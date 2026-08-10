@@ -117,3 +117,21 @@ def test_update_manual_and_rules():
         # Restore original content
         client.post("/manual", json={"content": orig_m})
         client.post("/rules", json={"content": orig_r})
+
+def test_models_endpoints():
+    # GET models
+    get_resp = client.get("/models")
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    assert "lm_studio_online" in data
+    assert "configured_fast_model" in data
+    assert "configured_main_model" in data
+
+    # POST config models
+    post_resp = client.post("/models/config", json={
+        "fast_model": "qwen2.5-3b-instruct",
+        "main_model": "qwen2.5-coder-7b-instruct"
+    })
+    assert post_resp.status_code == 200
+    assert post_resp.json()["configured_fast_model"] == "qwen2.5-3b-instruct"
+    assert post_resp.json()["configured_main_model"] == "qwen2.5-coder-7b-instruct"

@@ -44,6 +44,11 @@ class MemoryCreate(BaseModel):
 class DocUpdate(BaseModel):
     content: str
 
+class ModelConfigUpdate(BaseModel):
+    fast_model: Optional[str] = None
+    main_model: Optional[str] = None
+    lm_studio_url: Optional[str] = None
+
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
 def get_root(request: Request):
@@ -224,3 +229,45 @@ def update_rules(doc: DocUpdate):
     except Exception as e:
         app_logger.error(f"Error updating rules: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# 8. Model Management & Real-time LM Studio Query Endpoints
+@app.get("/models")
+def get_local_models():
+    lm_online = False
+    loaded_models = []
+    try:
+        r = httpx.get(f"{settings.LM_STUDIO_URL}/models", timeout=3.0)
+        if r.status_code == 200:
+            lm_online = True
+            data = r.json()
+            if "data" in data and isinstance(data["data"], list):
+                loaded_models = [m.get("id", "") for m in data["data"] if m.get("id")]
+    except Exception as e:
+        app_logger.warning(f"Unable to query LM Studio models endpoint: {e}")
+
+    return {
+        "lm_studio_online": lm_online,
+        "lm_studio_url": settings.LM_STUDIO_URL,
+        "loaded_models": loaded_models,
+        "configured_fast_model": settings.FAST_MODEL,
+        "configured_main_model": settings.MAIN_MODEL
+    }
+
+@app.post("/models/config")
+def update_model_config(config: ModelConfigUpdate):
+    if config.fast_model:
+        settings.FAST_MODEL = config.fast_model.strip()
+    if config.main_model:
+        settings.MAIN_MODEL = config.main_model.strip()
+    if config.lm_studio_url:
+        settings.LM_STUDIO_URL = config.lm_studio_url.rstrip('/').strip()
+        llm_client.base_url = settings.LM_STUDIO_URL
+    
+    db.create_audit_log("update_model_config", "success", f"Fast Model: {settings.FAST_MODEL}, Main Model: {settings.MAIN_MODEL}, Endpoint: {settings.LM_STUDIO_URL}", level=1)
+    
+    return {
+        "message": "Model settings updated successfully.",
+        "configured_fast_model": settings.FAST_MODEL,
+        "configured_main_model": settings.MAIN_MODEL,
+        "lm_studio_url": settings.LM_STUDIO_URL
+    }

@@ -451,6 +451,7 @@
         <button class="nav-btn active" onclick="switchTab('chat')">💬 Local Chat & Brain</button>
         <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
         <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
+        <button class="nav-btn" onclick="switchTab('models')">⚙️ Models & Brains</button>
         <button class="nav-btn" onclick="switchTab('security')">🛡️ Security & Audit</button>
 
         <button class="nav-btn" onclick="switchTab('manual')">📖 Rules & Manual</button>
@@ -466,13 +467,13 @@
                 <div class="chat-header">
                     <div>
                         <strong>Local Neural Conversation</strong>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">Connected to LM Studio local server</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);" id="chat-brain-desc">Connected to LM Studio local server</div>
                     </div>
                     <div class="brain-selector">
                         <span style="font-size: 0.8rem; color: var(--text-muted);">Active Brain:</span>
                         <select id="brain-model">
-                            <option value="fast">Qwen Fast (3B/4B) - Instant</option>
-                            <option value="main">Qwen Main (9B) - Deep Thinking</option>
+                            <option value="fast">Fast Brain (Qwen 3B/4B)</option>
+                            <option value="main">Main Brain (Qwen 9B)</option>
                         </select>
                     </div>
                 </div>
@@ -536,7 +537,45 @@
             </div>
         </div>
 
-        <!-- 4. Security & Audit Console -->
+        <!-- 4. Models & Brain Manager Tab -->
+        <div id="tab-models" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>
+                        <span>LM Studio Real-Time Status</span>
+                        <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="loadModelsTab()">🔄 Refresh LM Studio</button>
+                    </h2>
+                    <div id="models-status-box" style="margin-bottom: 1.25rem;">Checking LM Studio status...</div>
+                    
+                    <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">Currently Loaded GGUF Models in LM Studio</h3>
+                    <div id="loaded-models-list" class="console" style="height: 220px; font-size: 0.85rem;">Querying LM Studio endpoint...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Configured Dual-Brain Model Router Strings</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Set the model identifier strings to match the exact GGUF model files you have downloaded and loaded in LM Studio on your PC.
+                    </p>
+                    <form onsubmit="saveModelConfig(event)">
+                        <div class="form-group">
+                            <label>Fast Model String (Routine / Instant Tasks)</label>
+                            <input type="text" id="cfg-fast-model" placeholder="e.g. qwen2.5-3b-instruct" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Main Model String (Deep Reasoning & Planning)</label>
+                            <input type="text" id="cfg-main-model" placeholder="e.g. qwen2.5-coder-7b-instruct" required>
+                        </div>
+                        <div class="form-group">
+                            <label>LM Studio Local Server Base URL</label>
+                            <input type="text" id="cfg-lm-url" placeholder="http://localhost:1234/v1" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">Save Model Settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Security & Audit Console -->
         <div id="tab-security" class="tab-content">
             <div class="card">
                 <h2>Real-Time Audit Console Log</h2>
@@ -547,7 +586,7 @@
             </div>
         </div>
 
-        <!-- 5. Manual & Rules Tab -->
+        <!-- 6. Manual & Rules Tab -->
         <div id="tab-manual" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -573,7 +612,7 @@
             </div>
         </div>
 
-        <!-- 6. Policy Simulator Tab -->
+        <!-- 7. Policy Simulator Tab -->
         <div id="tab-playground" class="tab-content">
             <div class="card">
                 <h2>Safety Policy Playground Simulator</h2>
@@ -649,27 +688,98 @@
 
             if (tabId === 'tasks') loadTasks();
             if (tabId === 'memory') loadMemories();
+            if (tabId === 'models') loadModelsTab();
             if (tabId === 'security') loadAuditLogs();
             if (tabId === 'manual') loadManualAndRules();
         }
 
-        // Check LLM Status
+        // Check LLM Status and Models
         async function checkLLMStatus() {
             try {
-                const res = await fetch(`${API_BASE}/`);
+                const res = await fetch(`${API_BASE}/models`);
                 const data = await res.json();
                 const badge = document.getElementById('lm-studio-badge');
                 const dot = document.getElementById('lm-studio-dot');
 
-                if (data.local_llm_status === 'online') {
+                if (data.lm_studio_online) {
                     dot.className = "dot online";
-                    badge.innerHTML = `<div class="dot online"></div> LLM: Online (${data.lm_studio_endpoint})`;
+                    let loadedText = data.loaded_models.length > 0 ? data.loaded_models.join(', ') : 'No model currently loaded';
+                    badge.innerHTML = `<div class="dot online"></div> LLM: Online (${loadedText})`;
                 } else {
                     dot.className = "dot offline";
                     badge.innerHTML = `<div class="dot offline"></div> LLM: Offline`;
                 }
+
+                // Update Brain Selector Labels in Chat
+                const select = document.getElementById('brain-model');
+                select.options[0].text = `Fast Brain (${data.configured_fast_model})`;
+                select.options[1].text = `Main Brain (${data.configured_main_model})`;
+
+                // Update Chat Header Description
+                document.getElementById('chat-brain-desc').innerText = `LM Studio: ${data.lm_studio_url} | Fast: ${data.configured_fast_model} | Main: ${data.configured_main_model}`;
             } catch (e) {
-                console.error("Error pinging backend status", e);
+                console.error("Error pinging backend model status", e);
+            }
+        }
+
+        // Models Manager Tab Logic
+        async function loadModelsTab() {
+            try {
+                const res = await fetch(`${API_BASE}/models`);
+                const data = await res.json();
+
+                const statusBox = document.getElementById('models-status-box');
+                const listElem = document.getElementById('loaded-models-list');
+
+                if (data.lm_studio_online) {
+                    statusBox.innerHTML = `
+                        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); padding: 0.75rem 1rem; border-radius: 8px; color: var(--success); font-weight: 500;">
+                            ✓ LM Studio Local Server is ONLINE at <code>${escapeHtml(data.lm_studio_url)}</code>
+                        </div>
+                    `;
+
+                    if (data.loaded_models && data.loaded_models.length > 0) {
+                        listElem.innerText = data.loaded_models.map(m => `• ${m}`).join("\n\n");
+                    } else {
+                        listElem.innerText = "LM Studio server is running, but no model is currently loaded in memory.\n\nPlease open LM Studio on your PC and load a model GGUF file!";
+                    }
+                } else {
+                    statusBox.innerHTML = `
+                        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); padding: 0.75rem 1rem; border-radius: 8px; color: var(--danger); font-weight: 500;">
+                            ✕ LM Studio Local Server is OFFLINE at <code>${escapeHtml(data.lm_studio_url)}</code>
+                        </div>
+                    `;
+                    listElem.innerText = "LM Studio server is unreachable.\n\nMake sure LM Studio is open on your computer, a model is loaded, and the Local Server is started on port 1234!";
+                }
+
+                // Populate Form Inputs
+                document.getElementById('cfg-fast-model').value = data.configured_fast_model;
+                document.getElementById('cfg-main-model').value = data.configured_main_model;
+                document.getElementById('cfg-lm-url').value = data.lm_studio_url;
+            } catch (e) {
+                console.error("Error loading models tab", e);
+            }
+        }
+
+        async function saveModelConfig(e) {
+            e.preventDefault();
+            const fast = document.getElementById('cfg-fast-model').value.trim();
+            const main = document.getElementById('cfg-main-model').value.trim();
+            const url = document.getElementById('cfg-lm-url').value.trim();
+
+            try {
+                const res = await fetch(`${API_BASE}/models/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fast_model: fast, main_model: main, lm_studio_url: url })
+                });
+
+                const data = await res.json();
+                alert(data.message || "Model configuration updated!");
+                checkLLMStatus();
+                loadModelsTab();
+            } catch (err) {
+                alert("Error saving model settings: " + err);
             }
         }
 
@@ -680,6 +790,7 @@
             if (!messageText) return;
 
             const brain = document.getElementById('brain-model').value;
+            const brainLabel = document.getElementById('brain-model').options[document.getElementById('brain-model').selectedIndex].text;
             const messagesContainer = document.getElementById('chat-messages');
 
             // Append User Message
@@ -694,7 +805,7 @@
             // Append Assistant Placeholder
             const assistDiv = document.createElement('div');
             assistDiv.className = 'message assistant';
-            assistDiv.innerHTML = `<div class="meta">ASSISTANT (${brain.toUpperCase()} BRAIN) :: THINKING...</div>Thinking...`;
+            assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)}) :: THINKING...</div>Thinking...`;
             messagesContainer.appendChild(assistDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -715,7 +826,7 @@
                     reply = data.choices[0].message.content;
                 }
 
-                assistDiv.innerHTML = `<div class="meta">ASSISTANT (${brain.toUpperCase()} BRAIN)</div>${escapeHtml(reply)}`;
+                assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)})</div>${escapeHtml(reply)}`;
             } catch (e) {
                 assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to connect to local brain. Make sure backend and LM Studio are running.`;
             }
