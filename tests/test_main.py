@@ -5,8 +5,23 @@ from app.config import settings
 
 client = TestClient(app)
 
-def test_read_root():
-    response = client.get("/")
+def test_read_root_json():
+    # Non-HTML request should return JSON
+    response = client.get("/", headers={"accept": "application/json"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "online"
+    assert data["app_name"] == "Local Personal Assistant"
+
+def test_read_root_html():
+    # HTML request should return HTML index page
+    response = client.get("/", headers={"accept": "text/html"})
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Visual Dashboard" in response.text
+
+def test_api_status():
+    response = client.get("/api/status")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "online"

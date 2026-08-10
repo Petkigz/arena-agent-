@@ -1,7 +1,11 @@
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, status, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import httpx
+import os
+
 from app.config import settings
 from app.database import db
 from app.tasks import TaskManager, TaskCreate, TaskUpdate, Task
@@ -11,9 +15,14 @@ from app.utils.logger import app_logger, audit_logger
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Version 0 Core Engine for the Local Personal Assistant",
+    description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
     version="0.1.0"
 )
+
+# Mount static files directory if it exists
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Models for the API
 class ChatRequest(BaseModel):
@@ -32,10 +41,36 @@ class MemoryCreate(BaseModel):
     source: Optional[str] = "user"
     confidence: Optional[float] = 1.0
 
-# 1. Base Endpoint
+# 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
-def get_root():
-    # Try to ping LM Studio to see if it's running
+def get_root(request: Request):
+    # Check if client explicitly requested JSON
+    accept_header = request.headers.get("accept", "")
+    index_path = os.path.join(static_dir, "index.html")
+
+    if "text/html" in accept_header and os.path.exists(index_path):
+        return FileResponse(index_path)
+
+    # Return JSON API status by default for non-HTML/API requests
+    lm_status = "offline"
+    try:
+        r = httpx.get(f"{settings.LM_STUDIO_URL}/models", timeout=2.0)
+        if r.status_code == 200:
+            lm_status = "online"
+    except Exception:
+        pass
+
+    return {
+        "status": "online",
+        "app_name": settings.APP_NAME,
+        "version": "0.1.0",
+        "local_llm_status": lm_status,
+        "lm_studio_endpoint": settings.LM_STUDIO_URL,
+        "database_connected": True
+    }
+
+@app.get("/api/status")
+def get_api_status():
     lm_status = "offline"
     try:
         r = httpx.get(f"{settings.LM_STUDIO_URL}/models", timeout=2.0)
