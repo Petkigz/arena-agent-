@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # App General Settings
@@ -21,10 +21,11 @@ class Settings(BaseSettings):
     MAIN_MODEL: str = "qwen2.5-9b-instruct"
     DEFAULT_TIMEOUT: float = 180.0  # Extended timeout (3 mins) to allow LM Studio to auto-load models into VRAM
 
-    class Config:
-        env_prefix = "LPA_"  # Local Personal Assistant env variables prefix
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_prefix="LPA_",
+        env_file=".env",
+        extra="ignore"
+    )
 
 # Ensure data directories exist
 settings = Settings()
