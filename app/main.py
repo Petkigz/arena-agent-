@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, status, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Any, Optional
 import httpx
 import os
@@ -48,6 +48,10 @@ class ModelConfigUpdate(BaseModel):
     fast_model: Optional[str] = None
     main_model: Optional[str] = None
     lm_studio_url: Optional[str] = None
+
+class ModelUnloadRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    model_id: Optional[str] = None
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -270,4 +274,23 @@ def update_model_config(config: ModelConfigUpdate):
         "configured_fast_model": settings.FAST_MODEL,
         "configured_main_model": settings.MAIN_MODEL,
         "lm_studio_url": settings.LM_STUDIO_URL
+    }
+
+@app.post("/models/unload")
+def unload_lm_studio_model(req: Optional[ModelUnloadRequest] = None):
+    model_id = req.model_id if req else None
+    results = []
+    
+    for ep in ["/models/unload", "/models/eject"]:
+        try:
+            payload = {"model": model_id} if model_id else {}
+            r = httpx.post(f"{settings.LM_STUDIO_URL}{ep}", json=payload, timeout=3.0)
+            if r.status_code == 200:
+                results.append(f"Successfully called {ep}")
+        except Exception:
+            pass
+
+    return {
+        "message": "Unload command issued.",
+        "details": results if results else "Note: For strict 1-model VRAM limit, set 'Max Loaded Models = 1' in LM Studio Settings."
     }
