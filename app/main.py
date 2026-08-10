@@ -174,6 +174,13 @@ def delete_task_by_id(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found or deletion failed")
     return {"message": f"Task {task_id} deleted successfully."}
 
+@app.post("/tasks/{task_id}/acquire-skill")
+def acquire_skill_for_task_endpoint(task_id: str):
+    res = TaskManager.acquire_skill_for_task(task_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=404, detail=res.get("error", "Task not found"))
+    return res
+
 # 4. Audit Log Endpoint
 @app.get("/audit-logs")
 def view_audit_logs(limit: int = Query(50, ge=1, le=500)):
