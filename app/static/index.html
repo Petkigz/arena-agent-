@@ -224,6 +224,7 @@
             font-family: 'JetBrains Mono', monospace;
             outline: none;
             cursor: pointer;
+            max-width: 320px;
         }
 
         .chat-messages {
@@ -472,8 +473,9 @@
                     <div class="brain-selector">
                         <span style="font-size: 0.8rem; color: var(--text-muted);">Active Brain:</span>
                         <select id="brain-model">
-                            <option value="fast">Fast Brain (Qwen 3B/4B)</option>
-                            <option value="main">Main Brain (Qwen 9B)</option>
+                            <!-- Populated dynamically with all available & loaded models -->
+                            <option value="fast">Fast Brain</option>
+                            <option value="main">Main Brain</option>
                         </select>
                     </div>
                 </div>
@@ -552,18 +554,22 @@
                 </div>
 
                 <div class="card">
-                    <h2>Configured Dual-Brain Model Router Strings</h2>
+                    <h2>Configured Dual-Brain Model Selectors</h2>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-                        Set the model identifier strings to match the exact GGUF model files you have downloaded and loaded in LM Studio on your PC.
+                        Select which model GGUF file to assign to Fast Brain and Main Brain from your available LM Studio models.
                     </p>
                     <form onsubmit="saveModelConfig(event)">
                         <div class="form-group">
-                            <label>Fast Model String (Routine / Instant Tasks)</label>
-                            <input type="text" id="cfg-fast-model" placeholder="e.g. qwen2.5-3b-instruct" required>
+                            <label>Fast Model Selector (Routine / Instant Tasks)</label>
+                            <select id="cfg-fast-model">
+                                <!-- Populated dynamically -->
+                            </select>
                         </div>
                         <div class="form-group">
-                            <label>Main Model String (Deep Reasoning & Planning)</label>
-                            <input type="text" id="cfg-main-model" placeholder="e.g. qwen2.5-coder-7b-instruct" required>
+                            <label>Main Model Selector (Deep Reasoning & Planning)</label>
+                            <select id="cfg-main-model">
+                                <!-- Populated dynamically -->
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>LM Studio Local Server Base URL</label>
@@ -693,7 +699,7 @@
             if (tabId === 'manual') loadManualAndRules();
         }
 
-        // Check LLM Status and Models
+        // Check LLM Status and Populate All Model Selectors Dynamically
         async function checkLLMStatus() {
             try {
                 const res = await fetch(`${API_BASE}/models`);
@@ -703,17 +709,45 @@
 
                 if (data.lm_studio_online) {
                     dot.className = "dot online";
-                    let loadedText = data.loaded_models.length > 0 ? data.loaded_models.join(', ') : 'No model currently loaded';
+                    let loadedText = data.loaded_models.length > 0 ? data.loaded_models.join(', ') : 'No model loaded';
                     badge.innerHTML = `<div class="dot online"></div> LLM: Online (${loadedText})`;
                 } else {
                     dot.className = "dot offline";
                     badge.innerHTML = `<div class="dot offline"></div> LLM: Offline`;
                 }
 
-                // Update Brain Selector Labels in Chat
-                const select = document.getElementById('brain-model');
-                select.options[0].text = `Fast Brain (${data.configured_fast_model})`;
-                select.options[1].text = `Main Brain (${data.configured_main_model})`;
+                // Populate Chat Active Brain Selector
+                const brainSelect = document.getElementById('brain-model');
+                const currentVal = brainSelect.value;
+                brainSelect.innerHTML = '';
+
+                // Option 1: Fast Brain Router
+                const optFast = document.createElement('option');
+                optFast.value = 'fast';
+                optFast.text = `⚡ Fast Brain (${data.configured_fast_model})`;
+                brainSelect.appendChild(optFast);
+
+                // Option 2: Main Brain Router
+                const optMain = document.createElement('option');
+                optMain.value = 'main';
+                optMain.text = `🧠 Main Brain (${data.configured_main_model})`;
+                brainSelect.appendChild(optMain);
+
+                // Option Group: Direct Specific Models from LM Studio
+                if (data.loaded_models && data.loaded_models.length > 0) {
+                    const optGroup = document.createElement('optgroup');
+                    optGroup.label = "Direct LM Studio Models";
+                    data.loaded_models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m;
+                        opt.text = `🎯 Direct Model: ${m}`;
+                        optGroup.appendChild(opt);
+                    });
+                    brainSelect.appendChild(optGroup);
+                }
+
+                // Restore previous selection if valid
+                if (currentVal) brainSelect.value = currentVal;
 
                 // Update Chat Header Description
                 document.getElementById('chat-brain-desc').innerText = `LM Studio: ${data.lm_studio_url} | Fast: ${data.configured_fast_model} | Main: ${data.configured_main_model}`;
@@ -752,9 +786,41 @@
                     listElem.innerText = "LM Studio server is unreachable.\n\nMake sure LM Studio is open on your computer, a model is loaded, and the Local Server is started on port 1234!";
                 }
 
-                // Populate Form Inputs
-                document.getElementById('cfg-fast-model').value = data.configured_fast_model;
-                document.getElementById('cfg-main-model').value = data.configured_main_model;
+                // Build Dropdown Options for Fast and Main Models
+                const fastSelect = document.getElementById('cfg-fast-model');
+                const mainSelect = document.getElementById('cfg-main-model');
+
+                fastSelect.innerHTML = '';
+                mainSelect.innerHTML = '';
+
+                // Combine loaded models + current configured models for complete choices
+                const choices = new Set([
+                    ...data.loaded_models,
+                    data.configured_fast_model,
+                    data.configured_main_model,
+                    'qwen2.5-3b-instruct',
+                    'qwen2.5-coder-7b-instruct',
+                    'qwen3.5-9b-instruct'
+                ]);
+
+                choices.forEach(m => {
+                    if (!m) return;
+                    const isLoaded = data.loaded_models.includes(m);
+                    const label = isLoaded ? `✓ ${m} (Loaded in LM Studio)` : `${m}`;
+
+                    const optF = document.createElement('option');
+                    optF.value = m;
+                    optF.text = label;
+                    fastSelect.appendChild(optF);
+
+                    const optM = document.createElement('option');
+                    optM.value = m;
+                    optM.text = label;
+                    mainSelect.appendChild(optM);
+                });
+
+                fastSelect.value = data.configured_fast_model;
+                mainSelect.value = data.configured_main_model;
                 document.getElementById('cfg-lm-url').value = data.lm_studio_url;
             } catch (e) {
                 console.error("Error loading models tab", e);
@@ -789,8 +855,9 @@
             const messageText = input.value.trim();
             if (!messageText) return;
 
-            const brain = document.getElementById('brain-model').value;
-            const brainLabel = document.getElementById('brain-model').options[document.getElementById('brain-model').selectedIndex].text;
+            const brainSelect = document.getElementById('brain-model');
+            const brain = brainSelect.value;
+            const brainLabel = brainSelect.options[brainSelect.selectedIndex].text;
             const messagesContainer = document.getElementById('chat-messages');
 
             // Append User Message

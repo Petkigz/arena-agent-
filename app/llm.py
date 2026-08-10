@@ -10,13 +10,16 @@ class LocalLLMClient:
 
     def route_request(self, request_complexity: str) -> str:
         """
-        Routes the request to the appropriate model based on complexity.
-        'fast' -> Qwen 3B/4B
-        'main' -> Qwen 9B
+        Routes the request to the appropriate model based on complexity or direct model ID.
+        'fast' -> settings.FAST_MODEL
+        'main' -> settings.MAIN_MODEL
+        Otherwise -> uses the direct model ID passed
         """
         if request_complexity == "fast":
             return settings.FAST_MODEL
-        return settings.MAIN_MODEL
+        elif request_complexity == "main":
+            return settings.MAIN_MODEL
+        return request_complexity
 
     def generate_chat_completion(
         self, 
