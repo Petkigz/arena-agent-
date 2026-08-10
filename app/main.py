@@ -41,6 +41,9 @@ class MemoryCreate(BaseModel):
     source: Optional[str] = "user"
     confidence: Optional[float] = 1.0
 
+class DocUpdate(BaseModel):
+    content: str
+
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
 def get_root(request: Request):
@@ -181,7 +184,7 @@ def evaluate_action_policy(req: ActionEvaluationRequest):
         "action": req.action_type
     }
 
-# 7. File Readers for Context Docs (Manual and Rules)
+# 7. File Readers & Editors for Context Docs (Manual and Rules)
 @app.get("/manual")
 def get_user_manual():
     try:
@@ -190,6 +193,18 @@ def get_user_manual():
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="User Operating Manual not found")
 
+@app.post("/manual")
+def update_user_manual(doc: DocUpdate):
+    try:
+        os.makedirs(os.path.dirname(settings.USER_MANUAL_PATH), exist_ok=True)
+        with open(settings.USER_MANUAL_PATH, "w", encoding="utf-8") as f:
+            f.write(doc.content)
+        db.create_audit_log("update_user_manual", "success", "User operating manual updated.", level=1)
+        return {"message": "User Operating Manual updated successfully."}
+    except Exception as e:
+        app_logger.error(f"Error updating user manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/rules")
 def get_rules():
     try:
@@ -197,3 +212,15 @@ def get_rules():
             return {"content": f.read()}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Rules and boundaries document not found")
+
+@app.post("/rules")
+def update_rules(doc: DocUpdate):
+    try:
+        os.makedirs(os.path.dirname(settings.RULES_PATH), exist_ok=True)
+        with open(settings.RULES_PATH, "w", encoding="utf-8") as f:
+            f.write(doc.content)
+        db.create_audit_log("update_rules", "success", "Rules and boundaries updated.", level=1)
+        return {"message": "Rules and boundaries updated successfully."}
+    except Exception as e:
+        app_logger.error(f"Error updating rules: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

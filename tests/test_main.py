@@ -93,3 +93,27 @@ def test_manual_and_rules():
     rules_resp = client.get("/rules")
     assert rules_resp.status_code == 200
     assert "Rules & Permission Boundaries" in rules_resp.json()["content"]
+
+def test_update_manual_and_rules():
+    # Save original content
+    orig_m = client.get("/manual").json()["content"]
+    orig_r = client.get("/rules").json()["content"]
+
+    try:
+        m_update = client.post("/manual", json={"content": "# User Operating Manual\nTest manual content."})
+        assert m_update.status_code == 200
+        assert "updated successfully" in m_update.json()["message"]
+        
+        m_get = client.get("/manual")
+        assert "Test manual content." in m_get.json()["content"]
+
+        r_update = client.post("/rules", json={"content": "# Rules & Permission Boundaries\nTest rules content."})
+        assert r_update.status_code == 200
+        assert "updated successfully" in r_update.json()["message"]
+
+        r_get = client.get("/rules")
+        assert "Test rules content." in r_get.json()["content"]
+    finally:
+        # Restore original content
+        client.post("/manual", json={"content": orig_m})
+        client.post("/rules", json={"content": orig_r})

@@ -547,16 +547,28 @@
             </div>
         </div>
 
-        <!-- 5. Manual Tab -->
+        <!-- 5. Manual & Rules Tab -->
         <div id="tab-manual" class="tab-content">
             <div class="grid-2">
                 <div class="card">
-                    <h2>User Operating Manual</h2>
-                    <div id="manual-content" class="console" style="height: 500px; color: #f9fafb;">Loading manual...</div>
+                    <h2>
+                        <span>User Operating Manual</span>
+                        <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="saveManual()">Save Manual</button>
+                    </h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Edit goals, hardware context, and preferences. Saved directly to <code>memory/user_operating_manual.md</code>.
+                    </p>
+                    <textarea id="manual-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading manual..."></textarea>
                 </div>
                 <div class="card">
-                    <h2>Rules & Boundaries</h2>
-                    <div id="rules-content" class="console" style="height: 500px; color: #f9fafb;">Loading rules...</div>
+                    <h2>
+                        <span>Rules & Boundaries</span>
+                        <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="saveRules()">Save Rules</button>
+                    </h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Edit permission boundaries & authority levels. Saved directly to <code>memory/rules.md</code>.
+                    </p>
+                    <textarea id="rules-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading rules..."></textarea>
                 </div>
             </div>
         </div>
@@ -865,18 +877,48 @@
             }
         }
 
-        // Manual & Rules
+        // Manual & Rules API
         async function loadManualAndRules() {
             try {
                 const mRes = await fetch(`${API_BASE}/manual`);
                 const mData = await mRes.json();
-                document.getElementById('manual-content').innerText = mData.content;
+                document.getElementById('manual-content').value = mData.content;
 
                 const rRes = await fetch(`${API_BASE}/rules`);
                 const rData = await rRes.json();
-                document.getElementById('rules-content').innerText = rData.content;
+                document.getElementById('rules-content').value = rData.content;
             } catch (e) {
                 console.error("Error loading docs", e);
+            }
+        }
+
+        async function saveManual() {
+            const content = document.getElementById('manual-content').value;
+            try {
+                const res = await fetch(`${API_BASE}/manual`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                const data = await res.json();
+                alert(data.message || "User Operating Manual updated successfully!");
+            } catch (e) {
+                alert("Error saving manual: " + e);
+            }
+        }
+
+        async function saveRules() {
+            const content = document.getElementById('rules-content').value;
+            try {
+                const res = await fetch(`${API_BASE}/rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                const data = await res.json();
+                alert(data.message || "Rules & boundaries updated successfully!");
+            } catch (e) {
+                alert("Error saving rules: " + e);
             }
         }
 
