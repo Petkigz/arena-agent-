@@ -224,7 +224,7 @@
             font-family: 'JetBrains Mono', monospace;
             outline: none;
             cursor: pointer;
-            max-width: 320px;
+            max-width: 340px;
         }
 
         .chat-messages {
@@ -549,14 +549,14 @@
                     </h2>
                     <div id="models-status-box" style="margin-bottom: 1.25rem;">Checking LM Studio status...</div>
                     
-                    <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">Currently Loaded GGUF Models in LM Studio</h3>
+                    <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">Currently Active GGUF Models in LM Studio</h3>
                     <div id="loaded-models-list" class="console" style="height: 220px; font-size: 0.85rem;">Querying LM Studio endpoint...</div>
                 </div>
 
                 <div class="card">
                     <h2>Configured Dual-Brain Model Selectors</h2>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-                        Select which model GGUF file to assign to Fast Brain and Main Brain from your available LM Studio models.
+                        Select which model GGUF file to assign to Fast Brain and Main Brain. When you select a model, LM Studio automatically auto-loads it into GPU VRAM on request!
                     </p>
                     <form onsubmit="saveModelConfig(event)">
                         <div class="form-group">
@@ -709,7 +709,7 @@
 
                 if (data.lm_studio_online) {
                     dot.className = "dot online";
-                    let loadedText = data.loaded_models.length > 0 ? data.loaded_models.join(', ') : 'No model loaded';
+                    let loadedText = data.loaded_models.length > 0 ? data.loaded_models.join(', ') : 'Ready (Auto-loads on request)';
                     badge.innerHTML = `<div class="dot online"></div> LLM: Online (${loadedText})`;
                 } else {
                     dot.className = "dot offline";
@@ -736,7 +736,7 @@
                 // Option Group: Direct Specific Models from LM Studio
                 if (data.loaded_models && data.loaded_models.length > 0) {
                     const optGroup = document.createElement('optgroup');
-                    optGroup.label = "Direct LM Studio Models";
+                    optGroup.label = "Direct LM Studio Models (Auto-Loads in VRAM)";
                     data.loaded_models.forEach(m => {
                         const opt = document.createElement('option');
                         opt.value = m;
@@ -773,9 +773,9 @@
                     `;
 
                     if (data.loaded_models && data.loaded_models.length > 0) {
-                        listElem.innerText = data.loaded_models.map(m => `• ${m}`).join("\n\n");
+                        listElem.innerText = data.loaded_models.map(m => `• ${m} (Active in LM Studio)`).join("\n\n");
                     } else {
-                        listElem.innerText = "LM Studio server is running, but no model is currently loaded in memory.\n\nPlease open LM Studio on your PC and load a model GGUF file!";
+                        listElem.innerText = "LM Studio local server is online!\n\nPassing any model ID in chat automatically auto-loads it into GPU VRAM if configured in LM Studio.";
                     }
                 } else {
                     statusBox.innerHTML = `
@@ -783,7 +783,7 @@
                             ✕ LM Studio Local Server is OFFLINE at <code>${escapeHtml(data.lm_studio_url)}</code>
                         </div>
                     `;
-                    listElem.innerText = "LM Studio server is unreachable.\n\nMake sure LM Studio is open on your computer, a model is loaded, and the Local Server is started on port 1234!";
+                    listElem.innerText = "LM Studio server is unreachable.\n\nMake sure LM Studio is open on your computer and the Local Server is started on port 1234!";
                 }
 
                 // Build Dropdown Options for Fast and Main Models
@@ -872,7 +872,7 @@
             // Append Assistant Placeholder
             const assistDiv = document.createElement('div');
             assistDiv.className = 'message assistant';
-            assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)}) :: THINKING...</div>Thinking...`;
+            assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)}) :: AUTO-LOADING MODEL & THINKING...</div>Auto-loading model in LM Studio VRAM & generating response...`;
             messagesContainer.appendChild(assistDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -895,7 +895,7 @@
 
                 assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)})</div>${escapeHtml(reply)}`;
             } catch (e) {
-                assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to connect to local brain. Make sure backend and LM Studio are running.`;
+                assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to connect or auto-load model in LM Studio. Verify LM Studio server is running.`;
             }
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }

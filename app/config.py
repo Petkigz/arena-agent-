@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     LM_STUDIO_URL: str = "http://localhost:1234/v1"
     FAST_MODEL: str = "qwen2.5-3b-instruct"
     MAIN_MODEL: str = "qwen2.5-9b-instruct"
-    DEFAULT_TIMEOUT: float = 30.0
+    DEFAULT_TIMEOUT: float = 180.0  # Extended timeout (3 mins) to allow LM Studio to auto-load models into VRAM
 
     class Config:
         env_prefix = "LPA_"  # Local Personal Assistant env variables prefix
