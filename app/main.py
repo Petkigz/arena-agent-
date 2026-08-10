@@ -13,6 +13,11 @@ from app.llm import llm_client
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 
+from app.tools.youtube_learner import YouTubeLearner
+from app.tools.web_research import WebResearcher
+from app.tools.doc_reader import DocumentReader
+from app.tools.knowledge_indexer import KnowledgeIndexer
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -52,6 +57,23 @@ class ModelConfigUpdate(BaseModel):
 class ModelUnloadRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     model_id: Optional[str] = None
+
+class YouTubeLearnRequest(BaseModel):
+    url: str
+    prompt_focus: Optional[str] = None
+    auto_save_memory: bool = True
+
+class WebLearnRequest(BaseModel):
+    url: str
+    auto_save_memory: bool = True
+
+class WebSearchRequest(BaseModel):
+    query: str
+    max_results: int = 3
+
+class DocReadRequest(BaseModel):
+    file_path: str
+    auto_save_memory: bool = True
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -294,3 +316,47 @@ def unload_lm_studio_model(req: Optional[ModelUnloadRequest] = None):
         "message": "Unload command issued.",
         "details": results if results else "Note: For strict 1-model VRAM limit, set 'Max Loaded Models = 1' in LM Studio Settings."
     }
+
+# 9. Phase 2 Tools: Web Scraper, YouTube Learner & Document Reader Endpoints
+@app.post("/tools/youtube-learn")
+def youtube_learn_endpoint(req: YouTubeLearnRequest):
+    result = YouTubeLearner.learn_from_video(req.url, prompt_focus=req.prompt_focus)
+    if result.get("success") and req.auto_save_memory:
+        mem_id = KnowledgeIndexer.index_youtube_knowledge(result)
+        result["memory_id"] = mem_id
+    return result
+
+@app.post("/tools/web-learn")
+def web_learn_endpoint(req: WebLearnRequest):
+    result = WebResearcher.learn_from_article(req.url)
+    if result.get("success") and req.auto_save_memory:
+        mem_id = KnowledgeIndexer.index_web_knowledge(result)
+        result["memory_id"] = mem_id
+    return result
+
+@app.post("/tools/web-search")
+def web_search_endpoint(req: WebSearchRequest):
+    return WebResearcher.search_and_scrape(req.query, max_results=req.max_results)
+
+@app.get("/tools/approved-docs")
+def list_approved_docs_endpoint():
+    return DocumentReader.list_approved_documents()
+
+@app.post("/tools/read-doc")
+def read_doc_endpoint(req: DocReadRequest):
+    result = DocumentReader.read_document(req.file_path)
+    if result.get("success") and req.auto_save_memory:
+        summary_prompt = f"Summarize key technical takeaways from this document ({result['file_name']}):\n\n{result['content'][:8000]}"
+        try:
+            llm_res = llm_client.generate_chat_completion(
+                messages=[{"role": "user", "content": summary_prompt}],
+                complexity="main",
+                max_tokens=600
+            )
+            ai_summary = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Document content ingested."
+            mem_id = KnowledgeIndexer.index_doc_knowledge(result, ai_summary)
+            result["memory_id"] = mem_id
+            result["ai_summary"] = ai_summary
+        except Exception as e:
+            app_logger.error(f"Error summarizing document: {e}")
+    return result

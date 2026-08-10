@@ -450,6 +450,7 @@
     <!-- Navigation -->
     <nav>
         <button class="nav-btn active" onclick="switchTab('chat')">💬 Local Chat & Brain</button>
+        <button class="nav-btn" onclick="switchTab('learner')">🌐 Web & YouTube Learner</button>
         <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
         <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
         <button class="nav-btn" onclick="switchTab('models')">⚙️ Models & Brains</button>
@@ -492,7 +493,49 @@
             </div>
         </div>
 
-        <!-- 2. Tasks Tab -->
+        <!-- 2. Web & YouTube Learner Tab -->
+        <div id="tab-learner" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>📹 YouTube Video Skill Extractor</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Paste any YouTube URL. The assistant will extract video transcripts locally and use Qwen to generate step-by-step skill checklists with source citations.
+                    </p>
+                    <form onsubmit="learnYouTubeVideo(event)">
+                        <div class="form-group">
+                            <label>YouTube Video URL or ID</label>
+                            <input type="text" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." required>
+                        </div>
+                        <div class="form-group">
+                            <label>Optional Topic / Focus Filter</label>
+                            <input type="text" id="yt-focus" placeholder="e.g. EQ settings for vocal mixing, smart contract security">
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">📹 Learn & Extract Skill Checklist</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>🌐 Web Article & Search Learner</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Paste an article URL or search query to scrape content, summarize technical facts, and index notes into SQLite memory.
+                    </p>
+                    <form onsubmit="learnWebArticle(event)">
+                        <div class="form-group">
+                            <label>Article URL or Web Search Query</label>
+                            <input type="text" id="web-url" placeholder="https://example.com/tutorial or 'Rust Solana tutorial'" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🌐 Scrape & Learn Knowledge</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Learning Console & Extracted Knowledge Output</h2>
+                <div id="learner-console" class="console" style="height: 350px;">Paste a YouTube video URL or Web URL above to extract skills and knowledge...</div>
+            </div>
+        </div>
+
+        <!-- 3. Tasks Tab -->
         <div id="tab-tasks" class="tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2>Active Persistent Tasks</h2>
@@ -503,7 +546,7 @@
             </div>
         </div>
 
-        <!-- 3. Memory Vault Tab -->
+        <!-- 4. Memory Vault Tab -->
         <div id="tab-memory" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -519,7 +562,8 @@
                                 <option value="preference">Preference</option>
                                 <option value="goal">Goal</option>
                                 <option value="rule">Rule</option>
-                                <option value="skill">Learned Skill</option>
+                                <option value="learned_skill">Learned Skill</option>
+                                <option value="web_research">Web Research</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -539,7 +583,7 @@
             </div>
         </div>
 
-        <!-- 4. Models & Brain Manager Tab -->
+        <!-- 5. Models & Brain Manager Tab -->
         <div id="tab-models" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -581,7 +625,7 @@
             </div>
         </div>
 
-        <!-- 5. Security & Audit Console -->
+        <!-- 6. Security & Audit Console -->
         <div id="tab-security" class="tab-content">
             <div class="card">
                 <h2>Real-Time Audit Console Log</h2>
@@ -592,7 +636,7 @@
             </div>
         </div>
 
-        <!-- 6. Manual & Rules Tab -->
+        <!-- 7. Manual & Rules Tab -->
         <div id="tab-manual" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -618,7 +662,7 @@
             </div>
         </div>
 
-        <!-- 7. Policy Simulator Tab -->
+        <!-- 8. Policy Simulator Tab -->
         <div id="tab-playground" class="tab-content">
             <div class="card">
                 <h2>Safety Policy Playground Simulator</h2>
@@ -753,6 +797,75 @@
                 document.getElementById('chat-brain-desc').innerText = `LM Studio: ${data.lm_studio_url} | Fast: ${data.configured_fast_model} | Main: ${data.configured_main_model}`;
             } catch (e) {
                 console.error("Error pinging backend model status", e);
+            }
+        }
+
+        // Phase 2: Learner API Logic
+        async function learnYouTubeVideo(e) {
+            e.preventDefault();
+            const url = document.getElementById('yt-url').value.trim();
+            const focus = document.getElementById('yt-focus').value.trim();
+            const consoleElem = document.getElementById('learner-console');
+
+            consoleElem.innerText = `[YOUTUBE LEARNER] Extracting transcript for ${url}...\nSummarizing with Qwen model & auto-indexing into SQLite...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/tools/youtube-learn`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, prompt_focus: focus, auto_save_memory: true })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [SUCCESSFULLY LEARNED FROM YOUTUBE]\nVideo URL: ${data.video_url}\nMemory ID Saved: ${data.memory_id || 'Indexed'}\n\n=== EXTRACTED SKILL SUMMARY & CHECKLIST ===\n\n${data.ai_summary}`;
+                } else {
+                    consoleElem.innerText = `✕ [ERROR LEARNING FROM YOUTUBE]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function learnWebArticle(e) {
+            e.preventDefault();
+            const queryOrUrl = document.getElementById('web-url').value.trim();
+            const consoleElem = document.getElementById('learner-console');
+
+            if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://')) {
+                consoleElem.innerText = `[WEB SCRAPER] Scraping article at ${queryOrUrl}...\nSummarizing technical takeaways & auto-indexing into SQLite...`;
+                try {
+                    const res = await fetch(`${API_BASE}/tools/web-learn`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: queryOrUrl, auto_save_memory: true })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        consoleElem.innerText = `✓ [SUCCESSFULLY SCRAPED & LEARNED]\nArticle: "${data.title}"\nURL: ${data.url}\nMemory ID Saved: ${data.memory_id || 'Indexed'}\n\n=== EXTRACTED TECHNICAL TAKEAWAYS ===\n\n${data.ai_summary}`;
+                    } else {
+                        consoleElem.innerText = `✕ [ERROR SCRAPING] ${data.error}`;
+                    }
+                } catch (err) {
+                    consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+                }
+            } else {
+                consoleElem.innerText = `[WEB SEARCH] Searching web for '${queryOrUrl}'...`;
+                try {
+                    const res = await fetch(`${API_BASE}/tools/web-search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: queryOrUrl, max_results: 3 })
+                    });
+                    const data = await res.json();
+                    let output = `✓ [SEARCH COMPLETED :: ${data.results_count} Results Found]\n\n`;
+                    data.pages.forEach((p, idx) => {
+                        output += `--- Result ${idx+1}: ${p.title} ---\nURL: ${p.url}\nSnippet:\n${p.content.substring(0, 300)}...\n\n`;
+                    });
+                    consoleElem.innerText = output;
+                } catch (err) {
+                    consoleElem.innerText = `✕ [SEARCH ERROR] ${err}`;
+                }
             }
         }
 
