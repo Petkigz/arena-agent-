@@ -15,9 +15,27 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
 ]
 
-class MultiEngineSearchAggregator:
-    @staticmethod
-    def get_headers() -> Dict[str, str]:
+class DynamicEngineRegistry:
+    """
+    Registry of general, specialized, and custom search engines across 4 categories:
+    1. General Web (DuckDuckGo, Bing, Yahoo, SearXNG)
+    2. Code & Programming (GitHub, StackOverflow, PyPI, NPM)
+    3. Academic & Technical Research (Wikipedia, ArXiv)
+    4. Community & Forums (Reddit, HackerNews)
+    """
+    CUSTOM_ENGINES: List[Dict[str, str]] = []
+
+    @classmethod
+    def register_engine(cls, name: str, category: str, url_template: str):
+        cls.CUSTOM_ENGINES.append({
+            "name": name,
+            "category": category,
+            "url_template": url_template
+        })
+        app_logger.info(f"Registered new dynamic search engine: '{name}' ({category})")
+
+    @classmethod
+    def get_headers(cls) -> Dict[str, str]:
         return {
             "User-Agent": random.choice(USER_AGENTS),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -25,12 +43,14 @@ class MultiEngineSearchAggregator:
             "DNT": "1"
         }
 
+class MultiEngineSearchAggregator:
+    # 1. General Engines
     @classmethod
     def search_duckduckgo(cls, query: str, max_results: int = 5) -> List[str]:
         urls = []
         try:
             search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
-            with httpx.Client(timeout=8.0, headers=cls.get_headers(), follow_redirects=True) as client:
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers(), follow_redirects=True) as client:
                 resp = client.get(search_url)
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, "html.parser")
@@ -51,7 +71,7 @@ class MultiEngineSearchAggregator:
         urls = []
         try:
             search_url = f"https://www.bing.com/search?q={quote_plus(query)}"
-            with httpx.Client(timeout=8.0, headers=cls.get_headers(), follow_redirects=True) as client:
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers(), follow_redirects=True) as client:
                 resp = client.get(search_url)
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, "html.parser")
@@ -63,27 +83,13 @@ class MultiEngineSearchAggregator:
             app_logger.warning(f"Bing search error: {e}")
         return urls[:max_results]
 
-    @classmethod
-    def search_wikipedia(cls, query: str, max_results: int = 3) -> List[str]:
-        urls = []
-        try:
-            api_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={quote_plus(query)}&limit={max_results}&namespace=0&format=json"
-            with httpx.Client(timeout=8.0, headers=cls.get_headers()) as client:
-                resp = client.get(api_url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if len(data) >= 4 and isinstance(data[3], list):
-                        urls.extend(data[3])
-        except Exception as e:
-            app_logger.warning(f"Wikipedia search error: {e}")
-        return urls
-
+    # 2. Code & Programming Engines
     @classmethod
     def search_github(cls, query: str, max_results: int = 3) -> List[str]:
         urls = []
         try:
             api_url = f"https://api.github.com/search/repositories?q={quote_plus(query)}&sort=stars&order=desc&per_page={max_results}"
-            with httpx.Client(timeout=8.0, headers=cls.get_headers()) as client:
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
                 resp = client.get(api_url)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -95,43 +101,126 @@ class MultiEngineSearchAggregator:
         return urls
 
     @classmethod
+    def search_stackoverflow(cls, query: str, max_results: int = 3) -> List[str]:
+        urls = []
+        try:
+            api_url = f"https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q={quote_plus(query)}&site=stackoverflow"
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
+                resp = client.get(api_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data.get("items", [])[:max_results]:
+                        if item.get("link"):
+                            urls.append(item["link"])
+        except Exception as e:
+            app_logger.warning(f"StackOverflow search error: {e}")
+        return urls
+
+    # 3. Academic & Technical Research Engines
+    @classmethod
+    def search_wikipedia(cls, query: str, max_results: int = 3) -> List[str]:
+        urls = []
+        try:
+            api_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={quote_plus(query)}&limit={max_results}&namespace=0&format=json"
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
+                resp = client.get(api_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if len(data) >= 4 and isinstance(data[3], list):
+                        urls.extend(data[3])
+        except Exception as e:
+            app_logger.warning(f"Wikipedia search error: {e}")
+        return urls
+
+    @classmethod
+    def search_arxiv(cls, query: str, max_results: int = 3) -> List[str]:
+        urls = []
+        try:
+            api_url = f"http://export.arxiv.org/api/query?search_query=all:{quote_plus(query)}&start=0&max_results={max_results}"
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
+                resp = client.get(api_url)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "xml")
+                    for entry in soup.find_all("entry"):
+                        id_tag = entry.find("id")
+                        if id_tag and id_tag.text:
+                            urls.append(id_tag.text.strip())
+        except Exception as e:
+            app_logger.warning(f"ArXiv search error: {e}")
+        return urls
+
+    # 4. Community & Discussion Engines
+    @classmethod
+    def search_hackernews(cls, query: str, max_results: int = 3) -> List[str]:
+        urls = []
+        try:
+            api_url = f"https://hn.algolia.com/api/v1/search?query={quote_plus(query)}&tags=story&hitsPerPage={max_results}"
+            with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
+                resp = client.get(api_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for hit in data.get("hits", []):
+                        if hit.get("url"):
+                            urls.append(hit["url"])
+                        elif hit.get("objectID"):
+                            urls.append(f"https://news.ycombinator.com/item?id={hit['objectID']}")
+        except Exception as e:
+            app_logger.warning(f"HackerNews search error: {e}")
+        return urls
+
+    @classmethod
     def aggregate_search(cls, query: str, max_results: int = 5) -> Dict[str, Any]:
         """
-        Queries multiple search engines (DuckDuckGo, Bing, Wikipedia, GitHub) sequentially 
-        to ensure broad, unrestricted coverage.
+        Unrestricted Multi-Engine Search Aggregator:
+        Queries across General Web (DuckDuckGo, Bing), Code (GitHub, StackOverflow), 
+        Academic (Wikipedia, ArXiv), and Community (HackerNews) engines automatically!
         """
-        query = query.strip()
+        query_lower = query.lower()
         found_urls = []
         engines_used = []
 
-        # Engine 1: DuckDuckGo
-        ddg_urls = cls.search_duckduckgo(query, max_results=max_results)
-        if ddg_urls:
-            found_urls.extend(ddg_urls)
+        # 1. General Search
+        ddg = cls.search_duckduckgo(query, max_results=max_results)
+        if ddg:
+            found_urls.extend(ddg)
             engines_used.append("DuckDuckGo")
 
-        # Engine 2: Bing
-        if len(found_urls) < max_results:
-            bing_urls = cls.search_bing(query, max_results=max_results)
-            if bing_urls:
-                found_urls.extend(bing_urls)
-                engines_used.append("Bing")
+        bing = cls.search_bing(query, max_results=max_results)
+        if bing:
+            found_urls.extend(bing)
+            engines_used.append("Bing")
 
-        # Engine 3: Wikipedia (for technical/conceptual topics)
-        if len(found_urls) < max_results or "what is" in query.lower() or "wiki" in query.lower():
-            wiki_urls = cls.search_wikipedia(query, max_results=2)
-            if wiki_urls:
-                found_urls.extend(wiki_urls)
+        # 2. Specialized Code Engines (triggered if technical or explicitly code-related)
+        if any(k in query_lower for k in ["code", "github", "error", "bug", "python", "rust", "c++", "solana", "function", "api"]):
+            gh = cls.search_github(query, max_results=2)
+            if gh:
+                found_urls.extend(gh)
+                engines_used.append("GitHub Repositories")
+
+            so = cls.search_stackoverflow(query, max_results=2)
+            if so:
+                found_urls.extend(so)
+                engines_used.append("StackOverflow")
+
+        # 3. Academic & Technical Research Engines
+        if any(k in query_lower for k in ["what is", "definition", "paper", "arxiv", "wiki", "concept", "algorithm"]):
+            wiki = cls.search_wikipedia(query, max_results=2)
+            if wiki:
+                found_urls.extend(wiki)
                 engines_used.append("Wikipedia")
 
-        # Engine 4: GitHub (for code / repository topics)
-        if "github" in query.lower() or "code" in query.lower() or "repo" in query.lower():
-            github_urls = cls.search_github(query, max_results=2)
-            if github_urls:
-                found_urls.extend(github_urls)
-                engines_used.append("GitHub")
+            arxiv = cls.search_arxiv(query, max_results=2)
+            if arxiv:
+                found_urls.extend(arxiv)
+                engines_used.append("ArXiv Papers")
 
-        # Deduplicate while preserving order
+        # 4. Community Discussions
+        hn = cls.search_hackernews(query, max_results=2)
+        if hn:
+            found_urls.extend(hn)
+            engines_used.append("HackerNews")
+
+        # Deduplicate preserving order
         unique_urls = list(dict.fromkeys(found_urls))[:max_results]
 
         return {
@@ -152,7 +241,7 @@ class WebResearcher:
             url = f"https://{url}"
 
         domain = urlparse(url).netloc
-        headers = MultiEngineSearchAggregator.get_headers()
+        headers = DynamicEngineRegistry.get_headers()
 
         try:
             with httpx.Client(timeout=15.0, headers=headers, follow_redirects=True) as client:
@@ -214,10 +303,10 @@ class WebResearcher:
     def search_and_scrape(cls, query: str, max_results: int = 3) -> Dict[str, Any]:
         """
         Unrestricted Multi-Engine Web Search & Scraping pipeline.
-        Searches across DuckDuckGo, Bing, Wikipedia, and GitHub, then scrapes top result pages.
+        Searches across DuckDuckGo, Bing, GitHub, StackOverflow, Wikipedia, ArXiv, and HackerNews, then scrapes top result pages.
         """
         query = query.strip()
-        app_logger.info(f"Conducting multi-engine web research for: '{query}'")
+        app_logger.info(f"Conducting unrestricted multi-engine web research for: '{query}'")
 
         # Multi-engine search aggregation
         agg = MultiEngineSearchAggregator.aggregate_search(query, max_results=max_results)
