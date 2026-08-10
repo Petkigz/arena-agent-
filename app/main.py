@@ -16,6 +16,7 @@ from app.utils.logger import app_logger, audit_logger
 from app.tools.youtube_learner import YouTubeLearner
 from app.tools.web_research import WebResearcher
 from app.tools.doc_reader import DocumentReader
+from app.tools.doc_manager import DocumentManager
 from app.tools.knowledge_indexer import KnowledgeIndexer
 
 app = FastAPI(
@@ -74,6 +75,18 @@ class WebSearchRequest(BaseModel):
 class DocReadRequest(BaseModel):
     file_path: str
     auto_save_memory: bool = True
+
+class DocCreateRequest(BaseModel):
+    file_path: str
+    content: str
+    overwrite: bool = False
+
+class DocEditRequest(BaseModel):
+    file_path: str
+    new_content: Optional[str] = None
+    append_content: Optional[str] = None
+    search_target: Optional[str] = None
+    replace_text: Optional[str] = None
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -324,7 +337,7 @@ def unload_lm_studio_model(req: Optional[ModelUnloadRequest] = None):
         "details": results if results else "Note: For strict 1-model VRAM limit, set 'Max Loaded Models = 1' in LM Studio Settings."
     }
 
-# 9. Phase 2 Tools: Web Scraper, YouTube Learner & Document Reader Endpoints
+# 9. Phase 2 Tools: Web Scraper, YouTube Learner & All-Purpose Document Manager Endpoints
 @app.post("/tools/youtube-learn")
 def youtube_learn_endpoint(req: YouTubeLearnRequest):
     result = YouTubeLearner.learn_from_video(req.url, prompt_focus=req.prompt_focus)
@@ -347,11 +360,15 @@ def web_search_endpoint(req: WebSearchRequest):
 
 @app.get("/tools/approved-docs")
 def list_approved_docs_endpoint():
-    return DocumentReader.list_approved_documents()
+    return DocumentManager.list_workspace_files()
+
+@app.get("/tools/workspace-files")
+def list_workspace_files_endpoint():
+    return DocumentManager.list_workspace_files()
 
 @app.post("/tools/read-doc")
 def read_doc_endpoint(req: DocReadRequest):
-    result = DocumentReader.read_document(req.file_path)
+    result = DocumentManager.read_document(req.file_path)
     if result.get("success") and req.auto_save_memory:
         summary_prompt = f"Summarize key technical takeaways from this document ({result['file_name']}):\n\n{result['content'][:8000]}"
         try:
@@ -367,3 +384,17 @@ def read_doc_endpoint(req: DocReadRequest):
         except Exception as e:
             app_logger.error(f"Error summarizing document: {e}")
     return result
+
+@app.post("/tools/create-doc")
+def create_doc_endpoint(req: DocCreateRequest):
+    return DocumentManager.create_document(req.file_path, req.content, overwrite=req.overwrite)
+
+@app.post("/tools/edit-doc")
+def edit_doc_endpoint(req: DocEditRequest):
+    return DocumentManager.edit_document(
+        req.file_path,
+        new_content=req.new_content,
+        append_content=req.append_content,
+        search_target=req.search_target,
+        replace_text=req.replace_text
+    )

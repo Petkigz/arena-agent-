@@ -4,6 +4,7 @@ import tempfile
 from app.tools.youtube_learner import YouTubeLearner
 from app.tools.web_research import WebResearcher
 from app.tools.doc_reader import DocumentReader
+from app.tools.doc_manager import DocumentManager
 from app.tools.knowledge_indexer import KnowledgeIndexer
 
 def test_youtube_video_id_extractor():
@@ -23,6 +24,30 @@ def test_document_reader_txt():
         assert res["success"] is True
         assert res["file_name"] == "test_doc.txt"
         assert "High pass filter at 80Hz" in res["content"]
+
+def test_document_manager_create_and_edit():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "workspace_doc.md"
+        
+        # Create
+        create_res = DocumentManager.create_document(str(test_file), "# Initial Header\nContent line 1.")
+        assert create_res["success"] is True
+        
+        # Append
+        append_res = DocumentManager.edit_document(str(test_file), append_content="Line 2 appended.")
+        assert append_res["success"] is True
+        
+        # Read
+        read_res = DocumentManager.read_document(str(test_file))
+        assert "Line 2 appended" in read_res["content"]
+        
+        # Search and Replace
+        replace_res = DocumentManager.edit_document(str(test_file), search_target="Initial Header", replace_text="Updated Header")
+        assert replace_res["success"] is True
+        
+        # Verify Replace
+        read_res_2 = DocumentManager.read_document(str(test_file))
+        assert "Updated Header" in read_res_2["content"]
 
 def test_knowledge_indexer_simulated():
     # Test YouTube Indexer
