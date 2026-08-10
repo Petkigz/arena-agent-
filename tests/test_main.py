@@ -27,7 +27,8 @@ def test_api_status():
     assert data["status"] == "online"
     assert data["app_name"] == "Local Personal Assistant"
 
-def test_chat_endpoint_simulation():
+def test_chat_endpoint():
+    # Tests chat completion endpoint (works both when LM Studio is online or offline)
     response = client.post("/chat", json={
         "messages": [{"role": "user", "content": "How's the weather?"}],
         "complexity": "fast"
@@ -35,7 +36,9 @@ def test_chat_endpoint_simulation():
     assert response.status_code == 200
     data = response.json()
     assert "choices" in data
-    assert "Simulated Response" in data["choices"][0]["message"]["content"]
+    assert len(data["choices"]) > 0
+    content = data["choices"][0]["message"]["content"]
+    assert isinstance(content, str) and len(content) > 0
 
 def test_tasks_endpoints():
     # Create task
