@@ -39,6 +39,10 @@ from app.tools.finance_trader import FinanceTraderTool
 from app.tools.music_studio import MusicStudioTool
 from app.tools.content_creator import ContentCreatorTool
 
+from app.memory.semantic_rag import SemanticRAGEngine
+from app.memory.reflection_engine import ReflectionEngine
+from app.memory.decision_constitution import DecisionConstitution
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -183,7 +187,17 @@ class ContentScriptRequest(BaseModel):
     topic: str
     platform: str = "youtube"
     target_audience: str = "developers & tech enthusiasts"
-    auto_save_workspace: bool = True
+    auto_save_memory: bool = True
+
+class RAGSearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+class ReflectionRequest(BaseModel):
+    task_title: str
+    task_goal: str
+    outcome_summary: str
+    user_feedback: Optional[str] = None
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -244,10 +258,22 @@ def chat_with_local_brain(req: ChatRequest):
             detail="System is currently in SLEEP MODE. Wake up the assistant from the dashboard header to resume."
         )
 
+    # Inject RAG context from relevant past memories
+    user_msg_content = next((m["content"] for m in reversed(req.messages) if m["role"] == "user"), "")
+    rag_context = SemanticRAGEngine.build_rag_context(user_msg_content) if user_msg_content else ""
+
+    messages_with_rag = list(req.messages)
+    if rag_context and len(messages_with_rag) > 0:
+        # Prepend RAG context to system message or user message
+        if messages_with_rag[0]["role"] == "system":
+            messages_with_rag[0]["content"] += f"\n\n{rag_context}"
+        else:
+            messages_with_rag.insert(0, {"role": "system", "content": f"You are a local personal assistant.{rag_context}"})
+
     app_logger.info(f"Chat request with complexity '{req.complexity}' received.")
     try:
         response = llm_client.generate_chat_completion(
-            messages=req.messages,
+            messages=messages_with_rag,
             complexity=req.complexity,
             temperature=req.temperature,
             max_tokens=req.max_tokens
@@ -587,8 +613,13 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
             "model_used": "System Voice Perception"
         }
 
-    # 2. Chat Completion with Local LLM Brain
-    messages = [{"role": "user", "content": user_text}]
+    # 2. Chat Completion with Local LLM Brain and RAG Context
+    rag_context = SemanticRAGEngine.build_rag_context(user_text)
+    messages = [
+        {"role": "system", "content": f"You are a local personal assistant.{rag_context}"},
+        {"role": "user", "content": user_text}
+    ]
+    
     llm_res = llm_client.generate_chat_completion(
         messages=messages,
         complexity=complexity,
@@ -771,7 +802,35 @@ def content_script_endpoint(req: ContentScriptRequest):
         auto_save_workspace=req.auto_save_workspace
     )
 
-# 15. System Kill Switch: Sleep & Shutdown Endpoints
+# 15. Phase 7 Meta-Learning & RAG Memory Endpoints
+@app.post("/memory/rag-search")
+def rag_search_endpoint(req: RAGSearchRequest):
+    results = SemanticRAGEngine.search_memories(req.query, limit=req.limit)
+    context_str = SemanticRAGEngine.build_rag_context(req.query, limit=req.limit)
+    return {
+        "query": req.query,
+        "results_count": len(results),
+        "results": results,
+        "rag_prompt_context": context_str
+    }
+
+@app.post("/memory/reflect")
+def task_reflection_endpoint(req: ReflectionRequest):
+    return ReflectionEngine.reflect_on_task_execution(
+        req.task_title, 
+        req.task_goal, 
+        req.outcome_summary, 
+        user_feedback=req.user_feedback
+    )
+
+@app.get("/memory/constitution")
+def get_constitution_endpoint():
+    return {
+        "constitution_summary": DecisionConstitution.get_constitution_summary(),
+        "rules": DecisionConstitution.CORE_VALUES
+    }
+
+# 16. System Kill Switch: Sleep & Shutdown Endpoints
 def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)
