@@ -40,6 +40,11 @@ from app.tools.music_studio import MusicStudioTool
 from app.tools.content_creator import ContentCreatorTool
 from app.tools.cybersecurity_brain import CybersecurityBrainTool
 
+from app.tools.security_education import SecurityEducationTool
+from app.tools.coder_brain import CoderBrainTool
+from app.tools.media_studio import MediaStudioTool
+from app.tools.knowledge_domains import KnowledgeDomainsTool
+
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.reflection_engine import ReflectionEngine
 from app.memory.decision_constitution import DecisionConstitution
@@ -198,7 +203,7 @@ class ContentScriptRequest(BaseModel):
     topic: str
     platform: str = "youtube"
     target_audience: str = "developers & tech enthusiasts"
-    auto_save_memory: bool = True
+    auto_save_workspace: bool = True
 
 class RAGSearchRequest(BaseModel):
     query: str
@@ -289,6 +294,32 @@ class SigmaRuleRequest(BaseModel):
     title: str
     logsource_category: str = "process_creation"
     detection_selection: Dict[str, Any]
+
+class DefensiveAuditRequest(BaseModel):
+    code_snippet: str
+    language: str = "python"
+
+class CodeDebugRequest(BaseModel):
+    code_snippet: str
+    language: str = "python"
+
+class UnitTestsRequest(BaseModel):
+    code_snippet: str
+    language: str = "python"
+
+class SVGGenerateRequest(BaseModel):
+    description: str
+
+class LegalConsultRequest(BaseModel):
+    topic_or_question: str
+
+class CounselingRequest(BaseModel):
+    user_reflection: str
+
+class PnLCalcRequest(BaseModel):
+    revenue: float
+    operating_expenses: float
+    tax_rate_percent: float = 20.0
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -904,6 +935,38 @@ def security_generate_yara_endpoint(req: YaraRuleRequest):
 @app.post("/specialists/security/generate-sigma")
 def security_generate_sigma_endpoint(req: SigmaRuleRequest):
     return CybersecurityBrainTool.generate_sigma_rule(req.title, req.logsource_category, req.detection_selection)
+
+@app.post("/specialists/security/defensive-audit")
+def security_defensive_audit_endpoint(req: DefensiveAuditRequest):
+    return SecurityEducationTool.audit_code_defensively(req.code_snippet, language=req.language)
+
+@app.post("/specialists/coder/debug")
+def coder_debug_endpoint(req: CodeDebugRequest):
+    return CoderBrainTool.explain_and_debug_code(req.code_snippet, language=req.language)
+
+@app.post("/specialists/coder/generate-tests")
+def coder_generate_tests_endpoint(req: UnitTestsRequest):
+    return CoderBrainTool.generate_unit_tests(req.code_snippet, language=req.language)
+
+@app.post("/specialists/media/generate-svg")
+def media_generate_svg_endpoint(req: SVGGenerateRequest):
+    return MediaStudioTool.generate_svg_graphic(req.description)
+
+@app.post("/specialists/legal/consult")
+def legal_consult_endpoint(req: LegalConsultRequest):
+    return KnowledgeDomainsTool.legal_compliance_consult(req.topic_or_question)
+
+@app.post("/specialists/counseling/reflect")
+def counseling_reflect_endpoint(req: CounselingRequest):
+    return KnowledgeDomainsTool.psychological_counseling_partner(req.user_reflection)
+
+@app.post("/specialists/finance/pnl-calc")
+def finance_pnl_calc_endpoint(req: PnLCalcRequest):
+    return KnowledgeDomainsTool.accounting_finance_calc(
+        req.revenue, 
+        req.operating_expenses, 
+        tax_rate_percent=req.tax_rate_percent
+    )
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
