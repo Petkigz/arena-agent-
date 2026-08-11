@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, status, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query, status, Request, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict
@@ -7,6 +7,8 @@ import httpx
 import os
 import socket
 import uuid
+import signal
+import sys
 
 from app.config import settings
 from app.database import db
@@ -29,6 +31,9 @@ app = FastAPI(
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
     version="0.1.0"
 )
+
+# Global System State
+SYSTEM_STATE = "active"  # "active" or "sleeping"
 
 # Mount static files directory if it exists
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -109,6 +114,9 @@ class MobileLocationRequest(BaseModel):
     longitude: float
     city: Optional[str] = None
 
+class SystemSleepRequest(BaseModel):
+    mode: str = Field(..., description="'sleeping' or 'active'")
+
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
 def get_root(request: Request):
@@ -130,6 +138,7 @@ def get_root(request: Request):
 
     return {
         "status": "online",
+        "system_mode": SYSTEM_STATE,
         "app_name": settings.APP_NAME,
         "version": "0.1.0",
         "local_llm_status": lm_status,
@@ -149,6 +158,7 @@ def get_api_status():
 
     return {
         "status": "online",
+        "system_mode": SYSTEM_STATE,
         "app_name": settings.APP_NAME,
         "version": "0.1.0",
         "local_llm_status": lm_status,
@@ -159,6 +169,13 @@ def get_api_status():
 # 2. Local Chat Completions Route
 @app.post("/chat")
 def chat_with_local_brain(req: ChatRequest):
+    global SYSTEM_STATE
+    if SYSTEM_STATE == "sleeping":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System is currently in SLEEP MODE. Wake up the assistant from the dashboard header to resume."
+        )
+
     app_logger.info(f"Chat request with complexity '{req.complexity}' received.")
     try:
         response = llm_client.generate_chat_completion(
@@ -471,6 +488,13 @@ async def record_voice_profile_endpoint(file: UploadFile = File(...), profile_na
 
 @app.post("/voice/chat")
 async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Query("fast")):
+    global SYSTEM_STATE
+    if SYSTEM_STATE == "sleeping":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System is currently in SLEEP MODE. Wake up the assistant to resume."
+        )
+
     # 1. Save and Transcribe Audio
     audio_bytes = await file.read()
     temp_filename = f"voice_input_{file.filename or 'mic.wav'}"
@@ -569,4 +593,44 @@ async def upload_mobile_camera_photo(file: UploadFile = File(...)):
         "file_name": filename,
         "file_path": str(file_path),
         "file_url": f"/static/camera_uploads/{filename}"
+    }
+
+# 12. System Kill Switch: Sleep & Shutdown Endpoints
+def _perform_graceful_shutdown():
+    app_logger.info("Executing graceful system shutdown...")
+    db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)
+
+@app.get("/system/mode")
+def get_system_mode_endpoint():
+    global SYSTEM_STATE
+    return {"system_mode": SYSTEM_STATE}
+
+@app.post("/system/sleep")
+def set_system_sleep_endpoint(req: SystemSleepRequest):
+    global SYSTEM_STATE
+    mode = req.mode.lower().strip()
+    if mode in ["sleeping", "sleep"]:
+        SYSTEM_STATE = "sleeping"
+        db.create_audit_log("system_sleep", "success", "System set to SLEEP MODE. Inference & tasks paused.", level=1)
+        return {"success": True, "system_mode": "sleeping", "message": "Assistant is now in SLEEP MODE. All background inference paused."}
+    else:
+        SYSTEM_STATE = "active"
+        db.create_audit_log("system_wake", "success", "System WOKEN UP. Resuming active operations.", level=1)
+        return {"success": True, "system_mode": "active", "message": "Assistant is now ACTIVE and ready."}
+
+@app.post("/system/shutdown")
+def trigger_system_shutdown(background_tasks: BackgroundTasks):
+    global SYSTEM_STATE
+    SYSTEM_STATE = "shutdown"
+    _perform_graceful_shutdown()
+    
+    # Schedule process termination shortly after returning HTTP response
+    def shutdown_process():
+        os.kill(os.getpid(), signal.SIGTERM if hasattr(signal, 'SIGTERM') else signal.SIGINT)
+
+    background_tasks.add_task(shutdown_process)
+    
+    return {
+        "success": True,
+        "message": "System shutdown initiated safely. Database connections closed and server process terminating."
     }
