@@ -43,6 +43,11 @@ from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.reflection_engine import ReflectionEngine
 from app.memory.decision_constitution import DecisionConstitution
 
+from app.utils.hardware_monitor import HardwareMonitor
+from app.utils.notifier import SystemNotifier
+from app.scheduler import ProactiveScheduler
+from app.agents.multi_agent import MultiAgentTeam
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -198,6 +203,14 @@ class ReflectionRequest(BaseModel):
     task_goal: str
     outcome_summary: str
     user_feedback: Optional[str] = None
+
+class NotificationRequest(BaseModel):
+    title: str
+    message: str
+
+class MultiAgentRequest(BaseModel):
+    objective: str
+    complexity: str = "main"
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -830,7 +843,29 @@ def get_constitution_endpoint():
         "rules": DecisionConstitution.CORE_VALUES
     }
 
-# 16. System Kill Switch: Sleep & Shutdown Endpoints
+# 16. Upgrades 1, 4, 5, 6: Hardware Monitor, Notifier, Scheduler & Multi-Agent Endpoints
+@app.get("/api/hardware-stats")
+def get_hardware_stats_endpoint():
+    return HardwareMonitor.get_hardware_stats()
+
+@app.post("/system/notify")
+def send_notification_endpoint(req: NotificationRequest):
+    return SystemNotifier.send_notification(req.title, req.message)
+
+@app.get("/scheduler/jobs")
+def list_scheduler_jobs_endpoint():
+    return {"jobs": ProactiveScheduler.list_jobs()}
+
+@app.delete("/scheduler/jobs/{job_id}")
+def remove_scheduler_job_endpoint(job_id: str):
+    success = ProactiveScheduler.remove_job(job_id)
+    return {"success": success, "job_id": job_id}
+
+@app.post("/agents/multi-agent-collaborate")
+def run_multi_agent_endpoint(req: MultiAgentRequest):
+    return MultiAgentTeam.run_collaborative_workflow(req.objective, complexity=req.complexity)
+
+# 17. System Kill Switch: Sleep & Shutdown Endpoints
 def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)

@@ -465,6 +465,11 @@
             </div>
         </div>
         <div class="status-bar">
+            <!-- Live Hardware Monitor Badges -->
+            <div class="status-badge" id="hw-badge" style="color: var(--accent-cyan);">
+                💻 CPU: <span id="hw-cpu">--%</span> | RAM: <span id="hw-ram">-- GB</span>
+            </div>
+
             <!-- System Mode Badge -->
             <div class="status-badge" id="sys-mode-badge" style="cursor: pointer;" onclick="toggleSleepMode()">
                 <div class="dot online" id="sys-mode-dot"></div> <span id="sys-mode-text">System: Active</span>
@@ -484,6 +489,7 @@
     <!-- Navigation -->
     <nav>
         <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Mobile Remote</button>
+        <button class="nav-btn" onclick="switchTab('workspace')">📁 Workspace & Drafts</button>
         <button class="nav-btn" onclick="switchTab('specialists')">🎯 Domain Specialists</button>
         <button class="nav-btn" onclick="switchTab('automation')">🤖 Browser & Desktop Automation</button>
         <button class="nav-btn" onclick="switchTab('vision')">👁️ Desktop Sight & Vision</button>
@@ -564,8 +570,49 @@
             </div>
         </div>
 
+        <!-- Upgrade 5: Workspace File Explorer & Editor Tab -->
+        <div id="tab-workspace" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>
+                        <span>Workspace Files Explorer</span>
+                        <button class="btn btn-secondary" style="padding: 0.35rem 0.7rem; font-size: 0.75rem;" onclick="loadWorkspaceFiles()">🔄 Refresh Files</button>
+                    </h2>
+                    <div id="workspace-files-list" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                        Loading workspace files...
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>
+                        <span id="editor-file-title">File Editor</span>
+                        <button class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.75rem;" onclick="saveWorkspaceFile()">Save File Changes</button>
+                    </h2>
+                    <div class="form-group">
+                        <label>File Path</label>
+                        <input type="text" id="editor-filepath" placeholder="data/workspace/drafts/example.md">
+                    </div>
+                    <textarea id="editor-file-content" style="height: 320px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Select a file from the list or type path to edit..."></textarea>
+                </div>
+            </div>
+        </div>
+
         <!-- 2. Phase 6 Domain Specialists Tab -->
         <div id="tab-specialists" class="tab-content">
+            <div class="card">
+                <h2>👥 Multi-Agent Persona Collaboration Engine</h2>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                    Executes an objective through 4 specialized AI personas in collaboration: <strong>Planner Agent</strong> ➔ <strong>Researcher Agent</strong> ➔ <strong>Specialist Agent</strong> ➔ <strong>Safety Critic Inspector</strong>.
+                </p>
+                <form onsubmit="runMultiAgentCollaboration(event)">
+                    <div class="form-group">
+                        <label>Collaborative Multi-Agent Objective</label>
+                        <input type="text" id="multi-agent-obj" placeholder="e.g. Design an automated trading journal pipeline in Python" required>
+                    </div>
+                    <button type="submit" class="btn" style="width: 100%;">👥 Run Multi-Agent Persona Team Collaboration</button>
+                </form>
+            </div>
+
             <div class="grid-2">
                 <div class="card">
                     <h2>🛡️ Cybersecurity Lab Assessor</h2>
@@ -614,7 +661,7 @@
                 <div class="card">
                     <h2>🎵 Music Studio DAW Vocal Helper</h2>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-                        Generates tailored vocal chain parameters (EQ, Compression, De-Essing, Reverb) for DAW production.
+                        Generates tailored vocal mixing chain parameters (EQ, Compression, De-Essing, Reverb) for DAW production.
                     </p>
                     <form onsubmit="generateVocalChain(event)">
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
@@ -1029,11 +1076,128 @@
             event.target.classList.add('active');
             document.getElementById(`tab-${tabId}`).classList.add('active');
 
+            if (tabId === 'workspace') loadWorkspaceFiles();
             if (tabId === 'tasks') loadTasks();
             if (tabId === 'memory') loadMemories();
             if (tabId === 'models') loadModelsTab();
             if (tabId === 'security') loadAuditLogs();
             if (tabId === 'manual') loadManualAndRules();
+        }
+
+        // Live Hardware Stats Poller
+        async function fetchHardwareStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/hardware-stats`);
+                const data = await res.json();
+                document.getElementById('hw-cpu').innerText = `${data.cpu_percent}%`;
+                document.getElementById('hw-ram').innerText = `${data.ram_used_gb}/${data.ram_total_gb} GB (${data.ram_percent}%)`;
+            } catch (e) {
+                console.error("Hardware stats error", e);
+            }
+        }
+
+        // Workspace Files Tab Logic
+        async function loadWorkspaceFiles() {
+            try {
+                const res = await fetch(`${API_BASE}/tools/workspace-files`);
+                const files = await res.json();
+                const container = document.getElementById('workspace-files-list');
+                container.innerHTML = '';
+
+                if (files.length === 0) {
+                    container.innerHTML = '<div style="color: var(--text-muted);">No workspace files found.</div>';
+                    return;
+                }
+
+                files.forEach(f => {
+                    const item = document.createElement('div');
+                    item.style.background = 'var(--bg-primary)';
+                    item.style.border = '1px solid var(--border-color)';
+                    item.style.padding = '0.6rem 0.8rem';
+                    item.style.borderRadius = '6px';
+                    item.style.display = 'flex';
+                    item.style.justifyContent = 'space-between';
+                    item.style.alignItems = 'center';
+
+                    item.innerHTML = `
+                        <div style="font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;">
+                            📄 ${escapeHtml(f.file_name)}
+                            <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 0.5rem;">(${Math.round(f.size_bytes / 1024)} KB)</span>
+                        </div>
+                        <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="openWorkspaceFileForEdit('${escapeHtml(f.file_path)}')">Open File</button>
+                    `;
+                    container.appendChild(item);
+                });
+            } catch (e) {
+                console.error("Error loading workspace files", e);
+            }
+        }
+
+        async function openWorkspaceFileForEdit(filePath) {
+            try {
+                const res = await fetch(`${API_BASE}/tools/read-doc`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: filePath, auto_save_memory: false })
+                });
+                const data = await res.json();
+                document.getElementById('editor-filepath').value = filePath;
+                document.getElementById('editor-file-content').value = data.content || '';
+                document.getElementById('editor-file-title').innerText = `Editing: ${data.file_name || filePath}`;
+            } catch (e) {
+                alert("Error reading file: " + e);
+            }
+        }
+
+        async function saveWorkspaceFile() {
+            const path = document.getElementById('editor-filepath').value.trim();
+            const content = document.getElementById('editor-file-content').value;
+            if (!path) {
+                alert("Please enter a file path to save.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/tools/create-doc`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: path, content, overwrite: true })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message || "File saved successfully!");
+                    loadWorkspaceFiles();
+                } else {
+                    alert("Error saving file: " + data.error);
+                }
+            } catch (e) {
+                alert("Error: " + e);
+            }
+        }
+
+        // Multi-Agent Collaboration API
+        async function runMultiAgentCollaboration(e) {
+            e.preventDefault();
+            const objective = document.getElementById('multi-agent-obj').value.trim();
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[MULTI-AGENT TEAM] Starting collaboration for objective '${objective}'...\n1. Planner Agent ➔ 2. Researcher RAG ➔ 3. Specialist Agent ➔ 4. Safety Critic Inspector...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/agents/multi-agent-collaborate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ objective })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [MULTI-AGENT TEAM COLLABORATION COMPLETED]\n\n=== 1. PLANNER AGENT PLAN ===\n${data.plan_by_planner}\n\n=== 2. FINAL VERIFIED SOLUTION ===\n${data.final_verified_solution}`;
+                } else {
+                    consoleElem.innerText = `✕ [MULTI-AGENT ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
         }
 
         // Phase 6: Specialist API Logic
@@ -1348,11 +1512,12 @@
                 // Update Chat Header Description
                 document.getElementById('chat-brain-desc').innerText = `LM Studio: ${data.lm_studio_url} | Fast: ${data.configured_fast_model} | Main: ${data.configured_main_model}`;
 
-                // Populate Voice Profiles List & Microphones
+                // Populate Voice Profiles List & Microphones & Hardware
                 loadVoiceProfiles();
                 enumerateMicrophones();
                 fetchNetworkInfo();
                 checkSystemMode();
+                fetchHardwareStats();
             } catch (e) {
                 console.error("Error pinging backend model status", e);
             }
