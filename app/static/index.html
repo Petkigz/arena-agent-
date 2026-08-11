@@ -270,7 +270,8 @@
             background: var(--bg-secondary);
             border-top: 1px solid var(--border-color);
             display: flex;
-            gap: 1rem;
+            gap: 0.75rem;
+            align-items: center;
         }
 
         input[type="text"], textarea, select {
@@ -317,6 +318,18 @@
         .btn-danger {
             background: var(--danger);
             color: #fff;
+        }
+
+        .btn-recording {
+            background: var(--danger);
+            color: #fff;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1.0; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1.0; }
         }
 
         /* Task Cards */
@@ -449,7 +462,7 @@
 
     <!-- Navigation -->
     <nav>
-        <button class="nav-btn active" onclick="switchTab('chat')">💬 Local Chat & Brain</button>
+        <button class="nav-btn active" onclick="switchTab('chat')">💬 Local Chat & Voice</button>
         <button class="nav-btn" onclick="switchTab('learner')">🌐 Web & YouTube Learner</button>
         <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
         <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
@@ -463,31 +476,36 @@
     <!-- Main Content -->
     <main>
 
-        <!-- 1. Chat Tab -->
+        <!-- 1. Chat & Voice Tab -->
         <div id="tab-chat" class="tab-content active">
             <div class="chat-container">
                 <div class="chat-header">
                     <div>
-                        <strong>Local Neural Conversation</strong>
+                        <strong>Local Neural Conversation & Voice</strong>
                         <div style="font-size: 0.75rem; color: var(--text-muted);" id="chat-brain-desc">Connected to LM Studio local server</div>
                     </div>
-                    <div class="brain-selector">
-                        <span style="font-size: 0.8rem; color: var(--text-muted);">Active Brain:</span>
-                        <select id="brain-model">
-                            <!-- Populated dynamically with all available & loaded models -->
-                            <option value="fast">Fast Brain</option>
-                            <option value="main">Main Brain</option>
-                        </select>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <label style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                            <input type="checkbox" id="voice-output-toggle" checked> 🔊 Voice Output
+                        </label>
+                        <div class="brain-selector">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Active Brain:</span>
+                            <select id="brain-model">
+                                <option value="fast">Fast Brain</option>
+                                <option value="main">Main Brain</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="chat-messages" id="chat-messages">
                     <div class="message assistant">
-                        <div class="meta">SYSTEM :: CORE READY</div>
-                        Hello! I am your fully local personal assistant running on your machine. How can I assist you with your tasks, research, or system configuration today?
+                        <div class="meta">SYSTEM :: VOICE & CORE READY</div>
+                        Hello! I am your fully local personal assistant running on your machine. You can type or click the microphone button below to speak out loud!
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type your instruction or message here..." onkeypress="handleKeyPress(event)">
+                    <input type="text" id="chat-input" placeholder="Type or click '🎙️ Record Voice' to speak..." onkeypress="handleKeyPress(event)">
+                    <button class="btn btn-secondary" id="voice-rec-btn" onclick="toggleVoiceRecording()">🎙️ Record Voice</button>
                     <button class="btn" onclick="sendMessage()">Send Request</button>
                 </div>
             </div>
@@ -727,6 +745,9 @@
     <!-- JavaScript logic -->
     <script>
         const API_BASE = "";
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
 
         // Tab Switching
         function switchTab(tabId) {
@@ -798,6 +819,86 @@
             } catch (e) {
                 console.error("Error pinging backend model status", e);
             }
+        }
+
+        // Voice Recording Logic
+        async function toggleVoiceRecording() {
+            const btn = document.getElementById('voice-rec-btn');
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        await sendVoiceChat(audioBlob);
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    btn.className = "btn btn-recording";
+                    btn.innerText = "🛑 Stop & Send Voice";
+                } catch (err) {
+                    alert("Microphone access error: " + err);
+                }
+            } else {
+                if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                    mediaRecorder.stop();
+                }
+                isRecording = false;
+                btn.className = "btn btn-secondary";
+                btn.innerText = "🎙️ Record Voice";
+            }
+        }
+
+        async function sendVoiceChat(audioBlob) {
+            const brainSelect = document.getElementById('brain-model');
+            const brain = brainSelect.value;
+            const messagesContainer = document.getElementById('chat-messages');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'message user';
+            userDiv.innerHTML = `<div class="meta">YOU (VOICE INPUT)</div>🎙️ <em>Transcribing voice recording...</em>`;
+            messagesContainer.appendChild(userDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const assistDiv = document.createElement('div');
+            assistDiv.className = 'message assistant';
+            assistDiv.innerHTML = `<div class="meta">ASSISTANT :: PROCESSING VOICE & LLM...</div>Processing speech & generating voice response...`;
+            messagesContainer.appendChild(assistDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'microphone.wav');
+
+            try {
+                const res = await fetch(`${API_BASE}/voice/chat?complexity=${brain}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    userDiv.innerHTML = `<div class="meta">YOU (SPOKEN VOICE)</div>${escapeHtml(data.user_text)}`;
+                    assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(data.model_used)})</div>${escapeHtml(data.assistant_text)}`;
+
+                    // Play Synthesized Voice Audio if enabled
+                    if (data.audio_url && document.getElementById('voice-output-toggle').checked) {
+                        const audio = new Audio(`${API_BASE}${data.audio_url}`);
+                        audio.play();
+                    }
+                } else {
+                    assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>${escapeHtml(data.error || 'Voice transcription failed.')}`;
+                }
+            } catch (err) {
+                assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to process voice request: ${err}`;
+            }
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
         // Phase 2: Learner API Logic
@@ -1007,6 +1108,24 @@
                 }
 
                 assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)})</div>${escapeHtml(reply)}`;
+
+                // Synthesize & Play Voice if Voice Output is enabled
+                if (document.getElementById('voice-output-toggle').checked) {
+                    try {
+                        const ttsRes = await fetch(`${API_BASE}/voice/synthesize`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: reply.substring(0, 300) })
+                        });
+                        const ttsData = await ttsRes.json();
+                        if (ttsData.audio_url) {
+                            const audio = new Audio(`${API_BASE}${ttsData.audio_url}`);
+                            audio.play();
+                        }
+                    } catch (ttsErr) {
+                        console.error("TTS output error", ttsErr);
+                    }
+                }
             } catch (e) {
                 assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to connect or auto-load model in LM Studio. Verify LM Studio server is running.`;
             }

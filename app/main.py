@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, status, Request
+from fastapi import FastAPI, HTTPException, Query, status, Request, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict
@@ -19,6 +19,9 @@ from app.tools.doc_reader import DocumentReader
 from app.tools.doc_manager import DocumentManager
 from app.tools.knowledge_indexer import KnowledgeIndexer
 
+from app.perception.speech_to_text import LocalSpeechToText
+from app.perception.text_to_speech import LocalTextToSpeech
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -29,6 +32,11 @@ app = FastAPI(
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Mount audio static directory
+audio_dir = settings.DATA_DIR / "audio"
+audio_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 
 # Models for the API
 class ChatRequest(BaseModel):
@@ -87,6 +95,9 @@ class DocEditRequest(BaseModel):
     append_content: Optional[str] = None
     search_target: Optional[str] = None
     replace_text: Optional[str] = None
+
+class TTSSynthesizeRequest(BaseModel):
+    text: str
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -398,3 +409,70 @@ def edit_doc_endpoint(req: DocEditRequest):
         search_target=req.search_target,
         replace_text=req.replace_text
     )
+
+# 10. Phase 3 Perception: Local Speech-to-Text & Text-to-Speech Endpoints
+@app.post("/voice/transcribe")
+async def voice_transcribe_endpoint(file: UploadFile = File(...)):
+    audio_bytes = await file.read()
+    temp_filename = f"recording_{file.filename or 'input.wav'}"
+    temp_path = settings.DATA_DIR / "audio" / temp_filename
+    temp_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(temp_path, "wb") as f:
+        f.write(audio_bytes)
+        
+    res = LocalSpeechToText.transcribe_file(str(temp_path))
+    db.create_audit_log("voice_transcribe", "success", f"Transcribed {file.filename}: '{res.get('text', '')[:100]}'", level=0)
+    return res
+
+@app.post("/voice/synthesize")
+def voice_synthesize_endpoint(req: TTSSynthesizeRequest):
+    res = LocalTextToSpeech.synthesize_speech(req.text)
+    db.create_audit_log("voice_synthesize", "success", f"Synthesized speech for text: '{req.text[:80]}'", level=0)
+    return res
+
+@app.post("/voice/chat")
+async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Query("fast")):
+    # 1. Save and Transcribe Audio
+    audio_bytes = await file.read()
+    temp_filename = f"voice_input_{file.filename or 'mic.wav'}"
+    temp_path = settings.DATA_DIR / "audio" / temp_filename
+    temp_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(temp_path, "wb") as f:
+        f.write(audio_bytes)
+        
+    stt_res = LocalSpeechToText.transcribe_file(str(temp_path))
+    user_text = stt_res.get("text", "").strip()
+    
+    if not user_text:
+        return {
+            "success": False,
+            "error": "Could not transcribe audio or no speech detected.",
+            "user_text": "",
+            "assistant_text": "",
+            "audio_url": ""
+        }
+
+    # 2. Chat Completion with Local LLM Brain
+    messages = [{"role": "user", "content": user_text}]
+    llm_res = llm_client.generate_chat_completion(
+        messages=messages,
+        complexity=complexity,
+        max_tokens=256
+    )
+    
+    assistant_text = "No response generated."
+    if llm_res.get("choices") and len(llm_res["choices"]) > 0:
+        assistant_text = llm_res["choices"][0]["message"]["content"]
+
+    # 3. Synthesize Speech
+    tts_res = LocalTextToSpeech.synthesize_speech(assistant_text)
+
+    return {
+        "success": True,
+        "user_text": user_text,
+        "assistant_text": assistant_text,
+        "audio_url": tts_res.get("audio_url", ""),
+        "model_used": llm_res.get("model", "")
+    }
