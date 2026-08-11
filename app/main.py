@@ -26,6 +26,10 @@ from app.tools.knowledge_indexer import KnowledgeIndexer
 from app.perception.speech_to_text import LocalSpeechToText
 from app.perception.text_to_speech import LocalTextToSpeech
 
+from app.tools.screen_capture import ScreenCaptureTool
+from app.tools.ocr_reader import OCRReaderTool
+from app.tools.vision_analyzer import VisionAnalyzerTool
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -116,6 +120,14 @@ class MobileLocationRequest(BaseModel):
 
 class SystemSleepRequest(BaseModel):
     mode: str = Field(..., description="'sleeping' or 'active'")
+
+class VisionOCRRequest(BaseModel):
+    image_path: str
+
+class VisionAnalyzeRequest(BaseModel):
+    image_path: str
+    prompt_focus: Optional[str] = None
+    auto_save_memory: bool = True
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -598,7 +610,40 @@ async def upload_mobile_camera_photo(file: UploadFile = File(...)):
         "file_url": f"/static/camera_uploads/{filename}"
     }
 
-# 12. System Kill Switch: Sleep & Shutdown Endpoints
+# 12. Phase 4 Vision & Desktop Sight Endpoints
+@app.post("/vision/capture")
+def capture_screen_endpoint():
+    res = ScreenCaptureTool.capture_screen()
+    db.create_audit_log("capture_screen", "success", f"Captured screen: {res.get('file_name')}", level=0)
+    return res
+
+@app.post("/vision/ocr")
+def vision_ocr_endpoint(req: VisionOCRRequest):
+    return OCRReaderTool.extract_text_from_image(req.image_path)
+
+@app.post("/vision/analyze")
+def vision_analyze_endpoint(req: VisionAnalyzeRequest):
+    return VisionAnalyzerTool.analyze_screen_image(
+        req.image_path, 
+        prompt_focus=req.prompt_focus, 
+        auto_save_memory=req.auto_save_memory
+    )
+
+@app.post("/vision/capture-and-analyze")
+def capture_and_analyze_screen_endpoint(prompt_focus: Optional[str] = Query(None)):
+    cap_res = ScreenCaptureTool.capture_screen()
+    if not cap_res.get("success"):
+        raise HTTPException(status_code=500, detail=cap_res.get("error", "Screen capture failed"))
+
+    analysis_res = VisionAnalyzerTool.analyze_screen_image(
+        cap_res["file_path"], 
+        prompt_focus=prompt_focus, 
+        auto_save_memory=True
+    )
+    analysis_res["image_url"] = cap_res["image_url"]
+    return analysis_res
+
+# 13. System Kill Switch: Sleep & Shutdown Endpoints
 def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)

@@ -484,6 +484,7 @@
     <!-- Navigation -->
     <nav>
         <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Mobile Remote</button>
+        <button class="nav-btn" onclick="switchTab('vision')">👁️ Desktop Sight & Vision</button>
         <button class="nav-btn" onclick="switchTab('learner')">🌐 Web & YouTube Learner</button>
         <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
         <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
@@ -561,7 +562,36 @@
             </div>
         </div>
 
-        <!-- 2. Web & YouTube Learner Tab -->
+        <!-- 2. Phase 4 Desktop Sight & Screen Vision Tab -->
+        <div id="tab-vision" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>👁️ Capture & Analyze Screen State</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Capture your active desktop screen window. Runs Tesseract OCR text extraction and uses Qwen to analyze open application states, UI error dialogs, or trading charts.
+                    </p>
+                    <div class="form-group">
+                        <label>Optional Inspection Focus Filter</label>
+                        <input type="text" id="vision-focus" placeholder="e.g. Look for compiler error message, DAW track window">
+                    </div>
+                    <button class="btn" style="width: 100%;" onclick="captureAndAnalyzeScreen()">📸 Snap & Analyze Active Screen</button>
+                </div>
+
+                <div class="card">
+                    <h2>Screenshot Preview</h2>
+                    <div id="vision-image-preview" style="height: 220px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.85rem; overflow: hidden;">
+                        No screen captured yet. Click "Snap & Analyze Active Screen".
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Desktop Vision Analysis & OCR Output</h2>
+                <div id="vision-console" class="console" style="height: 350px;">Click "Snap & Analyze Active Screen" to inspect your desktop window state...</div>
+            </div>
+        </div>
+
+        <!-- 3. Web & YouTube Learner Tab -->
         <div id="tab-learner" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -603,7 +633,7 @@
             </div>
         </div>
 
-        <!-- 3. Tasks Tab -->
+        <!-- 4. Tasks Tab -->
         <div id="tab-tasks" class="tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2>Active Persistent Tasks</h2>
@@ -614,7 +644,7 @@
             </div>
         </div>
 
-        <!-- 4. Memory Vault Tab -->
+        <!-- 5. Memory Vault Tab -->
         <div id="tab-memory" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -651,7 +681,7 @@
             </div>
         </div>
 
-        <!-- 5. Models & Brain Manager Tab -->
+        <!-- 6. Models & Brain Manager Tab -->
         <div id="tab-models" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -718,7 +748,7 @@
             </div>
         </div>
 
-        <!-- 6. Security & Audit Console -->
+        <!-- 7. Security & Audit Console -->
         <div id="tab-security" class="tab-content">
             <div class="card">
                 <h2>Real-Time Audit Console Log</h2>
@@ -729,7 +759,7 @@
             </div>
         </div>
 
-        <!-- 7. Manual & Rules Tab -->
+        <!-- 8. Manual & Rules Tab -->
         <div id="tab-manual" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -755,7 +785,7 @@
             </div>
         </div>
 
-        <!-- 8. Policy Simulator Tab -->
+        <!-- 9. Policy Simulator Tab -->
         <div id="tab-playground" class="tab-content">
             <div class="card">
                 <h2>Safety Policy Playground Simulator</h2>
@@ -845,6 +875,32 @@
             if (tabId === 'manual') loadManualAndRules();
         }
 
+        // Phase 4: Vision API Logic
+        async function captureAndAnalyzeScreen() {
+            const focus = document.getElementById('vision-focus').value.trim();
+            const consoleElem = document.getElementById('vision-console');
+            const previewElem = document.getElementById('vision-image-preview');
+
+            consoleElem.innerText = "[DESKTOP VISION] Capturing desktop screen...\nRunning Tesseract OCR & Qwen visual analysis...";
+
+            try {
+                const url = focus ? `${API_BASE}/vision/capture-and-analyze?prompt_focus=${encodeURIComponent(focus)}` : `${API_BASE}/vision/capture-and-analyze`;
+                const res = await fetch(url, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    if (data.image_url) {
+                        previewElem.innerHTML = `<img src="${API_BASE}${data.image_url}" style="width: 100%; height: 100%; object-fit: contain;">`;
+                    }
+                    consoleElem.innerText = `✓ [SCREEN CAPTURE & VISION ANALYSIS COMPLETED]\nImage: ${data.image_name}\nMemory Saved: #${data.memory_id || 'Indexed'}\n\n=== EXTRACTED OCR TEXT ===\n${data.ocr_text || '[No raw text]'}\n\n=== QWEN VISUAL ANALYSIS ===\n${data.ai_analysis}`;
+                } else {
+                    consoleElem.innerText = `✕ [ERROR CAPTURING SCREEN]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
         // System Kill Switch & Sleep Controls
         async function checkSystemMode() {
             try {
@@ -904,7 +960,7 @@
             }
         }
 
-        // Query & Test Microphones Connected to PC/Phone
+        // Query Microphones Connected to PC/Phone
         async function enumerateMicrophones() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
             try {
