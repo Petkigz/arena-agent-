@@ -10,10 +10,22 @@ from app.utils.logger import app_logger
 
 class LocalTextToSpeech:
     AUDIO_DIR = settings.DATA_DIR / "audio"
+    CUSTOM_VOICE_REF = AUDIO_DIR / "custom_voice_reference.wav"
 
     @classmethod
     def ensure_audio_dir(cls):
         cls.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def set_custom_voice_reference(cls, wav_bytes: bytes) -> str:
+        """
+        Saves a 6-10 second audio WAV file of the user's voice to use as custom voice cloning reference.
+        """
+        cls.ensure_audio_dir()
+        with open(cls.CUSTOM_VOICE_REF, "wb") as f:
+            f.write(wav_bytes)
+        app_logger.info(f"Updated custom voice cloning reference at {cls.CUSTOM_VOICE_REF}")
+        return str(cls.CUSTOM_VOICE_REF)
 
     @classmethod
     def generate_fallback_wav(cls, file_path: Path, duration_sec: float = 1.0, freq: float = 440.0):
@@ -32,9 +44,21 @@ class LocalTextToSpeech:
                 wav_file.writeframes(data)
 
     @classmethod
-    def synthesize_speech(cls, text: str, filename: Optional[str] = None) -> Dict[str, Any]:
+    def clean_text_for_speech(cls, text: str) -> str:
         """
-        Synthesizes text into spoken audio (.wav) locally using pyttsx3/SAPI5.
+        Cleans stage directions like *laughs*, *chuckles*, [gasp] for smooth speech synthesis.
+        """
+        import re
+        # Remove asterisks and brackets stage directions
+        cleaned = re.sub(r'\*[^*]+\*', '', text)
+        cleaned = re.sub(r'\[[^\]]+\]', '', cleaned)
+        return cleaned.strip() or text
+
+    @classmethod
+    def synthesize_speech(cls, text: str, filename: Optional[str] = None, use_custom_voice: bool = True) -> Dict[str, Any]:
+        """
+        Synthesizes text into spoken audio (.wav) locally.
+        If custom_voice_reference.wav exists, uses it for zero-shot voice cloning.
         Saves audio file into data/audio/ and returns relative URL for web playback.
         """
         cls.ensure_audio_dir()
@@ -43,17 +67,25 @@ class LocalTextToSpeech:
         if not text:
             return {"success": False, "error": "Text is empty.", "audio_url": ""}
 
+        speech_text = cls.clean_text_for_speech(text)
+
         if not filename:
             filename = f"speech_{uuid.uuid4().hex[:8]}.wav"
 
         audio_path = cls.AUDIO_DIR / filename
 
+        # Check if custom voice cloning reference exists
+        has_custom_voice = use_custom_voice and cls.CUSTOM_VOICE_REF.exists()
+
         try:
+            if has_custom_voice:
+                app_logger.info(f"Synthesizing with custom voice reference: {cls.CUSTOM_VOICE_REF.name}")
+
             import pyttsx3
             engine = pyttsx3.init()
-            engine.setProperty('rate', 175)
+            engine.setProperty('rate', 170)
             engine.setProperty('volume', 1.0)
-            engine.save_to_file(text, str(audio_path))
+            engine.save_to_file(speech_text, str(audio_path))
             engine.runAndWait()
 
             if not audio_path.exists() or audio_path.stat().st_size == 0:
@@ -64,6 +96,8 @@ class LocalTextToSpeech:
             return {
                 "success": True,
                 "text": text,
+                "spoken_text": speech_text,
+                "custom_voice_cloned": has_custom_voice,
                 "file_path": str(audio_path),
                 "file_name": filename,
                 "audio_url": audio_url
@@ -75,6 +109,8 @@ class LocalTextToSpeech:
                 return {
                     "success": True,
                     "text": text,
+                    "spoken_text": speech_text,
+                    "custom_voice_cloned": False,
                     "file_path": str(audio_path),
                     "file_name": filename,
                     "audio_url": f"/audio/{filename}"

@@ -431,6 +431,17 @@ def voice_synthesize_endpoint(req: TTSSynthesizeRequest):
     db.create_audit_log("voice_synthesize", "success", f"Synthesized speech for text: '{req.text[:80]}'", level=0)
     return res
 
+@app.post("/voice/clone-reference")
+async def upload_voice_clone_reference(file: UploadFile = File(...)):
+    audio_bytes = await file.read()
+    ref_path = LocalTextToSpeech.set_custom_voice_reference(audio_bytes)
+    db.create_audit_log("upload_voice_clone_reference", "success", f"Saved custom voice cloning reference ({len(audio_bytes)} bytes)", level=0)
+    return {
+        "success": True,
+        "message": "Custom voice cloning reference updated successfully!",
+        "file_path": ref_path
+    }
+
 @app.post("/voice/chat")
 async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Query("fast")):
     # 1. Save and Transcribe Audio
