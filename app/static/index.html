@@ -904,18 +904,20 @@
             }
         }
 
-        // Query Microphones Connected to PC/Phone
+        // Query & Test Microphones Connected to PC/Phone
         async function enumerateMicrophones() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const micSelect = document.getElementById('mic-device-select');
+                const audioDevices = devices.filter(d => d.kind === 'audioinput');
+
                 micSelect.innerHTML = '<option value="">Default Microphone</option>';
 
-                devices.filter(d => d.kind === 'audioinput').forEach((m, idx) => {
+                audioDevices.forEach((m, idx) => {
                     const opt = document.createElement('option');
                     opt.value = m.deviceId;
-                    opt.text = m.label || `Microphone ${idx + 1}`;
+                    opt.text = `🎙️ ` + (m.label || `Microphone ${idx + 1}`);
                     micSelect.appendChild(opt);
                 });
             } catch (e) {
@@ -1411,84 +1413,6 @@
             } catch (err) {
                 alert("Error saving model settings: " + err);
             }
-        }
-
-        // Chat Logic
-        async function sendMessage() {
-            if (currentSystemMode === 'sleeping') {
-                alert("System is currently in SLEEP MODE. Click 'System: Sleeping' at top-right to wake up!");
-                return;
-            }
-
-            const input = document.getElementById('chat-input');
-            const messageText = input.value.trim();
-            if (!messageText) return;
-
-            const brainSelect = document.getElementById('brain-model');
-            const brain = brainSelect.value;
-            const brainLabel = brainSelect.options[brainSelect.selectedIndex].text;
-            const messagesContainer = document.getElementById('chat-messages');
-
-            // Append User Message
-            const userDiv = document.createElement('div');
-            userDiv.className = 'message user';
-            userDiv.innerHTML = `<div class="meta">YOU</div>${escapeHtml(messageText)}`;
-            messagesContainer.appendChild(userDiv);
-
-            input.value = '';
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-            // Append Assistant Placeholder
-            const assistDiv = document.createElement('div');
-            assistDiv.className = 'message assistant';
-            assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)}) :: AUTO-LOADING MODEL & THINKING...</div>Auto-loading model in LM Studio VRAM & generating response...`;
-            messagesContainer.appendChild(assistDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-            try {
-                const res = await fetch(`${API_BASE}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: [{ role: "user", content: messageText }],
-                        complexity: brain,
-                        max_tokens: 512
-                    })
-                });
-
-                const data = await res.json();
-                let reply = "No response generated.";
-                if (data.choices && data.choices.length > 0) {
-                    reply = data.choices[0].message.content;
-                }
-
-                assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(brainLabel)})</div>${escapeHtml(reply)}`;
-
-                // Synthesize & Play Voice if Voice Output is enabled
-                if (document.getElementById('voice-output-toggle').checked) {
-                    try {
-                        const ttsRes = await fetch(`${API_BASE}/voice/synthesize`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: reply.substring(0, 300) })
-                        });
-                        const ttsData = await ttsRes.json();
-                        if (ttsData.audio_url) {
-                            const audio = new Audio(`${API_BASE}${ttsData.audio_url}`);
-                            audio.play();
-                        }
-                    } catch (ttsErr) {
-                        console.error("TTS output error", ttsErr);
-                    }
-                }
-            } catch (e) {
-                assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to connect or auto-load model in LM Studio. Verify LM Studio server is running.`;
-            }
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function handleKeyPress(e) {
-            if (e.key === 'Enter') sendMessage();
         }
 
         // Tasks API

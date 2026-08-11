@@ -507,13 +507,16 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
     stt_res = LocalSpeechToText.transcribe_file(str(temp_path))
     user_text = stt_res.get("text", "").strip()
     
-    if not user_text:
+    # Conversational Fallback if no clear speech detected
+    if not user_text or len(user_text) == 0:
+        fallback_msg = "I didn't get that—I couldn't hear you clearly. Could you please say that again?"
+        tts_res = LocalTextToSpeech.synthesize_speech(fallback_msg)
         return {
-            "success": False,
-            "error": "Could not transcribe audio or no speech detected.",
-            "user_text": "",
-            "assistant_text": "",
-            "audio_url": ""
+            "success": True,
+            "user_text": "[Unclear speech / No audio detected]",
+            "assistant_text": fallback_msg,
+            "audio_url": tts_res.get("audio_url", ""),
+            "model_used": "System Voice Perception"
         }
 
     # 2. Chat Completion with Local LLM Brain
