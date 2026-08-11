@@ -484,6 +484,7 @@
     <!-- Navigation -->
     <nav>
         <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Mobile Remote</button>
+        <button class="nav-btn" onclick="switchTab('automation')">🤖 Browser & Desktop Automation</button>
         <button class="nav-btn" onclick="switchTab('vision')">👁️ Desktop Sight & Vision</button>
         <button class="nav-btn" onclick="switchTab('learner')">🌐 Web & YouTube Learner</button>
         <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
@@ -562,7 +563,54 @@
             </div>
         </div>
 
-        <!-- 2. Phase 4 Desktop Sight & Screen Vision Tab -->
+        <!-- 2. Phase 5 Browser & Desktop Automation Tab -->
+        <div id="tab-automation" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🤖 Autonomous Web Agent Workflow</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Executes multi-step browser tasks using Playwright. Submitting forms or publishing data is governed by Level 3 Safety Policies.
+                    </p>
+                    <form onsubmit="runWebAgentWorkflow(event)">
+                        <div class="form-group">
+                            <label>Target Web Objective</label>
+                            <input type="text" id="web-objective" placeholder="e.g. Find Solana developer job requirements" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Target URL</label>
+                            <input type="text" id="web-target-url" placeholder="https://github.com or https://example.com" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🚀 Execute Web Agent Workflow</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>💻 Approved Desktop Application Launcher</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Launches local approved applications on Windows/Linux under Level 2 Safety Policies.
+                    </p>
+                    <div class="form-group">
+                        <label>Approved Desktop App</label>
+                        <select id="desktop-app-select">
+                            <option value="vscode">VS Code</option>
+                            <option value="chrome">Google Chrome</option>
+                            <option value="lm_studio">LM Studio</option>
+                            <option value="notepad">Notepad</option>
+                            <option value="calculator">Calculator</option>
+                            <option value="terminal">Terminal / PowerShell</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" style="width: 100%;" onclick="launchDesktopApp()">🚀 Launch Selected Application</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Automation Execution Console</h2>
+                <div id="automation-console" class="console" style="height: 350px;">Submit a web agent workflow or app launch request above...</div>
+            </div>
+        </div>
+
+        <!-- 3. Phase 4 Desktop Sight & Screen Vision Tab -->
         <div id="tab-vision" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -591,7 +639,7 @@
             </div>
         </div>
 
-        <!-- 3. Web & YouTube Learner Tab -->
+        <!-- 4. Web & YouTube Learner Tab -->
         <div id="tab-learner" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -633,7 +681,7 @@
             </div>
         </div>
 
-        <!-- 4. Tasks Tab -->
+        <!-- 5. Tasks Tab -->
         <div id="tab-tasks" class="tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2>Active Persistent Tasks</h2>
@@ -644,7 +692,7 @@
             </div>
         </div>
 
-        <!-- 5. Memory Vault Tab -->
+        <!-- 6. Memory Vault Tab -->
         <div id="tab-memory" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -681,7 +729,7 @@
             </div>
         </div>
 
-        <!-- 6. Models & Brain Manager Tab -->
+        <!-- 7. Models & Brain Manager Tab -->
         <div id="tab-models" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -748,7 +796,7 @@
             </div>
         </div>
 
-        <!-- 7. Security & Audit Console -->
+        <!-- 8. Security & Audit Console -->
         <div id="tab-security" class="tab-content">
             <div class="card">
                 <h2>Real-Time Audit Console Log</h2>
@@ -759,7 +807,7 @@
             </div>
         </div>
 
-        <!-- 8. Manual & Rules Tab -->
+        <!-- 9. Manual & Rules Tab -->
         <div id="tab-manual" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -785,7 +833,7 @@
             </div>
         </div>
 
-        <!-- 9. Policy Simulator Tab -->
+        <!-- 10. Policy Simulator Tab -->
         <div id="tab-playground" class="tab-content">
             <div class="card">
                 <h2>Safety Policy Playground Simulator</h2>
@@ -873,6 +921,58 @@
             if (tabId === 'models') loadModelsTab();
             if (tabId === 'security') loadAuditLogs();
             if (tabId === 'manual') loadManualAndRules();
+        }
+
+        // Phase 5: Automation API Logic
+        async function runWebAgentWorkflow(e) {
+            e.preventDefault();
+            const objective = document.getElementById('web-objective').value.trim();
+            const targetUrl = document.getElementById('web-target-url').value.trim();
+            const consoleElem = document.getElementById('automation-console');
+
+            consoleElem.innerText = `[WEB AGENT] Launching Playwright browser for objective '${objective}' on ${targetUrl}...\nNavigating & extracting content...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/automation/web-agent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ objective, target_url: targetUrl })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [WEB WORKFLOW COMPLETED]\nTarget: ${data.target_url}\nMemory ID Saved: #${data.memory_id || 'Indexed'}\n\n=== AGENT FINDINGS & SUMMARY ===\n${data.agent_summary}`;
+                } else {
+                    consoleElem.innerText = `✕ [ERROR EXECUTING WORKFLOW]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function launchDesktopApp() {
+            const appSelect = document.getElementById('desktop-app-select');
+            const appName = appSelect.value;
+            const consoleElem = document.getElementById('automation-console');
+
+            consoleElem.innerText = `[DESKTOP CONTROL] Requesting desktop launch for '${appName}'...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/automation/desktop/launch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ app_name: appName })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [APP LAUNCHED] ${data.message}`;
+                } else {
+                    consoleElem.innerText = `✕ [LAUNCH ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
         }
 
         // Phase 4: Vision API Logic

@@ -30,6 +30,10 @@ from app.tools.screen_capture import ScreenCaptureTool
 from app.tools.ocr_reader import OCRReaderTool
 from app.tools.vision_analyzer import VisionAnalyzerTool
 
+from app.tools.browser_automation import BrowserAutomation
+from app.tools.desktop_control import DesktopControl
+from app.tools.web_agent import WebAgent
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -128,6 +132,20 @@ class VisionAnalyzeRequest(BaseModel):
     image_path: str
     prompt_focus: Optional[str] = None
     auto_save_memory: bool = True
+
+class BrowserNavigateRequest(BaseModel):
+    url: str
+    fill_inputs: Optional[Dict[str, str]] = None
+    click_selectors: Optional[List[str]] = None
+    submit_form: bool = False
+
+class AppLaunchRequest(BaseModel):
+    app_name: str
+
+class WebAgentRequest(BaseModel):
+    objective: str
+    target_url: str
+    complexity: str = "main"
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -643,7 +661,29 @@ def capture_and_analyze_screen_endpoint(prompt_focus: Optional[str] = Query(None
     analysis_res["image_url"] = cap_res["image_url"]
     return analysis_res
 
-# 13. System Kill Switch: Sleep & Shutdown Endpoints
+# 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
+@app.post("/automation/browser/navigate")
+def browser_navigate_endpoint(req: BrowserNavigateRequest):
+    return BrowserAutomation.navigate_and_extract(
+        req.url, 
+        fill_inputs=req.fill_inputs, 
+        click_selectors=req.click_selectors, 
+        submit_form=req.submit_form
+    )
+
+@app.get("/automation/desktop/apps")
+def list_approved_apps_endpoint():
+    return {"approved_apps": DesktopControl.list_approved_apps()}
+
+@app.post("/automation/desktop/launch")
+def launch_app_endpoint(req: AppLaunchRequest):
+    return DesktopControl.launch_application(req.app_name)
+
+@app.post("/automation/web-agent")
+def web_agent_endpoint(req: WebAgentRequest):
+    return WebAgent.execute_web_workflow(req.objective, req.target_url, complexity=req.complexity)
+
+# 14. System Kill Switch: Sleep & Shutdown Endpoints
 def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)
