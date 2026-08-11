@@ -38,6 +38,7 @@ from app.tools.security_lab import SecurityLabTool
 from app.tools.finance_trader import FinanceTraderTool
 from app.tools.music_studio import MusicStudioTool
 from app.tools.content_creator import ContentCreatorTool
+from app.tools.cybersecurity_brain import CybersecurityBrainTool
 
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.reflection_engine import ReflectionEngine
@@ -274,6 +275,20 @@ class DataChartRequest(BaseModel):
     y_col: str
     chart_type: str = "bar"
     chart_title: Optional[str] = None
+
+class SecurityNLURequest(BaseModel):
+    prompt: str
+    target_scope: Optional[str] = "127.0.0.1"
+
+class YaraRuleRequest(BaseModel):
+    rule_name: str
+    strings_list: List[str]
+    meta_description: Optional[str] = ""
+
+class SigmaRuleRequest(BaseModel):
+    title: str
+    logsource_category: str = "process_creation"
+    detection_selection: Dict[str, Any]
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -877,6 +892,18 @@ def content_script_endpoint(req: ContentScriptRequest):
         target_audience=req.target_audience, 
         auto_save_workspace=req.auto_save_workspace
     )
+
+@app.post("/specialists/security/parse-intent")
+def security_parse_intent_endpoint(req: SecurityNLURequest):
+    return CybersecurityBrainTool.parse_natural_security_intent(req.prompt, target_scope=req.target_scope)
+
+@app.post("/specialists/security/generate-yara")
+def security_generate_yara_endpoint(req: YaraRuleRequest):
+    return CybersecurityBrainTool.generate_yara_rule(req.rule_name, req.strings_list, meta_description=req.meta_description)
+
+@app.post("/specialists/security/generate-sigma")
+def security_generate_sigma_endpoint(req: SigmaRuleRequest):
+    return CybersecurityBrainTool.generate_sigma_rule(req.title, req.logsource_category, req.detection_selection)
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
