@@ -48,6 +48,11 @@ from app.utils.notifier import SystemNotifier
 from app.scheduler import ProactiveScheduler
 from app.agents.multi_agent import MultiAgentTeam
 
+from app.tools.deep_os_controller import DeepOSController
+from app.tools.android_adb_controller import AndroidADBController
+from app.tools.universal_filesystem import UniversalFilesystem
+from app.tools.data_analyzer import DataAnalysisEngine
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -211,6 +216,64 @@ class NotificationRequest(BaseModel):
 class MultiAgentRequest(BaseModel):
     objective: str
     complexity: str = "main"
+
+class OSMouseClickRequest(BaseModel):
+    x: int
+    y: int
+    double: bool = False
+
+class OSTypeTextRequest(BaseModel):
+    text: str
+
+class OSHotkeyRequest(BaseModel):
+    keys: List[str]
+
+class SoftwareUpdateRequest(BaseModel):
+    package_name: str = "vlc"
+
+class ADBTapRequest(BaseModel):
+    x: int
+    y: int
+    target_device: Optional[str] = None
+
+class ADBTypeTextRequest(BaseModel):
+    text: str
+    target_device: Optional[str] = None
+
+class ADBLaunchAppRequest(BaseModel):
+    package_name: str
+    target_device: Optional[str] = None
+
+class FileSearchRequest(BaseModel):
+    query: str
+    root_dir: Optional[str] = None
+    max_results: int = 20
+
+class FileMoveRequest(BaseModel):
+    source_path: str
+    destination_path: str
+
+class FileCompressRequest(BaseModel):
+    source_paths: List[str]
+    output_zip_path: str
+
+class ImageResizeRequest(BaseModel):
+    image_path: str
+    target_width: int
+    target_height: int
+
+class MediaPlayRequest(BaseModel):
+    media_path: str
+
+class DataAnalyzeRequest(BaseModel):
+    file_path: str
+
+class DataChartRequest(BaseModel):
+    file_path: str
+    x_col: str
+    y_col: str
+    chart_type: str = "bar"
+    chart_title: Optional[str] = None
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -865,7 +928,78 @@ def remove_scheduler_job_endpoint(job_id: str):
 def run_multi_agent_endpoint(req: MultiAgentRequest):
     return MultiAgentTeam.run_collaborative_workflow(req.objective, complexity=req.complexity)
 
-# 17. System Kill Switch: Sleep & Shutdown Endpoints
+# 17. Deep OS, Android ADB, Universal Filesystem & Data Science Endpoints
+@app.post("/os/click")
+def os_mouse_click_endpoint(req: OSMouseClickRequest):
+    return DeepOSController.mouse_click(req.x, req.y, double=req.double)
+
+@app.post("/os/type")
+def os_type_text_endpoint(req: OSTypeTextRequest):
+    return DeepOSController.type_text(req.text)
+
+@app.post("/os/hotkey")
+def os_press_hotkey_endpoint(req: OSHotkeyRequest):
+    return DeepOSController.press_hotkey(req.keys)
+
+@app.post("/os/update-software")
+def os_update_software_endpoint(req: SoftwareUpdateRequest):
+    return DeepOSController.check_and_update_software(req.package_name)
+
+@app.get("/android/devices")
+def android_list_devices_endpoint():
+    return AndroidADBController.list_connected_devices()
+
+@app.post("/android/tap")
+def android_tap_endpoint(req: ADBTapRequest):
+    return AndroidADBController.tap_screen(req.x, req.y, target_device=req.target_device)
+
+@app.post("/android/type")
+def android_type_endpoint(req: ADBTypeTextRequest):
+    return AndroidADBController.type_text(req.text, target_device=req.target_device)
+
+@app.post("/android/screenshot")
+def android_screenshot_endpoint(target_device: Optional[str] = Query(None)):
+    return AndroidADBController.capture_phone_screenshot(target_device=target_device)
+
+@app.post("/android/launch-app")
+def android_launch_app_endpoint(req: ADBLaunchAppRequest):
+    return AndroidADBController.launch_android_app(req.package_name, target_device=req.target_device)
+
+@app.post("/filesystem/search")
+def fs_search_endpoint(req: FileSearchRequest):
+    return UniversalFilesystem.search_filesystem(req.query, root_dir=req.root_dir, max_results=req.max_results)
+
+@app.post("/filesystem/move")
+def fs_move_endpoint(req: FileMoveRequest):
+    return UniversalFilesystem.rename_or_move(req.source_path, req.destination_path)
+
+@app.post("/filesystem/compress")
+def fs_compress_endpoint(req: FileCompressRequest):
+    return UniversalFilesystem.compress_zip(req.source_paths, req.output_zip_path)
+
+@app.post("/filesystem/resize-image")
+def fs_resize_image_endpoint(req: ImageResizeRequest):
+    return UniversalFilesystem.resize_image(req.image_path, req.target_width, req.target_height)
+
+@app.post("/filesystem/play-media")
+def fs_play_media_endpoint(req: MediaPlayRequest):
+    return UniversalFilesystem.play_media_file(req.media_path)
+
+@app.post("/data/analyze")
+def data_analyze_endpoint(req: DataAnalyzeRequest):
+    return DataAnalysisEngine.analyze_dataset(req.file_path)
+
+@app.post("/data/chart")
+def data_chart_endpoint(req: DataChartRequest):
+    return DataAnalysisEngine.generate_chart_visualization(
+        req.file_path, 
+        req.x_col, 
+        req.y_col, 
+        chart_type=req.chart_type, 
+        chart_title=req.chart_title
+    )
+
+# 18. System Kill Switch: Sleep & Shutdown Endpoints
 def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)
