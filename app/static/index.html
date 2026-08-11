@@ -291,7 +291,7 @@
             flex-wrap: wrap;
         }
 
-        input[type="text"], textarea, select {
+        input[type="text"], input[type="number"], textarea, select {
             width: 100%;
             background: var(--bg-primary);
             border: 1px solid var(--border-color);
@@ -302,7 +302,7 @@
             outline: none;
         }
 
-        input[type="text"]:focus, textarea:focus, select:focus {
+        input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
             border-color: var(--accent-cyan);
         }
 
@@ -484,6 +484,7 @@
     <!-- Navigation -->
     <nav>
         <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Mobile Remote</button>
+        <button class="nav-btn" onclick="switchTab('specialists')">🎯 Domain Specialists</button>
         <button class="nav-btn" onclick="switchTab('automation')">🤖 Browser & Desktop Automation</button>
         <button class="nav-btn" onclick="switchTab('vision')">👁️ Desktop Sight & Vision</button>
         <button class="nav-btn" onclick="switchTab('learner')">🌐 Web & YouTube Learner</button>
@@ -563,7 +564,119 @@
             </div>
         </div>
 
-        <!-- 2. Phase 5 Browser & Desktop Automation Tab -->
+        <!-- 2. Phase 6 Domain Specialists Tab -->
+        <div id="tab-specialists" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🛡️ Cybersecurity Lab Assessor</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Scan authorized home lab / Docker IPs (e.g. <code>127.0.0.1</code> or <code>192.168.1.1</code>) for open ports and services under <code>rules.md</code> scope policies.
+                    </p>
+                    <form onsubmit="runSecurityScan(event)">
+                        <div class="form-group">
+                            <label>Authorized Lab Target IP / Host</label>
+                            <input type="text" id="sec-target" placeholder="127.0.0.1 or 192.168.1.1" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🛡️ Scan Authorized Lab Target</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>📈 Trading & Betting Risk Calculator</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Calculates max position size based on 1-2% risk rules, Expected Value (EV), and logs paper trades to SQLite.
+                    </p>
+                    <form onsubmit="calcPositionSize(event)">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group">
+                                <label>Bankroll ($)</label>
+                                <input type="number" id="trd-bankroll" value="1000" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Max Risk (%)</label>
+                                <input type="number" id="trd-risk" value="1.0" step="0.1" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Entry Price ($)</label>
+                                <input type="number" id="trd-entry" value="100" step="0.1" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Stop Loss ($)</label>
+                                <input type="number" id="trd-stop" value="95" step="0.1" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">📈 Calculate Position Size & Risk</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🎵 Music Studio DAW Vocal Helper</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Generates tailored vocal chain parameters (EQ, Compression, De-Essing, Reverb) for DAW production.
+                    </p>
+                    <form onsubmit="generateVocalChain(event)">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group">
+                                <label>Genre</label>
+                                <select id="mus-genre">
+                                    <option value="hiphop">Hip-Hop / Rap</option>
+                                    <option value="pop">Pop / Melodic</option>
+                                    <option value="rock">Rock / Alternative</option>
+                                    <option value="rnb">R&B / Soul</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Vocal Style</label>
+                                <select id="mus-style">
+                                    <option value="male_rap">Male Rap / Aggressive</option>
+                                    <option value="female_singing">Female Melodic / Airy</option>
+                                    <option value="backing_harmony">Backing Vocals / Harmony</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🎵 Generate Vocal Mixing Chain</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>📝 Social Media Script Generator</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Generates hook-driven video scripts, Twitter threads, and SEO tags, saving drafts to <code>data/workspace/drafts/</code>.
+                    </p>
+                    <form onsubmit="generateContentScript(event)">
+                        <div class="form-group">
+                            <label>Content Topic</label>
+                            <input type="text" id="cnt-topic" placeholder="e.g. How to build a local AI assistant on RX 580" required>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group">
+                                <label>Platform</label>
+                                <select id="cnt-platform">
+                                    <option value="youtube">YouTube Video</option>
+                                    <option value="twitter">Twitter / X Thread</option>
+                                    <option value="shorts">YouTube Short / Reel</option>
+                                    <option value="linkedin">LinkedIn Post</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Target Audience</label>
+                                <input type="text" id="cnt-audience" value="Developers & Tech Enthusiasts">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">📝 Generate Script & Save Draft</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Specialist Intelligence Output Console</h2>
+                <div id="specialist-console" class="console" style="height: 300px;">Select a specialist tool above to run security scans, trading calculations, vocal guides, or content scripts...</div>
+            </div>
+        </div>
+
+        <!-- 3. Phase 5 Browser & Desktop Automation Tab -->
         <div id="tab-automation" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -610,7 +723,7 @@
             </div>
         </div>
 
-        <!-- 3. Phase 4 Desktop Sight & Screen Vision Tab -->
+        <!-- 4. Phase 4 Desktop Sight & Screen Vision Tab -->
         <div id="tab-vision" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -639,7 +752,7 @@
             </div>
         </div>
 
-        <!-- 4. Web & YouTube Learner Tab -->
+        <!-- 5. Web & YouTube Learner Tab -->
         <div id="tab-learner" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -681,7 +794,7 @@
             </div>
         </div>
 
-        <!-- 5. Tasks Tab -->
+        <!-- 6. Tasks Tab -->
         <div id="tab-tasks" class="tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2>Active Persistent Tasks</h2>
@@ -692,7 +805,7 @@
             </div>
         </div>
 
-        <!-- 6. Memory Vault Tab -->
+        <!-- 7. Memory Vault Tab -->
         <div id="tab-memory" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -729,7 +842,7 @@
             </div>
         </div>
 
-        <!-- 7. Models & Brain Manager Tab -->
+        <!-- 8. Models & Brain Manager Tab -->
         <div id="tab-models" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -796,7 +909,7 @@
             </div>
         </div>
 
-        <!-- 8. Security & Audit Console -->
+        <!-- 9. Security & Audit Console -->
         <div id="tab-security" class="tab-content">
             <div class="card">
                 <h2>Real-Time Audit Console Log</h2>
@@ -807,7 +920,7 @@
             </div>
         </div>
 
-        <!-- 9. Manual & Rules Tab -->
+        <!-- 10. Manual & Rules Tab -->
         <div id="tab-manual" class="tab-content">
             <div class="grid-2">
                 <div class="card">
@@ -833,7 +946,7 @@
             </div>
         </div>
 
-        <!-- 10. Policy Simulator Tab -->
+        <!-- 11. Policy Simulator Tab -->
         <div id="tab-playground" class="tab-content">
             <div class="card">
                 <h2>Safety Policy Playground Simulator</h2>
@@ -921,6 +1034,107 @@
             if (tabId === 'models') loadModelsTab();
             if (tabId === 'security') loadAuditLogs();
             if (tabId === 'manual') loadManualAndRules();
+        }
+
+        // Phase 6: Specialist API Logic
+        async function runSecurityScan(e) {
+            e.preventDefault();
+            const target = document.getElementById('sec-target').value.trim();
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[CYBERSECURITY LAB] Checking scope & scanning authorized target '${target}'...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/security/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [SECURITY SCAN COMPLETED]\nTarget: ${data.target}\nOpen Ports Found: ${data.open_ports.join(', ') || 'None'}\nNote: ${data.security_note}`;
+                } else {
+                    consoleElem.innerText = `✕ [SCOPE / SCAN ERROR]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function calcPositionSize(e) {
+            e.preventDefault();
+            const bankroll = parseFloat(document.getElementById('trd-bankroll').value);
+            const risk = parseFloat(document.getElementById('trd-risk').value);
+            const entry = parseFloat(document.getElementById('trd-entry').value);
+            const stop = parseFloat(document.getElementById('trd-stop').value);
+            const consoleElem = document.getElementById('specialist-console');
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/finance/risk-calc`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bankroll, risk_percent: risk, entry_price: entry, stop_loss_price: stop })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [TRADING RISK CALCULATED]\nBankroll: $${data.bankroll} | Risk Cap: ${data.risk_percent}%\nMax Risk Capital: $${data.max_risk_amount}\nRecommended Units: ${data.recommended_units}\nTotal Position Size: $${data.total_position_value}`;
+                } else {
+                    consoleElem.innerText = `✕ [CALC ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function generateVocalChain(e) {
+            e.preventDefault();
+            const genre = document.getElementById('mus-genre').value;
+            const style = document.getElementById('mus-style').value;
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[DAW HELPER] Generating vocal mixing chain for ${genre} / ${style}...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/music/vocal-guide`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ genre, vocal_type: style })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [VOCAL CHAIN GUIDE GENERATED]\n\n${data.vocal_chain_guide}`;
+                } else {
+                    consoleElem.innerText = `✕ [GUIDE ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function generateContentScript(e) {
+            e.preventDefault();
+            const topic = document.getElementById('cnt-topic').value.trim();
+            const platform = document.getElementById('cnt-platform').value;
+            const audience = document.getElementById('cnt-audience').value.trim();
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[CONTENT CREATOR] Generating ${platform.toUpperCase()} script for '${topic}'...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/content/script`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, platform, target_audience: audience, auto_save_workspace: true })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [CONTENT SCRIPT GENERATED & SAVED]\nSaved Draft: ${data.draft_file}\n\n=== SCRIPT & HOOK ===\n${data.script_text}`;
+                } else {
+                    consoleElem.innerText = `✕ [SCRIPT ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
         }
 
         // Phase 5: Automation API Logic

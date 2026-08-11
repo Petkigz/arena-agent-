@@ -34,6 +34,11 @@ from app.tools.browser_automation import BrowserAutomation
 from app.tools.desktop_control import DesktopControl
 from app.tools.web_agent import WebAgent
 
+from app.tools.security_lab import SecurityLabTool
+from app.tools.finance_trader import FinanceTraderTool
+from app.tools.music_studio import MusicStudioTool
+from app.tools.content_creator import ContentCreatorTool
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
@@ -146,6 +151,39 @@ class WebAgentRequest(BaseModel):
     objective: str
     target_url: str
     complexity: str = "main"
+
+class SecurityScanRequest(BaseModel):
+    target: str
+
+class PositionSizeRequest(BaseModel):
+    bankroll: float
+    risk_percent: float = 1.0
+    entry_price: float = 100.0
+    stop_loss_price: float = 95.0
+
+class EVCalcRequest(BaseModel):
+    odds_decimal: float
+    estimated_win_probability: float
+    stake: float
+
+class PaperTradeRequest(BaseModel):
+    asset_or_event: str
+    direction: str
+    entry_val: float
+    target_val: float
+    stop_val: float
+    notes: Optional[str] = ""
+
+class VocalGuideRequest(BaseModel):
+    genre: str = "hiphop"
+    vocal_type: str = "male_rap"
+    daw_name: str = "FL Studio / Logic / Pro Tools"
+
+class ContentScriptRequest(BaseModel):
+    topic: str
+    platform: str = "youtube"
+    target_audience: str = "developers & tech enthusiasts"
+    auto_save_workspace: bool = True
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -683,7 +721,57 @@ def launch_app_endpoint(req: AppLaunchRequest):
 def web_agent_endpoint(req: WebAgentRequest):
     return WebAgent.execute_web_workflow(req.objective, req.target_url, complexity=req.complexity)
 
-# 14. System Kill Switch: Sleep & Shutdown Endpoints
+# 14. Phase 6 Domain Specialist Intelligence Endpoints
+@app.post("/specialists/security/scan")
+def security_scan_endpoint(req: SecurityScanRequest):
+    return SecurityLabTool.scan_lab_target(req.target)
+
+@app.post("/specialists/finance/risk-calc")
+def finance_risk_calc_endpoint(req: PositionSizeRequest):
+    return FinanceTraderTool.calculate_position_size(
+        req.bankroll, 
+        risk_percent=req.risk_percent, 
+        entry_price=req.entry_price, 
+        stop_loss_price=req.stop_loss_price
+    )
+
+@app.post("/specialists/finance/ev-calc")
+def finance_ev_calc_endpoint(req: EVCalcRequest):
+    return FinanceTraderTool.calculate_expected_value(
+        req.odds_decimal, 
+        req.estimated_win_probability, 
+        req.stake
+    )
+
+@app.post("/specialists/finance/paper-trade")
+def finance_paper_trade_endpoint(req: PaperTradeRequest):
+    return FinanceTraderTool.log_paper_trade(
+        req.asset_or_event, 
+        req.direction, 
+        req.entry_val, 
+        req.target_val, 
+        req.stop_val, 
+        notes=req.notes or ""
+    )
+
+@app.post("/specialists/music/vocal-guide")
+def music_vocal_guide_endpoint(req: VocalGuideRequest):
+    return MusicStudioTool.generate_vocal_chain_guide(
+        genre=req.genre, 
+        vocal_type=req.vocal_type, 
+        daw_name=req.daw_name
+    )
+
+@app.post("/specialists/content/script")
+def content_script_endpoint(req: ContentScriptRequest):
+    return ContentCreatorTool.generate_content_script(
+        req.topic, 
+        platform=req.platform, 
+        target_audience=req.target_audience, 
+        auto_save_workspace=req.auto_save_workspace
+    )
+
+# 15. System Kill Switch: Sleep & Shutdown Endpoints
 def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)
