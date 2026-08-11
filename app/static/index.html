@@ -40,7 +40,7 @@
         header {
             background-color: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
-            padding: 1rem 2rem;
+            padding: 1rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -82,8 +82,9 @@
 
         .status-bar {
             display: flex;
-            gap: 1rem;
+            gap: 0.75rem;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .status-badge {
@@ -112,7 +113,7 @@
         nav {
             background-color: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
-            padding: 0 2rem;
+            padding: 0 1.5rem;
             display: flex;
             gap: 0.5rem;
             overflow-x: auto;
@@ -143,7 +144,7 @@
         /* Main Content Container */
         main {
             flex: 1;
-            padding: 2rem;
+            padding: 1.5rem;
             max-width: 1400px;
             width: 100%;
             margin: 0 auto;
@@ -174,8 +175,19 @@
 
         .grid-3 {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
         }
 
         h2 {
@@ -204,6 +216,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
         }
 
         .brain-selector {
@@ -224,7 +238,7 @@
             font-family: 'JetBrains Mono', monospace;
             outline: none;
             cursor: pointer;
-            max-width: 340px;
+            max-width: 250px;
         }
 
         .chat-messages {
@@ -237,7 +251,7 @@
         }
 
         .message {
-            max-width: 80%;
+            max-width: 85%;
             padding: 1rem 1.25rem;
             border-radius: 12px;
             font-size: 0.95rem;
@@ -270,8 +284,9 @@
             background: var(--bg-secondary);
             border-top: 1px solid var(--border-color);
             display: flex;
-            gap: 0.75rem;
+            gap: 0.5rem;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         input[type="text"], textarea, select {
@@ -294,7 +309,7 @@
             color: #000;
             font-weight: 600;
             border: none;
-            padding: 0.75rem 1.5rem;
+            padding: 0.75rem 1.25rem;
             border-radius: 8px;
             cursor: pointer;
             transition: opacity 0.2s ease;
@@ -462,11 +477,11 @@
 
     <!-- Navigation -->
     <nav>
-        <button class="nav-btn active" onclick="switchTab('chat')">💬 Local Chat & Voice</button>
+        <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Mobile Remote</button>
         <button class="nav-btn" onclick="switchTab('learner')">🌐 Web & YouTube Learner</button>
         <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
         <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
-        <button class="nav-btn" onclick="switchTab('models')">⚙️ Models & Brains</button>
+        <button class="nav-btn" onclick="switchTab('models')">⚙️ Models & Custom Voices</button>
         <button class="nav-btn" onclick="switchTab('security')">🛡️ Security & Audit</button>
 
         <button class="nav-btn" onclick="switchTab('manual')">📖 Rules & Manual</button>
@@ -481,15 +496,23 @@
             <div class="chat-container">
                 <div class="chat-header">
                     <div>
-                        <strong>Local Neural Conversation & Voice</strong>
+                        <strong>Local Neural Conversation & Mobile Remote</strong>
                         <div style="font-size: 0.75rem; color: var(--text-muted);" id="chat-brain-desc">Connected to LM Studio local server</div>
                     </div>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                         <label style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
-                            <input type="checkbox" id="voice-output-toggle" checked> 🔊 Voice Output
+                            <input type="checkbox" id="voice-output-toggle" checked> 🔊 Spoken Voice
                         </label>
+
                         <div class="brain-selector">
-                            <span style="font-size: 0.8rem; color: var(--text-muted);">Active Brain:</span>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Voice Profile:</span>
+                            <select id="active-voice-profile" onchange="changeVoiceProfile(event)">
+                                <option value="Default Assistant">Default Assistant</option>
+                            </select>
+                        </div>
+
+                        <div class="brain-selector">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Brain:</span>
                             <select id="brain-model">
                                 <option value="fast">Fast Brain</option>
                                 <option value="main">Main Brain</option>
@@ -499,14 +522,25 @@
                 </div>
                 <div class="chat-messages" id="chat-messages">
                     <div class="message assistant">
-                        <div class="meta">SYSTEM :: VOICE & CORE READY</div>
-                        Hello! I am your fully local personal assistant running on your machine. You can type or click the microphone button below to speak out loud!
+                        <div class="meta">SYSTEM :: VOICE & MOBILE REMOTE READY</div>
+                        Hello! I am your local personal assistant. You can speak or type below, snap photos with your phone camera, or send your GPS location!
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type or click '🎙️ Record Voice' to speak..." onkeypress="handleKeyPress(event)">
+                    <input type="text" id="chat-input" style="flex: 1;" placeholder="Type or click '🎙️ Record Voice' to speak..." onkeypress="handleKeyPress(event)">
+                    
                     <button class="btn btn-secondary" id="voice-rec-btn" onclick="toggleVoiceRecording()">🎙️ Record Voice</button>
-                    <button class="btn" onclick="sendMessage()">Send Request</button>
+                    
+                    <!-- Mobile Camera Snap Input -->
+                    <label class="btn btn-secondary" style="margin: 0; display: inline-flex; align-items: center; cursor: pointer;">
+                        📷 Camera
+                        <input type="file" accept="image/*" capture="environment" style="display: none;" onchange="uploadCameraPhoto(event)">
+                    </label>
+
+                    <!-- Mobile GPS Location Button -->
+                    <button class="btn btn-secondary" onclick="sendMobileGPSLocation()">📍 GPS Location</button>
+
+                    <button class="btn" onclick="sendMessage()">Send</button>
                 </div>
             </div>
         </div>
@@ -605,6 +639,31 @@
         <div id="tab-models" class="tab-content">
             <div class="grid-2">
                 <div class="card">
+                    <h2>🎙️ Custom Voice Profile Cloner</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Record a 6-10 second sample of your voice (or another person's voice). Give it a profile name and save it. You can switch voices anytime!
+                    </p>
+                    <div class="form-group">
+                        <label>Voice Profile Name</label>
+                        <input type="text" id="voice-profile-name" placeholder="e.g. Petar's Voice, Partner Voice, Sarcastic AI">
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                        <button class="btn btn-secondary" id="voice-profile-rec-btn" style="flex: 1;" onclick="toggleVoiceProfileRecording()">🎙️ Record 6s Voice Sample</button>
+                    </div>
+                    <div id="voice-profile-status" style="font-size: 0.8rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">Ready to record voice profile sample...</div>
+                </div>
+
+                <div class="card">
+                    <h2>📱 Mobile Wi-Fi Access Information</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        To open this dashboard on your Android or iPhone, connect your phone to the same home Wi-Fi network as this PC, then open any of these links in Chrome or Safari:
+                    </p>
+                    <div id="mobile-urls-box" class="console" style="height: 180px;">Querying local network IP address...</div>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
                     <h2>
                         <span>LM Studio Real-Time Status</span>
                         <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="loadModelsTab()">🔄 Refresh LM Studio</button>
@@ -612,7 +671,7 @@
                     <div id="models-status-box" style="margin-bottom: 1.25rem;">Checking LM Studio status...</div>
                     
                     <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">Currently Active GGUF Models in LM Studio</h3>
-                    <div id="loaded-models-list" class="console" style="height: 220px; font-size: 0.85rem;">Querying LM Studio endpoint...</div>
+                    <div id="loaded-models-list" class="console" style="height: 200px; font-size: 0.85rem;">Querying LM Studio endpoint...</div>
                 </div>
 
                 <div class="card">
@@ -749,6 +808,10 @@
         let audioChunks = [];
         let isRecording = false;
 
+        let profileRecorder = null;
+        let profileChunks = [];
+        let isRecordingProfile = false;
+
         // Tab Switching
         function switchTab(tabId) {
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
@@ -816,9 +879,178 @@
 
                 // Update Chat Header Description
                 document.getElementById('chat-brain-desc').innerText = `LM Studio: ${data.lm_studio_url} | Fast: ${data.configured_fast_model} | Main: ${data.configured_main_model}`;
+
+                // Populate Voice Profiles List
+                loadVoiceProfiles();
+
+                // Fetch Network Info for Mobile Remote
+                fetchNetworkInfo();
             } catch (e) {
                 console.error("Error pinging backend model status", e);
             }
+        }
+
+        // Voice Profiles API
+        async function loadVoiceProfiles() {
+            try {
+                const res = await fetch(`${API_BASE}/voice/profiles`);
+                const data = await res.json();
+                const select = document.getElementById('active-voice-profile');
+                select.innerHTML = '';
+
+                data.profiles.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.text = p === data.active_profile ? `✓ Voice: ${p}` : `Voice: ${p}`;
+                    select.appendChild(opt);
+                });
+
+                select.value = data.active_profile;
+            } catch (e) {
+                console.error("Error loading voice profiles", e);
+            }
+        }
+
+        async function changeVoiceProfile(e) {
+            const profileName = e.target.value;
+            try {
+                await fetch(`${API_BASE}/voice/profiles/select`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile_name: profileName })
+                });
+                loadVoiceProfiles();
+            } catch (e) {
+                alert("Error setting voice profile: " + e);
+            }
+        }
+
+        async function toggleVoiceProfileRecording() {
+            const nameInput = document.getElementById('voice-profile-name').value.trim();
+            if (!nameInput && !isRecordingProfile) {
+                alert("Please enter a Voice Profile Name first (e.g. 'Petar's Voice' or 'Partner Voice')!");
+                return;
+            }
+
+            const btn = document.getElementById('voice-profile-rec-btn');
+            const statusBox = document.getElementById('voice-profile-status');
+
+            if (!isRecordingProfile) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    profileRecorder = new MediaRecorder(stream);
+                    profileChunks = [];
+
+                    profileRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) profileChunks.push(event.data);
+                    };
+
+                    profileRecorder.onstop = async () => {
+                        const blob = new Blob(profileChunks, { type: 'audio/wav' });
+                        statusBox.innerText = `Saving custom voice profile '${nameInput}'...`;
+                        const formData = new FormData();
+                        formData.append('file', blob, 'sample.wav');
+
+                        const res = await fetch(`${API_BASE}/voice/profiles/record?profile_name=${encodeURIComponent(nameInput)}`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            statusBox.innerText = `✓ Saved custom voice profile '${data.profile_name}'!`;
+                            loadVoiceProfiles();
+                        } else {
+                            statusBox.innerText = `✕ Error saving profile: ${data.error}`;
+                        }
+                    };
+
+                    profileRecorder.start();
+                    isRecordingProfile = true;
+                    btn.className = "btn btn-recording";
+                    btn.innerText = "🛑 Stop & Save Voice Profile";
+                    statusBox.innerText = "🎙️ Recording voice sample... Speak naturally for 6-10 seconds!";
+                } catch (err) {
+                    alert("Microphone error: " + err);
+                }
+            } else {
+                if (profileRecorder && profileRecorder.state !== "inactive") {
+                    profileRecorder.stop();
+                }
+                isRecordingProfile = false;
+                btn.className = "btn btn-secondary";
+                btn.innerText = "🎙️ Record 6s Voice Sample";
+            }
+        }
+
+        // Mobile Features: Wi-Fi IP, Camera Photo Upload, GPS Location
+        async function fetchNetworkInfo() {
+            try {
+                const res = await fetch(`${API_BASE}/api/network-info`);
+                const data = await res.json();
+                const box = document.getElementById('mobile-urls-box');
+                
+                let text = "📱 MOBILE WI-FI ACCESS LINKS:\n\n";
+                data.mobile_urls.forEach(u => {
+                    text += `👉 ${u}\n`;
+                });
+                text += `\n${data.instructions}`;
+                box.innerText = text;
+            } catch (e) {
+                console.error("Error fetching network info", e);
+            }
+        }
+
+        async function uploadCameraPhoto(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const messagesContainer = document.getElementById('chat-messages');
+            const userDiv = document.createElement('div');
+            userDiv.className = 'message user';
+            userDiv.innerHTML = `<div class="meta">YOU (MOBILE CAMERA)</div>📷 <em>Uploading camera photo (${file.name})...</em>`;
+            messagesContainer.appendChild(userDiv);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch(`${API_BASE}/mobile/camera`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    userDiv.innerHTML = `<div class="meta">YOU (MOBILE CAMERA PHOTO)</div>📷 Saved photo: <code>${data.file_name}</code>`;
+                }
+            } catch (e) {
+                alert("Camera upload error: " + e);
+            }
+        }
+
+        async function sendMobileGPSLocation() {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async position => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                try {
+                    const res = await fetch(`${API_BASE}/mobile/location`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ latitude: lat, longitude: lon })
+                    });
+                    const data = await res.json();
+                    alert("📍 Location saved: " + data.location);
+                } catch (e) {
+                    alert("Error saving location: " + e);
+                }
+            }, err => {
+                alert("GPS Geolocation error: " + err.message);
+            });
         }
 
         // Voice Recording Logic

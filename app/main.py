@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Any, Optional
 import httpx
 import os
+import socket
+import uuid
 
 from app.config import settings
 from app.database import db
@@ -98,6 +100,14 @@ class DocEditRequest(BaseModel):
 
 class TTSSynthesizeRequest(BaseModel):
     text: str
+
+class VoiceProfileSelectRequest(BaseModel):
+    profile_name: str
+
+class MobileLocationRequest(BaseModel):
+    latitude: float
+    longitude: float
+    city: Optional[str] = None
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -442,6 +452,23 @@ async def upload_voice_clone_reference(file: UploadFile = File(...)):
         "file_path": ref_path
     }
 
+@app.get("/voice/profiles")
+def get_voice_profiles_endpoint():
+    return LocalTextToSpeech.list_voice_profiles()
+
+@app.post("/voice/profiles/select")
+def select_voice_profile_endpoint(req: VoiceProfileSelectRequest):
+    success = LocalTextToSpeech.set_active_voice_profile(req.profile_name)
+    db.create_audit_log("select_voice_profile", "success", f"Selected voice profile: '{req.profile_name}'", level=0)
+    return {"success": success, "active_profile": req.profile_name}
+
+@app.post("/voice/profiles/record")
+async def record_voice_profile_endpoint(file: UploadFile = File(...), profile_name: str = Query(...)):
+    audio_bytes = await file.read()
+    res = LocalTextToSpeech.save_voice_profile(profile_name, audio_bytes)
+    db.create_audit_log("record_voice_profile", "success", f"Recorded custom voice profile: '{profile_name}'", level=0)
+    return res
+
 @app.post("/voice/chat")
 async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Query("fast")):
     # 1. Save and Transcribe Audio
@@ -486,4 +513,60 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
         "assistant_text": assistant_text,
         "audio_url": tts_res.get("audio_url", ""),
         "model_used": llm_res.get("model", "")
+    }
+
+# 11. Mobile Network & Remote Access Endpoints
+@app.get("/api/network-info")
+def get_network_info_endpoint():
+    local_ips = []
+    try:
+        hostname = socket.gethostname()
+        local_ips.append(socket.gethostbyname(hostname))
+        
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        default_ip = s.getsockname()[0]
+        s.close()
+        if default_ip not in local_ips:
+            local_ips.insert(0, default_ip)
+    except Exception:
+        if not local_ips:
+            local_ips = ["127.0.0.1"]
+
+    mobile_urls = [f"http://{ip}:8000/" for ip in local_ips]
+    return {
+        "local_ips": local_ips,
+        "mobile_urls": mobile_urls,
+        "instructions": "Connect your Android or iPhone to the same home Wi-Fi and open any of the mobile URLs in Chrome/Safari!"
+    }
+
+@app.post("/mobile/location")
+def update_mobile_location_endpoint(req: MobileLocationRequest):
+    loc_str = f"Latitude: {req.latitude}, Longitude: {req.longitude}" + (f" ({req.city})" if req.city else "")
+    db.create_memory({
+        "content": f"User Physical Location Context: {loc_str}",
+        "category": "user_location",
+        "source": "mobile_gps",
+        "confidence": 1.0
+    })
+    db.create_audit_log("update_mobile_location", "success", loc_str, level=0)
+    return {"success": True, "location": loc_str, "message": "Location context saved to memory."}
+
+@app.post("/mobile/camera")
+async def upload_mobile_camera_photo(file: UploadFile = File(...)):
+    photo_bytes = await file.read()
+    filename = f"camera_{uuid.uuid4().hex[:8]}_{file.filename or 'photo.jpg'}"
+    save_dir = settings.DATA_DIR / "workspace" / "camera_uploads"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    file_path = save_dir / filename
+
+    with open(file_path, "wb") as f:
+        f.write(photo_bytes)
+
+    db.create_audit_log("upload_mobile_camera", "success", f"Saved camera photo {filename} ({len(photo_bytes)} bytes)", level=0)
+    return {
+        "success": True,
+        "file_name": filename,
+        "file_path": str(file_path),
+        "file_url": f"/static/camera_uploads/{filename}"
     }
