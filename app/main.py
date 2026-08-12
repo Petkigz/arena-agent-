@@ -439,6 +439,44 @@ def get_api_status():
         "database_connected": True
     }
 
+import re
+
+def _parse_and_execute_intent(user_text: str) -> Optional[str]:
+    text_lower = user_text.lower()
+
+    # 1. Open / Launch Application & Browser URLs
+    if any(k in text_lower for k in ["open ", "launch ", "search for ", "look up "]):
+        if "firefox" in text_lower or "chrome" in text_lower or "youtube" in text_lower or "browser" in text_lower:
+            query_term = "ordinary"
+            if "search" in text_lower or "for" in text_lower:
+                m = re.search(r'(?:search|look up|for|find)\s+(?:me\s+)?([a-zA-Z0-9_\-\s]+?)(?:\s+on youtube|\s+in firefox|\s+in chrome|\s+on google|$)', text_lower)
+                if m and m.group(1).strip():
+                    query_term = m.group(1).strip()
+
+            url = f"https://www.youtube.com/results?search_query={query_term.replace(' ', '+')}" if "youtube" in text_lower else f"https://www.google.com/search?q={query_term.replace(' ', '+')}"
+
+            app_to_launch = "firefox" if "firefox" in text_lower else "chrome"
+            DesktopControl.launch_application(app_to_launch)
+            DesktopControl.open_url(url)
+            return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Launched {app_to_launch.title()} and opened YouTube search for '{query_term}' ({url})."
+
+        for app in ["firefox", "chrome", "vscode", "notepad", "calculator", "terminal", "explorer", "lm_studio"]:
+            if app in text_lower or (app == "vscode" and "code" in text_lower):
+                res = DesktopControl.launch_application(app)
+                return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: {res.get('message', f'Launched {app}')}"
+
+    # 2. Screenshot / Screen Vision
+    if any(k in text_lower for k in ["take a screenshot", "capture screen", "snap desktop", "screen vision"]):
+        cap = ScreenCaptureTool.capture_screen()
+        return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Captured screen image: {cap.get('file_name', 'screenshot.png')}."
+
+    # 3. Daily Briefing
+    if any(k in text_lower for k in ["daily briefing", "morning report", "generate briefing"]):
+        b = DailyBriefingEngine.generate_briefing(generate_audio=False)
+        return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Generated Executive Briefing for today."
+
+    return None
+
 def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     rag_context = SemanticRAGEngine.build_rag_context(user_text) if user_text else ""
 
@@ -448,6 +486,8 @@ def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dic
         "play media, launch applications, monitor system hardware, and execute commands in sandboxes.\n"
         "Never state that you cannot access local files or the local system — you ARE the local assistant running on this PC."
     )
+
+    action_context = _parse_and_execute_intent(user_text) or ""
 
     fs_context = ""
     text_lower = user_text.lower()
@@ -460,7 +500,7 @@ def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dic
         else:
             fs_context = f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']: No files matching '{search_term}' were found in the scanned workspace/system directories."
 
-    combined_system_prompt = system_instruction + (f"\n\n{rag_context}" if rag_context else "") + fs_context
+    combined_system_prompt = system_instruction + (f"\n\n{rag_context}" if rag_context else "") + (f"\n\n{action_context}" if action_context else "") + fs_context
 
     enriched = list(messages)
     if enriched and enriched[0]["role"] == "system":

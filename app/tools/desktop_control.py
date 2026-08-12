@@ -7,14 +7,33 @@ from app.utils.logger import app_logger, audit_logger
 
 class DesktopControl:
     APPROVED_APPS: Dict[str, List[str]] = {
-        "vscode": ["code"],
+        "firefox": ["firefox"],
         "chrome": ["chrome", "google-chrome", "google-chrome-stable"],
+        "vscode": ["code"],
         "lm_studio": ["lm-studio", "LM Studio"],
         "notepad": ["notepad"],
         "calculator": ["calc", "calculator"],
         "explorer": ["explorer"],
         "terminal": ["powershell", "cmd", "bash", "gnome-terminal"]
     }
+
+    @classmethod
+    def open_url(cls, url: str) -> Dict[str, Any]:
+        """
+        Opens a target URL in default desktop web browser (or Firefox/Chrome).
+        """
+        import webbrowser
+        try:
+            webbrowser.open(url)
+            audit_logger.info(f"Opened URL in desktop browser: '{url}'")
+            return {
+                "success": True,
+                "url": url,
+                "message": f"Successfully opened URL in browser: {url}"
+            }
+        except Exception as e:
+            app_logger.error(f"Error opening URL: {e}")
+            return {"success": False, "error": str(e)}
 
     @classmethod
     def launch_application(cls, app_key: str) -> Dict[str, Any]:
