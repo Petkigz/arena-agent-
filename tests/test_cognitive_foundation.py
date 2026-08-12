@@ -8,10 +8,12 @@ from app.runtime.resource_manager import ResourceManager, ResourceSnapshot
 class CognitiveFoundationTests(unittest.TestCase):
     def test_state_round_trip(self):
         state = CognitiveState()
-        state.update(goal="test goal", task_id="task-1")
+        state.task.goal = "test goal"
+        state.task.task_id = "task-1"
+        state.touch()
         restored = CognitiveState.from_dict(state.to_dict())
-        self.assertEqual(restored.goal, "test goal")
-        self.assertEqual(restored.task_id, "task-1")
+        self.assertEqual(restored.task.goal, "test goal")
+        self.assertEqual(restored.task.task_id, "task-1")
 
     def test_blackboard_preserves_metadata(self):
         board = Blackboard()
