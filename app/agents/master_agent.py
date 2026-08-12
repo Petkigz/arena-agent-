@@ -28,6 +28,7 @@ from app.tools.daily_briefing import DailyBriefingEngine
 from app.tools.workflow_engine import WorkflowEngine
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.human_nature_engine import HumanNatureEngine
+from app.memory.coworker_brain import CoworkerBrain
 
 class MasterAgentOrchestrator:
     """
@@ -105,21 +106,8 @@ class MasterAgentOrchestrator:
             brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
             executed_actions.append("Generated Daily Executive Briefing.")
 
-        # BUILD CONCISE HUMAN-WARMTH PROMPT FOR LLM
-        rag_context = SemanticRAGEngine.build_rag_context(user_text)
-        emotion = HumanNatureEngine.analyze_emotional_tone(user_text)
-        app_count = SystemAppInventory.get_installed_apps_count()
-
-        system_instruction = (
-            f"You are a loyal, sharp, conversational local personal assistant running natively on the user's PC ({app_count} apps installed).\n"
-            f"TONE & STYLE RULES:\n"
-            f"1. Be direct, concise, warm, and natural (MAX 2-3 SENTENCES PER SPOKEN ANSWER).\n"
-            f"2. Never write essays, bulleted disclaimers, or say 'As an AI, I cannot access your PC'.\n"
-            f"3. Express emotional warmth and dry humor.\n"
-            f"4. Directly summarize the actions executed by your system operators below.\n\n"
-            f"[EXECUTED ACTIONS]: {'; '.join(executed_actions) if executed_actions else 'No tool action triggered; answer query directly.'}\n"
-            f"[RAG CONTEXT]: {rag_context}\n"
-        )
+        # BUILD CONCISE HUMAN-WARMTH PROMPT FOR COWORKER LLM
+        system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
 
         messages = [
             {"role": "system", "content": system_instruction},

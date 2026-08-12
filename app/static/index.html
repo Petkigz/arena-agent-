@@ -2215,6 +2215,15 @@
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
+        // Register PWA Service Worker for Native App Installation
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/static/service-worker.js')
+                    .then(reg => console.log('✓ Standalone App ServiceWorker registered:', reg))
+                    .catch(err => console.log('ServiceWorker registration notice:', err));
+            });
+        }
+
         // Init
         checkLLMStatus();
         setInterval(checkLLMStatus, 10000);
