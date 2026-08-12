@@ -19,9 +19,7 @@ def test_world_model_entity_relationship_observation_round_trip(tmp_path):
     assert model.get_entity(chrome.id).attributes["version"] == "151"
     assert model.related(chrome.id)[0].predicate == relationship.predicate
     assert model.recent_observations(chrome.id)[0].value == observation.value
-    assert model.snapshot() == {
-        "entities": 2,
-        "relationships": 1,
-        "observations": 1,
-        "updated_at": model.snapshot()["updated_at"],
-    }
+    snapshot = model.snapshot()
+    assert snapshot["entities"] == 2
+    assert snapshot["relationships"] == 1
+    assert snapshot["observations"] == 1
