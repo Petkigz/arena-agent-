@@ -71,6 +71,7 @@ from app.agents.master_agent import MasterAgentOrchestrator
 from app.utils.hardware_governor import HardwareGovernor
 from app.tools.security_canary import SecurityCanaryTrap
 from app.tools.financial_legal_wellness import FinancialLegalWellnessSuite
+from app.agents.self_evolving_agent import SelfEvolvingAgent
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -411,6 +412,10 @@ class ToneCritiqueRequest(BaseModel):
 class AnkiExportRequest(BaseModel):
     study_material: str
     deck_name: Optional[str] = "Personal_AI_Knowledge"
+
+class SelfEvolveRequest(BaseModel):
+    task_objective: str
+    tool_name_query: Optional[str] = "custom_tool"
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -1259,6 +1264,10 @@ def tone_critique_endpoint(req: ToneCritiqueRequest):
 @app.post("/tools/generate-anki")
 def generate_anki_endpoint(req: AnkiExportRequest):
     return FinancialLegalWellnessSuite.generate_anki_flashcards(req.study_material, deck_name=req.deck_name or "Personal_AI_Knowledge")
+
+@app.post("/agent/self-evolve")
+def self_evolve_endpoint(req: SelfEvolveRequest):
+    return SelfEvolvingAgent.synthesize_and_hotload_tool(req.task_objective, tool_name_query=req.tool_name_query or "custom_tool")
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
