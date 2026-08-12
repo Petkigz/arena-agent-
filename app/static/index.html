@@ -515,6 +515,13 @@
                         <div style="font-size: 0.75rem; color: var(--text-muted);" id="chat-brain-desc">Connected to LM Studio local server</div>
                     </div>
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <!-- Auto-Speak Output Toggle -->
+                        <div class="brain-selector" style="cursor: pointer;">
+                            <label style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                                <input type="checkbox" id="voice-output-toggle" checked style="cursor: pointer;"> 🔊 Speak Audio
+                            </label>
+                        </div>
+
                         <!-- Microphone Device Selector -->
                         <div class="brain-selector">
                             <span style="font-size: 0.8rem; color: var(--text-muted);">Mic:</span>
@@ -1775,9 +1782,10 @@
                     assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(data.model_used)})</div>${escapeHtml(data.assistant_text)}`;
 
                     // Play Synthesized Voice Audio if enabled
-                    if (data.audio_url && document.getElementById('voice-output-toggle').checked) {
+                    const voiceToggle = document.getElementById('voice-output-toggle');
+                    if (data.audio_url && (!voiceToggle || voiceToggle.checked)) {
                         const audio = new Audio(`${API_BASE}${data.audio_url}`);
-                        audio.play();
+                        audio.play().catch(e => console.log("Audio playback notice:", e));
                     }
                 } else {
                     assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>${escapeHtml(data.error || 'Voice transcription failed.')}`;
