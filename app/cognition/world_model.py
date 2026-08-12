@@ -8,7 +8,7 @@ machine.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 import sqlite3
@@ -128,22 +128,20 @@ class WorldModel:
     ) -> Entity:
         self._check_confidence(confidence)
         now = _now()
+        attributes = attributes or {}
         with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT * FROM world_entities WHERE id = ?",
-                (entity_id,),
-            ).fetchone() if entity_id else None
-            if existing is None:
+            row = None
+            if entity_id:
+                row = conn.execute("SELECT * FROM world_entities WHERE id = ?", (entity_id,)).fetchone()
+            if row is None:
                 row = conn.execute(
                     "SELECT * FROM world_entities WHERE name = ? AND entity_type = ?",
                     (name, entity_type),
                 ).fetchone()
-            else:
-                row = existing
 
             if row:
                 merged = json.loads(row["attributes"])
-                merged.update(attributes or {})
+                merged.update(attributes)
                 conn.execute(
                     """UPDATE world_entities
                        SET attributes = ?, confidence = ?, last_seen = ?
@@ -152,6 +150,7 @@ class WorldModel:
                 )
                 entity_id = row["id"]
                 first_seen = row["first_seen"]
+                attributes = merged
             else:
                 entity_id = entity_id or uuid4().hex
                 first_seen = now
@@ -159,10 +158,9 @@ class WorldModel:
                     """INSERT INTO world_entities
                        (id, name, entity_type, attributes, confidence, first_seen, last_seen)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (entity_id, name, entity_type, json.dumps(attributes or {}),
-                     confidence, first_seen, now),
+                    (entity_id, name, entity_type, json.dumps(attributes), confidence, first_seen, now),
                 )
-            return Entity(entity_id, name, entity_type, attributes or {}, confidence, first_seen, now)
+            return Entity(entity_id, name, entity_type, attributes, confidence, first_seen, now)
 
     def get_entity(self, entity_id: str) -> Optional[Entity]:
         with self._connect() as conn:
@@ -224,6 +222,7 @@ class WorldModel:
     ) -> Relationship:
         self._check_confidence(confidence)
         now = _now()
+        attributes = attributes or {}
         relationship_id = uuid4().hex
         with self._connect() as conn:
             row = conn.execute(
@@ -232,12 +231,15 @@ class WorldModel:
             ).fetchone()
             if row:
                 relationship_id = row["id"]
+                merged = json.loads(row["attributes"])
+                merged.update(attributes)
                 conn.execute(
                     """UPDATE world_relationships
                        SET confidence = ?, attributes = ?, last_confirmed = ?
                        WHERE id = ?""",
-                    (confidence, json.dumps(attributes or json.loads(row["attributes"])), now, relationship_id),
+                    (confidence, json.dumps(merged), now, relationship_id),
                 )
+                attributes = merged
                 created_at = row["created_at"]
             else:
                 created_at = now
@@ -246,10 +248,10 @@ class WorldModel:
                        (id, subject_id, predicate, object_id, confidence, attributes, created_at, last_confirmed)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (relationship_id, subject_id, predicate, object_id, confidence,
-                     json.dumps(attributes or {}), created_at, now),
+                     json.dumps(attributes), created_at, now),
                 )
         return Relationship(relationship_id, subject_id, predicate, object_id, confidence,
-                            attributes or {}, created_at, now)
+                            attributes, created_at, now)
 
     def related(self, subject_id: str, predicate: Optional[str] = None) -> List[Relationship]:
         query = "SELECT * FROM world_relationships WHERE subject_id = ?"
@@ -269,9 +271,5 @@ class WorldModel:
             entities = conn.execute("SELECT COUNT(*) FROM world_entities").fetchone()[0]
             relationships = conn.execute("SELECT COUNT(*) FROM world_relationships").fetchone()[0]
             observations = conn.execute("SELECT COUNT(*) FROM world_observations").fetchone()[0]
-        return {
-            "entities": entities,
-            "relationships": relationships,
-            "observations": observations,
-            "updated_at": _now(),
-        }
+        return {"entities": entities, "relationships": relationships,
+                "observations": observations, "updated_at": _now()}
