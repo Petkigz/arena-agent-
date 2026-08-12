@@ -37,3 +37,29 @@ def test_task_manager_operations():
     # Delete
     assert TaskManager.delete_task(task.id) is True
     assert TaskManager.get_task(task.id) is None
+
+def test_acquire_skill_for_task():
+    # First save a memory skill
+    db.create_memory({
+        "content": "Vocal EQ Skill: High pass at 80Hz, cut boxy frequencies at 300Hz, boost air at 10kHz.",
+        "category": "learned_skill",
+        "source": "https://youtube.com/watch?v=vocal_eq_test",
+        "confidence": 0.95
+    })
+
+    # Create task requiring vocal eq
+    task_in = TaskCreate(
+        title="Mix vocal track in DAW",
+        goal="Apply vocal EQ and compression settings",
+        priority="high",
+        plan=["Load DAW project", "Apply EQ settings"]
+    )
+    task = TaskManager.create_task(task_in)
+
+    # Acquire skill
+    res = TaskManager.acquire_skill_for_task(task.id)
+    assert res["success"] is True
+    assert res["skill_result"]["source"] == "sqlite_memory"
+
+    # Cleanup
+    TaskManager.delete_task(task.id)
