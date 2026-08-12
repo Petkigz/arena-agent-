@@ -7,9 +7,11 @@ from .event_bus import EventBus
 from .checkpoint import CognitiveCheckpointStore
 from .session import CognitiveSession
 from .world_model import Entity, Relationship, Observation, WorldModel
+from .world_ingest import WorldChange, WorldIngestor
 
 __all__ = [
     "CognitiveState", "Blackboard", "CognitiveEvent", "EventBus",
     "CognitiveCheckpointStore", "CognitiveSession", "Entity",
-    "Relationship", "Observation", "WorldModel",
+    "Relationship", "Observation", "WorldModel", "WorldChange",
+    "WorldIngestor",
 ]
