@@ -1696,11 +1696,19 @@
             });
         }
 
+        let currentPlayingAudio = null;
+
         // Voice Recording Logic with Device Selection & Mobile Fallback
         async function toggleVoiceRecording() {
             if (currentSystemMode === 'sleeping') {
                 alert("System is currently in SLEEP MODE. Click 'System: Sleeping' at top-right to wake up!");
                 return;
+            }
+
+            // Mute and stop any currently playing assistant TTS audio immediately
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio = null;
             }
 
             const btn = document.getElementById('voice-rec-btn');
@@ -1763,7 +1771,7 @@
 
             const assistDiv = document.createElement('div');
             assistDiv.className = 'message assistant';
-            assistDiv.innerHTML = `<div class="meta">ASSISTANT :: PROCESSING VOICE & LLM...</div>Processing speech & generating voice response...`;
+            assistDiv.innerHTML = `<div class="meta">MASTER AGENT :: EXECUTING NATIVE TOOLS & LLM...</div>Processing speech & executing task on PC...`;
             messagesContainer.appendChild(assistDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -1778,14 +1786,22 @@
 
                 const data = await res.json();
                 if (data.success) {
+                    let actionBadges = '';
+                    if (data.executed_actions && data.executed_actions.length > 0) {
+                        actionBadges = `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; background: var(--bg-primary); padding: 0.4rem; border-radius: 6px; border: 1px solid var(--border-color);">⚙️ Executed: ${data.executed_actions.join(' | ')}</div>`;
+                    }
+
                     userDiv.innerHTML = `<div class="meta">YOU (SPOKEN VOICE)</div>${escapeHtml(data.user_text)}`;
-                    assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(data.model_used)})</div>${escapeHtml(data.assistant_text)}`;
+                    assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(data.model_used)})</div>${escapeHtml(data.assistant_text)}${actionBadges}`;
 
                     // Play Synthesized Voice Audio if enabled
                     const voiceToggle = document.getElementById('voice-output-toggle');
                     if (data.audio_url && (!voiceToggle || voiceToggle.checked)) {
-                        const audio = new Audio(`${API_BASE}${data.audio_url}`);
-                        audio.play().catch(e => console.log("Audio playback notice:", e));
+                        if (currentPlayingAudio) {
+                            currentPlayingAudio.pause();
+                        }
+                        currentPlayingAudio = new Audio(`${API_BASE}${data.audio_url}`);
+                        currentPlayingAudio.play().catch(e => console.log("Audio playback notice:", e));
                     }
                 } else {
                     assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>${escapeHtml(data.error || 'Voice transcription failed.')}`;

@@ -67,6 +67,7 @@ from app.tools.pentest_company_assistant import PentestCompanyAssistant
 from app.tools.disposable_sandbox import DisposableSandbox
 from app.tools.skill_teaching_engine import SkillTeachingEngine
 from app.tools.app_inventory import SystemAppInventory
+from app.agents.master_agent import MasterAgentOrchestrator
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -540,23 +541,21 @@ def chat_with_local_brain(req: ChatRequest):
         )
 
     user_msg_content = next((m["content"] for m in reversed(req.messages) if m["role"] == "user"), "")
-    messages_with_rag = _enrich_messages_with_local_tools_and_rag(user_msg_content, req.messages)
+    agent_res = MasterAgentOrchestrator.process_user_task(user_msg_content, complexity=req.complexity)
 
-    app_logger.info(f"Chat request with complexity '{req.complexity}' received.")
-    try:
-        response = llm_client.generate_chat_completion(
-            messages=messages_with_rag,
-            complexity=req.complexity,
-            temperature=req.temperature,
-            max_tokens=req.max_tokens
-        )
-        return response
-    except Exception as e:
-        app_logger.error(f"Error in /chat: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+        "object": "chat.completion",
+        "model": agent_res.get("model_used", "MasterAgentOrchestrator"),
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": agent_res.get("assistant_reply", "Task executed.")
+            },
+            "finish_reason": "stop"
+        }]
+    }
 
 # 3. Tasks Endpoints
 @app.post("/tasks", response_model=Task, status_code=status.HTTP_201_CREATED)
@@ -869,7 +868,9 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
     
     with open(temp_path, "wb") as f:
         f.write(audio_bytes)
-        
+
+    # Verify speaker voice in crowded places
+    speaker_check = LocalSpeechToText.verify_speaker_voice(str(temp_path))
     stt_res = LocalSpeechToText.transcribe_file(str(temp_path))
     user_text = stt_res.get("text", "").strip()
     
@@ -885,21 +886,9 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
             "model_used": "System Voice Perception"
         }
 
-    # 2. Chat Completion with Local LLM Brain, RAG Context & Automatic Tool Injection
-    messages = [
-        {"role": "user", "content": user_text}
-    ]
-    messages_enriched = _enrich_messages_with_local_tools_and_rag(user_text, messages)
-    
-    llm_res = llm_client.generate_chat_completion(
-        messages=messages_enriched,
-        complexity=complexity,
-        max_tokens=256
-    )
-    
-    assistant_text = "No response generated."
-    if llm_res.get("choices") and len(llm_res["choices"]) > 0:
-        assistant_text = llm_res["choices"][0]["message"]["content"]
+    # 2. Master Agent Orchestrator All-In-One Execution
+    agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
+    assistant_text = agent_res.get("assistant_reply", "Done.")
 
     # 3. Synthesize Speech
     tts_res = LocalTextToSpeech.synthesize_speech(assistant_text)
@@ -909,7 +898,9 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
         "user_text": user_text,
         "assistant_text": assistant_text,
         "audio_url": tts_res.get("audio_url", ""),
-        "model_used": llm_res.get("model", "")
+        "model_used": agent_res.get("model_used", ""),
+        "executed_actions": agent_res.get("executed_actions", []),
+        "speaker_verified": speaker_check.get("verified", True)
     }
 
 # 11. Mobile Network & Remote Access Endpoints
