@@ -68,6 +68,8 @@ from app.tools.disposable_sandbox import DisposableSandbox
 from app.tools.skill_teaching_engine import SkillTeachingEngine
 from app.tools.app_inventory import SystemAppInventory
 from app.agents.master_agent import MasterAgentOrchestrator
+from app.utils.hardware_governor import HardwareGovernor
+from app.tools.security_canary import SecurityCanaryTrap
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -1210,6 +1212,22 @@ def rescan_system_apps_endpoint():
 @app.post("/system/apps/launch")
 def launch_system_app_endpoint(req: AppLaunchQueryRequest):
     return SystemAppInventory.launch_any_app(req.app_query)
+
+@app.post("/system/governor/p-cores")
+def set_p_cores_endpoint():
+    return HardwareGovernor.set_thread_affinity(p_cores_only=True)
+
+@app.post("/system/governor/purge-vram")
+def purge_vram_endpoint():
+    return HardwareGovernor.purge_vram_and_system_memory()
+
+@app.post("/opsec/spawn-canaries")
+def spawn_canaries_endpoint():
+    return SecurityCanaryTrap.spawn_canary_honeypots()
+
+@app.post("/opsec/inspect-clipboard")
+def inspect_clipboard_endpoint():
+    return SecurityCanaryTrap.inspect_clipboard_entropy()
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
