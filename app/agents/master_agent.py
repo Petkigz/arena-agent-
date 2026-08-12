@@ -8,7 +8,7 @@ from app.database import db
 from app.llm import llm_client
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
-from app.cognition import CognitiveState, CognitiveEvent, EventBus
+from app.cognition import CognitiveState, CognitiveEvent, EventBus, Blackboard
 from app.cognition.cognitive_router import CognitiveRouter
 from app.runtime.resource_manager import ResourceManager
 
@@ -38,14 +38,15 @@ class MasterAgentOrchestrator:
     """Unified Master Agent with a lightweight Phase 1 cognitive boundary.
 
     Existing deterministic tools remain intact. The cognitive foundation adds
-    shared state, routing, resource awareness, and events without replacing
-    the existing tool layer.
+    shared state, working memory, routing, resource awareness, and events
+    without replacing the existing tool layer.
     """
 
     cognitive_router = CognitiveRouter()
     resource_manager = ResourceManager()
     event_bus = EventBus()
     cognitive_state = CognitiveState()
+    blackboard = Blackboard()
 
     @classmethod
     def process_user_task(cls, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
@@ -57,6 +58,7 @@ class MasterAgentOrchestrator:
         cls.cognitive_state.task.goal = user_text
         cls.cognitive_state.task.status = "running"
         cls.cognitive_state.attention.focus = user_text
+        cls.blackboard.set("current_goal", user_text, source="user", confidence=1.0)
         cls.cognitive_state.touch()
 
         route = cls.cognitive_router.route(user_text)
@@ -68,6 +70,8 @@ class MasterAgentOrchestrator:
         cls.cognitive_state.resources.gpu_percent = resources.gpu_percent
         cls.cognitive_state.resources.vram_percent = resources.vram_percent
         cls.cognitive_state.resources.updated_at = cls.cognitive_state.updated_at
+        cls.blackboard.set("route", route.to_dict(), source="cognitive_router", confidence=1.0)
+        cls.blackboard.set("resource_policy", resource_policy, source="resource_manager", confidence=1.0)
 
         cls.event_bus.publish(CognitiveEvent(
             event_type="user_message_received",
@@ -139,6 +143,8 @@ class MasterAgentOrchestrator:
         elif route.model_tier:
             selected_complexity = route.model_tier
 
+        cls.blackboard.set("selected_model_tier", selected_complexity, source="cognitive_router", confidence=1.0)
+
         system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
         messages = [
             {"role": "system", "content": system_instruction},
@@ -152,29 +158,31 @@ class MasterAgentOrchestrator:
             temperature=0.7
         )
 
-        assistant_reply = "Done."
-        if llm_res.get("choices") and len(llm_res["choices"]) > 0:
+        llm_success = bool(llm_res.get("choices"))
+        assistant_reply = "Done." if llm_success else "I couldn't complete the reasoning step because the language model did not return a response."
+        if llm_success:
             assistant_reply = llm_res["choices"][0]["message"]["content"].strip()
 
         cls.cognitive_state.execution.last_action = {"type": "user_task", "route": route.to_dict()}
         cls.cognitive_state.execution.last_result = {
-            "success": bool(llm_res.get("choices")),
+            "success": llm_success,
             "model": llm_res.get("model", ""),
             "executed_actions": executed_actions,
         }
-        cls.cognitive_state.task.status = "completed"
+        cls.cognitive_state.task.status = "completed" if llm_success else "failed"
+        cls.blackboard.set("last_result", cls.cognitive_state.execution.last_result, source="master_agent", confidence=1.0)
         cls.cognitive_state.touch()
 
         cls.event_bus.publish(CognitiveEvent(
-            event_type="task_completed",
-            data={"success": bool(llm_res.get("choices")), "actions": executed_actions},
+            event_type="task_completed" if llm_success else "task_failed",
+            data={"success": llm_success, "actions": executed_actions},
             source="master_agent",
         ))
 
         HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)
 
         return {
-            "success": True,
+            "success": llm_success,
             "user_text": user_text,
             "assistant_reply": assistant_reply,
             "executed_actions": executed_actions,
@@ -182,4 +190,5 @@ class MasterAgentOrchestrator:
             "cognitive_route": route.to_dict(),
             "resource_policy": resource_policy,
             "cognitive_state": cls.cognitive_state.to_dict(),
+            "blackboard": cls.blackboard.snapshot(),
         }
