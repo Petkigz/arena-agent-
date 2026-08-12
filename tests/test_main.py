@@ -247,3 +247,16 @@ def test_sandbox_and_skills_apis():
     })
     assert exec_resp.status_code == 200
     assert exec_resp.json()["success"] is True
+
+def test_system_apps_apis():
+    resp_get = client.get("/system/apps")
+    assert resp_get.status_code == 200
+    assert "total_apps_count" in resp_get.json()
+
+    resp_scan = client.post("/system/apps/scan")
+    assert resp_scan.status_code == 200
+    assert resp_scan.json()["success"] is True
+
+    resp_launch = client.post("/system/apps/launch", json={"app_query": "echo"})
+    assert resp_launch.status_code == 200
+    assert "success" in resp_launch.json()

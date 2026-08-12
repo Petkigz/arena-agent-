@@ -66,6 +66,7 @@ from app.tools.opsec_manager import OpSecManagerTool
 from app.tools.pentest_company_assistant import PentestCompanyAssistant
 from app.tools.disposable_sandbox import DisposableSandbox
 from app.tools.skill_teaching_engine import SkillTeachingEngine
+from app.tools.app_inventory import SystemAppInventory
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -390,6 +391,9 @@ class SkillExecuteRequest(BaseModel):
     target_parameter: Optional[str] = ""
     run_in_sandbox: bool = True
 
+class AppLaunchQueryRequest(BaseModel):
+    app_query: str
+
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
 def get_root(request: Request):
@@ -444,9 +448,10 @@ import re
 def _parse_and_execute_intent(user_text: str) -> Optional[str]:
     text_lower = user_text.lower()
 
-    # 1. Open / Launch Application & Browser URLs
-    if any(k in text_lower for k in ["open ", "launch ", "search for ", "look up "]):
-        if "firefox" in text_lower or "chrome" in text_lower or "youtube" in text_lower or "browser" in text_lower:
+    # 1. Open / Launch ANY Installed Application
+    if any(k in text_lower for k in ["open ", "launch ", "start ", "run ", "search for ", "look up "]):
+        # Check for browser search URL intent (e.g. YouTube/Google search)
+        if "youtube" in text_lower or "google" in text_lower:
             query_term = "ordinary"
             if "search" in text_lower or "for" in text_lower:
                 m = re.search(r'(?:search|look up|for|find)\s+(?:me\s+)?([a-zA-Z0-9_\-\s]+?)(?:\s+on youtube|\s+in firefox|\s+in chrome|\s+on google|$)', text_lower)
@@ -458,12 +463,16 @@ def _parse_and_execute_intent(user_text: str) -> Optional[str]:
             app_to_launch = "firefox" if "firefox" in text_lower else "chrome"
             DesktopControl.launch_application(app_to_launch)
             DesktopControl.open_url(url)
-            return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Launched {app_to_launch.title()} and opened YouTube search for '{query_term}' ({url})."
+            return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Launched {app_to_launch.title()} and opened search for '{query_term}' ({url})."
 
-        for app in ["firefox", "chrome", "vscode", "notepad", "calculator", "terminal", "explorer", "lm_studio"]:
-            if app in text_lower or (app == "vscode" and "code" in text_lower):
-                res = DesktopControl.launch_application(app)
-                return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: {res.get('message', f'Launched {app}')}"
+        # General open any installed application intent
+        match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', text_lower)
+        if match:
+            target_app_query = match.group(1).strip()
+            if len(target_app_query) > 1 and target_app_query not in ["file", "folder", "song", "task", "briefing", "sandbox"]:
+                res = SystemAppInventory.launch_any_app(target_app_query)
+                if res.get("success"):
+                    return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: {res.get('message', f'Launched {target_app_query}')}"
 
     # 2. Screenshot / Screen Vision
     if any(k in text_lower for k in ["take a screenshot", "capture screen", "snap desktop", "screen vision"]):
@@ -480,25 +489,35 @@ def _parse_and_execute_intent(user_text: str) -> Optional[str]:
 def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     rag_context = SemanticRAGEngine.build_rag_context(user_text) if user_text else ""
 
+    app_count = SystemAppInventory.get_installed_apps_count()
+
     system_instruction = (
-        "You are an advanced local personal assistant running natively on the user's local PC.\n"
-        "You have full permission and local tools to access local files, search directories, read documents, "
-        "play media, launch applications, monitor system hardware, and execute commands in sandboxes.\n"
-        "Never state that you cannot access local files or the local system — you ARE the local assistant running on this PC."
+        f"You are an advanced local personal assistant running natively on the user's local PC.\n"
+        f"You have full permission and native tools to access local files, search directories, read documents, "
+        f"play media, launch and operate ANY of the {app_count} installed applications on this PC, monitor hardware, and run sandboxes.\n"
+        f"Never state that you cannot access local files, applications, or the system — you ARE the local assistant running on this PC."
     )
 
     action_context = _parse_and_execute_intent(user_text) or ""
 
     fs_context = ""
     text_lower = user_text.lower()
+
+    # Ingest App Count Info if user asks about installed apps/PC apps
+    if any(k in text_lower for k in ["how many apps", "installed apps", "apps on my pc", "list my apps", "what apps"]):
+        scan_info = SystemAppInventory.scan_installed_applications()
+        top_apps = [a["app_name"] for a in scan_info.get("applications", [])[:15]]
+        fs_context += f"\n\n[SYSTEM INSTALLED APPLICATIONS INFO]: Discovered {scan_info.get('total_apps_count')} installed applications on this {scan_info.get('host_os')} PC. Sample installed apps: {', '.join(top_apps)}."
+
+    # Ingest Filesystem Search
     if any(k in text_lower for k in ["song", "file", "document", "ordinary", "library", "folder", "do i have", "search my pc", "find on my pc"]):
         words = [w for w in user_text.replace("?", "").replace("'", "").split() if len(w) > 3 and w.lower() not in ["have", "called", "song", "this", "library", "with", "from", "does", "what"]]
         search_term = words[0] if words else "Ordinary"
         matched = UniversalFilesystem.search_filesystem(search_term, max_results=10)
         if matched:
-            fs_context = f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']:\n" + "\n".join([f"• {m['file_name']} (Path: {m['file_path']})" for m in matched])
+            fs_context += f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']:\n" + "\n".join([f"• {m['file_name']} (Path: {m['file_path']})" for m in matched])
         else:
-            fs_context = f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']: No files matching '{search_term}' were found in the scanned workspace/system directories."
+            fs_context += f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']: No files matching '{search_term}' were found in the scanned workspace/system directories."
 
     combined_system_prompt = system_instruction + (f"\n\n{rag_context}" if rag_context else "") + (f"\n\n{action_context}" if action_context else "") + fs_context
 
@@ -1188,6 +1207,18 @@ def skills_execute_endpoint(req: SkillExecuteRequest):
         target_parameter=req.target_parameter or "",
         run_in_sandbox=req.run_in_sandbox
     )
+
+@app.get("/system/apps")
+def get_system_apps_endpoint():
+    return SystemAppInventory.scan_installed_applications()
+
+@app.post("/system/apps/scan")
+def rescan_system_apps_endpoint():
+    return SystemAppInventory.scan_installed_applications()
+
+@app.post("/system/apps/launch")
+def launch_system_app_endpoint(req: AppLaunchQueryRequest):
+    return SystemAppInventory.launch_any_app(req.app_query)
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
