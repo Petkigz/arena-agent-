@@ -15,25 +15,28 @@ from app.runtime.resource_manager import ResourceManager
 def test_blackboard_preserves_metadata():
     board = Blackboard()
     board.set("answer", 42, source="test", confidence=0.9)
-    item = board.get("answer")
-    assert item["value"] == 42
-    assert item["source"] == "test"
-    assert item["confidence"] == 0.9
+    item = board.get_entry("answer")
+    assert item is not None
+    assert item.value == 42
+    assert item.source == "test"
+    assert item.confidence == 0.9
 
 
 def test_event_bus_dispatches_without_cross_event_leaks():
     bus = EventBus()
     received = []
     bus.subscribe("tool_execution_completed", received.append)
-    bus.emit(CognitiveEvent(type="tool_execution_completed", payload={"ok": True}))
+    bus.publish(CognitiveEvent(event_type="tool_execution_completed", data={"ok": True}))
     assert len(received) == 1
-    assert received[0].payload["ok"] is True
+    assert received[0].data["ok"] is True
 
 
 def test_session_lifecycle():
     session = CognitiveSession()
     assert session.active is True
+    before = session.last_activity
     session.touch()
+    assert session.last_activity >= before
     session.close()
     assert session.active is False
 
@@ -46,6 +49,6 @@ def test_cognitive_state_has_stable_identity():
 
 def test_resource_manager_returns_safe_policy():
     manager = ResourceManager()
-    policy = manager.get_policy()
+    policy = manager.execution_policy()
     assert policy is not None
-    assert "model_tier" in policy
+    assert "preferred_model_tier" in policy
