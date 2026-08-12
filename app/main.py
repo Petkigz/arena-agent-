@@ -439,6 +439,37 @@ def get_api_status():
         "database_connected": True
     }
 
+def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    rag_context = SemanticRAGEngine.build_rag_context(user_text) if user_text else ""
+
+    system_instruction = (
+        "You are an advanced local personal assistant running natively on the user's local PC.\n"
+        "You have full permission and local tools to access local files, search directories, read documents, "
+        "play media, launch applications, monitor system hardware, and execute commands in sandboxes.\n"
+        "Never state that you cannot access local files or the local system — you ARE the local assistant running on this PC."
+    )
+
+    fs_context = ""
+    text_lower = user_text.lower()
+    if any(k in text_lower for k in ["song", "file", "document", "ordinary", "library", "folder", "do i have", "search my pc", "find on my pc"]):
+        words = [w for w in user_text.replace("?", "").replace("'", "").split() if len(w) > 3 and w.lower() not in ["have", "called", "song", "this", "library", "with", "from", "does", "what"]]
+        search_term = words[0] if words else "Ordinary"
+        matched = UniversalFilesystem.search_filesystem(search_term, max_results=10)
+        if matched:
+            fs_context = f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']:\n" + "\n".join([f"• {m['file_name']} (Path: {m['file_path']})" for m in matched])
+        else:
+            fs_context = f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']: No files matching '{search_term}' were found in the scanned workspace/system directories."
+
+    combined_system_prompt = system_instruction + (f"\n\n{rag_context}" if rag_context else "") + fs_context
+
+    enriched = list(messages)
+    if enriched and enriched[0]["role"] == "system":
+        enriched[0]["content"] += f"\n\n{combined_system_prompt}"
+    else:
+        enriched.insert(0, {"role": "system", "content": combined_system_prompt})
+
+    return enriched
+
 # 2. Local Chat Completions Route
 @app.post("/chat")
 def chat_with_local_brain(req: ChatRequest):
@@ -449,17 +480,8 @@ def chat_with_local_brain(req: ChatRequest):
             detail="System is currently in SLEEP MODE. Wake up the assistant from the dashboard header to resume."
         )
 
-    # Inject RAG context from relevant past memories
     user_msg_content = next((m["content"] for m in reversed(req.messages) if m["role"] == "user"), "")
-    rag_context = SemanticRAGEngine.build_rag_context(user_msg_content) if user_msg_content else ""
-
-    messages_with_rag = list(req.messages)
-    if rag_context and len(messages_with_rag) > 0:
-        # Prepend RAG context to system message or user message
-        if messages_with_rag[0]["role"] == "system":
-            messages_with_rag[0]["content"] += f"\n\n{rag_context}"
-        else:
-            messages_with_rag.insert(0, {"role": "system", "content": f"You are a local personal assistant.{rag_context}"})
+    messages_with_rag = _enrich_messages_with_local_tools_and_rag(user_msg_content, req.messages)
 
     app_logger.info(f"Chat request with complexity '{req.complexity}' received.")
     try:
@@ -804,15 +826,14 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
             "model_used": "System Voice Perception"
         }
 
-    # 2. Chat Completion with Local LLM Brain and RAG Context
-    rag_context = SemanticRAGEngine.build_rag_context(user_text)
+    # 2. Chat Completion with Local LLM Brain, RAG Context & Automatic Tool Injection
     messages = [
-        {"role": "system", "content": f"You are a local personal assistant.{rag_context}"},
         {"role": "user", "content": user_text}
     ]
+    messages_enriched = _enrich_messages_with_local_tools_and_rag(user_text, messages)
     
     llm_res = llm_client.generate_chat_completion(
-        messages=messages,
+        messages=messages_enriched,
         complexity=complexity,
         max_tokens=256
     )
