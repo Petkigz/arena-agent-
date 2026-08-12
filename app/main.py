@@ -70,6 +70,7 @@ from app.tools.app_inventory import SystemAppInventory
 from app.agents.master_agent import MasterAgentOrchestrator
 from app.utils.hardware_governor import HardwareGovernor
 from app.tools.security_canary import SecurityCanaryTrap
+from app.tools.financial_legal_wellness import FinancialLegalWellnessSuite
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -396,6 +397,20 @@ class SkillExecuteRequest(BaseModel):
 
 class AppLaunchQueryRequest(BaseModel):
     app_query: str
+
+class SubscriptionAuditRequest(BaseModel):
+    subscriptions_list: List[Dict[str, Any]]
+
+class ToSAuditRequest(BaseModel):
+    policy_text_or_url: str
+
+class ToneCritiqueRequest(BaseModel):
+    draft_message: str
+    recipient_context: Optional[str] = "Professional Client / Colleague"
+
+class AnkiExportRequest(BaseModel):
+    study_material: str
+    deck_name: Optional[str] = "Personal_AI_Knowledge"
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -1228,6 +1243,22 @@ def spawn_canaries_endpoint():
 @app.post("/opsec/inspect-clipboard")
 def inspect_clipboard_endpoint():
     return SecurityCanaryTrap.inspect_clipboard_entropy()
+
+@app.post("/tools/audit-subscriptions")
+def audit_subscriptions_endpoint(req: SubscriptionAuditRequest):
+    return FinancialLegalWellnessSuite.audit_subscriptions_and_trials(req.subscriptions_list)
+
+@app.post("/tools/audit-tos")
+def audit_tos_endpoint(req: ToSAuditRequest):
+    return FinancialLegalWellnessSuite.audit_tos_and_privacy_policy(req.policy_text_or_url)
+
+@app.post("/tools/tone-critique")
+def tone_critique_endpoint(req: ToneCritiqueRequest):
+    return FinancialLegalWellnessSuite.socratic_tone_sounding_board(req.draft_message, recipient_context=req.recipient_context)
+
+@app.post("/tools/generate-anki")
+def generate_anki_endpoint(req: AnkiExportRequest):
+    return FinancialLegalWellnessSuite.generate_anki_flashcards(req.study_material, deck_name=req.deck_name or "Personal_AI_Knowledge")
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
