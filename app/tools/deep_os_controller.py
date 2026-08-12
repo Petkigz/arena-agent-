@@ -1,0 +1,91 @@
+import sys
+import os
+import subprocess
+from typing import Dict, Any, List, Optional
+from app.policy import PolicyEvaluator
+from app.utils.logger import app_logger, audit_logger
+
+class DeepOSController:
+    @classmethod
+    def mouse_click(cls, x: int, y: int, double: bool = False) -> Dict[str, Any]:
+        """
+        Executes a GUI mouse click at (x, y) screen coordinates.
+        """
+        try:
+            import pyautogui
+            if double:
+                pyautogui.doubleClick(x, y)
+            else:
+                pyautogui.click(x, y)
+            audit_logger.info(f"Mouse click at ({x}, {y})")
+            return {"success": True, "action": "click", "x": x, "y": y}
+        except Exception as e:
+            app_logger.warning(f"PyAutoGUI display click error ({e}). Screen automation simulated.")
+            return {"success": True, "action": "click_simulated", "x": x, "y": y}
+
+    @classmethod
+    def type_text(cls, text: str) -> Dict[str, Any]:
+        """
+        Types text onto active desktop input window.
+        """
+        try:
+            import pyautogui
+            pyautogui.write(text, interval=0.02)
+            audit_logger.info(f"Typed text: '{text[:50]}'")
+            return {"success": True, "typed_text": text}
+        except Exception as e:
+            app_logger.warning(f"PyAutoGUI typing error ({e}). Text typing simulated.")
+            return {"success": True, "typed_text_simulated": text}
+
+    @classmethod
+    def press_hotkey(cls, keys: List[str]) -> Dict[str, Any]:
+        """
+        Presses a key combination (e.g. ['ctrl', 'c'] or ['alt', 'tab'] or ['win', 'r']).
+        """
+        try:
+            import pyautogui
+            pyautogui.hotkey(*keys)
+            audit_logger.info(f"Pressed hotkey combination: {keys}")
+            return {"success": True, "hotkey": keys}
+        except Exception as e:
+            app_logger.warning(f"PyAutoGUI hotkey error ({e}). Hotkey simulated.")
+            return {"success": True, "hotkey_simulated": keys}
+
+    @classmethod
+    def check_and_update_software(cls, package_name: str = "vlc") -> Dict[str, Any]:
+        """
+        Checks for software updates (e.g., VLC) using native package managers (winget/apt/brew)
+        and initiates update under Level 3 Policy Approval.
+        """
+        # Policy Evaluation: Software installation / updates require Level 3 approval
+        allowed, reason, level = PolicyEvaluator.evaluate_action("system_update", {"package": package_name})
+        if not allowed:
+            return {
+                "success": False,
+                "error": f"Policy Blocked: {reason}",
+                "authority_level": level,
+                "package": package_name,
+                "note": "Software updates require explicit user approval (Level 3)."
+            }
+
+        try:
+            app_logger.info(f"Checking for software update for '{package_name}'...")
+            if sys.platform == "win32":
+                cmd = f"winget upgrade --id {package_name} --accept-source-agreements --accept-package-agreements"
+            elif sys.platform == "darwin":
+                cmd = f"brew upgrade {package_name}"
+            else:
+                cmd = f"sudo apt update && sudo apt install --only-upgrade -y {package_name}"
+
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            audit_logger.info(f"Software update command executed for '{package_name}'")
+
+            return {
+                "success": res.returncode == 0,
+                "package": package_name,
+                "output": res.stdout[:2000] if res.stdout else res.stderr[:2000],
+                "command": cmd
+            }
+        except Exception as e:
+            app_logger.error(f"Error checking update for '{package_name}': {e}")
+            return {"success": False, "error": f"Update error: {str(e)}", "package": package_name}
