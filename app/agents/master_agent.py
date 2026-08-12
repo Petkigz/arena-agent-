@@ -54,16 +54,20 @@ class MasterAgentOrchestrator:
         app_logger.info(f"MasterAgent processing user task: '{user_text[:80]}...'")
 
         # Phase 1: establish the shared cognitive context before acting.
+        cls.cognitive_state.task.goal = user_text
+        cls.cognitive_state.task.status = "running"
+        cls.cognitive_state.attention.focus = user_text
         cls.cognitive_state.touch()
-        cls.cognitive_state.update(
-            goal=user_text,
-            focus=user_text,
-            task_status="running",
-        )
+
         route = cls.cognitive_router.route(user_text)
         resources = cls.resource_manager.snapshot()
         resource_policy = cls.resource_manager.execution_policy(resources)
-        cls.cognitive_state.resources = resources.to_dict()
+        cls.cognitive_state.resources.cpu_percent = resources.cpu_percent
+        cls.cognitive_state.resources.ram_percent = resources.ram_percent
+        cls.cognitive_state.resources.ram_available_mb = resources.ram_available_mb
+        cls.cognitive_state.resources.gpu_percent = resources.gpu_percent
+        cls.cognitive_state.resources.vram_percent = resources.vram_percent
+        cls.cognitive_state.resources.updated_at = cls.cognitive_state.updated_at
 
         cls.event_bus.publish(CognitiveEvent(
             event_type="user_message_received",
@@ -152,13 +156,13 @@ class MasterAgentOrchestrator:
         if llm_res.get("choices") and len(llm_res["choices"]) > 0:
             assistant_reply = llm_res["choices"][0]["message"]["content"].strip()
 
-        cls.cognitive_state.last_action = {"type": "user_task", "route": route.to_dict()}
-        cls.cognitive_state.last_result = {
+        cls.cognitive_state.execution.last_action = {"type": "user_task", "route": route.to_dict()}
+        cls.cognitive_state.execution.last_result = {
             "success": bool(llm_res.get("choices")),
             "model": llm_res.get("model", ""),
             "executed_actions": executed_actions,
         }
-        cls.cognitive_state.task_status = "completed"
+        cls.cognitive_state.task.status = "completed"
         cls.cognitive_state.touch()
 
         cls.event_bus.publish(CognitiveEvent(
