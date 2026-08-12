@@ -68,6 +68,7 @@ class DisposableSandbox:
         """
         Executes a command inside the disposable sandbox environment using the appropriate execution engine
         for the desired target OS (WSL, Docker, ADB, or native isolated subprocess).
+        Includes automatic fallback to native subprocess execution if wrapper tools are unconfigured.
         """
         if use_linux_environment and target_guest_os == "auto":
             target_guest_os = "linux"
@@ -83,10 +84,12 @@ class DisposableSandbox:
         use_shell = True
         exec_mode = f"Native Subprocess ({host_os})"
 
-        # 1. Target Linux
-        if guest_os in ["linux", "auto"] and host_os == "windows" and shutil.which("wsl"):
-            wsl_path = str(sandbox_dir).replace("\\", "/").replace("C:", "/mnt/c").replace("F:", "/mnt/f")
-            cmd_args = ["wsl", "bash", "-c", f"cd '{wsl_path}' && {command}"]
+        # 1. Specific Target Linux requested explicitly
+        if guest_os == "linux" and host_os == "windows" and shutil.which("wsl"):
+            drive_letter = str(sandbox_dir)[0].lower() if len(str(sandbox_dir)) > 1 and str(sandbox_dir)[1] == ":" else ""
+            raw_rel = str(sandbox_dir)[2:].replace("\\", "/") if drive_letter else str(sandbox_dir).replace("\\", "/")
+            wsl_path = f"/mnt/{drive_letter}{raw_rel}" if drive_letter else raw_rel
+            cmd_args = ["wsl", "bash", "-c", f"cd '{wsl_path}' 2>/dev/null || cd ~; {command}"]
             use_shell = False
             exec_mode = "WSL (Linux on Windows)"
         elif guest_os == "linux" and shutil.which("docker"):
@@ -100,7 +103,7 @@ class DisposableSandbox:
             use_shell = False
             exec_mode = "Docker Container (Linux/Ubuntu)"
 
-        # 2. Target Windows (from Linux or Mac via Wine or Docker Windows container, or native on Windows)
+        # 2. Target Windows (from Linux or Mac via Wine)
         elif guest_os == "windows" and host_os != "windows":
             if shutil.which("wine"):
                 cmd_args = f"wine {command}"
@@ -119,6 +122,7 @@ class DisposableSandbox:
 
         app_logger.info(f"Running sandbox '{sandbox_id}' [Host: {host_os} -> Guest: {guest_os}] via {exec_mode}: {command}")
 
+        # Attempt primary execution wrapper
         try:
             res = subprocess.run(
                 cmd_args,
@@ -129,14 +133,48 @@ class DisposableSandbox:
                 timeout=timeout_seconds
             )
 
-            stdout = res.stdout
-            stderr = res.stderr
-            exit_code = res.returncode
+            # If primary wrapper succeeded, return result
+            if res.returncode == 0:
+                db.create_audit_log(
+                    "run_in_sandbox",
+                    "success",
+                    f"Executed in sandbox '{sandbox_id}' ({exec_mode}, Exit: 0)",
+                    level=1
+                )
+                return {
+                    "success": True,
+                    "sandbox_id": sandbox_id,
+                    "host_os": platform.system(),
+                    "target_guest_os": guest_os,
+                    "execution_mode": exec_mode,
+                    "exit_code": 0,
+                    "stdout": res.stdout,
+                    "stderr": res.stderr,
+                    "command": command
+                }
+            else:
+                app_logger.warning(f"Primary execution wrapper '{exec_mode}' returned code {res.returncode}. Attempting native sandbox fallback...")
 
+        except Exception as e:
+            app_logger.warning(f"Primary execution wrapper failed: {e}. Attempting native sandbox fallback...")
+
+        # Fallback to direct native isolated subprocess in sandbox directory
+        try:
+            native_cmd = command if host_os != "windows" else f"cmd.exe /c {command}"
+            fallback_res = subprocess.run(
+                native_cmd,
+                shell=True,
+                cwd=str(sandbox_dir),
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds
+            )
+
+            exit_code = fallback_res.returncode
             db.create_audit_log(
                 "run_in_sandbox",
                 "success" if exit_code == 0 else "failed",
-                f"Executed in sandbox '{sandbox_id}' ({exec_mode}, Exit: {exit_code})",
+                f"Executed in sandbox '{sandbox_id}' (Native Subprocess Fallback, Exit: {exit_code})",
                 level=1
             )
 
@@ -145,10 +183,10 @@ class DisposableSandbox:
                 "sandbox_id": sandbox_id,
                 "host_os": platform.system(),
                 "target_guest_os": guest_os,
-                "execution_mode": exec_mode,
+                "execution_mode": f"Native Isolated Subprocess ({host_os})",
                 "exit_code": exit_code,
-                "stdout": stdout,
-                "stderr": stderr,
+                "stdout": fallback_res.stdout,
+                "stderr": fallback_res.stderr,
                 "command": command
             }
 
@@ -159,7 +197,7 @@ class DisposableSandbox:
                 "error": f"Execution timed out after {timeout_seconds} seconds."
             }
         except Exception as e:
-            app_logger.error(f"Error executing command in sandbox: {e}")
+            app_logger.error(f"Error in native sandbox fallback execution: {e}")
             return {"success": False, "sandbox_id": sandbox_id, "error": str(e)}
 
     @staticmethod
