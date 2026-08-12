@@ -8,6 +8,9 @@ from app.database import db
 from app.llm import llm_client
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
+from app.cognition import CognitiveState, CognitiveEvent, EventBus
+from app.cognition.cognitive_router import CognitiveRouter
+from app.runtime.resource_manager import ResourceManager
 
 from app.tools.app_inventory import SystemAppInventory
 from app.tools.desktop_control import DesktopControl
@@ -30,29 +33,48 @@ from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.human_nature_engine import HumanNatureEngine
 from app.memory.coworker_brain import CoworkerBrain
 
+
 class MasterAgentOrchestrator:
+    """Unified Master Agent with a lightweight Phase 1 cognitive boundary.
+
+    Existing deterministic tools remain intact. The cognitive foundation adds
+    shared state, routing, resource awareness, and events without replacing
+    the existing tool layer.
     """
-    Unified Master Agent & All-in-One Autonomous Router.
-    Merates ALL domain tools (OS control, app launching, file search, vision, web research,
-    cybersecurity/pentesting, OpSec, data analysis, sandboxes, and taught skills) into a single
-    intelligent human-like agent.
-    """
+
+    cognitive_router = CognitiveRouter()
+    resource_manager = ResourceManager()
+    event_bus = EventBus()
+    cognitive_state = CognitiveState()
 
     @classmethod
     def process_user_task(cls, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
-        """
-        Unified single entry point for processing any user chat or spoken voice task.
-        Automatically identifies, routes, and executes native tools on the system and returns
-        a concise, human-warmth spoken/written response.
-        """
+        """Process a user request through the existing tools plus Phase 1 state."""
         text_lower = user_text.lower().strip()
         app_logger.info(f"MasterAgent processing user task: '{user_text[:80]}...'")
+
+        # Phase 1: establish the shared cognitive context before acting.
+        cls.cognitive_state.touch()
+        cls.cognitive_state.update(
+            goal=user_text,
+            focus=user_text,
+            task_status="running",
+        )
+        route = cls.cognitive_router.route(user_text)
+        resources = cls.resource_manager.snapshot()
+        resource_policy = cls.resource_manager.execution_policy(resources)
+        cls.cognitive_state.resources = resources.to_dict()
+
+        cls.event_bus.publish(CognitiveEvent(
+            event_type="user_message_received",
+            data={"text": user_text, "route": route.to_dict()},
+            source="master_agent",
+        ))
 
         executed_actions = []
 
         # 1. APPLICATION LAUNCHING & OPERATING INTENT
         if any(k in text_lower for k in ["open ", "launch ", "start ", "run ", "search for ", "look up "]):
-            # Web/YouTube Search in Browser
             if "youtube" in text_lower or "google" in text_lower or "browser" in text_lower:
                 m = re.search(r'(?:search|look up|for|find|open)\s+(?:me\s+)?([a-zA-Z0-9_\-\s]+?)(?:\s+on youtube|\s+in firefox|\s+in chrome|\s+on google|$)', text_lower)
                 query_term = m.group(1).strip() if m and m.group(1).strip() else "ordinary"
@@ -62,7 +84,6 @@ class MasterAgentOrchestrator:
                 DesktopControl.launch_application(app_name)
                 DesktopControl.open_url(url)
                 executed_actions.append(f"Opened {app_name.title()} and launched YouTube search for '{query_term}'.")
-
             else:
                 match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', text_lower)
                 if match:
@@ -93,8 +114,8 @@ class MasterAgentOrchestrator:
 
         # 4. PENTEST & CYBERSECURITY INTENT
         if any(k in text_lower for k in ["pentest", "rules of engagement", "roe", "security scan", "vulnerability report"]):
-            roe_res = PentestCompanyAssistant.draft_rules_of_engagement("Client Company", ["192.168.1.0/24"])
-            executed_actions.append(f"Drafted Penetration Testing Rules of Engagement (RoE) document.")
+            PentestCompanyAssistant.draft_rules_of_engagement("Client Company", ["192.168.1.0/24"])
+            executed_actions.append("Drafted Penetration Testing Rules of Engagement (RoE) document.")
 
         # 5. SCREENSHOT & VISION INTENT
         if any(k in text_lower for k in ["screenshot", "capture screen", "screen vision", "what is on my screen"]):
@@ -103,12 +124,18 @@ class MasterAgentOrchestrator:
 
         # 6. DAILY BRIEFING INTENT
         if any(k in text_lower for k in ["daily briefing", "morning report", "executive briefing"]):
-            brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
+            DailyBriefingEngine.generate_briefing(generate_audio=False)
             executed_actions.append("Generated Daily Executive Briefing.")
 
-        # BUILD CONCISE HUMAN-WARMTH PROMPT FOR COWORKER LLM
-        system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
+        # Resource-aware model selection. Explicit caller complexity still wins
+        # when supplied, but constrained hosts are allowed to force the fast tier.
+        selected_complexity = complexity
+        if resource_policy["mode"] != "normal":
+            selected_complexity = "fast"
+        elif route.model_tier:
+            selected_complexity = route.model_tier
 
+        system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
         messages = [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": user_text}
@@ -116,7 +143,7 @@ class MasterAgentOrchestrator:
 
         llm_res = llm_client.generate_chat_completion(
             messages=messages,
-            complexity=complexity,
+            complexity=selected_complexity,
             max_tokens=150,
             temperature=0.7
         )
@@ -125,7 +152,21 @@ class MasterAgentOrchestrator:
         if llm_res.get("choices") and len(llm_res["choices"]) > 0:
             assistant_reply = llm_res["choices"][0]["message"]["content"].strip()
 
-        # Save experience into lifelong memory
+        cls.cognitive_state.last_action = {"type": "user_task", "route": route.to_dict()}
+        cls.cognitive_state.last_result = {
+            "success": bool(llm_res.get("choices")),
+            "model": llm_res.get("model", ""),
+            "executed_actions": executed_actions,
+        }
+        cls.cognitive_state.task_status = "completed"
+        cls.cognitive_state.touch()
+
+        cls.event_bus.publish(CognitiveEvent(
+            event_type="task_completed",
+            data={"success": bool(llm_res.get("choices")), "actions": executed_actions},
+            source="master_agent",
+        ))
+
         HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)
 
         return {
@@ -133,5 +174,8 @@ class MasterAgentOrchestrator:
             "user_text": user_text,
             "assistant_reply": assistant_reply,
             "executed_actions": executed_actions,
-            "model_used": llm_res.get("model", "")
+            "model_used": llm_res.get("model", ""),
+            "cognitive_route": route.to_dict(),
+            "resource_policy": resource_policy,
+            "cognitive_state": cls.cognitive_state.to_dict(),
         }
