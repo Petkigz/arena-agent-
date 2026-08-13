@@ -74,6 +74,7 @@ from app.tools.financial_legal_wellness import FinancialLegalWellnessSuite
 from app.agents.self_evolving_agent import SelfEvolvingAgent
 from app.scheduler.self_healer import AutonomousSelfHealer
 from app.cognition.experiment_engine import ExperimentEngine
+from app.cognition.capability_factory import CapabilityFactory
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -423,6 +424,11 @@ class ExperimentRequest(BaseModel):
     hypothesis_name: str
     command_or_script: str
     target_guest_os: Optional[str] = "auto"
+
+class CapabilitySynthesizeRequest(BaseModel):
+    capability_name: str
+    description: str
+    sample_params: Optional[Dict[str, Any]] = None
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -1286,6 +1292,14 @@ def test_experiment_endpoint(req: ExperimentRequest):
         req.hypothesis_name,
         req.command_or_script,
         target_guest_os=req.target_guest_os or "auto"
+    )
+
+@app.post("/cognition/synthesize-capability")
+def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
+    return CapabilityFactory.synthesize_capability(
+        req.capability_name,
+        req.description,
+        sample_params=req.sample_params
     )
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
