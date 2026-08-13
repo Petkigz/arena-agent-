@@ -77,6 +77,7 @@ from app.cognition.experiment_engine import ExperimentEngine
 from app.cognition.capability_factory import CapabilityFactory
 from app.agents.proactive_coworker_daemon import ProactiveCoworkerDaemon
 from app.tools.win32_ghost_operator import Win32GhostOperator
+from app.cognition.pipeline import CognitivePipeline
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -101,6 +102,7 @@ app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]
     complexity: str = Field(default="fast", description="'fast' for Qwen 3B/4B, 'main' for Qwen 9B")
+    session_id: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 512
 
@@ -583,17 +585,23 @@ def chat_with_local_brain(req: ChatRequest):
         )
 
     user_msg_content = next((m["content"] for m in reversed(req.messages) if m["role"] == "user"), "")
-    agent_res = MasterAgentOrchestrator.process_user_task(user_msg_content, complexity=req.complexity)
+    pipeline_res = CognitivePipeline.process_chat(
+        user_text=user_msg_content,
+        complexity=req.complexity,
+        session_id=req.session_id
+    )
 
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
         "object": "chat.completion",
-        "model": agent_res.get("model_used", "MasterAgentOrchestrator"),
+        "model": pipeline_res.get("model_used", "CognitivePipeline"),
+        "trace_id": pipeline_res.get("trace_id"),
+        "session_id": pipeline_res.get("session_id"),
         "choices": [{
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": agent_res.get("assistant_reply", "Task executed.")
+                "content": pipeline_res.get("assistant_reply", "Task executed.")
             },
             "finish_reason": "stop"
         }]
