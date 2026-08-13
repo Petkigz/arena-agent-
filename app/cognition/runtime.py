@@ -1,4 +1,4 @@
-"""Composition root for Arena's Phase 3 cognitive stack."""
+"""Composition root for Arena's Phase 4 cognitive stack."""
 from __future__ import annotations
 from typing import Optional
 from app.config import settings
@@ -6,12 +6,15 @@ from .action_selection import ActionSelector, InvestigationExecutor
 from .belief_engine import BeliefEngine
 from .cognitive_state import CognitiveState
 from .event_bus import EventBus
+from .memory import MemoryStore
+from .memory_learning import MemoryLearner
 from .reasoning_loop import CognitiveReasoningLoop
+from .reflection import ReflectionEngine
 from .world_ingest import WorldIngestor
 from .world_model import WorldModel
 
 class CognitiveRuntime:
-    """Owns one isolated cognitive stack and exposes explicit registration points."""
+    """Owns one isolated cognitive stack and its persistent memory."""
     def __init__(self, db_path: Optional[str] = None, max_steps: int = 3) -> None:
         path = db_path or str(settings.DB_PATH)
         self.state = CognitiveState()
@@ -21,6 +24,9 @@ class CognitiveRuntime:
         self.beliefs = BeliefEngine(db_path=path)
         self.actions = ActionSelector()
         self.executor = InvestigationExecutor()
+        self.memory = MemoryStore(path)
+        self.learning = MemoryLearner(self.memory)
+        self.reflection = ReflectionEngine()
         self.loop = CognitiveReasoningLoop(
             engine=self.beliefs,
             action_selector=self.actions,
