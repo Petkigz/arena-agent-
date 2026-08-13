@@ -77,6 +77,7 @@ from app.cognition.experiment_engine import ExperimentEngine
 from app.cognition.capability_factory import CapabilityFactory
 from app.agents.proactive_coworker_daemon import ProactiveCoworkerDaemon
 from app.tools.win32_ghost_operator import Win32GhostOperator
+from app.tools.ast_janitor import ASTJanitor
 from app.cognition.pipeline import CognitivePipeline
 
 app = FastAPI(
@@ -428,6 +429,9 @@ class GhostMessageRequest(BaseModel):
     window_title_query: str
     message_type: Optional[str] = "click"
     text_payload: Optional[str] = None
+
+class ASTAuditRequest(BaseModel):
+    file_path: str
 
 class ExperimentRequest(BaseModel):
     hypothesis_name: str
@@ -1332,6 +1336,14 @@ def send_ghost_message_endpoint(req: GhostMessageRequest):
         message_type=req.message_type or "click",
         text_payload=req.text_payload
     )
+
+@app.post("/coder/ast-audit")
+def ast_audit_endpoint(req: ASTAuditRequest):
+    return ASTJanitor.audit_and_refactor_code(req.file_path)
+
+@app.post("/coder/ast-generate-test")
+def ast_generate_test_endpoint(module_query: str = Query(...)):
+    return ASTJanitor.generate_pytest_contract(module_query)
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
