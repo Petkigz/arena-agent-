@@ -8,22 +8,11 @@ perception subsystem to SQLite.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Optional
 from uuid import uuid4
 
 from .events import CognitiveEvent
-from .world_model import Observation, WorldModel
-
-
-@dataclass
-class WorldChange:
-    subject: str
-    predicate: str
-    previous: Any
-    current: Any
-    source: str
-    confidence: float
+from .world_model import Observation, WorldChange, WorldModel
 
 
 class WorldIngestor:
@@ -59,10 +48,12 @@ class WorldIngestor:
             change = WorldChange(
                 subject=subject,
                 predicate=predicate,
-                previous=previous.value,
-                current=value,
+                previous_value=previous.value,
+                current_value=value,
+                observed_at=observation.observed_at,
                 source=source,
                 confidence=confidence,
+                observation_id=observation.id,
             )
             if self.event_bus is not None:
                 self.event_bus.publish(
@@ -75,6 +66,7 @@ class WorldIngestor:
                             "current": value,
                             "source": source,
                             "confidence": confidence,
+                            "observation_id": observation.id,
                         },
                     )
                 )
