@@ -21,30 +21,23 @@ def test_persistent_beliefs_round_trip(tmp_path):
 def test_closed_loop_executes_probe_and_reasons_again(tmp_path):
     model = WorldModel(str(tmp_path / "world.db"))
     bus = EventBus()
+    emitted = []
+    bus.subscribe("investigation_completed", emitted.append)
     ingestor = WorldIngestor(model, bus)
     selector = ActionSelector()
     executor = InvestigationExecutor()
-
     need = InformationNeed("Is Chrome responsive?", "chrome", "vision is uncertain", 0.9)
     selector.registry.register(
         "chrome",
-        lambda n: InvestigationPlan(
-            tool="probe_chrome",
-            arguments={},
-            target=n.target,
-            reason=n.reason,
-            priority=n.priority,
-            predicate="responsiveness",
-        ),
+        lambda n: InvestigationPlan(tool="probe_chrome", arguments={}, target=n.target,
+                                    reason=n.reason, priority=n.priority, predicate="responsiveness"),
     )
     executor.register("probe_chrome", lambda: "responsive")
-    loop = CognitiveReasoningLoop(
-        engine=BeliefEngine(), action_selector=selector, executor=executor,
-        world_ingestor=ingestor, event_bus=bus, max_steps=2,
-    )
-
-    trace = loop.run("chrome", "status", value="unknown", source="vision", confidence=0.2, information_needs=[need])
+    loop = CognitiveReasoningLoop(engine=BeliefEngine(), action_selector=selector, executor=executor,
+                                  world_ingestor=ingestor, event_bus=bus, max_steps=2)
+    trace = loop.run("chrome", "status", value="unknown", source="vision", confidence=0.2,
+                     information_needs=[need])
     assert trace.results[0].success is True
     assert trace.results[0].output == "responsive"
     assert model.latest_observation("chrome", "responsiveness").value == "responsive"
-    assert any(item.event_type == "investigation_completed" for item in bus.history())
+    assert emitted
