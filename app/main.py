@@ -73,6 +73,7 @@ from app.tools.security_canary import SecurityCanaryTrap
 from app.tools.financial_legal_wellness import FinancialLegalWellnessSuite
 from app.agents.self_evolving_agent import SelfEvolvingAgent
 from app.scheduler.self_healer import AutonomousSelfHealer
+from app.cognition.experiment_engine import ExperimentEngine
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -417,6 +418,11 @@ class AnkiExportRequest(BaseModel):
 class SelfEvolveRequest(BaseModel):
     task_objective: str
     tool_name_query: Optional[str] = "custom_tool"
+
+class ExperimentRequest(BaseModel):
+    hypothesis_name: str
+    command_or_script: str
+    target_guest_os: Optional[str] = "auto"
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -1273,6 +1279,14 @@ def self_evolve_endpoint(req: SelfEvolveRequest):
 @app.post("/system/self-heal")
 async def trigger_self_heal_endpoint():
     return await AutonomousSelfHealer.run_maintenance_cycle()
+
+@app.post("/cognition/experiment")
+def test_experiment_endpoint(req: ExperimentRequest):
+    return ExperimentEngine.test_hypothesis_in_sandbox(
+        req.hypothesis_name,
+        req.command_or_script,
+        target_guest_os=req.target_guest_os or "auto"
+    )
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
