@@ -88,3 +88,27 @@ class TaskManager:
             app_logger.info(f"Task {task_id} deleted.")
             db.create_audit_log("delete_task", "success", f"Task {task_id}", level=2)
         return success
+
+    @staticmethod
+    def acquire_skill_for_task(task_id: str) -> Dict[str, Any]:
+        """
+        Triggers the autonomous skill lookup/acquisition loop for a task.
+        Checks SQLite memory first; if missing, searches YouTube, extracts transcript,
+        saves to SQLite memory, and updates the task checkpoint.
+        """
+        task = TaskManager.get_task(task_id)
+        if not task:
+            return {"success": False, "error": f"Task '{task_id}' not found."}
+
+        from app.skill_acquisition import SkillAcquisitionManager
+        res = SkillAcquisitionManager.auto_acquire_skill_for_task(task.title, task.goal)
+        
+        # Update task checkpoint with skill acquisition details
+        new_checkpoint = f"Skill Status: {res.get('source')}. {res.get('summary', '')[:200]}"
+        TaskManager.update_task(task_id, TaskUpdate(checkpoint=new_checkpoint))
+        
+        return {
+            "success": True,
+            "task_id": task_id,
+            "skill_result": res
+        }

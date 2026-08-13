@@ -1,0 +1,2232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Personal Assistant - Visual Dashboard</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0b0f19">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #111827;
+            --bg-card: #1f2937;
+            --border-color: #374151;
+            --accent-cyan: #00f2fe;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header Navigation */
+        header {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #000;
+            font-size: 1.2rem;
+        }
+
+        .brand-text h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-text span {
+            font-size: 0.75rem;
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-muted);
+        }
+
+        .dot.online { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
+        .dot.offline { background-color: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+        /* Navigation Tabs */
+        nav {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 1.5rem;
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.85rem 1.25rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .nav-btn:hover {
+            color: var(--text-main);
+        }
+
+        .nav-btn.active {
+            color: var(--accent-cyan);
+            border-bottom-color: var(--accent-cyan);
+        }
+
+        /* Main Content Container */
+        main {
+            flex: 1;
+            padding: 1.5rem;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Common Elements */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Chat Interface */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 220px);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .brain-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-primary);
+            padding: 0.3rem 0.6rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .brain-selector select {
+            background: none;
+            border: none;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            outline: none;
+            cursor: pointer;
+            max-width: 220px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            max-width: 85%;
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 2px;
+        }
+
+        .message .meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .chat-input-area {
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"], input[type="number"], textarea, select {
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            color: #000;
+            font-weight: 600;
+            border: none;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .btn-recording {
+            background: var(--danger);
+            color: #fff;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1.0; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1.0; }
+        }
+
+        /* Task Cards */
+        .task-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+
+        .task-title {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .tag {
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+        }
+
+        .tag.running { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); border: 1px solid var(--accent-blue); }
+        .tag.queued { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+        .tag.completed { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+        .tag.failed { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+
+        .task-goal {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .task-steps {
+            background: var(--bg-primary);
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .task-steps ol {
+            padding-left: 1.2rem;
+        }
+
+        /* Console Output */
+        .console {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #10b981;
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            padding: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">PA</div>
+            <div class="brand-text">
+                <h1>Personal Assistant</h1>
+                <span>LOCAL PLATFORM v0.1.0</span>
+            </div>
+        </div>
+        <div class="status-bar">
+            <!-- Live Hardware Monitor Badges -->
+            <div class="status-badge" id="hw-badge" style="color: var(--accent-cyan);">
+                💻 CPU: <span id="hw-cpu">--%</span> | RAM: <span id="hw-ram">-- GB</span>
+            </div>
+
+            <!-- System Mode Badge -->
+            <div class="status-badge" id="sys-mode-badge" style="cursor: pointer;" onclick="toggleSleepMode()">
+                <div class="dot online" id="sys-mode-dot"></div> <span id="sys-mode-text">System: Active</span>
+            </div>
+
+            <div class="status-badge" id="lm-studio-badge">
+                <div class="dot offline" id="lm-studio-dot"></div> LLM: Checking...
+            </div>
+
+            <!-- Kill Switch Shutdown Button -->
+            <button class="btn btn-danger" style="padding: 0.3rem 0.7rem; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;" onclick="triggerKillSwitch()">
+                🛑 Kill Switch
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav>
+        <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Master Agent</button>
+        <button class="nav-btn" onclick="switchTab('workspace')">📁 Workspace & Files</button>
+        <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
+        <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
+        <button class="nav-btn" onclick="switchTab('models')">⚙️ Models & Custom Voices</button>
+        <button class="nav-btn" onclick="switchTab('security')">🛡️ Security & Audit Log</button>
+        <button class="nav-btn" onclick="switchTab('manual')">📖 Manual & Rules</button>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+
+        <!-- 1. Chat & Voice Tab -->
+        <div id="tab-chat" class="tab-content active">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <div>
+                        <strong>Local Neural Conversation & Mobile Remote</strong>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);" id="chat-brain-desc">Connected to LM Studio local server</div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <!-- Auto-Speak Output Toggle -->
+                        <div class="brain-selector" style="cursor: pointer;">
+                            <label style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                                <input type="checkbox" id="voice-output-toggle" checked style="cursor: pointer;"> 🔊 Speak Audio
+                            </label>
+                        </div>
+
+                        <!-- Microphone Device Selector -->
+                        <div class="brain-selector">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Mic:</span>
+                            <select id="mic-device-select">
+                                <option value="">Default Microphone</option>
+                            </select>
+                        </div>
+
+                        <div class="brain-selector">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Voice Profile:</span>
+                            <select id="active-voice-profile" onchange="changeVoiceProfile(event)">
+                                <option value="Default Assistant">Default Assistant</option>
+                            </select>
+                        </div>
+
+                        <div class="brain-selector">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Brain:</span>
+                            <select id="brain-model">
+                                <option value="fast">Fast Brain</option>
+                                <option value="main">Main Brain</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="message assistant">
+                        <div class="meta">SYSTEM :: VOICE & MOBILE REMOTE READY</div>
+                        Hello! I am your local personal assistant. You can speak or type below, snap photos with your phone camera, or send your GPS location!
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" style="flex: 1;" placeholder="Type or click '🎙️ Record Voice' to speak..." onkeypress="handleKeyPress(event)">
+                    
+                    <button class="btn btn-secondary" id="voice-rec-btn" onclick="toggleVoiceRecording()">🎙️ Record Voice</button>
+
+                    <!-- Fallback Audio File Note Input for Mobile HTTP -->
+                    <label class="btn btn-secondary" title="Fallback Audio File Upload for Mobile HTTP" style="margin: 0; display: inline-flex; align-items: center; cursor: pointer;">
+                        📁 Voice File
+                        <input type="file" accept="audio/*" capture="microphone" style="display: none;" onchange="uploadAudioFileRecording(event)">
+                    </label>
+                    
+                    <!-- Mobile Camera Snap Input -->
+                    <label class="btn btn-secondary" style="margin: 0; display: inline-flex; align-items: center; cursor: pointer;">
+                        📷 Camera
+                        <input type="file" accept="image/*" capture="environment" style="display: none;" onchange="uploadCameraPhoto(event)">
+                    </label>
+
+                    <!-- Mobile GPS Location Button -->
+                    <button class="btn btn-secondary" onclick="sendMobileGPSLocation()">📍 GPS</button>
+
+                    <button class="btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upgrade 5: Workspace File Explorer & Editor Tab -->
+        <div id="tab-workspace" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>
+                        <span>Workspace Files Explorer</span>
+                        <button class="btn btn-secondary" style="padding: 0.35rem 0.7rem; font-size: 0.75rem;" onclick="loadWorkspaceFiles()">🔄 Refresh Files</button>
+                    </h2>
+                    <div id="workspace-files-list" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                        Loading workspace files...
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>
+                        <span id="editor-file-title">File Editor</span>
+                        <button class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.75rem;" onclick="saveWorkspaceFile()">Save File Changes</button>
+                    </h2>
+                    <div class="form-group">
+                        <label>File Path</label>
+                        <input type="text" id="editor-filepath" placeholder="data/workspace/drafts/example.md">
+                    </div>
+                    <textarea id="editor-file-content" style="height: 320px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Select a file from the list or type path to edit..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Phase 6 Domain Specialists Tab -->
+        <div id="tab-specialists" class="tab-content">
+            <div class="card">
+                <h2>👥 Multi-Agent Persona Collaboration Engine</h2>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                    Executes an objective through 4 specialized AI personas in collaboration: <strong>Planner Agent</strong> ➔ <strong>Researcher Agent</strong> ➔ <strong>Specialist Agent</strong> ➔ <strong>Safety Critic Inspector</strong>.
+                </p>
+                <form onsubmit="runMultiAgentCollaboration(event)">
+                    <div class="form-group">
+                        <label>Collaborative Multi-Agent Objective</label>
+                        <input type="text" id="multi-agent-obj" placeholder="e.g. Design an automated trading journal pipeline in Python" required>
+                    </div>
+                    <button type="submit" class="btn" style="width: 100%;">👥 Run Multi-Agent Persona Team Collaboration</button>
+                </form>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🛡️ Cybersecurity Lab Assessor</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Scan authorized home lab / Docker IPs (e.g. <code>127.0.0.1</code> or <code>192.168.1.1</code>) for open ports and services under <code>rules.md</code> scope policies.
+                    </p>
+                    <form onsubmit="runSecurityScan(event)">
+                        <div class="form-group">
+                            <label>Authorized Lab Target IP / Host</label>
+                            <input type="text" id="sec-target" placeholder="127.0.0.1 or 192.168.1.1" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🛡️ Scan Authorized Lab Target</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>📈 Trading & Betting Risk Calculator</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Calculates max position size based on 1-2% risk rules, Expected Value (EV), and logs paper trades to SQLite.
+                    </p>
+                    <form onsubmit="calcPositionSize(event)">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group">
+                                <label>Bankroll ($)</label>
+                                <input type="number" id="trd-bankroll" value="1000" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Max Risk (%)</label>
+                                <input type="number" id="trd-risk" value="1.0" step="0.1" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Entry Price ($)</label>
+                                <input type="number" id="trd-entry" value="100" step="0.1" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Stop Loss ($)</label>
+                                <input type="number" id="trd-stop" value="95" step="0.1" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">📈 Calculate Position Size & Risk</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🎵 Music Studio DAW Vocal Helper</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Generates tailored vocal mixing chain parameters (EQ, Compression, De-Essing, Reverb) for DAW production.
+                    </p>
+                    <form onsubmit="generateVocalChain(event)">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group">
+                                <label>Genre</label>
+                                <select id="mus-genre">
+                                    <option value="hiphop">Hip-Hop / Rap</option>
+                                    <option value="pop">Pop / Melodic</option>
+                                    <option value="rock">Rock / Alternative</option>
+                                    <option value="rnb">R&B / Soul</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Vocal Style</label>
+                                <select id="mus-style">
+                                    <option value="male_rap">Male Rap / Aggressive</option>
+                                    <option value="female_singing">Female Melodic / Airy</option>
+                                    <option value="backing_harmony">Backing Vocals / Harmony</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🎵 Generate Vocal Mixing Chain</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>📝 Social Media Script Generator</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Generates hook-driven video scripts, Twitter threads, and SEO tags, saving drafts to <code>data/workspace/drafts/</code>.
+                    </p>
+                    <form onsubmit="generateContentScript(event)">
+                        <div class="form-group">
+                            <label>Content Topic</label>
+                            <input type="text" id="cnt-topic" placeholder="e.g. How to build a local AI assistant on RX 580" required>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group">
+                                <label>Platform</label>
+                                <select id="cnt-platform">
+                                    <option value="youtube">YouTube Video</option>
+                                    <option value="twitter">Twitter / X Thread</option>
+                                    <option value="shorts">YouTube Short / Reel</option>
+                                    <option value="linkedin">LinkedIn Post</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Target Audience</label>
+                                <input type="text" id="cnt-audience" value="Developers & Tech Enthusiasts">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">📝 Generate Script & Save Draft</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Specialist Intelligence Output Console</h2>
+                <div id="specialist-console" class="console" style="height: 300px;">Select a specialist tool above to run security scans, trading calculations, vocal guides, or content scripts...</div>
+            </div>
+        </div>
+
+        <!-- 3. Phase 5 Browser & Desktop Automation Tab -->
+        <div id="tab-automation" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🤖 Autonomous Web Agent Workflow</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Executes multi-step browser tasks using Playwright. Submitting forms or publishing data is governed by Level 3 Safety Policies.
+                    </p>
+                    <form onsubmit="runWebAgentWorkflow(event)">
+                        <div class="form-group">
+                            <label>Target Web Objective</label>
+                            <input type="text" id="web-objective" placeholder="e.g. Find Solana developer job requirements" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Target URL</label>
+                            <input type="text" id="web-target-url" placeholder="https://github.com or https://example.com" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🚀 Execute Web Agent Workflow</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>💻 Approved Desktop Application Launcher</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Launches local approved applications on Windows/Linux under Level 2 Safety Policies.
+                    </p>
+                    <div class="form-group">
+                        <label>Approved Desktop App</label>
+                        <select id="desktop-app-select">
+                            <option value="vscode">VS Code</option>
+                            <option value="chrome">Google Chrome</option>
+                            <option value="lm_studio">LM Studio</option>
+                            <option value="notepad">Notepad</option>
+                            <option value="calculator">Calculator</option>
+                            <option value="terminal">Terminal / PowerShell</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" style="width: 100%;" onclick="launchDesktopApp()">🚀 Launch Selected Application</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Automation Execution Console</h2>
+                <div id="automation-console" class="console" style="height: 350px;">Submit a web agent workflow or app launch request above...</div>
+            </div>
+        </div>
+
+        <!-- 4. Phase 4 Desktop Sight & Screen Vision Tab -->
+        <div id="tab-vision" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>👁️ Capture & Analyze Screen State</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Capture your active desktop screen window. Runs Tesseract OCR text extraction and uses Qwen to analyze open application states, UI error dialogs, or trading charts.
+                    </p>
+                    <div class="form-group">
+                        <label>Optional Inspection Focus Filter</label>
+                        <input type="text" id="vision-focus" placeholder="e.g. Look for compiler error message, DAW track window">
+                    </div>
+                    <button class="btn" style="width: 100%;" onclick="captureAndAnalyzeScreen()">📸 Snap & Analyze Active Screen</button>
+                </div>
+
+                <div class="card">
+                    <h2>Screenshot Preview</h2>
+                    <div id="vision-image-preview" style="height: 220px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.85rem; overflow: hidden;">
+                        No screen captured yet. Click "Snap & Analyze Active Screen".
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Desktop Vision Analysis & OCR Output</h2>
+                <div id="vision-console" class="console" style="height: 350px;">Click "Snap & Analyze Active Screen" to inspect your desktop window state...</div>
+            </div>
+        </div>
+
+        <!-- 5. Web & YouTube Learner Tab -->
+        <div id="tab-learner" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>📹 YouTube Video Skill Extractor</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Paste any YouTube URL. The assistant will extract video transcripts locally and use Qwen to generate step-by-step skill checklists with source citations.
+                    </p>
+                    <form onsubmit="learnYouTubeVideo(event)">
+                        <div class="form-group">
+                            <label>YouTube Video URL or ID</label>
+                            <input type="text" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." required>
+                        </div>
+                        <div class="form-group">
+                            <label>Optional Topic / Focus Filter</label>
+                            <input type="text" id="yt-focus" placeholder="e.g. EQ settings for vocal mixing, smart contract security">
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">📹 Learn & Extract Skill Checklist</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>🌐 Web Article & Search Learner</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Paste an article URL or search query to scrape content, summarize technical facts, and index notes into SQLite memory.
+                    </p>
+                    <form onsubmit="learnWebArticle(event)">
+                        <div class="form-group">
+                            <label>Article URL or Web Search Query</label>
+                            <input type="text" id="web-url" placeholder="https://example.com/tutorial or 'Rust Solana tutorial'" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">🌐 Scrape & Learn Knowledge</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Learning Console & Extracted Knowledge Output</h2>
+                <div id="learner-console" class="console" style="height: 350px;">Paste a YouTube video URL or Web URL above to extract skills and knowledge...</div>
+            </div>
+        </div>
+
+        <!-- 6. Tasks Tab -->
+        <div id="tab-tasks" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2>Active Persistent Tasks</h2>
+                <button class="btn" onclick="openNewTaskModal()">+ Create New Task</button>
+            </div>
+            <div id="tasks-grid" class="grid-3">
+                <!-- Task Cards will be loaded here dynamically -->
+            </div>
+        </div>
+
+        <!-- 7. Memory Vault Tab -->
+        <div id="tab-memory" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Add New Fact/Preference Memory</h2>
+                    <form id="memory-form" onsubmit="saveMemory(event)">
+                        <div class="form-group">
+                            <label>Fact or Preference Content</label>
+                            <input type="text" id="mem-content" placeholder="e.g. User prefers short direct plans" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select id="mem-category">
+                                <option value="preference">Preference</option>
+                                <option value="goal">Goal</option>
+                                <option value="rule">Rule</option>
+                                <option value="learned_skill">Learned Skill</option>
+                                <option value="web_research">Web Research</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Confidence Rating (0.0 to 1.0)</label>
+                            <input type="number" id="mem-confidence" step="0.1" min="0" max="1" value="1.0">
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">Save to Permanent Memory</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>Stored Permanent Memories</h2>
+                    <div id="memories-list" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+                        <!-- Memories loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. Models & Brain Manager Tab -->
+        <div id="tab-models" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>🎙️ Custom Voice Profile Cloner</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Record a 6-10 second sample of your voice (or another person's voice). Give it a profile name and save it. You can switch voices anytime!
+                    </p>
+                    <div class="form-group">
+                        <label>Voice Profile Name</label>
+                        <input type="text" id="voice-profile-name" placeholder="e.g. Petar's Voice, Partner Voice, Sarcastic AI">
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                        <button class="btn btn-secondary" id="voice-profile-rec-btn" style="flex: 1;" onclick="toggleVoiceProfileRecording()">🎙️ Record 6s Voice Sample</button>
+                    </div>
+                    <div id="voice-profile-status" style="font-size: 0.8rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">Ready to record voice profile sample...</div>
+                </div>
+
+                <div class="card">
+                    <h2>📱 Mobile Wi-Fi Access Information</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        To open this dashboard on your Android or iPhone, connect your phone to the same home Wi-Fi network as this PC, then open any of these links in Chrome or Safari:
+                    </p>
+                    <div id="mobile-urls-box" class="console" style="height: 180px;">Querying local network IP address...</div>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>
+                        <span>LM Studio Real-Time Status</span>
+                        <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="loadModelsTab()">🔄 Refresh LM Studio</button>
+                    </h2>
+                    <div id="models-status-box" style="margin-bottom: 1.25rem;">Checking LM Studio status...</div>
+                    
+                    <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">Currently Active GGUF Models in LM Studio</h3>
+                    <div id="loaded-models-list" class="console" style="height: 200px; font-size: 0.85rem;">Querying LM Studio endpoint...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Configured Dual-Brain Model Selectors</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+                        Select which model GGUF file to assign to Fast Brain and Main Brain. When you select a model, LM Studio automatically auto-loads it into GPU VRAM on request!
+                    </p>
+                    <form onsubmit="saveModelConfig(event)">
+                        <div class="form-group">
+                            <label>Fast Model Selector (Routine / Instant Tasks)</label>
+                            <select id="cfg-fast-model">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Main Model Selector (Deep Reasoning & Planning)</label>
+                            <select id="cfg-main-model">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>LM Studio Local Server Base URL</label>
+                            <input type="text" id="cfg-lm-url" placeholder="http://localhost:1234/v1" required>
+                        </div>
+                        <button type="submit" class="btn" style="width: 100%;">Save Model Settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. Security & Audit Console -->
+        <div id="tab-security" class="tab-content">
+            <div class="card">
+                <h2>Real-Time Audit Console Log</h2>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                    Monitors all actions evaluated by <code>policy.py</code> and records Level 0 through Level 3 activities.
+                </p>
+                <div class="console" id="audit-console">Loading security logs...</div>
+            </div>
+        </div>
+
+        <!-- 10. Manual & Rules Tab -->
+        <div id="tab-manual" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>
+                        <span>User Operating Manual</span>
+                        <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="saveManual()">Save Manual</button>
+                    </h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Edit goals, hardware context, and preferences. Saved directly to <code>memory/user_operating_manual.md</code>.
+                    </p>
+                    <textarea id="manual-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading manual..."></textarea>
+                </div>
+                <div class="card">
+                    <h2>
+                        <span>Rules & Boundaries</span>
+                        <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="saveRules()">Save Rules</button>
+                    </h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Edit permission boundaries & authority levels. Saved directly to <code>memory/rules.md</code>.
+                    </p>
+                    <textarea id="rules-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading rules..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- 11. Policy Simulator Tab -->
+        <div id="tab-playground" class="tab-content">
+            <div class="card">
+                <h2>Safety Policy Playground Simulator</h2>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+                    Test how the policy engine evaluates potential actions against safety authority levels (Level 0: Read, Level 1: Draft, Level 2: Reversible, Level 3: Sensitive/Requires Approval).
+                </p>
+                <div class="grid-2">
+                    <div>
+                        <div class="form-group">
+                            <label>Action Type</label>
+                            <input type="text" id="sim-action" placeholder="e.g. send_email, read_file, execute_trade">
+                        </div>
+                        <div class="form-group">
+                            <label>Details (JSON format)</label>
+                            <textarea id="sim-details" rows="5" style="font-family: 'JetBrains Mono', monospace;">{"target": "client@example.com", "body": "Draft report"}</textarea>
+                        </div>
+                        <button class="btn" onclick="runPolicySimulation()">Evaluate Policy Permission</button>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.85rem; color: var(--text-muted);">Evaluation Result</label>
+                        <div id="sim-result" class="console" style="height: 220px;">Submit an action to test evaluation rules.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- New Task Modal -->
+    <div class="modal" id="task-modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1.5rem;">Create New Persistent Task</h2>
+            <form onsubmit="submitNewTask(event)">
+                <div class="form-group">
+                    <label>Task Title</label>
+                    <input type="text" id="task-title" required placeholder="e.g. Research Social Media Strategy">
+                </div>
+                <div class="form-group">
+                    <label>Task Goal</label>
+                    <input type="text" id="task-goal" required placeholder="e.g. Gather top competitor analytics and draft report">
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <select id="task-priority">
+                        <option value="normal">Normal</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Plan Steps (Comma separated)</label>
+                    <textarea id="task-plan" rows="3" placeholder="Read requirements, Search web, Draft summary report" required></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeNewTaskModal()">Cancel</button>
+                    <button type="submit" class="btn">Create Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript logic -->
+    <script>
+        const API_BASE = "";
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+
+        let profileRecorder = null;
+        let profileChunks = [];
+        let isRecordingProfile = false;
+
+        let currentSystemMode = "active";
+
+        // Tab Switching
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+
+            if (tabId === 'workspace') loadWorkspaceFiles();
+            if (tabId === 'tasks') loadTasks();
+            if (tabId === 'memory') loadMemories();
+            if (tabId === 'models') loadModelsTab();
+            if (tabId === 'security') loadAuditLogs();
+            if (tabId === 'manual') loadManualAndRules();
+        }
+
+        // Live Hardware Stats Poller
+        async function fetchHardwareStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/hardware-stats`);
+                const data = await res.json();
+                document.getElementById('hw-cpu').innerText = `${data.cpu_percent}%`;
+                document.getElementById('hw-ram').innerText = `${data.ram_used_gb}/${data.ram_total_gb} GB (${data.ram_percent}%)`;
+            } catch (e) {
+                console.error("Hardware stats error", e);
+            }
+        }
+
+        // Workspace Files Tab Logic
+        async function loadWorkspaceFiles() {
+            try {
+                const res = await fetch(`${API_BASE}/tools/workspace-files`);
+                const files = await res.json();
+                const container = document.getElementById('workspace-files-list');
+                container.innerHTML = '';
+
+                if (files.length === 0) {
+                    container.innerHTML = '<div style="color: var(--text-muted);">No workspace files found.</div>';
+                    return;
+                }
+
+                files.forEach(f => {
+                    const item = document.createElement('div');
+                    item.style.background = 'var(--bg-primary)';
+                    item.style.border = '1px solid var(--border-color)';
+                    item.style.padding = '0.6rem 0.8rem';
+                    item.style.borderRadius = '6px';
+                    item.style.display = 'flex';
+                    item.style.justifyContent = 'space-between';
+                    item.style.alignItems = 'center';
+
+                    item.innerHTML = `
+                        <div style="font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;">
+                            📄 ${escapeHtml(f.file_name)}
+                            <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 0.5rem;">(${Math.round(f.size_bytes / 1024)} KB)</span>
+                        </div>
+                        <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="openWorkspaceFileForEdit('${escapeHtml(f.file_path)}')">Open File</button>
+                    `;
+                    container.appendChild(item);
+                });
+            } catch (e) {
+                console.error("Error loading workspace files", e);
+            }
+        }
+
+        async function openWorkspaceFileForEdit(filePath) {
+            try {
+                const res = await fetch(`${API_BASE}/tools/read-doc`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: filePath, auto_save_memory: false })
+                });
+                const data = await res.json();
+                document.getElementById('editor-filepath').value = filePath;
+                document.getElementById('editor-file-content').value = data.content || '';
+                document.getElementById('editor-file-title').innerText = `Editing: ${data.file_name || filePath}`;
+            } catch (e) {
+                alert("Error reading file: " + e);
+            }
+        }
+
+        async function saveWorkspaceFile() {
+            const path = document.getElementById('editor-filepath').value.trim();
+            const content = document.getElementById('editor-file-content').value;
+            if (!path) {
+                alert("Please enter a file path to save.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/tools/create-doc`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: path, content, overwrite: true })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message || "File saved successfully!");
+                    loadWorkspaceFiles();
+                } else {
+                    alert("Error saving file: " + data.error);
+                }
+            } catch (e) {
+                alert("Error: " + e);
+            }
+        }
+
+        // Multi-Agent Collaboration API
+        async function runMultiAgentCollaboration(e) {
+            e.preventDefault();
+            const objective = document.getElementById('multi-agent-obj').value.trim();
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[MULTI-AGENT TEAM] Starting collaboration for objective '${objective}'...\n1. Planner Agent ➔ 2. Researcher RAG ➔ 3. Specialist Agent ➔ 4. Safety Critic Inspector...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/agents/multi-agent-collaborate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ objective })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [MULTI-AGENT TEAM COLLABORATION COMPLETED]\n\n=== 1. PLANNER AGENT PLAN ===\n${data.plan_by_planner}\n\n=== 2. FINAL VERIFIED SOLUTION ===\n${data.final_verified_solution}`;
+                } else {
+                    consoleElem.innerText = `✕ [MULTI-AGENT ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        // Phase 6: Specialist API Logic
+        async function runSecurityScan(e) {
+            e.preventDefault();
+            const target = document.getElementById('sec-target').value.trim();
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[CYBERSECURITY LAB] Checking scope & scanning authorized target '${target}'...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/security/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [SECURITY SCAN COMPLETED]\nTarget: ${data.target}\nOpen Ports Found: ${data.open_ports.join(', ') || 'None'}\nNote: ${data.security_note}`;
+                } else {
+                    consoleElem.innerText = `✕ [SCOPE / SCAN ERROR]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function calcPositionSize(e) {
+            e.preventDefault();
+            const bankroll = parseFloat(document.getElementById('trd-bankroll').value);
+            const risk = parseFloat(document.getElementById('trd-risk').value);
+            const entry = parseFloat(document.getElementById('trd-entry').value);
+            const stop = parseFloat(document.getElementById('trd-stop').value);
+            const consoleElem = document.getElementById('specialist-console');
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/finance/risk-calc`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bankroll, risk_percent: risk, entry_price: entry, stop_loss_price: stop })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [TRADING RISK CALCULATED]\nBankroll: $${data.bankroll} | Risk Cap: ${data.risk_percent}%\nMax Risk Capital: $${data.max_risk_amount}\nRecommended Units: ${data.recommended_units}\nTotal Position Size: $${data.total_position_value}`;
+                } else {
+                    consoleElem.innerText = `✕ [CALC ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function generateVocalChain(e) {
+            e.preventDefault();
+            const genre = document.getElementById('mus-genre').value;
+            const style = document.getElementById('mus-style').value;
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[DAW HELPER] Generating vocal mixing chain for ${genre} / ${style}...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/music/vocal-guide`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ genre, vocal_type: style })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [VOCAL CHAIN GUIDE GENERATED]\n\n${data.vocal_chain_guide}`;
+                } else {
+                    consoleElem.innerText = `✕ [GUIDE ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function generateContentScript(e) {
+            e.preventDefault();
+            const topic = document.getElementById('cnt-topic').value.trim();
+            const platform = document.getElementById('cnt-platform').value;
+            const audience = document.getElementById('cnt-audience').value.trim();
+            const consoleElem = document.getElementById('specialist-console');
+
+            consoleElem.innerText = `[CONTENT CREATOR] Generating ${platform.toUpperCase()} script for '${topic}'...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/specialists/content/script`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, platform, target_audience: audience, auto_save_workspace: true })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [CONTENT SCRIPT GENERATED & SAVED]\nSaved Draft: ${data.draft_file}\n\n=== SCRIPT & HOOK ===\n${data.script_text}`;
+                } else {
+                    consoleElem.innerText = `✕ [SCRIPT ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        // Phase 5: Automation API Logic
+        async function runWebAgentWorkflow(e) {
+            e.preventDefault();
+            const objective = document.getElementById('web-objective').value.trim();
+            const targetUrl = document.getElementById('web-target-url').value.trim();
+            const consoleElem = document.getElementById('automation-console');
+
+            consoleElem.innerText = `[WEB AGENT] Launching Playwright browser for objective '${objective}' on ${targetUrl}...\nNavigating & extracting content...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/automation/web-agent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ objective, target_url: targetUrl })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [WEB WORKFLOW COMPLETED]\nTarget: ${data.target_url}\nMemory ID Saved: #${data.memory_id || 'Indexed'}\n\n=== AGENT FINDINGS & SUMMARY ===\n${data.agent_summary}`;
+                } else {
+                    consoleElem.innerText = `✕ [ERROR EXECUTING WORKFLOW]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function launchDesktopApp() {
+            const appSelect = document.getElementById('desktop-app-select');
+            const appName = appSelect.value;
+            const consoleElem = document.getElementById('automation-console');
+
+            consoleElem.innerText = `[DESKTOP CONTROL] Requesting desktop launch for '${appName}'...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/automation/desktop/launch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ app_name: appName })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [APP LAUNCHED] ${data.message}`;
+                } else {
+                    consoleElem.innerText = `✕ [LAUNCH ERROR] ${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        // Phase 4: Vision API Logic
+        async function captureAndAnalyzeScreen() {
+            const focus = document.getElementById('vision-focus').value.trim();
+            const consoleElem = document.getElementById('vision-console');
+            const previewElem = document.getElementById('vision-image-preview');
+
+            consoleElem.innerText = "[DESKTOP VISION] Capturing desktop screen...\nRunning Tesseract OCR & Qwen visual analysis...";
+
+            try {
+                const url = focus ? `${API_BASE}/vision/capture-and-analyze?prompt_focus=${encodeURIComponent(focus)}` : `${API_BASE}/vision/capture-and-analyze`;
+                const res = await fetch(url, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    if (data.image_url) {
+                        previewElem.innerHTML = `<img src="${API_BASE}${data.image_url}" style="width: 100%; height: 100%; object-fit: contain;">`;
+                    }
+                    consoleElem.innerText = `✓ [SCREEN CAPTURE & VISION ANALYSIS COMPLETED]\nImage: ${data.image_name}\nMemory Saved: #${data.memory_id || 'Indexed'}\n\n=== EXTRACTED OCR TEXT ===\n${data.ocr_text || '[No raw text]'}\n\n=== QWEN VISUAL ANALYSIS ===\n${data.ai_analysis}`;
+                } else {
+                    consoleElem.innerText = `✕ [ERROR CAPTURING SCREEN]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        // System Kill Switch & Sleep Controls
+        async function checkSystemMode() {
+            try {
+                const res = await fetch(`${API_BASE}/system/mode`);
+                const data = await res.json();
+                currentSystemMode = data.system_mode;
+                updateSystemModeUI();
+            } catch (e) {
+                console.error("Error fetching system mode", e);
+            }
+        }
+
+        function updateSystemModeUI() {
+            const dot = document.getElementById('sys-mode-dot');
+            const text = document.getElementById('sys-mode-text');
+            if (currentSystemMode === 'sleeping') {
+                dot.className = "dot offline";
+                text.innerText = "💤 System: SLEEPING (Click to Wake)";
+            } else {
+                dot.className = "dot online";
+                text.innerText = "System: Active (Click to Sleep)";
+            }
+        }
+
+        async function toggleSleepMode() {
+            const targetMode = currentSystemMode === 'sleeping' ? 'active' : 'sleeping';
+            try {
+                const res = await fetch(`${API_BASE}/system/sleep`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: targetMode })
+                });
+                const data = await res.json();
+                currentSystemMode = data.system_mode;
+                updateSystemModeUI();
+                alert(data.message);
+            } catch (e) {
+                alert("Error toggling sleep mode: " + e);
+            }
+        }
+
+        async function triggerKillSwitch() {
+            if (!confirm("🛑 SHUTDOWN CONFIRMATION:\n\nAre you sure you want to trigger the Kill Switch and terminate the server process?")) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/system/shutdown`, { method: 'POST' });
+                const data = await res.json();
+                alert("🛑 " + data.message);
+                document.body.innerHTML = `
+                    <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0b0f19; color: #ef4444; font-family: 'JetBrains Mono', monospace;">
+                        <h1 style="font-size: 2rem; margin-bottom: 1rem;">🛑 SYSTEM SHUT DOWN</h1>
+                        <p style="color: #9ca3af;">The server process has been safely terminated. Close this browser tab.</p>
+                    </div>
+                `;
+            } catch (e) {
+                alert("Server process terminated.");
+            }
+        }
+
+        // Query Microphones Connected to PC/Phone
+        async function enumerateMicrophones() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const micSelect = document.getElementById('mic-device-select');
+                const audioDevices = devices.filter(d => d.kind === 'audioinput');
+
+                micSelect.innerHTML = '<option value="">Default Microphone</option>';
+
+                audioDevices.forEach((m, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = m.deviceId;
+                    opt.text = `🎙️ ` + (m.label || `Microphone ${idx + 1}`);
+                    micSelect.appendChild(opt);
+                });
+            } catch (e) {
+                console.error("Error enumerating mic devices", e);
+            }
+        }
+
+        // Check LLM Status and Populate All Model Selectors Dynamically
+        async function checkLLMStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/models`);
+                const data = await res.json();
+                const badge = document.getElementById('lm-studio-badge');
+                const dot = document.getElementById('lm-studio-dot');
+
+                if (data.lm_studio_online) {
+                    dot.className = "dot online";
+                    let loadedText = data.loaded_models.length > 0 ? data.loaded_models.join(', ') : 'Ready (Auto-loads on request)';
+                    badge.innerHTML = `<div class="dot online"></div> LLM: Online (${loadedText})`;
+                } else {
+                    dot.className = "dot offline";
+                    badge.innerHTML = `<div class="dot offline"></div> LLM: Offline`;
+                }
+
+                // Populate Chat Active Brain Selector
+                const brainSelect = document.getElementById('brain-model');
+                const currentVal = brainSelect.value;
+                brainSelect.innerHTML = '';
+
+                // Option 1: Fast Brain Router
+                const optFast = document.createElement('option');
+                optFast.value = 'fast';
+                optFast.text = `⚡ Fast Brain (${data.configured_fast_model})`;
+                brainSelect.appendChild(optFast);
+
+                // Option 2: Main Brain Router
+                const optMain = document.createElement('option');
+                optMain.value = 'main';
+                optMain.text = `🧠 Main Brain (${data.configured_main_model})`;
+                brainSelect.appendChild(optMain);
+
+                // Option Group: Direct Specific Models from LM Studio
+                if (data.loaded_models && data.loaded_models.length > 0) {
+                    const optGroup = document.createElement('optgroup');
+                    optGroup.label = "Direct LM Studio Models (Auto-Loads in VRAM)";
+                    data.loaded_models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m;
+                        opt.text = `🎯 Direct Model: ${m}`;
+                        optGroup.appendChild(opt);
+                    });
+                    brainSelect.appendChild(optGroup);
+                }
+
+                // Restore previous selection if valid
+                if (currentVal) brainSelect.value = currentVal;
+
+                // Update Chat Header Description
+                document.getElementById('chat-brain-desc').innerText = `LM Studio: ${data.lm_studio_url} | Fast: ${data.configured_fast_model} | Main: ${data.configured_main_model}`;
+
+                // Populate Voice Profiles List & Microphones & Hardware
+                loadVoiceProfiles();
+                enumerateMicrophones();
+                fetchNetworkInfo();
+                checkSystemMode();
+                fetchHardwareStats();
+            } catch (e) {
+                console.error("Error pinging backend model status", e);
+            }
+        }
+
+        // Voice Profiles API
+        async function loadVoiceProfiles() {
+            try {
+                const res = await fetch(`${API_BASE}/voice/profiles`);
+                const data = await res.json();
+                const select = document.getElementById('active-voice-profile');
+                select.innerHTML = '';
+
+                data.profiles.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.text = p === data.active_profile ? `✓ Voice: ${p}` : `Voice: ${p}`;
+                    select.appendChild(opt);
+                });
+
+                select.value = data.active_profile;
+            } catch (e) {
+                console.error("Error loading voice profiles", e);
+            }
+        }
+
+        async function changeVoiceProfile(e) {
+            const profileName = e.target.value;
+            try {
+                await fetch(`${API_BASE}/voice/profiles/select`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile_name: profileName })
+                });
+                loadVoiceProfiles();
+            } catch (e) {
+                alert("Error setting voice profile: " + e);
+            }
+        }
+
+        async function toggleVoiceProfileRecording() {
+            const nameInput = document.getElementById('voice-profile-name').value.trim();
+            if (!nameInput && !isRecordingProfile) {
+                alert("Please enter a Voice Profile Name first (e.g. 'Petar's Voice' or 'Partner Voice')!");
+                return;
+            }
+
+            const btn = document.getElementById('voice-profile-rec-btn');
+            const statusBox = document.getElementById('voice-profile-status');
+
+            if (!isRecordingProfile) {
+                try {
+                    const micSelect = document.getElementById('mic-device-select');
+                    const constraints = { audio: micSelect.value ? { deviceId: { exact: micSelect.value } } : true };
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    profileRecorder = new MediaRecorder(stream);
+                    profileChunks = [];
+
+                    profileRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) profileChunks.push(event.data);
+                    };
+
+                    profileRecorder.onstop = async () => {
+                        const blob = new Blob(profileChunks, { type: 'audio/wav' });
+                        statusBox.innerText = `Saving custom voice profile '${nameInput}'...`;
+                        const formData = new FormData();
+                        formData.append('file', blob, 'sample.wav');
+
+                        const res = await fetch(`${API_BASE}/voice/profiles/record?profile_name=${encodeURIComponent(nameInput)}`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            statusBox.innerText = `✓ Saved custom voice profile '${data.profile_name}'!`;
+                            loadVoiceProfiles();
+                        } else {
+                            statusBox.innerText = `✕ Error saving profile: ${data.error}`;
+                        }
+                    };
+
+                    profileRecorder.start();
+                    isRecordingProfile = true;
+                    btn.className = "btn btn-recording";
+                    btn.innerText = "🛑 Stop & Save Voice Profile";
+                    statusBox.innerText = "🎙️ Recording voice sample... Speak naturally for 6-10 seconds!";
+                } catch (err) {
+                    alert("Microphone error: " + err + "\n\nTip: You can select a different microphone from the 'Mic:' dropdown at the top of the chat page!");
+                }
+            } else {
+                if (profileRecorder && profileRecorder.state !== "inactive") {
+                    profileRecorder.stop();
+                }
+                isRecordingProfile = false;
+                btn.className = "btn btn-secondary";
+                btn.innerText = "🎙️ Record 6s Voice Sample";
+            }
+        }
+
+        // Mobile Features: Wi-Fi IP, Camera Photo Upload, GPS Location
+        async function fetchNetworkInfo() {
+            try {
+                const res = await fetch(`${API_BASE}/api/network-info`);
+                const data = await res.json();
+                const box = document.getElementById('mobile-urls-box');
+                
+                let text = "📱 MOBILE WI-FI ACCESS LINKS:\n\n";
+                data.mobile_urls.forEach(u => {
+                    text += `👉 ${u}\n`;
+                });
+                text += `\n${data.instructions}`;
+                box.innerText = text;
+            } catch (e) {
+                console.error("Error fetching network info", e);
+            }
+        }
+
+        async function uploadCameraPhoto(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const messagesContainer = document.getElementById('chat-messages');
+            const userDiv = document.createElement('div');
+            userDiv.className = 'message user';
+            userDiv.innerHTML = `<div class="meta">YOU (MOBILE CAMERA)</div>📷 <em>Uploading camera photo (${file.name})...</em>`;
+            messagesContainer.appendChild(userDiv);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch(`${API_BASE}/mobile/camera`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    userDiv.innerHTML = `<div class="meta">YOU (MOBILE CAMERA PHOTO)</div>📷 Saved photo: <code>${data.file_name}</code>`;
+                }
+            } catch (e) {
+                alert("Camera upload error: " + e);
+            }
+        }
+
+        async function sendMobileGPSLocation() {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async position => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                try {
+                    const res = await fetch(`${API_BASE}/mobile/location`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ latitude: lat, longitude: lon })
+                    });
+                    const data = await res.json();
+                    alert("📍 Location saved: " + data.location);
+                } catch (e) {
+                    alert("Error saving location: " + e);
+                }
+            }, err => {
+                alert("GPS Geolocation error: " + err.message);
+            });
+        }
+
+        let currentPlayingAudio = null;
+
+        // Voice Recording Logic with Device Selection & Mobile Fallback
+        async function toggleVoiceRecording() {
+            if (currentSystemMode === 'sleeping') {
+                alert("System is currently in SLEEP MODE. Click 'System: Sleeping' at top-right to wake up!");
+                return;
+            }
+
+            // Mute and stop any currently playing assistant TTS audio immediately
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio = null;
+            }
+
+            const btn = document.getElementById('voice-rec-btn');
+            if (!isRecording) {
+                try {
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        alert("Microphone live recording is blocked over non-HTTPS mobile links.\n\nPlease use the '📁 Voice File' button next to the mic to record voice notes on your phone!");
+                        return;
+                    }
+
+                    const micSelect = document.getElementById('mic-device-select');
+                    const constraints = { audio: micSelect.value ? { deviceId: { exact: micSelect.value } } : true };
+
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        await sendVoiceChat(audioBlob);
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    btn.className = "btn btn-recording";
+                    btn.innerText = "🛑 Stop & Send Voice";
+                } catch (err) {
+                    alert("Microphone Access Error: " + err + "\n\nTip: Check if another microphone is selected in the 'Mic:' dropdown or use the '📁 Voice File' button!");
+                }
+            } else {
+                if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                    mediaRecorder.stop();
+                }
+                isRecording = false;
+                btn.className = "btn btn-secondary";
+                btn.innerText = "🎙️ Record Voice";
+            }
+        }
+
+        async function uploadAudioFileRecording(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            await sendVoiceChat(file);
+        }
+
+        async function sendVoiceChat(audioBlob) {
+            const brainSelect = document.getElementById('brain-model');
+            const brain = brainSelect.value;
+            const messagesContainer = document.getElementById('chat-messages');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'message user';
+            userDiv.innerHTML = `<div class="meta">YOU (VOICE INPUT)</div>🎙️ <em>Transcribing voice recording...</em>`;
+            messagesContainer.appendChild(userDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const assistDiv = document.createElement('div');
+            assistDiv.className = 'message assistant';
+            assistDiv.innerHTML = `<div class="meta">MASTER AGENT :: EXECUTING NATIVE TOOLS & LLM...</div>Processing speech & executing task on PC...`;
+            messagesContainer.appendChild(assistDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'microphone.wav');
+
+            try {
+                const res = await fetch(`${API_BASE}/voice/chat?complexity=${brain}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    let actionBadges = '';
+                    if (data.executed_actions && data.executed_actions.length > 0) {
+                        actionBadges = `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; background: var(--bg-primary); padding: 0.4rem; border-radius: 6px; border: 1px solid var(--border-color);">⚙️ Executed: ${data.executed_actions.join(' | ')}</div>`;
+                    }
+
+                    userDiv.innerHTML = `<div class="meta">YOU (SPOKEN VOICE)</div>${escapeHtml(data.user_text)}`;
+                    assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(data.model_used)})</div>${escapeHtml(data.assistant_text)}${actionBadges}`;
+
+                    // Play Synthesized Voice Audio if enabled
+                    const voiceToggle = document.getElementById('voice-output-toggle');
+                    if (data.audio_url && (!voiceToggle || voiceToggle.checked)) {
+                        if (currentPlayingAudio) {
+                            currentPlayingAudio.pause();
+                        }
+                        currentPlayingAudio = new Audio(`${API_BASE}${data.audio_url}`);
+                        currentPlayingAudio.play().catch(e => console.log("Audio playback notice:", e));
+                    }
+                } else {
+                    assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>${escapeHtml(data.error || 'Voice transcription failed.')}`;
+                }
+            } catch (err) {
+                assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to process voice request: ${err}`;
+            }
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Phase 2: Learner API Logic
+        async function learnYouTubeVideo(e) {
+            e.preventDefault();
+            const url = document.getElementById('yt-url').value.trim();
+            const focus = document.getElementById('yt-focus').value.trim();
+            const consoleElem = document.getElementById('learner-console');
+
+            consoleElem.innerText = `[YOUTUBE LEARNER] Extracting transcript for ${url}...\nSummarizing with Qwen model & auto-indexing into SQLite...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/tools/youtube-learn`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, prompt_focus: focus, auto_save_memory: true })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    consoleElem.innerText = `✓ [SUCCESSFULLY LEARNED FROM YOUTUBE]\nVideo URL: ${data.video_url}\nMemory ID Saved: ${data.memory_id || 'Indexed'}\n\n=== EXTRACTED SKILL SUMMARY & CHECKLIST ===\n\n${data.ai_summary}`;
+                } else {
+                    consoleElem.innerText = `✕ [ERROR LEARNING FROM YOUTUBE]\n${data.error}`;
+                }
+            } catch (err) {
+                consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+            }
+        }
+
+        async function learnWebArticle(e) {
+            e.preventDefault();
+            const queryOrUrl = document.getElementById('web-url').value.trim();
+            const consoleElem = document.getElementById('learner-console');
+
+            if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://')) {
+                consoleElem.innerText = `[WEB SCRAPER] Scraping article at ${queryOrUrl}...\nSummarizing technical takeaways & auto-indexing into SQLite...`;
+                try {
+                    const res = await fetch(`${API_BASE}/tools/web-learn`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: queryOrUrl, auto_save_memory: true })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        consoleElem.innerText = `✓ [SUCCESSFULLY SCRAPED & LEARNED]\nArticle: "${data.title}"\nURL: ${data.url}\nMemory ID Saved: ${data.memory_id || 'Indexed'}\n\n=== EXTRACTED TECHNICAL TAKEAWAYS ===\n\n${data.ai_summary}`;
+                    } else {
+                        consoleElem.innerText = `✕ [ERROR SCRAPING] ${data.error}`;
+                    }
+                } catch (err) {
+                    consoleElem.innerText = `✕ [NETWORK ERROR] ${err}`;
+                }
+            } else {
+                consoleElem.innerText = `[WEB SEARCH] Searching web for '${queryOrUrl}'...`;
+                try {
+                    const res = await fetch(`${API_BASE}/tools/web-search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: queryOrUrl, max_results: 3 })
+                    });
+                    const data = await res.json();
+                    let output = `✓ [SEARCH COMPLETED :: ${data.results_count} Results Found]\n\n`;
+                    data.pages.forEach((p, idx) => {
+                        output += `--- Result ${idx+1}: ${p.title} ---\nURL: ${p.url}\nSnippet:\n${p.content.substring(0, 300)}...\n\n`;
+                    });
+                    consoleElem.innerText = output;
+                } catch (err) {
+                    consoleElem.innerText = `✕ [SEARCH ERROR] ${err}`;
+                }
+            }
+        }
+
+        // Models Manager Tab Logic
+        async function loadModelsTab() {
+            try {
+                const res = await fetch(`${API_BASE}/models`);
+                const data = await res.json();
+
+                const statusBox = document.getElementById('models-status-box');
+                const listElem = document.getElementById('loaded-models-list');
+
+                if (data.lm_studio_online) {
+                    statusBox.innerHTML = `
+                        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); padding: 0.75rem 1rem; border-radius: 8px; color: var(--success); font-weight: 500;">
+                            ✓ LM Studio Local Server is ONLINE at <code>${escapeHtml(data.lm_studio_url)}</code>
+                        </div>
+                    `;
+
+                    if (data.loaded_models && data.loaded_models.length > 0) {
+                        listElem.innerText = data.loaded_models.map(m => `• ${m} (Active in LM Studio)`).join("\n\n");
+                    } else {
+                        listElem.innerText = "LM Studio local server is online!\n\nPassing any model ID in chat automatically auto-loads it into GPU VRAM if configured in LM Studio.";
+                    }
+                } else {
+                    statusBox.innerHTML = `
+                        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); padding: 0.75rem 1rem; border-radius: 8px; color: var(--danger); font-weight: 500;">
+                            ✕ LM Studio Local Server is OFFLINE at <code>${escapeHtml(data.lm_studio_url)}</code>
+                        </div>
+                    `;
+                    listElem.innerText = "LM Studio server is unreachable.\n\nMake sure LM Studio is open on your computer and the Local Server is started on port 1234!";
+                }
+
+                // Build Dropdown Options for Fast and Main Models
+                const fastSelect = document.getElementById('cfg-fast-model');
+                const mainSelect = document.getElementById('cfg-main-model');
+
+                fastSelect.innerHTML = '';
+                mainSelect.innerHTML = '';
+
+                // Combine loaded models + current configured models for complete choices
+                const choices = new Set([
+                    ...data.loaded_models,
+                    data.configured_fast_model,
+                    data.configured_main_model,
+                    'qwen2.5-3b-instruct',
+                    'qwen2.5-coder-7b-instruct',
+                    'qwen3.5-9b-instruct'
+                ]);
+
+                choices.forEach(m => {
+                    if (!m) return;
+                    const isLoaded = data.loaded_models.includes(m);
+                    const label = isLoaded ? `✓ ${m} (Loaded in LM Studio)` : `${m}`;
+
+                    const optF = document.createElement('option');
+                    optF.value = m;
+                    optF.text = label;
+                    fastSelect.appendChild(optF);
+
+                    const optM = document.createElement('option');
+                    optM.value = m;
+                    optM.text = label;
+                    mainSelect.appendChild(optM);
+                });
+
+                fastSelect.value = data.configured_fast_model;
+                mainSelect.value = data.configured_main_model;
+                document.getElementById('cfg-lm-url').value = data.lm_studio_url;
+            } catch (e) {
+                console.error("Error loading models tab", e);
+            }
+        }
+
+        async function saveModelConfig(e) {
+            e.preventDefault();
+            const fast = document.getElementById('cfg-fast-model').value.trim();
+            const main = document.getElementById('cfg-main-model').value.trim();
+            const url = document.getElementById('cfg-lm-url').value.trim();
+
+            try {
+                const res = await fetch(`${API_BASE}/models/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fast_model: fast, main_model: main, lm_studio_url: url })
+                });
+
+                const data = await res.json();
+                alert(data.message || "Model configuration updated!");
+                checkLLMStatus();
+                loadModelsTab();
+            } catch (err) {
+                alert("Error saving model settings: " + err);
+            }
+        }
+
+        // Tasks API
+        async function loadTasks() {
+            try {
+                const res = await fetch(`${API_BASE}/tasks`);
+                const tasks = await res.json();
+                const grid = document.getElementById('tasks-grid');
+                grid.innerHTML = '';
+
+                if (tasks.length === 0) {
+                    grid.innerHTML = '<div style="color: var(--text-muted);">No persistent tasks created yet. Click "+ Create New Task" to start one.</div>';
+                    return;
+                }
+
+                tasks.forEach(task => {
+                    const stepsList = task.plan.map((step, idx) => `<li>${escapeHtml(step)}</li>`).join('');
+                    const card = document.createElement('div');
+                    card.className = 'task-card';
+                    card.innerHTML = `
+                        <div>
+                            <div class="task-header">
+                                <div class="task-title">${escapeHtml(task.title)}</div>
+                                <span class="tag ${task.status}">${task.status}</span>
+                            </div>
+                            <div class="task-goal">${escapeHtml(task.goal)}</div>
+                            <div class="task-steps">
+                                <div style="margin-bottom: 0.3rem; color: var(--accent-cyan);">Plan Steps:</div>
+                                <ol>${stepsList}</ol>
+                            </div>
+                            ${task.checkpoint ? `<div style="font-size: 0.75rem; background: var(--bg-card); padding: 0.5rem; border-radius: 6px; margin-bottom: 0.75rem; border: 1px solid var(--border-color); color: var(--text-muted); font-family: 'JetBrains Mono', monospace;"><strong>Checkpoint:</strong> ${escapeHtml(task.checkpoint)}</div>` : ''}
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="acquireSkillForTask('${task.id}')">🧠 Acquire YouTube Skill</button>
+                            <button class="btn btn-danger" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="deleteTask('${task.id}')">Delete</button>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                console.error("Failed to load tasks", e);
+            }
+        }
+
+        async function acquireSkillForTask(taskId) {
+            alert("Checking SQLite memory for existing skills... If missing, the assistant will search YouTube for tutorial transcripts and auto-index the skill into SQLite!");
+            try {
+                const res = await fetch(`${API_BASE}/tasks/${taskId}/acquire-skill`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const skillRes = data.skill_result;
+                    alert(skillRes.summary || "Skill acquisition completed!");
+                    loadTasks();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (e) {
+                alert("Error acquiring skill: " + e);
+            }
+        }
+
+        function openNewTaskModal() { document.getElementById('task-modal').style.display = 'flex'; }
+        function closeNewTaskModal() { document.getElementById('task-modal').style.display = 'none'; }
+
+        async function submitNewTask(e) {
+            e.preventDefault();
+            const title = document.getElementById('task-title').value;
+            const goal = document.getElementById('task-goal').value;
+            const priority = document.getElementById('task-priority').value;
+            const planRaw = document.getElementById('task-plan').value;
+            const plan = planRaw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+            try {
+                await fetch(`${API_BASE}/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, goal, priority, plan })
+                });
+                closeNewTaskModal();
+                loadTasks();
+            } catch (err) {
+                alert("Error creating task: " + err);
+            }
+        }
+
+        async function deleteTask(taskId) {
+            if (!confirm("Are you sure you want to delete this task?")) return;
+            await fetch(`${API_BASE}/tasks/${taskId}`, { method: 'DELETE' });
+            loadTasks();
+        }
+
+        // Memory API
+        async function loadMemories() {
+            try {
+                const res = await fetch(`${API_BASE}/memories`);
+                const memories = await res.json();
+                const container = document.getElementById('memories-list');
+                container.innerHTML = '';
+
+                if (memories.length === 0) {
+                    container.innerHTML = '<div style="color: var(--text-muted);">No stored memories found in SQLite database.</div>';
+                    return;
+                }
+
+                memories.forEach(mem => {
+                    const item = document.createElement('div');
+                    item.style.background = 'var(--bg-primary)';
+                    item.style.border = '1px solid var(--border-color)';
+                    item.style.padding = '0.75rem 1rem';
+                    item.style.borderRadius = '8px';
+                    item.style.display = 'flex';
+                    item.style.justifyContent = 'space-between';
+                    item.style.alignItems = 'center';
+
+                    item.innerHTML = `
+                        <div>
+                            <div style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(mem.content)}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                                Category: <span style="color: var(--accent-cyan);">${mem.category}</span> | Confidence: ${mem.confidence}
+                            </div>
+                        </div>
+                        <button class="btn btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;" onclick="deleteMemory(${mem.id})">Delete</button>
+                    `;
+                    container.appendChild(item);
+                });
+            } catch (e) {
+                console.error("Error loading memories", e);
+            }
+        }
+
+        async function saveMemory(e) {
+            e.preventDefault();
+            const content = document.getElementById('mem-content').value;
+            const category = document.getElementById('mem-category').value;
+            const confidence = parseFloat(document.getElementById('mem-confidence').value);
+
+            await fetch(`${API_BASE}/memories`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content, category, confidence })
+            });
+
+            document.getElementById('mem-content').value = '';
+            loadMemories();
+        }
+
+        async function deleteMemory(id) {
+            await fetch(`${API_BASE}/memories/${id}`, { method: 'DELETE' });
+            loadMemories();
+        }
+
+        // Security Logs
+        async function loadAuditLogs() {
+            try {
+                const res = await fetch(`${API_BASE}/audit-logs?limit=50`);
+                const logs = await res.json();
+                const consoleElem = document.getElementById('audit-console');
+
+                if (logs.length === 0) {
+                    consoleElem.innerText = "[SYSTEM] No security audit events logged yet.";
+                    return;
+                }
+
+                consoleElem.innerText = logs.map(l => 
+                    `[${l.timestamp}] [LEVEL ${l.authority_level}] ACTION: ${l.action_type} | STATUS: ${l.status.toUpperCase()} | DETAILS: ${l.details}`
+                ).join("\n");
+            } catch (e) {
+                document.getElementById('audit-console').innerText = "[ERROR] Failed to load security audit log.";
+            }
+        }
+
+        // Manual & Rules API
+        async function loadManualAndRules() {
+            try {
+                const mRes = await fetch(`${API_BASE}/manual`);
+                const mData = await mRes.json();
+                document.getElementById('manual-content').value = mData.content;
+
+                const rRes = await fetch(`${API_BASE}/rules`);
+                const rData = await rRes.json();
+                document.getElementById('rules-content').value = rData.content;
+            } catch (e) {
+                console.error("Error loading docs", e);
+            }
+        }
+
+        async function saveManual() {
+            const content = document.getElementById('manual-content').value;
+            try {
+                const res = await fetch(`${API_BASE}/manual`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                const data = await res.json();
+                alert(data.message || "User Operating Manual updated successfully!");
+            } catch (e) {
+                alert("Error saving manual: " + e);
+            }
+        }
+
+        async function saveRules() {
+            const content = document.getElementById('rules-content').value;
+            try {
+                const res = await fetch(`${API_BASE}/rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                const data = await res.json();
+                alert(data.message || "Rules & boundaries updated successfully!");
+            } catch (e) {
+                alert("Error saving rules: " + e);
+            }
+        }
+
+        // Policy Simulation
+        async function runPolicySimulation() {
+            const action = document.getElementById('sim-action').value.trim();
+            const detailsRaw = document.getElementById('sim-details').value;
+            const resultElem = document.getElementById('sim-result');
+
+            if (!action) {
+                alert("Please enter an action type.");
+                return;
+            }
+
+            try {
+                const details = JSON.parse(detailsRaw);
+                const res = await fetch(`${API_BASE}/policies/evaluate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action_type: action, details })
+                });
+
+                const data = await res.json();
+                resultElem.innerText = JSON.stringify(data, null, 2);
+            } catch (e) {
+                resultElem.innerText = "Error: Invalid JSON details input or network error.";
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        // Register PWA Service Worker for Native App Installation
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/static/service-worker.js')
+                    .then(reg => console.log('✓ Standalone App ServiceWorker registered:', reg))
+                    .catch(err => console.log('ServiceWorker registration notice:', err));
+            });
+        }
+
+        // Init
+        checkLLMStatus();
+        setInterval(checkLLMStatus, 10000);
+    </script>
+</body>
+</html>
