@@ -62,6 +62,16 @@ class WorldChange:
     confidence: float
     observation_id: str
 
+    @property
+    def previous(self) -> Any:
+        """Compatibility alias for ingestion/event consumers."""
+        return self.previous_value
+
+    @property
+    def current(self) -> Any:
+        """Compatibility alias for ingestion/event consumers."""
+        return self.current_value
+
 
 class WorldModel:
     """Persistent, queryable representation of Arena's external context."""
