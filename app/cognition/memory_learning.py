@@ -23,11 +23,18 @@ class MemoryLearner:
     def learn_lesson(self, lesson: Lesson, *, source: str = "reflection") -> MemoryRecord:
         return self.store.add("lesson", lesson.content, source=source, importance=lesson.importance, tags=lesson.tags)
 
-    def consolidate(self, episodes: list[MemoryRecord], *, semantic_facts: Iterable[str] = (), lessons: Iterable[Lesson] = ()) -> list[MemoryRecord]:
-        """Promote selected experience into durable knowledge; callers decide semantic truth."""
+    def learn_procedure(self, procedure: str, *, importance: float = 0.7, tags: Iterable[str] = (),
+                        source: str = "experience") -> MemoryRecord:
+        return self.store.add("procedural", procedure, source=source, importance=importance, tags=tuple(tags))
+
+    def consolidate(self, episodes: list[MemoryRecord], *, semantic_facts: Iterable[str] = (),
+                    procedures: Iterable[str] = (), lessons: Iterable[Lesson] = ()) -> list[MemoryRecord]:
+        """Promote selected experience into durable knowledge; callers decide what is justified."""
         created: list[MemoryRecord] = []
         for fact in semantic_facts:
             created.append(self.store.add("semantic", fact, source="consolidation", importance=0.7))
+        for procedure in procedures:
+            created.append(self.learn_procedure(procedure, source="consolidation"))
         for lesson in lessons:
             created.append(self.learn_lesson(lesson))
         return created
