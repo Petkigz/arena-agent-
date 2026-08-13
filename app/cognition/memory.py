@@ -31,7 +31,7 @@ class MemoryRecord:
 
 
 class MemoryStore:
-    """SQLite-backed memory with bounded retrieval; no embedding model required."""
+    """SQLite-backed memory with bounded retrieval and explicit maintenance."""
     VALID_KINDS = {"episodic", "semantic", "procedural", "lesson"}
 
     def __init__(self, db_path: str | Path) -> None:
@@ -116,6 +116,26 @@ class MemoryStore:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM cognitive_memory WHERE task_id = ? ORDER BY created_at DESC LIMIT ?", (task_id, max(1, min(limit, 200)))).fetchall()
             return [self._row(row) for row in rows]
+
+    def prune(self, *, max_records: int = 5000, minimum_importance: float = 0.05) -> int:
+        """Bound storage by removing the least valuable memories first.
+
+        Semantic/procedural/lesson memories are protected from this generic
+        cleanup unless they fall below the explicit importance floor.
+        """
+        max_records = max(100, max_records)
+        with self._connect() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM cognitive_memory").fetchone()[0]
+            if count <= max_records:
+                return 0
+            excess = count - max_records
+            rows = conn.execute("""SELECT memory_id FROM cognitive_memory
+                WHERE importance <= ? ORDER BY importance ASC, access_count ASC, last_accessed ASC LIMIT ?""",
+                (max(0.0, min(1.0, minimum_importance)), excess)).fetchall()
+            ids = [row["memory_id"] for row in rows]
+            for memory_id in ids:
+                conn.execute("DELETE FROM cognitive_memory WHERE memory_id = ?", (memory_id,))
+            return len(ids)
 
     def _row(self, row: sqlite3.Row, accessed: bool = False) -> MemoryRecord:
         return MemoryRecord(
