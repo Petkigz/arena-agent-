@@ -17,11 +17,11 @@ class RevisionResult:
 
 class BeliefEngine:
     """Deterministic evidence aggregator; reasoning models can challenge its output."""
-    def __init__(self, beliefs: BeliefStore | None = None, hypotheses: HypothesisSet | None = None) -> None:
-        self.beliefs = beliefs or BeliefStore()
+    def __init__(self, beliefs: BeliefStore | None = None, hypotheses: HypothesisSet | None = None, db_path: str | None = None) -> None:
+        self.beliefs = beliefs or BeliefStore(db_path=db_path)
         self.hypotheses = hypotheses or HypothesisSet()
 
-    def ingest(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None) -> RevisionResult:
+    def ingest(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, task_id: str | None = None) -> RevisionResult:
         belief = self.beliefs.observe(subject, predicate, value, source=source, confidence=confidence)
         self.hypotheses.upsert(subject, predicate, value, score=belief.confidence, rationale=rationale)
         ranked = self.hypotheses.rank(subject, predicate)
