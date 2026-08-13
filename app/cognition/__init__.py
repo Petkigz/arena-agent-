@@ -1,4 +1,4 @@
-"""Cognitive foundation, world model, belief, and reasoning primitives for Arena."""
+"""Cognitive foundation, world model, belief, reasoning, and memory primitives for Arena."""
 from .cognitive_state import CognitiveState
 from .blackboard import Blackboard
 from .events import CognitiveEvent
@@ -15,6 +15,9 @@ from .information_gain import InformationNeed, choose_information_need
 from .reasoning_cycle import ReasoningAction, ReasoningDecision, ReasoningCycle
 from .action_selection import InvestigationPlan, InvestigationRegistry, ActionSelector, ActionResult, InvestigationExecutor
 from .reasoning_loop import CognitiveReasoningLoop, CycleTrace
+from .memory import MemoryRecord, MemoryStore
+from .memory_learning import Lesson, MemoryLearner
+from .reflection import Reflection, ReflectionEngine
 from .runtime import CognitiveRuntime
 
 __all__ = [
@@ -23,5 +26,6 @@ __all__ = [
     "Belief", "Evidence", "BeliefStore", "Hypothesis", "HypothesisSet", "ConfidenceCalibrator", "SourceStats",
     "BeliefEngine", "RevisionResult", "InformationNeed", "choose_information_need", "ReasoningAction",
     "ReasoningDecision", "ReasoningCycle", "InvestigationPlan", "InvestigationRegistry", "ActionSelector",
-    "ActionResult", "InvestigationExecutor", "CognitiveReasoningLoop", "CycleTrace", "CognitiveRuntime",
+    "ActionResult", "InvestigationExecutor", "CognitiveReasoningLoop", "CycleTrace", "MemoryRecord", "MemoryStore",
+    "Lesson", "MemoryLearner", "Reflection", "ReflectionEngine", "CognitiveRuntime",
 ]
