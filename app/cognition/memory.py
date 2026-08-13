@@ -87,8 +87,10 @@ class MemoryStore:
             row = conn.execute("SELECT * FROM cognitive_memory WHERE memory_id = ?", (memory_id,)).fetchone()
             if row is None:
                 return None
-            conn.execute("UPDATE cognitive_memory SET access_count = access_count + 1, last_accessed = ? WHERE memory_id = ?", (_now(), memory_id))
-            return self._row(row, accessed=True)
+            accessed_at = _now()
+            conn.execute("UPDATE cognitive_memory SET access_count = access_count + 1, last_accessed = ? WHERE memory_id = ?", (accessed_at, memory_id))
+            refreshed = conn.execute("SELECT * FROM cognitive_memory WHERE memory_id = ?", (memory_id,)).fetchone()
+            return self._row(refreshed) if refreshed is not None else None
 
     def search(self, query: str, *, kinds: set[str] | None = None, limit: int = 8) -> list[MemoryRecord]:
         """Cheap lexical retrieval; semantic/vector retrieval can be layered later."""
@@ -137,10 +139,10 @@ class MemoryStore:
                 conn.execute("DELETE FROM cognitive_memory WHERE memory_id = ?", (memory_id,))
             return len(ids)
 
-    def _row(self, row: sqlite3.Row, accessed: bool = False) -> MemoryRecord:
+    def _row(self, row: sqlite3.Row) -> MemoryRecord:
         return MemoryRecord(
             row["memory_id"], row["kind"], row["content"], row["importance"], row["created_at"],
-            _now() if accessed else row["last_accessed"], row["access_count"] + (1 if accessed else 0),
+            row["last_accessed"], row["access_count"],
             row["source"], row["task_id"], tuple(json.loads(row["tags_json"] or "[]")), row["outcome"],
             None if row["success"] is None else bool(row["success"]),
         )
