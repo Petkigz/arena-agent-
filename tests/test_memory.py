@@ -15,8 +15,13 @@ def test_learning_promotes_explicit_knowledge(tmp_path):
     store = MemoryStore(tmp_path / "memory.db")
     learner = MemoryLearner(store)
     episode = learner.record_episode("A test succeeded", success=True)
-    created = learner.consolidate([episode], semantic_facts=["The test environment supports the probe"], lessons=[Lesson("Prefer the probe before escalating", 0.8)])
-    assert {item.kind for item in created} == {"semantic", "lesson"}
+    created = learner.consolidate(
+        [episode],
+        semantic_facts=["The test environment supports the probe"],
+        procedures=["Check the probe before escalating"],
+        lessons=[Lesson("Prefer the probe before escalating", 0.8)],
+    )
+    assert {item.kind for item in created} == {"semantic", "procedural", "lesson"}
 
 
 def test_reflection_does_not_invent_a_lesson():
