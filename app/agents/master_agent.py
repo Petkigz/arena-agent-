@@ -29,6 +29,8 @@ from app.tools.workflow_engine import WorkflowEngine
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.human_nature_engine import HumanNatureEngine
 from app.memory.coworker_brain import CoworkerBrain
+from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction, ReasoningDecision
+from app.cognition.belief_engine import BeliefEngine
 
 class MasterAgentOrchestrator:
     """
@@ -106,8 +108,22 @@ class MasterAgentOrchestrator:
             brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
             executed_actions.append("Generated Daily Executive Briefing.")
 
+        # 7. REASONING CYCLE DECISION GATE
+        cycle = ReasoningCycle()
+        subject_term = text_lower.split()[0] if text_lower else "user_query"
+        decision = cycle.observe_and_decide(
+            subject=subject_term,
+            predicate="task_intent",
+            value=text_lower,
+            source="user_input",
+            confidence=0.9 if executed_actions else 0.5
+        )
+
+        app_logger.info(f"ReasoningCycle Decision for '{subject_term}': Action={decision.action.value}, Confidence={decision.confidence:.2f}")
+
         # BUILD CONCISE HUMAN-WARMTH PROMPT FOR COWORKER LLM
         system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
+        system_instruction += f"\n[REASONING DECISION GATE]: Action '{decision.action.value.upper()}' chosen (Confidence: {decision.confidence:.2f}). Reason: {decision.reason}"
 
         messages = [
             {"role": "system", "content": system_instruction},
