@@ -936,9 +936,9 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
             "model_used": "System Voice Perception"
         }
 
-    # 2. Master Agent Orchestrator All-In-One Execution
-    agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
-    assistant_text = agent_res.get("assistant_reply", "Done.")
+    # 2. Master Agent Orchestrator All-In-One Execution via Cognitive Pipeline
+    pipeline_res = CognitivePipeline().process_request(user_text, complexity=complexity)
+    assistant_text = pipeline_res.get("assistant_reply", "Done.")
 
     # 3. Synthesize Speech
     tts_res = LocalTextToSpeech.synthesize_speech(assistant_text)
@@ -948,8 +948,8 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
         "user_text": user_text,
         "assistant_text": assistant_text,
         "audio_url": tts_res.get("audio_url", ""),
-        "model_used": agent_res.get("model_used", ""),
-        "executed_actions": agent_res.get("executed_actions", []),
+        "model_used": pipeline_res.get("model_used", ""),
+        "executed_actions": pipeline_res.get("executed_actions", []),
         "speaker_verified": speaker_check.get("verified", True)
     }
 
