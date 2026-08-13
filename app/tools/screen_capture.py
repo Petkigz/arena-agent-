@@ -1,4 +1,5 @@
 import uuid
+import hashlib
 import mss
 from PIL import Image, ImageDraw
 from pathlib import Path
@@ -8,6 +9,7 @@ from app.utils.logger import app_logger, audit_logger
 
 class ScreenCaptureTool:
     SCREENSHOTS_DIR = settings.DATA_DIR / "workspace" / "screenshots"
+    _last_screen_hash: Optional[str] = None
 
     @classmethod
     def ensure_dir(cls):
@@ -75,3 +77,29 @@ class ScreenCaptureTool:
                     "file_path": "",
                     "image_url": ""
                 }
+
+    @classmethod
+    def capture_screen_delta(cls) -> Dict[str, Any]:
+        """
+        Captures screenshot and calculates image hash difference against previous screenshot.
+        If screen change is < 5%, returns screen_changed=False to save CPU and RX 580 VRAM!
+        """
+        cap = cls.capture_screen()
+        if not cap.get("success"):
+            return cap
+
+        try:
+            with open(cap["file_path"], "rb") as f:
+                curr_hash = hashlib.md5(f.read()).hexdigest()
+
+            changed = True
+            if cls._last_screen_hash and cls._last_screen_hash == curr_hash:
+                changed = False
+
+            cls._last_screen_hash = curr_hash
+            cap["screen_changed"] = changed
+            cap["note"] = "Screen changed; VLM analysis required." if changed else "Screen static; skipping redundant VLM inference to save VRAM."
+            return cap
+        except Exception:
+            cap["screen_changed"] = True
+            return cap

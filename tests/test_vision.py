@@ -10,6 +10,11 @@ def test_screen_capture_tool():
     assert res["success"] is True
     assert Path(res["file_path"]).exists()
 
+def test_screen_capture_delta():
+    res1 = ScreenCaptureTool.capture_screen_delta()
+    assert res1["success"] is True
+    assert "screen_changed" in res1
+
 def test_ocr_reader_tool_missing_file():
     res = OCRReaderTool.extract_text_from_image("missing_image.png")
     assert res["success"] is False
