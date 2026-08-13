@@ -75,6 +75,7 @@ from app.agents.self_evolving_agent import SelfEvolvingAgent
 from app.scheduler.self_healer import AutonomousSelfHealer
 from app.cognition.experiment_engine import ExperimentEngine
 from app.cognition.capability_factory import CapabilityFactory
+from app.agents.proactive_coworker_daemon import ProactiveCoworkerDaemon
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -1301,6 +1302,10 @@ def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
         req.description,
         sample_params=req.sample_params
     )
+
+@app.get("/agent/proactive-greeting")
+def proactive_greeting_endpoint():
+    return {"proactive_greeting": ProactiveCoworkerDaemon.get_proactive_greeting()}
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
