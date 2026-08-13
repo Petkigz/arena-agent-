@@ -76,6 +76,7 @@ from app.scheduler.self_healer import AutonomousSelfHealer
 from app.cognition.experiment_engine import ExperimentEngine
 from app.cognition.capability_factory import CapabilityFactory
 from app.agents.proactive_coworker_daemon import ProactiveCoworkerDaemon
+from app.tools.win32_ghost_operator import Win32GhostOperator
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -420,6 +421,11 @@ class AnkiExportRequest(BaseModel):
 class SelfEvolveRequest(BaseModel):
     task_objective: str
     tool_name_query: Optional[str] = "custom_tool"
+
+class GhostMessageRequest(BaseModel):
+    window_title_query: str
+    message_type: Optional[str] = "click"
+    text_payload: Optional[str] = None
 
 class ExperimentRequest(BaseModel):
     hypothesis_name: str
@@ -1306,6 +1312,18 @@ def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
 @app.get("/agent/proactive-greeting")
 def proactive_greeting_endpoint():
     return {"proactive_greeting": ProactiveCoworkerDaemon.get_proactive_greeting()}
+
+@app.get("/os/ghost-windows")
+def list_ghost_windows_endpoint():
+    return {"open_windows": Win32GhostOperator.list_open_windows()}
+
+@app.post("/os/ghost-send")
+def send_ghost_message_endpoint(req: GhostMessageRequest):
+    return Win32GhostOperator.send_background_window_message(
+        req.window_title_query,
+        message_type=req.message_type or "click",
+        text_payload=req.text_payload
+    )
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
 @app.post("/memory/rag-search")
