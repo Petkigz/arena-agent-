@@ -78,6 +78,7 @@ from app.cognition.capability_factory import CapabilityFactory
 from app.agents.proactive_coworker_daemon import ProactiveCoworkerDaemon
 from app.tools.win32_ghost_operator import Win32GhostOperator
 from app.tools.ast_janitor import ASTJanitor
+from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
 
 app = FastAPI(
@@ -442,6 +443,10 @@ class CapabilitySynthesizeRequest(BaseModel):
     capability_name: str
     description: str
     sample_params: Optional[Dict[str, Any]] = None
+
+class SimulationRequest(BaseModel):
+    target_goal: str
+    candidate_actions: List[Dict[str, Any]]
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
 @app.get("/")
@@ -1323,6 +1328,13 @@ def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
         req.capability_name,
         req.description,
         sample_params=req.sample_params
+    )
+
+@app.post("/cognition/simulate-branches")
+def simulate_branches_endpoint(req: SimulationRequest):
+    return CounterfactualSimulator.simulate_competing_branches(
+        req.target_goal,
+        req.candidate_actions
     )
 
 @app.get("/agent/proactive-greeting")
