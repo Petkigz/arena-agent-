@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 from app.config import settings
 from app.llm import llm_client
 from app.tools.ocr_reader import OCRReaderTool
+from app.tools.screen_capture import ScreenCaptureTool
 from app.tools.knowledge_indexer import KnowledgeIndexer
 from app.utils.logger import app_logger
 
@@ -23,8 +24,18 @@ class VisionAnalyzerTool:
         if not image_path.is_absolute():
             image_path = settings.BASE_DIR / image_path
 
-        # Step 1: Run OCR Text Extraction
-        ocr_res = OCRReaderTool.extract_text_from_image(str(image_path))
+        # Step 1: Run Screen Delta Check to prevent redundant VLM runs on identical frames
+        cap_delta = ScreenCaptureTool.capture_screen_delta()
+        if not cap_delta.get("screen_changed", True):
+            app_logger.info("Screen unchanged (<5% delta); returning cached visual observation to save VRAM.")
+            return {
+                "success": True,
+                "screen_changed": False,
+                "image_name": image_path.name,
+                "file_path": str(image_path),
+                "ai_analysis": "Desktop screen state is unchanged from previous observation frame. VLM inference skipped to conserve RX 580 VRAM.",
+                "note": "Skipped redundant VLM run on identical screen frame."
+            }
         extracted_text = ocr_res.get("extracted_text", "")
 
         focus_str = f" Focus specifically on: '{prompt_focus}'." if prompt_focus else ""
