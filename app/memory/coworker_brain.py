@@ -6,6 +6,7 @@ from app.database import db
 from app.utils.logger import app_logger
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.tools.app_inventory import SystemAppInventory
+from app.cognition.environment_grounding import EnvironmentGroundingEngine
 
 class CoworkerBrain:
     """
@@ -54,14 +55,14 @@ class CoworkerBrain:
     @classmethod
     def format_coworker_prompt(cls, user_text: str, executed_actions: Optional[List[str]] = None) -> str:
         """
-        Generates system prompt instructions for the Coworker Partner persona.
+        Generates system prompt instructions for the Coworker Partner persona with full environmental self-grounding.
         """
         competence = cls.evaluate_task_competence(user_text)
-        app_count = SystemAppInventory.get_installed_apps_count()
+        env_grounding = EnvironmentGroundingEngine.generate_grounding_prompt_context()
 
         prompt = (
             f"{cls.COWORKER_PERSONA}\n"
-            f"SYSTEM STATE: Running natively on user PC ({app_count} installed apps available).\n"
+            f"{env_grounding}\n"
             f"[RELEVANT MEMORY CONTEXT]: {competence['rag_context'] if competence['rag_context'] else 'No specific past memory matched.'}\n"
         )
 
