@@ -1,10 +1,10 @@
-"""Ephemeral working memory for the active cognitive loop."""
+"""Ephemeral working memory for the active cognitive loop with clear boundary contracts."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 
 def _now() -> str:
@@ -24,7 +24,17 @@ class BlackboardEntry:
 
 
 class Blackboard:
-    """Small, inspectable key/value workspace for current reasoning."""
+    """
+    P1-B: Dynamic Working Memory Workspace for reasoning artifacts.
+    Distinct from CognitiveState (which holds stable, structured system state):
+    - Blackboard stores: candidate hypotheses, evidence, temporary observations, and scratchpad thoughts.
+    """
+
+    # Reserved workspace keys
+    KEY_CANDIDATE_PLANS = "candidate_plans"
+    KEY_ACTIVE_HYPOTHESES = "active_hypotheses"
+    KEY_PENDING_OBSERVATIONS = "pending_observations"
+    KEY_SCRATCHPAD_THOUGHTS = "scratchpad_thoughts"
 
     def __init__(self) -> None:
         self._entries: Dict[str, BlackboardEntry] = {}
