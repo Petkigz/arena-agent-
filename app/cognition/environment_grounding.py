@@ -22,7 +22,7 @@ class EnvironmentGroundingEngine:
     Environmental Self-Grounding & Resource Topology Engine.
     Probes host hardware, operating system, installed apps, active windows, and local networks,
     constructing a persistent WorldModel representation so the assistant ALWAYS knows where it is
-    and works intelligently within available resources.
+    and works intelligently within available resources across any PC generation (3rd Gen, 8th Gen, or i9-14900K).
     """
 
     @classmethod
@@ -34,9 +34,10 @@ class EnvironmentGroundingEngine:
         os_release = platform.release()
         machine = platform.machine()
 
-        # Hardware metrics
+        # Hardware metrics & Tier detection
         hw_stats = HardwareMonitor.get_hardware_stats()
-        cpu_count = psutil.cpu_count(logical=True) or 32
+        tier = HardwareGovernor.detect_hardware_tier()
+        cpu_count = tier["cpu_threads"]
 
         # Installed Applications Count
         app_count = SystemAppInventory.get_installed_apps_count()
@@ -46,11 +47,13 @@ class EnvironmentGroundingEngine:
 
         topology_snapshot = {
             "host_os": f"{host_os} {os_release} ({machine})",
+            "hardware_tier": tier["tier_name"],
             "cpu_threads": cpu_count,
             "cpu_usage_percent": hw_stats.get("cpu_percent", 0),
             "ram_used_gb": hw_stats.get("ram_used_gb", 0),
-            "ram_total_gb": hw_stats.get("ram_total_gb", 16),
-            "vram_status": "RX 580 8 GB VRAM Managed",
+            "ram_total_gb": tier["total_ram_gb"],
+            "gpu_available": tier["gpu_available"],
+            "ultra_lean_mode": tier["ultra_lean_mode"],
             "installed_apps_count": app_count,
             "active_windows_count": len(windows),
             "top_window_title": windows[0]["title"] if windows else "Desktop"
@@ -75,7 +78,7 @@ class EnvironmentGroundingEngine:
         except Exception as e:
             app_logger.warning(f"WorldModel environment grounding notice: {e}")
 
-        db.create_audit_log("probe_complete_environment", "success", f"Environment probed: {host_os} ({cpu_count} threads, {app_count} apps)", level=0)
+        db.create_audit_log("probe_complete_environment", "success", f"Environment probed: {host_os} ({tier['tier_name']})", level=0)
 
         return topology_snapshot
 
@@ -85,11 +88,14 @@ class EnvironmentGroundingEngine:
         Generates a dense, structured environmental self-awareness string for LLM prompts.
         """
         env = cls.probe_complete_environment()
+        mode_note = "ULTRA-LEAN LOW-SPEC MODE ACTIVE (Restricting thread pools and context length to prevent PC lag)" if env['ultra_lean_mode'] else "HIGH-PERFORMANCE MODE ACTIVE (P-Core/E-Core thread shunting & VRAM management active)"
+
         return (
-            f"\n[ENVIRONMENTAL SELF-GROUNDING & LOCAL TOPOLOGY]\n"
+            f"\n[ENVIRONMENTAL SELF-GROUNDING & HARDWARE TIER]\n"
             f"• Host Machine: {env['host_os']} | Node: {platform.node()}\n"
-            f"• CPU Hardware: Intel Core i9-14900K ({env['cpu_threads']} Logical Threads | {env['cpu_usage_percent']}% Load)\n"
-            f"• System Memory: {env['ram_used_gb']}/{env['ram_total_gb']} GB RAM | GPU: RX 580 (8 GB VRAM Managed)\n"
+            f"• Hardware Profile: {env['hardware_tier']} ({env['cpu_threads']} Threads | {env['cpu_usage_percent']}% Load)\n"
+            f"• System Memory: {env['ram_used_gb']}/{env['ram_total_gb']} GB RAM | GPU Acceleration: {'Active' if env['gpu_available'] else 'Managed CPU Fallback'}\n"
+            f"• Operating Mode: {mode_note}\n"
             f"• Software Footprint: {env['installed_apps_count']} Installed Applications | {env['active_windows_count']} Active Windows (Focus: '{env['top_window_title']}')\n"
             f"• Capability Status: 100% Offline, Privacy Preserved, Full Native OS Permission Granted.\n"
         )

@@ -10,4 +10,4 @@ def test_environment_grounding_probe():
 def test_environment_grounding_prompt():
     prompt = EnvironmentGroundingEngine.generate_grounding_prompt_context()
     assert "[ENVIRONMENTAL SELF-GROUNDING" in prompt
-    assert "Intel Core i9-14900K" in prompt
+    assert "Hardware Profile:" in prompt

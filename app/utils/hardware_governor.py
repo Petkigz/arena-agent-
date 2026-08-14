@@ -11,41 +11,91 @@ from app.utils.logger import app_logger
 
 class HardwareGovernor:
     """
-    Intel Core i9-14900K Thread Governor & RX 580 VRAM Memory Management Engine.
-    Shunts tasks between Intel Performance P-Cores and Efficiency E-Cores, and manages
-    VRAM caches for LM Studio local model inference.
+    Universal Hardware Governor & Hardware Tier Adaptation Engine.
+    Detects CPU generation (3rd Gen, 8th Gen, i9-14900K), available system RAM, and GPU VRAM,
+    automatically shifting operational profiles (Ultra-Lean Mode vs High-Performance Mode)
+    so the assistant runs smooth without lag on ANY machine.
     """
 
-    @staticmethod
-    def set_thread_affinity(p_cores_only: bool = False, e_cores_only: bool = False) -> Dict[str, Any]:
+    @classmethod
+    def detect_hardware_tier(cls) -> Dict[str, Any]:
         """
-        Binds current process execution affinity across Intel i9-14900K P-Cores / E-Cores.
-        14900K has 8 P-Cores (16 threads: 0-15) and 16 E-Cores (16 threads: 16-31).
+        Detects CPU threads, RAM, and GPU status to categorize host PC into Hardware Tier 1, 2, or 3.
+        """
+        total_cpus = psutil.cpu_count(logical=True) or 4
+        ram = psutil.virtual_memory()
+        total_ram_gb = round(ram.total / (1024 ** 3), 1)
+
+        gpu_available = False
+        try:
+            import torch
+            gpu_available = torch.cuda.is_available()
+        except Exception:
+            pass
+
+        # Tier classification logic
+        if total_cpus >= 20 and total_ram_gb >= 15.0 and gpu_available:
+            tier_level = 1
+            tier_name = "TIER 1 (Ultra High-End / i9-14900K)"
+            max_threads = total_cpus
+            max_context_budget = 1000
+            enable_background_daemon = True
+        elif total_cpus >= 8 and total_ram_gb >= 8.0:
+            tier_level = 2
+            tier_name = "TIER 2 (Mid-Range 8th Gen CPU / 8-16GB RAM)"
+            max_threads = min(8, total_cpus)
+            max_context_budget = 500
+            enable_background_daemon = True
+        else:
+            tier_level = 3
+            tier_name = "TIER 3 (Legacy Low-Spec 2nd-7th Gen CPU / <8GB RAM)"
+            max_threads = min(4, total_cpus)
+            max_context_budget = 250
+            enable_background_daemon = False
+
+        return {
+            "tier_level": tier_level,
+            "tier_name": tier_name,
+            "cpu_threads": total_cpus,
+            "total_ram_gb": total_ram_gb,
+            "gpu_available": gpu_available,
+            "allocated_max_threads": max_threads,
+            "max_context_budget_tokens": max_context_budget,
+            "background_daemon_enabled": enable_background_daemon,
+            "ultra_lean_mode": tier_level == 3
+        }
+
+    @classmethod
+    def set_thread_affinity(cls, p_cores_only: bool = False, e_cores_only: bool = False) -> Dict[str, Any]:
+        """
+        Binds current process execution affinity across Intel P-Cores / E-Cores or restricts threads on lower-spec CPUs.
         """
         proc = psutil.Process(os.getpid())
-        total_cpus = psutil.cpu_count(logical=True) or 32
+        total_cpus = psutil.cpu_count(logical=True) or 4
+        tier = cls.detect_hardware_tier()
 
         selected_affinity = list(range(total_cpus))
 
         if total_cpus >= 24:
             if p_cores_only:
-                # First 16 logical threads (P-Cores with HyperThreading)
                 selected_affinity = list(range(min(16, total_cpus)))
             elif e_cores_only:
-                # Remaining logical threads (E-Cores)
                 selected_affinity = list(range(16, total_cpus))
+        elif tier["tier_level"] == 3:
+            # Low-spec PC: restrict to first 2-4 threads to prevent CPU overheating/lag
+            selected_affinity = list(range(min(4, total_cpus)))
 
         try:
             if hasattr(proc, 'cpu_affinity'):
                 proc.cpu_affinity(selected_affinity)
-                app_logger.info(f"HardwareGovernor set CPU affinity to threads: {selected_affinity[:8]}...")
+                app_logger.info(f"HardwareGovernor set CPU affinity for {tier['tier_name']}: {selected_affinity[:8]}...")
 
             return {
                 "success": True,
+                "hardware_tier": tier["tier_name"],
                 "total_cpu_threads": total_cpus,
                 "active_affinity_threads": len(selected_affinity),
-                "p_cores_mode": p_cores_only,
-                "e_cores_mode": e_cores_only
+                "ultra_lean_mode": tier["ultra_lean_mode"]
             }
         except Exception as e:
             app_logger.warning(f"Cpu affinity setting error: {e}")
@@ -59,7 +109,6 @@ class HardwareGovernor:
         """
         gc.collect()
 
-        # Check PyTorch VRAM flush if available
         vram_flushed = False
         try:
             import torch
@@ -69,7 +118,6 @@ class HardwareGovernor:
         except Exception:
             pass
 
-        # Memory stats
         ram = psutil.virtual_memory()
         free_ram_gb = round(ram.available / (1024 ** 3), 2)
 

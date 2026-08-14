@@ -1278,6 +1278,10 @@ def launch_system_app_endpoint(req: AppLaunchQueryRequest):
 def set_p_cores_endpoint():
     return HardwareGovernor.set_thread_affinity(p_cores_only=True)
 
+@app.get("/system/governor/hardware-tier")
+def get_hardware_tier_endpoint():
+    return HardwareGovernor.detect_hardware_tier()
+
 @app.post("/system/governor/purge-vram")
 def purge_vram_endpoint():
     return HardwareGovernor.purge_vram_and_system_memory()
