@@ -7,7 +7,7 @@ def test_prediction_engine():
     pred = pe.predict_action("open_application", {"app_query": "firefox"})
     assert pred.action_type == "open_application"
     
-    surprisal = pe.evaluate_surprisal(pred, {"app_state": "running", "active_window": "firefox"})
+    surprisal = pe.evaluate_surprisal(pred, {"app_state": "running", "success": True})
     assert surprisal == 0.0
 
 def test_attention_manager():
