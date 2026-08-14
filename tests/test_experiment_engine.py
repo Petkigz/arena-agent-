@@ -8,3 +8,8 @@ def test_experiment_engine():
     )
     assert exp.success is True
     assert "Hello Experiment" in exp.output_summary
+
+def test_self_play_exploration():
+    res = ExperimentEngine.run_self_play_sandbox_exploration()
+    assert res["success"] is True
+    assert res["total_experiments_run"] == 2

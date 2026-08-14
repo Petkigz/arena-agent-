@@ -1337,6 +1337,10 @@ def simulate_branches_endpoint(req: SimulationRequest):
         req.candidate_actions
     )
 
+@app.post("/cognition/self-play-explore")
+def self_play_explore_endpoint():
+    return ExperimentEngine.run_self_play_sandbox_exploration()
+
 @app.get("/agent/proactive-greeting")
 def proactive_greeting_endpoint():
     return {"proactive_greeting": ProactiveCoworkerDaemon.get_proactive_greeting()}
