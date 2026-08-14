@@ -36,6 +36,9 @@ class VisionAnalyzerTool:
                 "ai_analysis": "Desktop screen state is unchanged from previous observation frame. VLM inference skipped to conserve RX 580 VRAM.",
                 "note": "Skipped redundant VLM run on identical screen frame."
             }
+
+        # Step 2: Run OCR Text Extraction
+        ocr_res = OCRReaderTool.extract_text_from_image(str(image_path))
         extracted_text = ocr_res.get("extracted_text", "")
 
         focus_str = f" Focus specifically on: '{prompt_focus}'." if prompt_focus else ""

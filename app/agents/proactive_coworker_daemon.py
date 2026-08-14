@@ -63,12 +63,11 @@ class ProactiveCoworkerDaemon:
         self_heal_res = None
         if idle_info["is_idle"]:
             try:
-                # Async loop wrapper or background trigger
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(AutonomousSelfHealer.run_maintenance_cycle())
-                else:
-                    loop.run_until_complete(AutonomousSelfHealer.run_maintenance_cycle())
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(AutonomousSelfHealer.run_maintenance_cycle())
+                except RuntimeError:
+                    asyncio.run(AutonomousSelfHealer.run_maintenance_cycle())
                 self_heal_res = "Autonomous self-healer triggered on idle E-Cores."
             except Exception as e:
                 self_heal_res = f"Self-healer notice: {e}"
