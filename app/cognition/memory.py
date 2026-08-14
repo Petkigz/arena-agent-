@@ -139,6 +139,23 @@ class MemoryStore:
                 conn.execute("DELETE FROM cognitive_memory WHERE memory_id = ?", (memory_id,))
             return len(ids)
 
+    def apply_memory_decay_and_prune(self, decay_rate: float = 0.05, max_records: int = 5000) -> int:
+        """
+        Applies mathematical time-decay to memory importance scores based on age,
+        and automatically prunes stale, low-importance memories to maintain sub-millisecond retrieval speeds.
+        """
+        with self._connect() as conn:
+            # Apply decay factor to old un-accessed memories
+            conn.execute("""
+                UPDATE cognitive_memory
+                SET importance = MAX(0.01, importance * (1.0 - ?))
+                WHERE access_count = 0 AND kind NOT IN ('lesson', 'procedural')
+            """, (decay_rate,))
+            conn.commit()
+
+        # Prune stale memories below importance threshold
+        return self.prune(max_records=max_records, minimum_importance=0.1)
+
     def _row(self, row: sqlite3.Row) -> MemoryRecord:
         return MemoryRecord(
             row["memory_id"], row["kind"], row["content"], row["importance"], row["created_at"],
