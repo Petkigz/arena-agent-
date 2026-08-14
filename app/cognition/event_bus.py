@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from collections import defaultdict
 from threading import RLock
-from typing import Callable, DefaultDict, List, Union
+from typing import Callable, DefaultDict, List, Union, Optional
 
 from .events import CognitiveEvent
+from app.utils.logger import app_logger
 
 Handler = Callable[[CognitiveEvent], None]
 EventKey = Union[str, type]
 
 
 class EventBus:
-    """Synchronous by default, intentionally simple for Phase 1.
-
-    Handlers should be fast and side-effect aware. An exception in one
-    subscriber is isolated so it cannot prevent other subscribers from
-    receiving the event.
+    """
+    P1-C: Event-Driven State Synchronization Bus.
+    Broadcasting cognitive state transitions, observation updates, prediction errors,
+    and tool execution events asynchronously across all modules.
     """
 
     def __init__(self) -> None:
@@ -50,10 +50,18 @@ class EventBus:
         for handler in handlers:
             try:
                 handler(event)
-            except Exception:
-                # Phase 1 intentionally keeps event delivery resilient.
-                # Production logging/telemetry will be attached later.
+            except Exception as e:
+                app_logger.warning(f"EventBus subscriber exception for '{event.event_type}': {e}")
                 continue
+
+    def emit(self, event_type: str, data: Optional[dict] = None, source: Optional[str] = "system") -> None:
+        """Helper method to construct and publish a CognitiveEvent."""
+        evt = CognitiveEvent(
+            event_type=event_type,
+            data=data or {},
+            source=source
+        )
+        self.publish(evt)
 
     def clear(self) -> None:
         with self._lock:
