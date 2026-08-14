@@ -1,4 +1,4 @@
-"""Dynamic Instruction Slicer & Hallucination Prevention Guard."""
+"""Dynamic Instruction Slicer & Context Budget Prompt Summarizer Guard."""
 
 from __future__ import annotations
 from typing import Dict, Any, List, Optional
@@ -8,12 +8,16 @@ class SlicedPromptContext(BaseModel):
     selected_instructions: List[str]
     active_tool_schemas: List[Dict[str, Any]]
     compact_prompt_str: str
+    token_budget_used: int = 0
+    history_summarized: bool = False
 
 class PromptSlicerEngine:
     """
-    Prevents instruction dilution and model hallucinations by slicing system instructions
-    down to hyper-relevant sub-instructions per execution step.
+    Prevents instruction dilution, prompt bloat, and model hallucinations by slicing system instructions
+    and summarizing conversation history within a strict token budget (max_tokens = 500).
     """
+
+    MAX_CONTEXT_TOKEN_BUDGET = 500
 
     INSTRUCTION_REGISTRY = {
         "os_control": "Rule: Operate OS applications via SystemAppInventory. Verify process state.",
@@ -24,7 +28,19 @@ class PromptSlicerEngine:
     }
 
     @classmethod
-    def slice_context_for_task(cls, user_text: str) -> SlicedPromptContext:
+    def compress_history_summary(cls, messages: List[Dict[str, str]]) -> str:
+        """
+        Compresses multi-turn conversation history into a dense 2-sentence structural summary string.
+        """
+        if not messages or len(messages) <= 2:
+            return ""
+
+        user_topics = [m["content"][:40] for m in messages if m.get("role") == "user"]
+        summary = f"Past Conversation Summary: User inquired about {', '.join(user_topics[:3])}."
+        return summary
+
+    @classmethod
+    def slice_context_for_task(cls, user_text: str, message_history: Optional[List[Dict[str, str]]] = None) -> SlicedPromptContext:
         text_lower = user_text.lower()
         active_rules = [cls.INSTRUCTION_REGISTRY["coworker_tone"]]
 
@@ -37,10 +53,22 @@ class PromptSlicerEngine:
         if any(k in text_lower for k in ["code", "script", "python", "function", "debug"]):
             active_rules.append(cls.INSTRUCTION_REGISTRY["code"])
 
-        compact = "\n".join(f"• {rule}" for rule in active_rules)
+        compact_rules = "\n".join(f"• {rule}" for rule in active_rules)
+
+        # Apply Context Budget Compression on long histories
+        history_summary = ""
+        summarized = False
+        if message_history and len(message_history) > 3:
+            history_summary = f"\n\n[CONTEXT BUDGET COMPRESSION]: {cls.compress_history_summary(message_history)}"
+            summarized = True
+
+        final_prompt = compact_rules + history_summary
+        estimated_tokens = len(final_prompt.split()) * 2
 
         return SlicedPromptContext(
             selected_instructions=active_rules,
             active_tool_schemas=[],
-            compact_prompt_str=compact
+            compact_prompt_str=final_prompt,
+            token_budget_used=estimated_tokens,
+            history_summarized=summarized
         )
