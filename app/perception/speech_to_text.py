@@ -1,4 +1,7 @@
 import os
+import wave
+import math
+import numpy as np
 from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings
@@ -16,7 +19,6 @@ class LocalSpeechToText:
             try:
                 from faster_whisper import WhisperModel
                 app_logger.info(f"Loading local Faster-Whisper model ('{model_size}')...")
-                # Use CPU/float32 or CUDA if available
                 cls._model = WhisperModel(model_size, device="cpu", compute_type="float32")
             except Exception as e:
                 app_logger.warning(f"Failed to load faster-whisper model: {e}")
@@ -24,41 +26,50 @@ class LocalSpeechToText:
         return cls._model
 
     @classmethod
-    def verify_speaker_voice(cls, audio_path_str: str) -> Dict[str, Any]:
+    def verify_speaker_voice(cls, audio_path_str: str, noise_gate_threshold: float = 0.05) -> Dict[str, Any]:
         """
-        Verifies if the recorded audio matches the user's registered custom voice profile
-        to filter out background noise/chatter in crowded environments.
+        Refined noise-resilient speaker verification.
+        Applies RMS energy noise-gating and Fast Fourier Transform (FFT) spectral distance matching
+        against the user's reference voice profile to filter out background chatter in crowded places.
         """
         ref_path = settings.DATA_DIR / "audio" / "custom_voice_reference.wav"
         if not ref_path.exists():
-            return {"verified": True, "confidence": 1.0, "note": "No voice reference profile set; accepting all spoken audio."}
+            return {"verified": True, "confidence": 1.0, "note": "No voice reference profile set; accepting all audio."}
 
         try:
-            import wave
-            import numpy as np
-
             with wave.open(str(ref_path), 'rb') as ref_wav, wave.open(audio_path_str, 'rb') as input_wav:
-                ref_frames = ref_wav.readframes(10000)
-                input_frames = input_wav.readframes(10000)
+                ref_frames = ref_wav.readframes(20000)
+                input_frames = input_wav.readframes(20000)
 
                 if ref_frames and input_frames:
-                    ref_data = np.frombuffer(ref_frames, dtype=np.int16)
-                    input_data = np.frombuffer(input_frames, dtype=np.int16)
+                    ref_data = np.frombuffer(ref_frames, dtype=np.int16).astype(np.float32)
+                    input_data = np.frombuffer(input_frames, dtype=np.int16).astype(np.float32)
 
-                    ref_freq = np.fft.rfft(ref_data)
-                    input_freq = np.fft.rfft(input_data[:len(ref_data)]) if len(input_data) >= len(ref_data) else np.fft.rfft(input_data)
+                    # 1. RMS Energy Noise Gate Check
+                    rms_input = np.sqrt(np.mean(input_data ** 2)) / 32768.0
+                    if rms_input < noise_gate_threshold:
+                        return {
+                            "verified": False,
+                            "confidence": 0.20,
+                            "note": f"Audio below noise-gate threshold ({rms_input:.3f} < {noise_gate_threshold}). Ambient noise detected."
+                        }
 
-                    ref_peak = np.argmax(np.abs(ref_freq))
-                    input_peak = np.argmax(np.abs(input_freq))
+                    # 2. Spectral Centroid / Pitch Alignment
+                    ref_fft = np.abs(np.fft.rfft(ref_data[:16000]))
+                    input_fft = np.abs(np.fft.rfft(input_data[:16000])) if len(input_data) >= 16000 else np.abs(np.fft.rfft(input_data))
 
-                    peak_diff = abs(ref_peak - input_peak)
-                    is_user = peak_diff < 1000
+                    ref_centroid = np.sum(ref_fft * np.arange(len(ref_fft))) / (np.sum(ref_fft) + 1e-6)
+                    input_centroid = np.sum(input_fft * np.arange(len(input_fft))) / (np.sum(input_fft) + 1e-6)
+
+                    centroid_diff = abs(ref_centroid - input_centroid)
+                    is_verified_speaker = centroid_diff < 1500.0
 
                     return {
-                        "verified": is_user,
-                        "confidence": 0.95 if is_user else 0.40,
-                        "peak_diff": int(peak_diff),
-                        "note": "Verified primary user speaker profile" if is_user else "Audio spectrum suggests background chatter or unverified speaker."
+                        "verified": is_verified_speaker,
+                        "confidence": 0.95 if is_verified_speaker else 0.45,
+                        "centroid_distance": round(float(centroid_diff), 2),
+                        "input_rms_energy": round(float(rms_input), 3),
+                        "note": "Verified primary user speaker profile in noisy environment" if is_verified_speaker else "Spectral mismatch: background chatter or unverified speaker."
                     }
         except Exception as e:
             app_logger.warning(f"Speaker voice verification notice: {e}")
@@ -84,7 +95,6 @@ class LocalSpeechToText:
 
         model = cls.get_model()
         if not model:
-            # Simulated fallback if Whisper dependencies or CTranslate2 are unavailable
             return {
                 "success": False,
                 "error": "Faster-Whisper model is not available in environment.",
