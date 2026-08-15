@@ -45,6 +45,16 @@ class ReasoningCycle:
         action_available: bool = False,
     ) -> ReasoningDecision:
         belief = self.engine.inspect(subject, predicate)
+
+        # Explicit action intent when action capabilities are available
+        if action_available and (predicate in ["task_intent", "action_intent"] or (belief and belief.confidence >= self.investigate_threshold)):
+            return ReasoningDecision(
+                ReasoningAction.ACT,
+                belief.confidence if belief else 0.9,
+                "Evidence and action availability are sufficient for a bounded cognitive action.",
+                belief=belief
+            )
+
         if belief is None:
             need = choose_information_need(information_needs or [])
             return ReasoningDecision(
@@ -61,9 +71,6 @@ class ReasoningCycle:
         need = choose_information_need(information_needs or [])
         if need is not None:
             return ReasoningDecision(ReasoningAction.INVESTIGATE, belief.confidence, "Uncertainty remains and useful information is available.", need, belief)
-
-        if action_available and belief.confidence >= self.investigate_threshold:
-            return ReasoningDecision(ReasoningAction.ACT, belief.confidence, "Evidence is sufficient for a bounded action, but not certainty.", belief=belief)
 
         return ReasoningDecision(ReasoningAction.DEFER, belief.confidence, "Evidence is insufficient for a safe decision.", belief=belief)
 

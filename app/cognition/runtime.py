@@ -81,30 +81,9 @@ class CognitiveRuntime:
 
     def classify_fine_grained_action_type(self, user_text: str) -> str:
         """
-        Extracts fine-grained action vocabulary rather than generic 'master_task' wrapper.
-        Vocabulary: open_application, web_search, search_files, screen_capture, opsec_audit,
-                    daily_briefing, phone_command, formulate_answer.
+        Delegates action selection directly to self.actions.select_action_for_query.
         """
-        text_lower = user_text.lower().strip()
-
-        if any(k in text_lower for k in ["phone", "mobile", "battery", "charged", "sms", "call ", "text "]):
-            return "phone_command"
-        elif any(k in text_lower for k in ["youtube", "google", "search web", "look up", "browser"]):
-            return "web_search"
-        elif any(k in text_lower for k in ["open ", "launch ", "start ", "run "]):
-            return "open_application"
-        elif any(k in text_lower for k in ["find file", "song", "ordinary", "search my pc", "document", "folder"]):
-            return "search_files"
-        elif any(k in text_lower for k in ["screenshot", "capture screen", "what is on my screen"]):
-            return "screen_capture"
-        elif any(k in text_lower for k in ["opsec", "footprint", "breach", "remove my data"]):
-            return "opsec_audit"
-        elif any(k in text_lower for k in ["daily briefing", "morning report"]):
-            return "daily_briefing"
-        elif any(k in text_lower for k in ["what is", "calculate", "tell me", "explain", "who is", "how do"]):
-            return "formulate_answer"
-        else:
-            return "user_task"
+        return self.actions.select_action_for_query(user_text)
 
     def process_cognitive_cycle(
         self,
@@ -118,7 +97,7 @@ class CognitiveRuntime:
         2. Set CognitiveState & Attention Focus Target
         3. Blackboard Ingestion & Context Budget Slicing (Retrieves Past Lessons)
         4. WorldModel Ingestion & CognitiveReasoningLoop Execution
-        5. Decision Router (ANSWER vs DEFER vs ACT/INVESTIGATE)
+        5. Decision Router (ANSWER vs DEFER vs INVESTIGATE vs ACT)
         6. Fine-Grained Action Proposal & Pre-Execution Outcome Prediction
         7. Multi-Gate Verification (Policy / Resource / Prediction)
         8. Capability Execution Layer (Tool Execution or Direct Answer)
@@ -222,7 +201,7 @@ class CognitiveRuntime:
                 "model_used": llm_res.get("model", "fast")
             }
 
-        # Branch B: INVESTIGATE / Information Gathering Loop
+        # Branch B: INVESTIGATE / Bounded Probe Evidence Gathering Loop
         elif reasoning_action == ReasoningAction.INVESTIGATE and loop_trace.results:
             investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s): " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
@@ -230,13 +209,25 @@ class CognitiveRuntime:
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
+            # Pass investigation results through Reflection & Memory Learning Loop (Fix #8)
+            try:
+                lesson_rec = self.learning.process_outcome_reflection(
+                    task_title=f"Investigation: {user_text[:30]}",
+                    goal=user_text,
+                    outcome_summary=investigation_summary,
+                    surprisal=0.1
+                )
+                trace.reflection_lesson = getattr(lesson_rec, "content", "Investigation completed.")
+            except Exception as e:
+                app_logger.warning(f"Investigation reflection notice: {e}")
+
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=assistant_reply,
                 actions=[investigation_summary],
                 latency=latency,
                 surprisal=0.1,
-                lesson="Investigation evidence retrieved.",
+                lesson=trace.reflection_lesson,
                 gate_decision="passed"
             )
             return {
@@ -249,6 +240,7 @@ class CognitiveRuntime:
                 "action_type": "investigate",
                 "reasoning_action": "investigate",
                 "prediction_surprisal": 0.1,
+                "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast")
             }
@@ -279,7 +271,7 @@ class CognitiveRuntime:
                 "model_used": "ReasoningCycle"
             }
 
-        # Branch C: ACT / INVESTIGATE ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
+        # Branch D: ACT / Cognitive Action Planning ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
         fine_action_type = self.classify_fine_grained_action_type(user_text)
         proposal = ActionProposal(
             action_type=fine_action_type,
@@ -289,7 +281,7 @@ class CognitiveRuntime:
         proposal.predicted_outcome = pred.expected_changes
         trace.predicted_outcome = pred.expected_changes
 
-        # 6. Multi-Gate Checks (Policy, Resource, Prediction)
+        # 6. Multi-Gate Checks (Policy, Resource, Prediction) - Reuses canonical prediction
         gate_res = ActionGate.evaluate_proposal(proposal)
         trace.gate_decision = gate_res.gate_name
 
