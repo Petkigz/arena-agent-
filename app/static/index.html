@@ -451,6 +451,137 @@
             color: var(--text-muted);
             margin-bottom: 0.5rem;
         }
+
+        /* Simple Mode vs Expert Mode Rules */
+        body.simple-mode .expert-only {
+            display: none !important;
+        }
+
+        /* Quick Action Chips Bar */
+        .quick-action-chips {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem 0.2rem 1rem;
+            background: var(--bg-secondary);
+            overflow-x: auto;
+            scrollbar-width: none;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .quick-action-chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chip {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.35rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .chip:hover {
+            border-color: var(--accent-cyan);
+            background: var(--bg-primary);
+            color: var(--accent-cyan);
+            transform: translateY(-1px);
+        }
+
+        .app-install-card {
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08));
+            border: 1px solid rgba(0, 242, 254, 0.25);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* Floating Siri-Style Assistant Orb Widget */
+        #floating-assistant-orb {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            width: 64px;
+            height: 64px;
+            z-index: 9999;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        #floating-assistant-orb:hover {
+            transform: scale(1.12);
+        }
+
+        .orb-core {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, var(--accent-cyan), var(--accent-blue), var(--accent-purple));
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.6), 0 0 35px rgba(139, 92, 246, 0.4);
+            animation: orbGlow 3s infinite ease-in-out;
+        }
+
+        .orb-ring {
+            position: absolute;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-cyan);
+            opacity: 0.5;
+            animation: orbPulse 2.5s infinite ease-in-out;
+        }
+
+        .orb-status {
+            position: absolute;
+            bottom: -22px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+            white-space: nowrap;
+            background: rgba(11, 15, 25, 0.85);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        #floating-assistant-orb.listening .orb-core {
+            background: radial-gradient(circle at 30% 30%, #10b981, var(--accent-cyan));
+            box-shadow: 0 0 30px #10b981, 0 0 50px rgba(16, 185, 129, 0.6);
+            animation: orbActive 0.8s infinite alternate;
+        }
+
+        #floating-assistant-orb.speaking .orb-core {
+            background: radial-gradient(circle at 30% 30%, #f59e0b, var(--accent-purple));
+            box-shadow: 0 0 30px #f59e0b;
+        }
+
+        @keyframes orbGlow {
+            0%, 100% { transform: scale(1.0); opacity: 0.9; }
+            50% { transform: scale(1.06); opacity: 1.0; }
+        }
+
+        @keyframes orbPulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 0.2; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        @keyframes orbActive {
+            from { transform: scale(1.0); }
+            to { transform: scale(1.18); }
+        }
     </style>
 </head>
 <body>
@@ -465,17 +596,22 @@
             </div>
         </div>
         <div class="status-bar">
-            <!-- Live Hardware Monitor Badges -->
-            <div class="status-badge" id="hw-badge" style="color: var(--accent-cyan);">
-                💻 CPU: <span id="hw-cpu">--%</span> | RAM: <span id="hw-ram">-- GB</span>
-            </div>
+            <!-- Mode Switcher Toggle Button -->
+            <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="toggleUIMode()" id="ui-mode-btn">
+                📱 <span id="ui-mode-text">Simple Mode</span>
+            </button>
 
             <!-- System Mode Badge -->
             <div class="status-badge" id="sys-mode-badge" style="cursor: pointer;" onclick="toggleSleepMode()">
                 <div class="dot online" id="sys-mode-dot"></div> <span id="sys-mode-text">System: Active</span>
             </div>
 
-            <div class="status-badge" id="lm-studio-badge">
+            <!-- Live Hardware Monitor Badges (Expert Mode) -->
+            <div class="status-badge expert-only" id="hw-badge" style="color: var(--accent-cyan);">
+                💻 CPU: <span id="hw-cpu">--%</span> | RAM: <span id="hw-ram">-- GB</span>
+            </div>
+
+            <div class="status-badge expert-only" id="lm-studio-badge">
                 <div class="dot offline" id="lm-studio-dot"></div> LLM: Checking...
             </div>
 
@@ -486,15 +622,23 @@
         </div>
     </header>
 
+    <!-- Floating Siri-Style Desktop/Mobile Assistant Orb -->
+    <div id="floating-assistant-orb" onclick="toggleOrbListening()" title="Click or say 'Hey Ben' / 'Hey Agent' to speak">
+        <div class="orb-core"></div>
+        <div class="orb-ring"></div>
+        <div class="orb-status" id="orb-status-text">Hey Ben</div>
+    </div>
+
     <!-- Navigation -->
     <nav>
-        <button class="nav-btn active" onclick="switchTab('chat')">💬 Chat & Master Agent</button>
-        <button class="nav-btn" onclick="switchTab('workspace')">📁 Workspace & Files</button>
-        <button class="nav-btn" onclick="switchTab('tasks')">📋 Persistent Tasks</button>
-        <button class="nav-btn" onclick="switchTab('memory')">🧠 Memory Vault</button>
-        <button class="nav-btn" onclick="switchTab('models')">⚙️ Models & Custom Voices</button>
-        <button class="nav-btn" onclick="switchTab('security')">🛡️ Security & Audit Log</button>
-        <button class="nav-btn" onclick="switchTab('manual')">📖 Manual & Rules</button>
+        <button class="nav-btn active" onclick="switchTab('chat')">💬 Assistant</button>
+        <button class="nav-btn" onclick="switchTab('tasks')">📋 Tasks</button>
+        <button class="nav-btn" onclick="switchTab('workspace')">📁 Workspace</button>
+        <button class="nav-btn" onclick="switchTab('mobile-app')">📱 Mobile & Desktop App</button>
+        <button class="nav-btn expert-only" onclick="switchTab('memory')">🧠 Memory Vault</button>
+        <button class="nav-btn expert-only" onclick="switchTab('models')">⚙️ Models & Voices</button>
+        <button class="nav-btn expert-only" onclick="switchTab('security')">🛡️ Security & Logs</button>
+        <button class="nav-btn expert-only" onclick="switchTab('manual')">📖 Manual & Rules</button>
     </nav>
 
     <!-- Main Content -->
@@ -1068,17 +1212,238 @@
         let isRecordingProfile = false;
 
         let currentSystemMode = "active";
+        let currentUIMode = localStorage.getItem('ui_mode') || 'simple';
+        let activeAssistantName = localStorage.getItem('assistant_name') || 'Ben';
+        let wakeWordRecognizer = null;
+        let isWakeWordListening = false;
+        let activeListeningTimeout = null;
+
+        function setUIMode(mode) {
+            currentUIMode = mode;
+            localStorage.setItem('ui_mode', mode);
+            const btnText = document.getElementById('ui-mode-text');
+            if (mode === 'simple') {
+                document.body.classList.add('simple-mode');
+                document.body.classList.remove('expert-mode');
+                if (btnText) btnText.innerText = 'Simple Mode';
+            } else {
+                document.body.classList.add('expert-mode');
+                document.body.classList.remove('simple-mode');
+                if (btnText) btnText.innerText = 'Expert Mode';
+            }
+        }
+
+        function toggleUIMode() {
+            setUIMode(currentUIMode === 'simple' ? 'expert' : 'simple');
+        }
+
+        function sendQuickAction(text) {
+            const inputElem = document.getElementById('chat-input');
+            if (inputElem) {
+                inputElem.value = text;
+                sendMessage();
+            }
+        }
+
+        // Floating Orb & Ambient Hands-Free Wake Word ("Hey Ben") Controller
+        function initAmbientWakeWordListener() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return;
+
+            try {
+                wakeWordRecognizer = new SpeechRecognition();
+                wakeWordRecognizer.continuous = true;
+                wakeWordRecognizer.interimResults = true;
+                wakeWordRecognizer.lang = 'en-US';
+
+                wakeWordRecognizer.onresult = (event) => {
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        const transcript = event.results[i][0].transcript.toLowerCase();
+                        const nameTrigger = activeAssistantName.toLowerCase();
+                        
+                        if (transcript.includes(`hey ${nameTrigger}`) || transcript.includes('hey agent') || transcript.includes('hey bot') || (transcript.includes(nameTrigger) && transcript.length < 15)) {
+                            console.log("Wake-word triggered:", transcript);
+                            triggerWakeWordActivation(transcript);
+                            break;
+                        }
+                    }
+                };
+
+                wakeWordRecognizer.onend = () => {
+                    if (isWakeWordListening) {
+                        try { wakeWordRecognizer.start(); } catch(e) {}
+                    }
+                };
+
+                wakeWordRecognizer.start();
+                isWakeWordListening = true;
+                const statusText = document.getElementById('orb-status-text');
+                if (statusText) statusText.innerText = `Hey ${activeAssistantName}`;
+            } catch (e) {
+                console.warn("SpeechRecognition wake-word notice:", e);
+            }
+        }
+
+        function triggerWakeWordActivation(fullTranscript) {
+            const orb = document.getElementById('floating-assistant-orb');
+            const statusText = document.getElementById('orb-status-text');
+            if (orb) orb.className = 'listening';
+            if (statusText) statusText.innerText = 'Listening...';
+
+            playActivationChime();
+
+            const nameTrigger = activeAssistantName.toLowerCase();
+            let taskText = fullTranscript.replace(`hey ${nameTrigger}`, '').replace('hey agent', '').replace('hey bot', '').replace(nameTrigger, '').trim();
+
+            if (taskText.length > 2) {
+                sendQuickAction(taskText);
+            } else if (!isRecording) {
+                toggleVoiceRecording();
+                setTimeout(() => {
+                    if (isRecording) toggleVoiceRecording();
+                }, 6000);
+            }
+
+            clearTimeout(activeListeningTimeout);
+            activeListeningTimeout = setTimeout(() => {
+                if (orb) orb.className = '';
+                if (statusText) statusText.innerText = `Hey ${activeAssistantName}`;
+            }, 8000);
+        }
+
+        function toggleOrbListening() {
+            const orb = document.getElementById('floating-assistant-orb');
+            const statusText = document.getElementById('orb-status-text');
+
+            if (orb && orb.classList.contains('listening')) {
+                if (isRecording) toggleVoiceRecording();
+                orb.className = '';
+                if (statusText) statusText.innerText = `Hey ${activeAssistantName}`;
+            } else {
+                triggerWakeWordActivation('');
+            }
+        }
+
+        function playActivationChime() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.25);
+            } catch (e) {}
+        }
+
+        function speakNaturalVoiceResponse(text) {
+            if (!('speechSynthesis' in window)) return;
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+
+            const voices = window.speechSynthesis.getVoices();
+            const naturalVoice = voices.find(v => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Jenny') || v.name.includes('Guy') || v.name.includes('Online')) && v.lang.startsWith('en'));
+            if (naturalVoice) utterance.voice = naturalVoice;
+
+            const orb = document.getElementById('floating-assistant-orb');
+            utterance.onstart = () => { if (orb) orb.className = 'speaking'; };
+            utterance.onend = () => { if (orb) orb.className = ''; };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            if (currentSystemMode === 'sleeping') {
+                alert("System is currently in SLEEP MODE. Click 'System: Sleeping' at top-right to wake up!");
+                return;
+            }
+
+            const inputElem = document.getElementById('chat-input');
+            const userText = inputElem.value.trim();
+            if (!userText) return;
+
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio = null;
+            }
+
+            const brainSelect = document.getElementById('brain-model');
+            const brain = brainSelect ? brainSelect.value : 'fast';
+            const messagesContainer = document.getElementById('chat-messages');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'message user';
+            userDiv.innerHTML = `<div class="meta">YOU</div>${escapeHtml(userText)}`;
+            messagesContainer.appendChild(userDiv);
+
+            const assistDiv = document.createElement('div');
+            assistDiv.className = 'message assistant';
+            assistDiv.innerHTML = `<div class="meta">MASTER AGENT :: PROCESSING...</div>Thinking & executing task on PC...`;
+            messagesContainer.appendChild(assistDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            inputElem.value = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: userText }],
+                        complexity: brain
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.choices && data.choices.length > 0) {
+                    const choice = data.choices[0];
+                    const replyContent = choice.message ? choice.message.content : "Task executed.";
+                    const modelUsed = data.model || "CognitivePipeline";
+                    const traceId = data.trace_id ? ` [Trace: ${data.trace_id.slice(0, 8)}]` : '';
+
+                    assistDiv.innerHTML = `<div class="meta">ASSISTANT (${escapeHtml(modelUsed)}${traceId})</div>${escapeHtml(replyContent)}`;
+
+                    const voiceToggle = document.getElementById('voice-output-toggle');
+                    if (!voiceToggle || voiceToggle.checked) {
+                        speakNaturalVoiceResponse(replyContent);
+                    }
+                } else {
+                    const errMsg = data.detail || data.error || 'Failed to process chat request.';
+                    assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>${escapeHtml(errMsg)}`;
+                }
+            } catch (err) {
+                assistDiv.innerHTML = `<div class="meta" style="color: var(--danger);">ERROR</div>Failed to connect to server: ${err}`;
+            }
+
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
 
         // Tab Switching
         function switchTab(tabId) {
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             
-            event.target.classList.add('active');
-            document.getElementById(`tab-${tabId}`).classList.add('active');
+            if (event && event.target) event.target.classList.add('active');
+            const targetTab = document.getElementById(`tab-${tabId}`);
+            if (targetTab) targetTab.classList.add('active');
 
             if (tabId === 'workspace') loadWorkspaceFiles();
             if (tabId === 'tasks') loadTasks();
+            if (tabId === 'mobile-app') loadNetworkInfo();
             if (tabId === 'memory') loadMemories();
             if (tabId === 'models') loadModelsTab();
             if (tabId === 'security') loadAuditLogs();
