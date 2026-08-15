@@ -1,12 +1,15 @@
 """Unit P1-A: Canonical CognitiveRuntime Composition Root Integration."""
 
 from __future__ import annotations
+import re
 import uuid
 import time
 from typing import Dict, Any, List, Optional
 
 from app.config import settings
 from app.database import db
+from app.llm import llm_client
+from app.memory.coworker_brain import CoworkerBrain
 from app.utils.logger import app_logger, audit_logger
 from app.utils.hardware_monitor import HardwareMonitor
 from app.utils.hardware_governor import HardwareGovernor
@@ -27,14 +30,15 @@ from app.cognition.prediction_engine import PredictionEngine
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.action_proposal import ActionProposal, ActionGate
 from app.cognition.tool_registry import ToolRegistry
+from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction
 from app.cognition.reasoning_loop import CognitiveReasoningLoop
 from app.cognition.prompt_slicer import PromptSlicerEngine
 from app.cognition.trace import CognitiveTrace
 
 class CognitiveRuntime:
     """
-    P1-A: Single Authoritative Composition Root for Arena's Cognitive Architecture.
-    Wires Perception ➔ WorldModel ➔ Blackboard ➔ Beliefs ➔ Attention ➔ Reasoning ➔ Prediction ➔ ActionGates ➔ MasterAgent ➔ Reflection ➔ Learning.
+    P1-A: Authoritative Single Composition Root for Arena's Cognitive Architecture.
+    Wires Perception ➔ WorldModel ➔ Blackboard ➔ Beliefs ➔ Attention ➔ CognitiveReasoningLoop ➔ DecisionRouter ➔ Prediction ➔ ActionGates ➔ Capability Execution ➔ Reflection ➔ MemoryLearner.
     """
 
     _instance: Optional[CognitiveRuntime] = None
@@ -62,6 +66,7 @@ class CognitiveRuntime:
         self.prediction = PredictionEngine()
         self.counterfactual = CounterfactualSimulator()
         self.registry = ToolRegistry(event_bus=self.events)
+        self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
         # Wire complete reasoning loop with memory, world ingestor, and event bus
         self.loop = CognitiveReasoningLoop(
@@ -74,6 +79,33 @@ class CognitiveRuntime:
             max_steps=max_steps,
         )
 
+    def classify_fine_grained_action_type(self, user_text: str) -> str:
+        """
+        Extracts fine-grained action vocabulary rather than generic 'master_task' wrapper.
+        Vocabulary: open_application, web_search, search_files, screen_capture, opsec_audit,
+                    daily_briefing, phone_command, formulate_answer.
+        """
+        text_lower = user_text.lower().strip()
+
+        if any(k in text_lower for k in ["phone", "mobile", "battery", "charged", "sms", "call ", "text "]):
+            return "phone_command"
+        elif any(k in text_lower for k in ["youtube", "google", "search web", "look up", "browser"]):
+            return "web_search"
+        elif any(k in text_lower for k in ["open ", "launch ", "start ", "run "]):
+            return "open_application"
+        elif any(k in text_lower for k in ["find file", "song", "ordinary", "search my pc", "document", "folder"]):
+            return "search_files"
+        elif any(k in text_lower for k in ["screenshot", "capture screen", "what is on my screen"]):
+            return "screen_capture"
+        elif any(k in text_lower for k in ["opsec", "footprint", "breach", "remove my data"]):
+            return "opsec_audit"
+        elif any(k in text_lower for k in ["daily briefing", "morning report"]):
+            return "daily_briefing"
+        elif any(k in text_lower for k in ["what is", "calculate", "tell me", "explain", "who is", "how do"]):
+            return "formulate_answer"
+        else:
+            return "user_task"
+
     def process_cognitive_cycle(
         self,
         user_text: str,
@@ -84,14 +116,14 @@ class CognitiveRuntime:
         Authoritative Closed-Loop Predictive Cognitive Cycle:
         1. Initialize Trace & Hardware Snapshot
         2. Set CognitiveState & Attention Focus Target
-        3. Blackboard Ingestion & Prompt Context Slicing
-        4. WorldModel Ingestion & Belief / Hypothesis Selection
-        5. Action Proposal & Pre-Execution Prediction
-        6. Multi-Gate Checks (Policy / Resource / Prediction)
-        7. MasterAgent Capability Execution
-        8. Observe Reality & Calculate Prediction Error (Surprisal)
-        9. Reflection & Memory Learning (ReflectionEngine ➔ MemoryLearner ➔ MemoryStore)
-        10. Event Bus Sync & Finalize Trace
+        3. Blackboard Ingestion & Context Budget Slicing (Retrieves Past Lessons)
+        4. WorldModel Ingestion & CognitiveReasoningLoop Execution
+        5. Decision Router (ANSWER vs DEFER vs ACT/INVESTIGATE)
+        6. Fine-Grained Action Proposal & Pre-Execution Outcome Prediction
+        7. Multi-Gate Verification (Policy / Resource / Prediction)
+        8. Capability Execution Layer (Tool Execution or Direct Answer)
+        9. Observe Reality & Calculate Prediction Error (Surprisal)
+        10. Reflection & Memory Learning (ReflectionEngine ➔ MemoryLearner ➔ MemoryStore)
         """
         start_time = time.time()
         session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
@@ -118,7 +150,7 @@ class CognitiveRuntime:
         self.state.task.current_step = "cognitive_cycle"
         self.state.touch()
 
-        # 3. Blackboard Ingestion & Context Slicing
+        # 3. Blackboard Ingestion & Context Slicing (Retrieves Past Learned Lessons)
         self.blackboard.set("current_user_query", user_text, source="user_input", confidence=1.0)
         try:
             sliced_ctx = PromptSlicerEngine.slice_context_for_task(user_text)
@@ -126,7 +158,7 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"PromptSlicer error: {e}")
 
-        # 4. WorldModel Ingestion & Belief / Hypothesis Selection
+        # 4. WorldModel Ingestion & CognitiveReasoningLoop Execution
         try:
             self.world_ingest.ingest(
                 subject="user",
@@ -146,10 +178,80 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # 5. Action Proposal & Pre-Execution Prediction
+        # Run Authoritative Cognitive Reasoning Loop
+        loop_trace = self.loop.run(
+            subject=user_text[:30].strip() or "user_query",
+            predicate="task_intent",
+            value=user_text[:200],
+            source="user_input",
+            task_id=session_id
+        )
+
+        last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
+        reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
+
+        # 5. DECISION ROUTER:
+        # Branch A: ANSWER / Direct Conversational Q&A
+        if reasoning_action == ReasoningAction.ANSWER and not any(k in user_text.lower() for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing"]):
+            system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
+            messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
+            llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
+            assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
+
+            latency = (time.time() - start_time) * 1000
+            trace.finalize(
+                reply=assistant_reply,
+                actions=[],
+                latency=latency,
+                surprisal=0.0,
+                lesson="",
+                gate_decision="passed"
+            )
+            return {
+                "success": True,
+                "session_id": session_id,
+                "trace_id": trace.trace_id,
+                "user_text": user_text,
+                "assistant_reply": assistant_reply,
+                "executed_actions": [],
+                "action_type": "formulate_answer",
+                "reasoning_action": "answer",
+                "prediction_surprisal": 0.0,
+                "latency_ms": round(latency, 2),
+                "model_used": llm_res.get("model", "fast")
+            }
+
+        # Branch B: DEFER / SAFELY ASK USER
+        elif reasoning_action == ReasoningAction.DEFER:
+            defer_msg = f"Deferred task: {last_decision.reason if last_decision else 'Evidence is insufficient for a safe decision.'}"
+            latency = (time.time() - start_time) * 1000
+            trace.finalize(
+                reply=defer_msg,
+                actions=[],
+                latency=latency,
+                surprisal=0.0,
+                lesson="",
+                gate_decision="deferred"
+            )
+            return {
+                "success": True,
+                "session_id": session_id,
+                "trace_id": trace.trace_id,
+                "user_text": user_text,
+                "assistant_reply": defer_msg,
+                "executed_actions": [],
+                "action_type": "defer",
+                "reasoning_action": "defer",
+                "prediction_surprisal": 0.0,
+                "latency_ms": round(latency, 2),
+                "model_used": "ReasoningCycle"
+            }
+
+        # Branch C: ACT / INVESTIGATE ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
+        fine_action_type = self.classify_fine_grained_action_type(user_text)
         proposal = ActionProposal(
-            action_type="master_task",
-            payload={"query": user_text, "complexity": complexity}
+            action_type=fine_action_type,
+            payload={"query": user_text, "complexity": complexity, "action_type": fine_action_type}
         )
         pred = self.prediction.predict_action(proposal.action_type, proposal.payload)
         proposal.predicted_outcome = pred.expected_changes
@@ -184,7 +286,7 @@ class CognitiveRuntime:
                 "model_used": "ActionGate"
             }
 
-        # 7. MasterAgent Capability Execution
+        # 7. Capability Execution Layer (MasterAgent Capability Delegate)
         from app.agents.master_agent import MasterAgentOrchestrator
         agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
         executed_actions = agent_res.get("executed_actions", [])
@@ -217,7 +319,7 @@ class CognitiveRuntime:
             lesson_rec = self.learning.process_outcome_reflection(
                 task_title=user_text[:50],
                 goal=user_text,
-                outcome_summary=f"Executed actions: {executed_actions} | Reply: {assistant_reply[:100]}",
+                outcome_summary=f"Action: {fine_action_type} | Executed: {executed_actions} | Reply: {assistant_reply[:100]}",
                 surprisal=surprisal
             )
             lesson_text = getattr(lesson_rec, "content", "")
@@ -232,13 +334,14 @@ class CognitiveRuntime:
                 data={
                     "session_id": session_id,
                     "user_text": user_text,
+                    "action_type": fine_action_type,
                     "actions": executed_actions,
                     "surprisal": surprisal,
                     "lesson": lesson_text
                 },
                 source="cognitive_runtime"
             ))
-            self.state.execution.last_action = "master_task"
+            self.state.execution.last_action = fine_action_type
             self.state.execution.last_result = assistant_reply[:200]
             self.state.touch()
         except Exception as e:
@@ -257,7 +360,7 @@ class CognitiveRuntime:
 
         app_logger.info(
             f"COGNITIVE RUNTIME TRACE [{trace.trace_id[:8]}] | Session: {session_id} | "
-            f"Latency: {latency:.0f}ms | Surprisal: {surprisal} | Actions: {len(executed_actions)}"
+            f"Action: {fine_action_type} | Latency: {latency:.0f}ms | Surprisal: {surprisal} | Actions: {len(executed_actions)}"
         )
 
         return {
@@ -267,6 +370,8 @@ class CognitiveRuntime:
             "user_text": user_text,
             "assistant_reply": assistant_reply,
             "executed_actions": executed_actions,
+            "action_type": fine_action_type,
+            "reasoning_action": reasoning_action.value if hasattr(reasoning_action, "value") else str(reasoning_action),
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
             "latency_ms": round(latency, 2),
