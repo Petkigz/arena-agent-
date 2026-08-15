@@ -299,14 +299,12 @@ class CognitiveRuntime:
             }
 
         # Branch D: ACT / Cognitive Action Planning ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
-        fine_action_type = self.classify_fine_grained_action_type(user_text)
-        proposal = ActionProposal(
-            action_type=fine_action_type,
-            payload={"query": user_text, "complexity": complexity, "action_type": fine_action_type}
-        )
-        pred = self.prediction.predict_action(proposal.action_type, proposal.payload)
-        proposal.predicted_outcome = pred.expected_changes
-        trace.predicted_outcome = pred.expected_changes
+        # Directly consumes proposal carried by ReasoningDecision / candidate_proposal without re-creating or overwriting
+        fine_action_type = proposal.action_type
+        if not proposal.predicted_outcome:
+            pred = self.prediction.predict_action(proposal.action_type, proposal.payload)
+            proposal.predicted_outcome = pred.expected_changes
+        trace.predicted_outcome = proposal.predicted_outcome
 
         # 6. Multi-Gate Checks (Policy, Resource, Prediction) - Reuses canonical prediction
         gate_res = ActionGate.evaluate_proposal(proposal)
