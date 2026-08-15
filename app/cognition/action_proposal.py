@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from app.policy import PolicyEvaluator
 from app.utils.hardware_governor import HardwareGovernor
+from app.utils.hardware_monitor import HardwareMonitor
 from app.cognition.prediction_engine import PredictionEngine
 from app.utils.logger import app_logger, audit_logger
 
@@ -43,33 +44,49 @@ class ActionGate:
         "search_files": "read_file",
         "screen_capture": "capture_screen",
         "web_search": "web_search",
-        "run_command": "execute_command"
+        "run_command": "execute_command",
+        "master_task": "user_task",
+        "user_task": "user_task"
     }
 
     @classmethod
     def evaluate_proposal(cls, proposal: ActionProposal) -> GateResult:
-        # 1. Policy Gate
-        action_name = cls.POLICY_ACTION_MAP.get(proposal.action_type.lower(), proposal.action_type)
-        allowed, reason, level = PolicyEvaluator.evaluate_action(action_name, proposal.payload)
-        proposal.safety_level = level
+        # 1. Policy Gate (Evaluates underlying action list if present)
+        actions_to_check = [proposal.action_type]
+        if isinstance(proposal.payload.get("actions"), list):
+            actions_to_check.extend(proposal.payload.get("actions"))
+        if proposal.payload.get("underlying_action"):
+            actions_to_check.append(proposal.payload.get("underlying_action"))
 
-        if not allowed:
-            audit_logger.warning(f"ActionGate BLOCKED proposal '{proposal.action_type}' at Policy Gate: {reason}")
-            return GateResult(
-                allowed=False,
-                gate_name="policy_gate",
-                reason=reason,
-                requires_approval=(level == 3)
-            )
+        for act in actions_to_check:
+            action_name = cls.POLICY_ACTION_MAP.get(str(act).lower(), str(act))
+            allowed, reason, level = PolicyEvaluator.evaluate_action(action_name, proposal.payload)
+            proposal.safety_level = max(proposal.safety_level, level)
 
-        # 2. Resource Gate
-        ram_stats = HardwareGovernor.purge_vram_and_system_memory()
-        if ram_stats.get("ram_usage_percent", 0) > 98.0:
-            audit_logger.warning(f"ActionGate BLOCKED proposal '{proposal.action_type}' at Resource Gate: High RAM pressure")
+            if not allowed:
+                audit_logger.warning(f"ActionGate BLOCKED proposal '{act}' at Policy Gate: {reason}")
+                return GateResult(
+                    allowed=False,
+                    gate_name="policy_gate",
+                    reason=f"Action '{act}' blocked: {reason}",
+                    requires_approval=(level == 3)
+                )
+
+        # 2. Resource Gate (Non-destructive check)
+        hw_stats = HardwareMonitor.get_hardware_stats()
+        ram_percent = float(hw_stats.get("ram_used_percent", 0.0))
+
+        # Only purge VRAM/system memory if RAM usage crosses critical 95% pressure
+        if ram_percent > 95.0:
+            ram_stats = HardwareGovernor.purge_vram_and_system_memory()
+            ram_percent = float(ram_stats.get("ram_usage_percent", ram_percent))
+
+        if ram_percent > 98.0:
+            audit_logger.warning(f"ActionGate BLOCKED proposal '{proposal.action_type}' at Resource Gate: High RAM pressure ({ram_percent}%)")
             return GateResult(
                 allowed=False,
                 gate_name="resource_gate",
-                reason="System RAM pressure above critical threshold (98%). Task paused."
+                reason=f"System RAM pressure above critical threshold ({ram_percent}%). Task paused."
             )
 
         # 3. Prediction Gate
@@ -77,10 +94,10 @@ class ActionGate:
         pred = pe.predict_action(proposal.action_type, proposal.payload)
         proposal.predicted_outcome = pred.expected_changes
 
-        audit_logger.info(f"ActionGate PASSED proposal '{proposal.action_type}' (Safety Level {level})")
+        audit_logger.info(f"ActionGate PASSED proposal '{proposal.action_type}' (Safety Level {proposal.safety_level})")
 
         return GateResult(
             allowed=True,
             gate_name="passed_all_gates",
-            reason=f"Action proposal passed Policy (Level {level}), Resource, and Prediction gates."
+            reason=f"Action proposal passed Policy (Level {proposal.safety_level}), Resource, and Prediction gates."
         )
