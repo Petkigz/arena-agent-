@@ -187,7 +187,8 @@ class CognitiveRuntime:
             value=user_text[:200],
             source="user_input",
             task_id=session_id,
-            action_available=True
+            action_available=True,
+            proposed_action=candidate_proposal
         )
 
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
