@@ -79,6 +79,21 @@ class CognitiveRuntime:
             max_steps=max_steps,
         )
 
+    def classify_query_predicate(self, user_text: str) -> str:
+        """
+        Classifies semantic query predicate for ReasoningCycle.decide():
+        - action_intent: User wants an OS action, app launch, search, file action, phone command, or vision capture.
+        - information_need: Diagnostic or missing evidence query requiring research/investigation.
+        - knowledge_query: Conversational or factual Q&A request.
+        """
+        text_lower = user_text.lower().strip()
+        if any(k in text_lower for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
+            return "action_intent"
+        elif any(k in text_lower for k in ["why", "find out", "check if", "investigate", "where is", "does file"]):
+            return "information_need"
+        else:
+            return "knowledge_query"
+
     def classify_fine_grained_action_type(self, user_text: str) -> str:
         """
         Delegates action selection directly to self.actions.select_action_for_query.
@@ -97,7 +112,7 @@ class CognitiveRuntime:
         2. Set CognitiveState & Attention Focus Target
         3. Blackboard Ingestion & Context Budget Slicing (Retrieves Past Lessons)
         4. WorldModel Ingestion & CognitiveReasoningLoop Execution
-        5. Decision Router (ANSWER vs DEFER vs INVESTIGATE vs ACT)
+        5. Authoritative Decision Router (ANSWER vs INVESTIGATE vs DEFER vs ACT)
         6. Fine-Grained Action Proposal & Pre-Execution Outcome Prediction
         7. Multi-Gate Verification (Policy / Resource / Prediction)
         8. Capability Execution Layer (Tool Execution or Direct Answer)
@@ -137,18 +152,19 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"PromptSlicer error: {e}")
 
-        # 4. WorldModel Ingestion & CognitiveReasoningLoop Execution
+        # 4. Semantic Predicate Classification & WorldModel / Belief Ingestion
+        query_pred = self.classify_query_predicate(user_text)
         try:
             self.world_ingest.ingest(
                 subject="user",
-                predicate="query",
+                predicate=query_pred,
                 value=user_text[:200],
                 source="user_input",
                 task_id=session_id
             )
             belief_res = self.beliefs.ingest(
                 subject="user",
-                predicate="intent",
+                predicate=query_pred,
                 value=user_text[:200],
                 source="user_input",
                 task_id=session_id
@@ -157,10 +173,10 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Run Authoritative Cognitive Reasoning Loop (with action_available=True)
+        # Run Authoritative Cognitive Reasoning Loop with semantic query_pred
         loop_trace = self.loop.run(
             subject=user_text[:30].strip() or "user_query",
-            predicate="task_intent",
+            predicate=query_pred,
             value=user_text[:200],
             source="user_input",
             task_id=session_id,
@@ -170,9 +186,9 @@ class CognitiveRuntime:
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
 
-        # 5. DECISION ROUTER:
+        # 5. DECISION ROUTER (100% Authoritative Reasoning Decision, No Keyword Overrides):
         # Branch A: ANSWER / Direct Conversational Q&A
-        if reasoning_action == ReasoningAction.ANSWER and not any(k in user_text.lower() for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play"]):
+        if reasoning_action == ReasoningAction.ANSWER:
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
@@ -202,14 +218,17 @@ class CognitiveRuntime:
             }
 
         # Branch B: INVESTIGATE / Bounded Probe Evidence Gathering Loop
-        elif reasoning_action == ReasoningAction.INVESTIGATE and loop_trace.results:
-            investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s): " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
+        elif reasoning_action == ReasoningAction.INVESTIGATE:
+            investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s)" if loop_trace.results else "Diagnostic investigation completed."
+            if loop_trace.results:
+                investigation_summary += ": " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
+
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
-            # Pass investigation results through Reflection & Memory Learning Loop (Fix #8)
+            # Pass investigation results through Reflection & Memory Learning Loop
             try:
                 lesson_rec = self.learning.process_outcome_reflection(
                     task_title=f"Investigation: {user_text[:30]}",

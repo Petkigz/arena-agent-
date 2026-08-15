@@ -46,33 +46,42 @@ class ReasoningCycle:
     ) -> ReasoningDecision:
         belief = self.engine.inspect(subject, predicate)
 
-        # Explicit action intent when action capabilities are available
-        if action_available and (predicate in ["task_intent", "action_intent"] or (belief and belief.confidence >= self.investigate_threshold)):
+        # 1. Action Intent: Direct system modification or tool execution requested
+        if action_available and predicate == "action_intent":
             return ReasoningDecision(
                 ReasoningAction.ACT,
                 belief.confidence if belief else 0.9,
-                "Evidence and action availability are sufficient for a bounded cognitive action.",
+                "Explicit action intent provided with available execution capabilities.",
                 belief=belief
             )
 
-        if belief is None:
+        # 2. Information Need: Diagnostic or missing evidence query
+        if predicate == "information_need" or belief is None:
             need = choose_information_need(information_needs or [])
-            return ReasoningDecision(
-                ReasoningAction.INVESTIGATE if need else ReasoningAction.DEFER,
-                0.0,
-                "No supported belief exists yet.",
-                need,
-                None,
-            )
+            if need or predicate == "information_need":
+                return ReasoningDecision(
+                    ReasoningAction.INVESTIGATE,
+                    belief.confidence if belief else 0.3,
+                    "Information need or diagnostic query detected; running investigation probes.",
+                    information_need=need,
+                    belief=belief
+                )
 
-        if belief.confidence >= self.answer_threshold:
+        # 3. Knowledge Query: Direct answer or high confidence belief
+        if belief and belief.confidence >= self.answer_threshold:
             return ReasoningDecision(ReasoningAction.ANSWER, belief.confidence, "Best hypothesis exceeds answer threshold.", belief=belief)
+
+        if predicate == "knowledge_query":
+            return ReasoningDecision(ReasoningAction.ANSWER, 0.9, "Knowledge query provided; formulating direct conversational answer.", belief=belief)
 
         need = choose_information_need(information_needs or [])
         if need is not None:
-            return ReasoningDecision(ReasoningAction.INVESTIGATE, belief.confidence, "Uncertainty remains and useful information is available.", need, belief)
+            return ReasoningDecision(ReasoningAction.INVESTIGATE, belief.confidence if belief else 0.4, "Uncertainty remains and useful information is available.", information_need=need, belief=belief)
 
-        return ReasoningDecision(ReasoningAction.DEFER, belief.confidence, "Evidence is insufficient for a safe decision.", belief=belief)
+        if action_available and belief and belief.confidence >= self.investigate_threshold:
+            return ReasoningDecision(ReasoningAction.ACT, belief.confidence, "Evidence is sufficient for a bounded action.", belief=belief)
+
+        return ReasoningDecision(ReasoningAction.DEFER, belief.confidence if belief else 0.0, "Evidence is insufficient for a safe decision.", belief=belief)
 
     def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False) -> ReasoningDecision:
         self.engine.ingest(subject, predicate, value, source=source, confidence=confidence, rationale=rationale)
