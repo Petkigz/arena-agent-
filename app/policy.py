@@ -21,7 +21,7 @@ class PolicyEvaluator:
         action_type = action_type.lower()
         
         # Read/Observe actions (Level 0)
-        if action_type in ["read_file", "search_notes", "capture_screen", "browser_read", "web_search"]:
+        if action_type in ["read_file", "search_notes", "capture_screen", "browser_read", "web_search", "master_task", "user_task", "chat"]:
             db.create_audit_log(action_type, "allowed", f"Autonomous read execution: {details}", level=0)
             return True, "Autonomous execution allowed (Level 0: Read/Observe)", 0
 
