@@ -456,7 +456,7 @@ def get_root(request: Request):
     index_path = os.path.join(static_dir, "index.html")
 
     if "text/html" in accept_header and os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
     # Return JSON API status by default for non-HTML/API requests
     lm_status = "offline"
