@@ -173,7 +173,14 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Run Authoritative Cognitive Reasoning Loop with semantic query_pred
+        # Select candidate action proposal via ActionSelector
+        fine_action_type = self.classify_fine_grained_action_type(user_text)
+        candidate_proposal = ActionProposal(
+            action_type=fine_action_type,
+            payload={"query": user_text, "complexity": complexity, "action_type": fine_action_type}
+        )
+
+        # Run Authoritative Cognitive Reasoning Loop with semantic query_pred and candidate proposal
         loop_trace = self.loop.run(
             subject=user_text[:30].strip() or "user_query",
             predicate=query_pred,
@@ -185,6 +192,7 @@ class CognitiveRuntime:
 
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
+        proposal = getattr(last_decision, "proposed_action", None) or candidate_proposal
 
         # 5. DECISION ROUTER (100% Authoritative Reasoning Decision, No Keyword Overrides):
         # Branch A: ANSWER / Direct Conversational Q&A

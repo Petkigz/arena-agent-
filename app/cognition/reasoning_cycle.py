@@ -22,6 +22,7 @@ class ReasoningDecision:
     reason: str
     information_need: Optional[InformationNeed] = None
     belief: Optional[RevisionResult] = None
+    proposed_action: Optional[Any] = None
 
 
 @dataclass
@@ -43,6 +44,7 @@ class ReasoningCycle:
         *,
         information_needs: list[InformationNeed] | None = None,
         action_available: bool = False,
+        proposed_action: Optional[Any] = None,
     ) -> ReasoningDecision:
         belief = self.engine.inspect(subject, predicate)
 
@@ -52,7 +54,8 @@ class ReasoningCycle:
                 ReasoningAction.ACT,
                 belief.confidence if belief else 0.9,
                 "Explicit action intent provided with available execution capabilities.",
-                belief=belief
+                belief=belief,
+                proposed_action=proposed_action
             )
 
         # 2. Information Need: Diagnostic or missing evidence query
@@ -79,10 +82,10 @@ class ReasoningCycle:
             return ReasoningDecision(ReasoningAction.INVESTIGATE, belief.confidence if belief else 0.4, "Uncertainty remains and useful information is available.", information_need=need, belief=belief)
 
         if action_available and belief and belief.confidence >= self.investigate_threshold:
-            return ReasoningDecision(ReasoningAction.ACT, belief.confidence, "Evidence is sufficient for a bounded action.", belief=belief)
+            return ReasoningDecision(ReasoningAction.ACT, belief.confidence, "Evidence is sufficient for a bounded action.", belief=belief, proposed_action=proposed_action)
 
         return ReasoningDecision(ReasoningAction.DEFER, belief.confidence if belief else 0.0, "Evidence is insufficient for a safe decision.", belief=belief)
 
-    def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False) -> ReasoningDecision:
+    def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False, proposed_action: Optional[Any] = None) -> ReasoningDecision:
         self.engine.ingest(subject, predicate, value, source=source, confidence=confidence, rationale=rationale)
-        return self.decide(subject, predicate, information_needs=information_needs, action_available=action_available)
+        return self.decide(subject, predicate, information_needs=information_needs, action_available=action_available, proposed_action=proposed_action)
