@@ -89,10 +89,11 @@ class ActionGate:
                 reason=f"System RAM pressure above critical threshold ({ram_percent}%). Task paused."
             )
 
-        # 3. Prediction Gate
-        pe = PredictionEngine()
-        pred = pe.predict_action(proposal.action_type, proposal.payload)
-        proposal.predicted_outcome = pred.expected_changes
+        # 3. Prediction Gate (Reuses canonical pre-execution prediction if already attached)
+        if not proposal.predicted_outcome:
+            pe = PredictionEngine()
+            pred = pe.predict_action(proposal.action_type, proposal.payload)
+            proposal.predicted_outcome = pred.expected_changes
 
         audit_logger.info(f"ActionGate PASSED proposal '{proposal.action_type}' (Safety Level {proposal.safety_level})")
 

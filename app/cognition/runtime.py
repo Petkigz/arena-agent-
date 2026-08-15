@@ -178,13 +178,14 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Run Authoritative Cognitive Reasoning Loop
+        # Run Authoritative Cognitive Reasoning Loop (with action_available=True)
         loop_trace = self.loop.run(
             subject=user_text[:30].strip() or "user_query",
             predicate="task_intent",
             value=user_text[:200],
             source="user_input",
-            task_id=session_id
+            task_id=session_id,
+            action_available=True
         )
 
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
@@ -192,7 +193,7 @@ class CognitiveRuntime:
 
         # 5. DECISION ROUTER:
         # Branch A: ANSWER / Direct Conversational Q&A
-        if reasoning_action == ReasoningAction.ANSWER and not any(k in user_text.lower() for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing"]):
+        if reasoning_action == ReasoningAction.ANSWER and not any(k in user_text.lower() for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play"]):
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
@@ -221,7 +222,38 @@ class CognitiveRuntime:
                 "model_used": llm_res.get("model", "fast")
             }
 
-        # Branch B: DEFER / SAFELY ASK USER
+        # Branch B: INVESTIGATE / Information Gathering Loop
+        elif reasoning_action == ReasoningAction.INVESTIGATE and loop_trace.results:
+            investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s): " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
+            system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
+            messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
+            llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
+            assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
+
+            latency = (time.time() - start_time) * 1000
+            trace.finalize(
+                reply=assistant_reply,
+                actions=[investigation_summary],
+                latency=latency,
+                surprisal=0.1,
+                lesson="Investigation evidence retrieved.",
+                gate_decision="passed"
+            )
+            return {
+                "success": True,
+                "session_id": session_id,
+                "trace_id": trace.trace_id,
+                "user_text": user_text,
+                "assistant_reply": assistant_reply,
+                "executed_actions": [investigation_summary],
+                "action_type": "investigate",
+                "reasoning_action": "investigate",
+                "prediction_surprisal": 0.1,
+                "latency_ms": round(latency, 2),
+                "model_used": llm_res.get("model", "fast")
+            }
+
+        # Branch C: DEFER / SAFELY ASK USER
         elif reasoning_action == ReasoningAction.DEFER:
             defer_msg = f"Deferred task: {last_decision.reason if last_decision else 'Evidence is insufficient for a safe decision.'}"
             latency = (time.time() - start_time) * 1000
