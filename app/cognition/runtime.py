@@ -183,26 +183,21 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Select candidate action proposal via ActionPlanner & CounterfactualSimulator
-        candidate_proposal = self.generate_candidate_action_proposal(user_text, complexity=complexity)
-
-        # Run Authoritative Cognitive Reasoning Loop with semantic query_pred and candidate proposal
+        # Run Authoritative Cognitive Reasoning Loop with semantic query_pred
         loop_trace = self.loop.run(
             subject=user_text[:30].strip() or "user_query",
             predicate=query_pred,
             value=user_text[:200],
             source="user_input",
             task_id=session_id,
-            action_available=True,
-            proposed_action=candidate_proposal
+            action_available=True
         )
 
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
-        proposal = getattr(last_decision, "proposed_action", None) or candidate_proposal
 
         # 5. DECISION ROUTER (100% Authoritative Reasoning Decision, No Keyword Overrides):
-        # Branch A: ANSWER / Direct Conversational Q&A
+        # Branch A: ANSWER / Direct Conversational Q&A (Lazy Planning: skips action planning computation)
         if reasoning_action == ReasoningAction.ANSWER:
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
@@ -305,7 +300,8 @@ class CognitiveRuntime:
                 "model_used": "ReasoningCycle"
             }
 
-        # Branch D: ACT / Cognitive Action Planning ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
+        # Branch D: ACT / Cognitive Action Planning ➔ Counterfactual Branch Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
+        proposal = getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity)
         fine_action_type = proposal.action_type
         if not proposal.predicted_outcome:
             pred = self.prediction.predict_action(proposal.action_type, proposal.payload)

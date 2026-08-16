@@ -19,7 +19,9 @@ class SimulationBranch:
     hypothetical_action: str
     predicted_state_change: Dict[str, Any]
     risk_score: float  # 0.0 = low risk, 1.0 = critical risk
+    goal_fit_score: float  # 0.0 = low goal fit, 1.0 = perfect goal fit
     estimated_surprisal: float
+    utility_score: float
     reasoning_summary: str
 
 @dataclass
@@ -33,7 +35,7 @@ class CounterfactualSimulationResult:
 class CounterfactualSimulator:
     """
     Simulates competing hypothetical execution branches (S_A, S_B, S_C) in memory,
-    evaluating predicted outcomes, risk scores, and surprisal BEFORE touching the live host system.
+    evaluating predicted outcomes, risk scores, goal fit, and utility BEFORE touching the live host system.
     """
 
     @classmethod
@@ -63,27 +65,43 @@ class CounterfactualSimulator:
             elif "update" in payload_str or "install" in payload_str:
                 risk = 0.40
 
-            # 3. Construct Simulation Branch
+            # 3. Compute Goal Fit Heuristic (How well candidate action matches user goal)
+            goal_lower = target_goal.lower()
+            goal_fit = 0.5
+            if act_type in ["open_application", "web_search"] and any(k in goal_lower for k in ["open", "launch", "search"]):
+                goal_fit = 0.95
+            elif act_type in ["search_files"] and any(k in goal_lower for k in ["find", "file", "song", "document"]):
+                goal_fit = 0.95
+            elif act_type in ["phone_command"] and any(k in goal_lower for k in ["phone", "call", "sms", "battery"]):
+                goal_fit = 0.95
+
+            # Composite utility = 0.5*GoalFit + 0.3*(1 - Risk) + 0.2*(1 - Surprisal)
+            utility = round(0.5 * goal_fit + 0.3 * (1.0 - risk) + 0.2 * (1.0 - 0.15), 2)
+
             branch = SimulationBranch(
                 branch_id=uuid4().hex[:8],
                 branch_name=act_name,
                 hypothetical_action=act_type,
                 predicted_state_change=pred.expected_changes,
                 risk_score=risk,
+                goal_fit_score=goal_fit,
                 estimated_surprisal=0.15,
-                reasoning_summary=f"Branch '{act_name}' executes '{act_type}' predicting {pred.expected_changes} with risk {risk}"
+                utility_score=utility,
+                reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.2f}"
             )
             branches.append(branch)
 
-        # Select winning branch (minimizes risk score and expected surprisal)
-        branches.sort(key=lambda b: (b.risk_score, b.estimated_surprisal))
+        # Select winning branch (maximizes overall UtilityScore)
+        branches.sort(key=lambda b: b.utility_score, reverse=True)
         winning_branch = branches[0] if branches else SimulationBranch(
             branch_id="fallback",
             branch_name="Default Fallback",
             hypothetical_action="observe",
             predicted_state_change={},
             risk_score=0.0,
+            goal_fit_score=0.0,
             estimated_surprisal=0.0,
+            utility_score=0.0,
             reasoning_summary="No candidate branches provided; falling back to observe."
         )
 
