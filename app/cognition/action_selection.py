@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from .information_gain import InformationNeed
+from app.cognition.action_proposal import ActionProposal
 
 @dataclass(frozen=True)
 class InvestigationPlan:
@@ -54,27 +55,10 @@ class ActionSelector:
     def select(self, need: InformationNeed) -> Optional[InvestigationPlan]:
         return self.registry.plan(need)
 
-    def select_action_for_query(self, query_text: str) -> str:
+    def select_action_for_query(self, query_text: str, complexity: str = "fast") -> ActionProposal:
         """
-        Cognitive Action Selector that inspects semantic goal intent and maps it to fine-grained action type.
+        Cognitive Action Selector that uses ActionPlanner & CounterfactualSimulator
+        to evaluate candidate action branches and output the optimal ActionProposal.
         """
-        text_lower = query_text.lower().strip()
-
-        if any(k in text_lower for k in ["phone", "mobile", "battery", "charged", "sms", "call ", "text "]):
-            return "phone_command"
-        elif any(k in text_lower for k in ["youtube", "google", "search web", "look up", "browser"]):
-            return "web_search"
-        elif any(k in text_lower for k in ["open ", "launch ", "start ", "run "]):
-            return "open_application"
-        elif any(k in text_lower for k in ["find file", "song", "ordinary", "search my pc", "document", "folder"]):
-            return "search_files"
-        elif any(k in text_lower for k in ["screenshot", "capture screen", "what is on my screen"]):
-            return "screen_capture"
-        elif any(k in text_lower for k in ["opsec", "footprint", "breach", "remove my data"]):
-            return "opsec_audit"
-        elif any(k in text_lower for k in ["daily briefing", "morning report"]):
-            return "daily_briefing"
-        elif any(k in text_lower for k in ["what is", "calculate", "tell me", "explain", "who is", "how do"]):
-            return "formulate_answer"
-        else:
-            return "user_task"
+        from app.cognition.action_planner import ActionPlanner
+        return ActionPlanner.plan_and_evaluate_action(query_text, complexity=complexity)

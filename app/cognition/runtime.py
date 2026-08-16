@@ -94,11 +94,21 @@ class CognitiveRuntime:
         else:
             return "knowledge_query"
 
+    def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast") -> ActionProposal:
+        """
+        Delegates action planning and counterfactual evaluation directly to self.actions.select_action_for_query.
+        """
+        res = self.actions.select_action_for_query(user_text, complexity=complexity)
+        if isinstance(res, ActionProposal):
+            return res
+        return ActionProposal(
+            action_type=str(res),
+            payload={"query": user_text, "complexity": complexity, "action_type": str(res)}
+        )
+
     def classify_fine_grained_action_type(self, user_text: str) -> str:
-        """
-        Delegates action selection directly to self.actions.select_action_for_query.
-        """
-        return self.actions.select_action_for_query(user_text)
+        prop = self.generate_candidate_action_proposal(user_text)
+        return prop.action_type
 
     def process_cognitive_cycle(
         self,
@@ -173,12 +183,8 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Select candidate action proposal via ActionSelector
-        fine_action_type = self.classify_fine_grained_action_type(user_text)
-        candidate_proposal = ActionProposal(
-            action_type=fine_action_type,
-            payload={"query": user_text, "complexity": complexity, "action_type": fine_action_type}
-        )
+        # Select candidate action proposal via ActionPlanner & CounterfactualSimulator
+        candidate_proposal = self.generate_candidate_action_proposal(user_text, complexity=complexity)
 
         # Run Authoritative Cognitive Reasoning Loop with semantic query_pred and candidate proposal
         loop_trace = self.loop.run(
@@ -300,11 +306,13 @@ class CognitiveRuntime:
             }
 
         # Branch D: ACT / Cognitive Action Planning ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
-        # Directly consumes proposal carried by ReasoningDecision / candidate_proposal without re-creating or overwriting
         fine_action_type = proposal.action_type
         if not proposal.predicted_outcome:
             pred = self.prediction.predict_action(proposal.action_type, proposal.payload)
             proposal.predicted_outcome = pred.expected_changes
+        else:
+            from app.cognition.prediction_engine import WorldPrediction
+            pred = WorldPrediction(action_type=proposal.action_type, expected_changes=proposal.predicted_outcome)
         trace.predicted_outcome = proposal.predicted_outcome
 
         # 6. Multi-Gate Checks (Policy, Resource, Prediction) - Reuses canonical prediction
