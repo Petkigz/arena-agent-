@@ -1,4 +1,4 @@
-"""Semantic Goal & Intent Representation Layer."""
+"""Semantic Goal & Intent Representation Layer (Goal Representation v2)."""
 
 from __future__ import annotations
 import re
@@ -11,102 +11,200 @@ from app.utils.logger import app_logger
 @dataclass
 class SemanticGoalRepresentation:
     user_query: str
-    primary_intent_type: str  # 'action_intent', 'information_need', 'knowledge_query'
-    target_domain: str        # 'desktop_os', 'filesystem', 'web_research', 'mobile_phone', 'vision_desktop', 'conversation'
-    parsed_goal_summary: str
-    recommended_candidates: List[Dict[str, Any]] = field(default_factory=list)
+    primary_intent_type: str        # 'action_intent', 'information_need', 'knowledge_query'
+    target_domain: str              # 'desktop_os', 'filesystem', 'web_research', 'mobile_phone', 'vision_desktop', 'conversation', 'diagnostic'
+    goal: str                       # Actionable core objective (e.g. "locate project")
+    desired_outcome: str            # Target state (e.g. "project path identified")
+    entities: List[str]             # Extracted key entities/nouns (e.g. ["project", "chrome"])
+    constraints: List[str]          # Safety/operational constraints (e.g. ["read_only"])
+    assumptions: List[str]          # Inferred assumptions (e.g. ["refers to default browser"])
+    unknowns: List[str]             # Information gaps/missing facts (e.g. ["file location"])
+    preconditions: List[str]        # Required prior states (e.g. ["application installed"])
+    success_conditions: List[str]   # Criteria verifying success (e.g. ["process_running = true"])
+    failure_conditions: List[str]   # Criteria indicating failure (e.g. ["exit code != 0"])
+    required_capabilities: List[str]# Capabilities needed (e.g. ["filesystem.search"])
+    risk_factors: List[str]         # Potential risks (e.g. ["data modification"])
+    recommended_candidates: List[Dict[str, Any]] = field(default_factory=list) # Candidate strategy branches
+    confidence: float = 0.95        # Confidence score (0.0 to 1.0)
+    provenance_source: str = "inferred_from_user"
+    parsed_goal_summary: str = ""   # Legacy string summary for backward compatibility
 
 class SemanticGoalInterpreter:
     """
-    Semantic Goal & Intent Representation Layer.
-    Interprets natural language user goals into structured SemanticGoalRepresentation
-    for ReasoningCycle and ActionPlanner.
+    Goal Representation v2 Layer.
+    Parses user queries into rich SemanticGoalRepresentation v2 objects carrying
+    goals, desired outcomes, entities, constraints, assumptions, unknowns,
+    success conditions, required capabilities, and candidate strategies.
     """
+
+    VALID_INTENTS = {"action_intent", "information_need", "knowledge_query"}
+    VALID_DOMAINS = {"desktop_os", "filesystem", "web_research", "mobile_phone", "vision_desktop", "diagnostic", "conversation"}
+
+    @classmethod
+    def normalize_and_validate(cls, intent_type: str, domain: str) -> tuple[str, str]:
+        clean_intent = str(intent_type).lower().strip()
+        clean_domain = str(domain).lower().strip()
+
+        if clean_intent not in cls.VALID_INTENTS:
+            if any(k in clean_intent for k in ["act", "task", "open", "run", "launch"]):
+                clean_intent = "action_intent"
+            elif any(k in clean_intent for k in ["investigate", "info", "search", "check"]):
+                clean_intent = "information_need"
+            else:
+                clean_intent = "knowledge_query"
+
+        if clean_domain not in cls.VALID_DOMAINS:
+            if clean_intent == "action_intent":
+                clean_domain = "desktop_os"
+            elif clean_intent == "information_need":
+                clean_domain = "diagnostic"
+            else:
+                clean_domain = "conversation"
+
+        return clean_intent, clean_domain
+
+    @classmethod
+    def build_candidates_for_domain(cls, domain: str, user_text: str) -> List[Dict[str, Any]]:
+        domain_clean = domain.lower().strip()
+        candidates = []
+        if domain_clean == "diagnostic":
+            candidates.append({"name": "Diagnostic Investigation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}})
+            candidates.append({"name": "Filesystem Search Probe", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}})
+        elif domain_clean == "mobile_phone":
+            candidates.append({"name": "Android ADB Phone Command", "action_type": "phone_command", "payload": {"query": user_text, "action_type": "phone_command"}})
+        elif domain_clean == "web_research":
+            candidates.append({"name": "Web Search & Browser Research", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+        elif domain_clean == "filesystem":
+            candidates.append({"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}})
+            candidates.append({"name": "Web Research Fallback", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+        elif domain_clean == "vision_desktop":
+            candidates.append({"name": "Desktop Screen Capture & Vision", "action_type": "screen_capture", "payload": {"query": user_text, "action_type": "screen_capture"}})
+        elif domain_clean == "desktop_os":
+            candidates.append({"name": "Desktop Application Launch", "action_type": "open_application", "payload": {"query": user_text, "action_type": "open_application"}})
+            candidates.append({"name": "Web Browser Fallback Search", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+        else:
+            candidates.append({"name": "Direct Conversational Answer", "action_type": "formulate_answer", "payload": {"query": user_text, "action_type": "formulate_answer"}})
+        return candidates
 
     @classmethod
     def interpret_goal(cls, user_text: str, complexity: str = "fast") -> SemanticGoalRepresentation:
         text_lower = user_text.lower().strip()
 
+        # Fast Heuristic Baseline
         intent_type = "knowledge_query"
         domain = "conversation"
-        candidates = []
+        goal = f"Respond to user query: '{user_text[:60]}'"
+        outcome = "User receives helpful direct response"
+        entities = [w for w in user_text.split() if len(w) > 3 and w.lower() not in ["what", "where", "when", "how", "with", "this"]]
+        constraints = ["read_only_safe", "no_destructive_actions"]
+        assumptions = ["user expects concise human response"]
+        unknowns = []
+        preconditions = ["system active"]
+        success_conditions = ["response_delivered = true"]
+        failure_conditions = ["response_empty = true"]
+        req_caps = ["llm.generate"]
+        risks = ["low"]
 
         # 1. Diagnostic, Research & Information Gathering queries FIRST
         if any(k in text_lower for k in ["why ", "how come", "find out", "find whether", "find if", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
             intent_type = "information_need"
             domain = "diagnostic"
-            candidates.append({"name": "Diagnostic Investigation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}})
-            candidates.append({"name": "Filesystem Search Probe", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}})
+            goal = f"Investigate cause or evidence for: '{user_text[:60]}'"
+            outcome = "Diagnostic evidence gathered and reported"
+            unknowns = ["underlying error cause", "evidence availability"]
+            req_caps = ["filesystem.search", "system.probe"]
 
-        # 2. Direct Operational Action Commands SECOND
+        # 2. Operational Action Commands SECOND
         elif any(k in text_lower for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
             intent_type = "action_intent"
             if "phone" in text_lower or "mobile" in text_lower or "call" in text_lower or "sms" in text_lower or "battery" in text_lower or "charged" in text_lower:
                 domain = "mobile_phone"
-                candidates.append({"name": "Android ADB Phone Command", "action_type": "phone_command", "payload": {"query": user_text, "action_type": "phone_command"}})
+                goal = f"Execute mobile phone operation: '{user_text[:60]}'"
+                outcome = "Mobile phone action completed via ADB"
+                req_caps = ["phone.adb", "phone.control"]
             elif "youtube" in text_lower or "google" in text_lower or "search web" in text_lower:
                 domain = "web_research"
-                candidates.append({"name": "Web Search & Browser Research", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+                goal = f"Perform web search or research: '{user_text[:60]}'"
+                outcome = "Web search results retrieved"
+                req_caps = ["browser.open", "web.search"]
             elif "find" in text_lower or "file" in text_lower or "ordinary" in text_lower or "document" in text_lower or "song" in text_lower:
                 domain = "filesystem"
-                candidates.append({"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}})
-                candidates.append({"name": "Web Research Fallback", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+                goal = f"Locate or inspect local file: '{user_text[:60]}'"
+                outcome = "Matching file path identified"
+                req_caps = ["filesystem.search", "filesystem.read"]
             elif "screenshot" in text_lower or "screen" in text_lower:
                 domain = "vision_desktop"
-                candidates.append({"name": "Desktop Screen Capture & Vision", "action_type": "screen_capture", "payload": {"query": user_text, "action_type": "screen_capture"}})
+                goal = f"Capture and analyze active screen window"
+                outcome = "Desktop screen capture saved and analyzed"
+                req_caps = ["screen.capture", "vision.analyze"]
             else:
                 domain = "desktop_os"
-                candidates.append({"name": "Desktop Application Launch", "action_type": "open_application", "payload": {"query": user_text, "action_type": "open_application"}})
-                candidates.append({"name": "Web Browser Fallback Search", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+                goal = f"Launch or operate desktop application: '{user_text[:60]}'"
+                outcome = "Desktop application process running"
+                req_caps = ["os.launch_app"]
 
-        # 3. Direct Conversational Q&A DEFAULT
-        else:
-            intent_type = "knowledge_query"
-            domain = "conversation"
-            candidates.append({"name": "Direct Conversational Answer", "action_type": "formulate_answer", "payload": {"query": user_text, "action_type": "formulate_answer"}})
-
-        # LLM-Assisted Semantic Goal Decomposition Path when complexity == "main"
-        if complexity == "main":
+        # Deep LLM-Assisted Goal Decomposition Path when complexity in ["main", "deep"]
+        if complexity in ["main", "deep"]:
             try:
                 system_prompt = (
-                    "You are a semantic goal decomposition engine. Parse user input into JSON with keys: "
+                    "You are a Goal Representation v2 Decomposition Engine. Parse user input into JSON with keys: "
                     "'primary_intent_type' (action_intent, information_need, knowledge_query), "
                     "'target_domain' (desktop_os, filesystem, web_research, mobile_phone, vision_desktop, diagnostic, conversation), "
-                    "'parsed_goal_summary' (1 sentence summary)."
+                    "'goal' (1 phrase actionable goal), "
+                    "'desired_outcome' (1 phrase target state), "
+                    "'entities' (array of string noun entities), "
+                    "'constraints' (array of safety constraints), "
+                    "'unknowns' (array of missing facts/gaps), "
+                    "'required_capabilities' (array of capability strings)."
                 )
                 llm_res = llm_client.generate_chat_completion(
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Parse goal: '{user_text}'"}
+                        {"role": "user", "content": f"Parse goal v2: '{user_text}'"}
                     ],
                     complexity="fast",
-                    max_tokens=150
+                    max_tokens=250
                 )
                 if llm_res.get("choices"):
                     content = llm_res["choices"][0]["message"]["content"]
                     json_match = re.search(r'\{[^{}]*\}', content)
                     if json_match:
                         parsed_json = json.loads(json_match.group(0))
-                        intent_type = parsed_json.get("primary_intent_type", intent_type)
-                        domain = parsed_json.get("target_domain", domain)
-                        summary = parsed_json.get("parsed_goal_summary", f"Goal Domain [{domain.upper()}]: '{user_text[:70]}'")
-                        return SemanticGoalRepresentation(
-                            user_query=user_text,
-                            primary_intent_type=intent_type,
-                            target_domain=domain,
-                            parsed_goal_summary=summary,
-                            recommended_candidates=candidates
-                        )
+                        raw_intent = parsed_json.get("primary_intent_type", intent_type)
+                        raw_domain = parsed_json.get("target_domain", domain)
+                        intent_type, domain = cls.normalize_and_validate(raw_intent, raw_domain)
+                        goal = parsed_json.get("goal", goal)
+                        outcome = parsed_json.get("desired_outcome", outcome)
+                        if isinstance(parsed_json.get("entities"), list): entities = parsed_json["entities"]
+                        if isinstance(parsed_json.get("constraints"), list): constraints = parsed_json["constraints"]
+                        if isinstance(parsed_json.get("unknowns"), list): unknowns = parsed_json["unknowns"]
+                        if isinstance(parsed_json.get("required_capabilities"), list): req_caps = parsed_json["required_capabilities"]
             except Exception as e:
-                app_logger.warning(f"LLM-assisted goal decomposition fallback: {e}")
+                app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
-        summary = f"Goal Domain [{domain.upper()}]: '{user_text[:70]}' | Candidate Strategies: {len(candidates)}"
-        app_logger.info(f"SemanticGoalInterpreter: Intent='{intent_type}', Domain='{domain}', Candidates={len(candidates)}")
+        intent_type, domain = cls.normalize_and_validate(intent_type, domain)
+        candidates = cls.build_candidates_for_domain(domain, user_text)
+        summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
+
+        app_logger.info(f"SemanticGoalInterpreter v2: Intent='{intent_type}', Domain='{domain}', Candidates={len(candidates)}")
 
         return SemanticGoalRepresentation(
             user_query=user_text,
             primary_intent_type=intent_type,
             target_domain=domain,
-            parsed_goal_summary=summary,
-            recommended_candidates=candidates
+            goal=goal,
+            desired_outcome=outcome,
+            entities=entities,
+            constraints=constraints,
+            assumptions=assumptions,
+            unknowns=unknowns,
+            preconditions=preconditions,
+            success_conditions=success_conditions,
+            failure_conditions=failure_conditions,
+            required_capabilities=req_caps,
+            risk_factors=risks,
+            recommended_candidates=candidates,
+            confidence=0.95,
+            provenance_source="semantic_goal_interpreter_v2",
+            parsed_goal_summary=summary
         )
