@@ -81,22 +81,11 @@ class CognitiveRuntime:
 
     def classify_query_predicate(self, user_text: str) -> str:
         """
-        Classifies semantic query predicate for ReasoningCycle.decide():
-        - action_intent: User wants an OS action, app launch, search, file action, phone command, or vision capture.
-        - information_need: Diagnostic or missing evidence query requiring research/investigation.
-        - knowledge_query: Conversational or factual Q&A request.
+        Delegates semantic query predicate interpretation to SemanticGoalInterpreter.
         """
-        text_lower = user_text.lower().strip()
-        # 1. Diagnostic, Research & Information Gathering queries FIRST
-        if any(k in text_lower for k in ["why ", "how come", "find out", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
-            return "information_need"
-
-        # 2. Direct Operational Action Intent SECOND
-        if any(k in text_lower for k in ["open ", "launch ", "start ", "run ", "search ", "call ", "sms ", "photo", "screenshot", "briefing", "play ", "find "]):
-            return "action_intent"
-
-        # 3. Conversational / Factual Knowledge Query DEFAULT
-        return "knowledge_query"
+        from app.cognition.goal_interpreter import SemanticGoalInterpreter
+        goal_rep = SemanticGoalInterpreter.interpret_goal(user_text)
+        return goal_rep.primary_intent_type
 
     def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast") -> ActionProposal:
         """
