@@ -87,12 +87,16 @@ class CognitiveRuntime:
         - knowledge_query: Conversational or factual Q&A request.
         """
         text_lower = user_text.lower().strip()
-        if any(k in text_lower for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
-            return "action_intent"
-        elif any(k in text_lower for k in ["why", "find out", "check if", "investigate", "where is", "does file"]):
+        # 1. Diagnostic, Research & Information Gathering queries FIRST
+        if any(k in text_lower for k in ["why ", "how come", "find out", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
             return "information_need"
-        else:
-            return "knowledge_query"
+
+        # 2. Direct Operational Action Intent SECOND
+        if any(k in text_lower for k in ["open ", "launch ", "start ", "run ", "search ", "call ", "sms ", "photo", "screenshot", "briefing", "play ", "find "]):
+            return "action_intent"
+
+        # 3. Conversational / Factual Knowledge Query DEFAULT
+        return "knowledge_query"
 
     def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast") -> ActionProposal:
         """
