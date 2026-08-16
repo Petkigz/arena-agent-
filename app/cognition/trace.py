@@ -32,6 +32,7 @@ class CognitiveTrace:
     actions_executed: List[str] = field(default_factory=list)
     prediction_surprisal: float = 0.0
     reflection_lesson: str = ""
+    goal_verified: bool = True
     model_used: str = "fast"
     latency_ms: float = 0.0
     is_finalized: bool = False
@@ -44,7 +45,8 @@ class CognitiveTrace:
         latency: float,
         surprisal: float = 0.0,
         lesson: str = "",
-        gate_decision: str = "passed"
+        gate_decision: str = "passed",
+        goal_verified: bool = True
     ):
         self.assistant_reply = reply
         self.actions_executed = actions
@@ -52,6 +54,7 @@ class CognitiveTrace:
         self.prediction_surprisal = surprisal
         self.reflection_lesson = lesson
         self.gate_decision = gate_decision
+        self.goal_verified = goal_verified
         self.is_finalized = True
         self._persist_trace_to_db()
 
@@ -78,13 +81,14 @@ class CognitiveTrace:
                     gate_decision TEXT,
                     prediction_surprisal REAL,
                     reflection_lesson TEXT,
+                    goal_verified INTEGER,
                     created_at TEXT NOT NULL
                 )
             """)
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
-                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trace_id,
                 self.session_id or "default",
@@ -100,6 +104,7 @@ class CognitiveTrace:
                 self.gate_decision,
                 self.prediction_surprisal,
                 self.reflection_lesson,
+                1 if self.goal_verified else 0,
                 self.created_at
             ))
             conn.commit()
