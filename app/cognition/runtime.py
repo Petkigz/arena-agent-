@@ -155,8 +155,11 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"PromptSlicer error: {e}")
 
-        # 4. Semantic Predicate Classification & WorldModel / Belief Ingestion
-        query_pred = self.classify_query_predicate(user_text)
+        # 4. Semantic Goal Representation & WorldModel / Belief Ingestion
+        from app.cognition.goal_interpreter import SemanticGoalInterpreter
+        goal_rep = SemanticGoalInterpreter.interpret_goal(user_text, complexity=complexity)
+        query_pred = goal_rep.primary_intent_type
+
         try:
             self.world_ingest.ingest(
                 subject="user",
