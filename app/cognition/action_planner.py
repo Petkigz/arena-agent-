@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional
 from app.cognition.action_proposal import ActionProposal
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
-from app.cognition.goal_interpreter import SemanticGoalInterpreter
+from app.cognition.goal_interpreter import SemanticGoalInterpreter, SemanticGoalRepresentation
 from app.utils.logger import app_logger
 
 class ActionPlanner:
@@ -14,17 +14,18 @@ class ActionPlanner:
     """
 
     @classmethod
-    def generate_candidate_actions(cls, goal_text: str, complexity: str = "fast") -> List[Dict[str, Any]]:
-        goal_rep = SemanticGoalInterpreter.interpret_goal(goal_text, complexity=complexity)
+    def generate_candidate_actions(cls, goal_text: str, complexity: str = "fast", goal_rep: Optional[SemanticGoalRepresentation] = None) -> List[Dict[str, Any]]:
+        if not goal_rep:
+            goal_rep = SemanticGoalInterpreter.interpret_goal(goal_text, complexity=complexity)
         return goal_rep.recommended_candidates
 
     @classmethod
-    def plan_and_evaluate_action(cls, goal_text: str, complexity: str = "fast") -> ActionProposal:
+    def plan_and_evaluate_action(cls, goal_text: str, complexity: str = "fast", goal_rep: Optional[SemanticGoalRepresentation] = None) -> ActionProposal:
         """
         Generates candidate strategies via SemanticGoalInterpreter, runs parallel counterfactual simulation in memory,
         and constructs the winning ActionProposal.
         """
-        candidates = cls.generate_candidate_actions(goal_text, complexity=complexity)
+        candidates = cls.generate_candidate_actions(goal_text, complexity=complexity, goal_rep=goal_rep)
         sim_res = CounterfactualSimulator.simulate_competing_branches(goal_text, candidates)
         winner = sim_res.winning_branch
 

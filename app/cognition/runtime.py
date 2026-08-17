@@ -34,11 +34,14 @@ from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction
 from app.cognition.reasoning_loop import CognitiveReasoningLoop
 from app.cognition.prompt_slicer import PromptSlicerEngine
 from app.cognition.trace import CognitiveTrace
+from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
+from app.cognition.goal_verifier import GoalVerifier, GoalVerificationResult
+from app.cognition.goal_replanner import GoalReplanner
 
 class CognitiveRuntime:
     """
     P1-A: Authoritative Single Composition Root for Arena's Cognitive Architecture.
-    Wires Perception ➔ WorldModel ➔ Blackboard ➔ Beliefs ➔ Attention ➔ CognitiveReasoningLoop ➔ DecisionRouter ➔ Prediction ➔ ActionGates ➔ Capability Execution ➔ Reflection ➔ MemoryLearner.
+    Wires Perception ➔ WorldModel ➔ Blackboard ➔ Beliefs ➔ Attention ➔ CognitiveReasoningLoop ➔ DecisionRouter ➔ Prediction ➔ ActionGates ➔ Capability Execution ➔ GoalVerifier ➔ GoalReplanner ➔ Reflection ➔ MemoryLearner.
     """
 
     _instance: Optional[CognitiveRuntime] = None
@@ -80,18 +83,13 @@ class CognitiveRuntime:
         )
 
     def classify_query_predicate(self, user_text: str) -> str:
-        """
-        Delegates semantic query predicate interpretation to SemanticGoalInterpreter.
-        """
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
         goal_rep = SemanticGoalInterpreter.interpret_goal(user_text)
         return goal_rep.primary_intent_type
 
-    def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast") -> ActionProposal:
-        """
-        Delegates action planning and counterfactual evaluation directly to self.actions.select_action_for_query.
-        """
-        res = self.actions.select_action_for_query(user_text, complexity=complexity)
+    def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast", goal_rep: Optional[Any] = None) -> ActionProposal:
+        from app.cognition.action_planner import ActionPlanner
+        res = ActionPlanner.plan_and_evaluate_action(user_text, complexity=complexity, goal_rep=goal_rep)
         if isinstance(res, ActionProposal):
             return res
         return ActionProposal(
@@ -110,20 +108,23 @@ class CognitiveRuntime:
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Authoritative Closed-Loop Predictive Cognitive Cycle:
-        1. Initialize Trace & Hardware Snapshot
+        Authoritative Closed-Loop Predictive Cognitive Cycle with Goal Lifecycle & Verification:
+        1. Initialize Trace & Hardware Snapshot & GoalTracker (CREATED)
         2. Set CognitiveState & Attention Focus Target
         3. Blackboard Ingestion & Context Budget Slicing (Retrieves Past Lessons)
-        4. WorldModel Ingestion & CognitiveReasoningLoop Execution
-        5. Authoritative Decision Router (ANSWER vs INVESTIGATE vs DEFER vs ACT)
-        6. Fine-Grained Action Proposal & Pre-Execution Outcome Prediction
-        7. Multi-Gate Verification (Policy / Resource / Prediction)
-        8. Capability Execution Layer (Tool Execution or Direct Answer)
-        9. Observe Reality & Calculate Prediction Error (Surprisal)
-        10. Reflection & Memory Learning (ReflectionEngine ➔ MemoryLearner ➔ MemoryStore)
+        4. Semantic GoalRepresentation v2 Decomposition (UNDERSTOOD)
+        5. WorldModel Ingestion & CognitiveReasoningLoop Execution
+        6. Authoritative Decision Router (ANSWER vs INVESTIGATE vs DEFER vs ACT)
+        7. Candidate Strategy Planning & Counterfactual Simulation (PLANNED)
+        8. Multi-Gate Verification & Capability Execution (EXECUTING)
+        9. Goal Verification & Reassessment/Replanner on Failure (VERIFYING ➔ ACHIEVED/FAILED ➔ REPLAN)
+        10. Prediction Error Surprisal ➔ Reflection ➔ Memory Learning ➔ Trace Finalize
         """
         start_time = time.time()
         session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
+
+        # Initialize Goal Lifecycle Tracker
+        tracker = GoalTracker(user_query=user_text)
 
         # 1. Initialize Trace & Hardware Snapshot
         trace = CognitiveTrace(
@@ -155,10 +156,11 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"PromptSlicer error: {e}")
 
-        # 4. Semantic Goal Representation & WorldModel / Belief Ingestion
+        # 4. Semantic Goal Representation v2 & WorldModel / Belief Ingestion
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
         goal_rep = SemanticGoalInterpreter.interpret_goal(user_text, complexity=complexity)
         query_pred = goal_rep.primary_intent_type
+        tracker.transition(GoalLifecycleState.UNDERSTOOD, f"Parsed goal in domain '{goal_rep.target_domain}'")
 
         try:
             self.world_ingest.ingest(
@@ -175,7 +177,7 @@ class CognitiveRuntime:
                 source="user_input",
                 task_id=session_id
             )
-            trace.belief_confidence = float(getattr(belief_res, "confidence", 1.0))
+            trace.belief_confidence = float(getattr(belief_res, "confidence", goal_rep.confidence))
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
@@ -192,13 +194,17 @@ class CognitiveRuntime:
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
 
-        # 5. DECISION ROUTER (100% Authoritative Reasoning Decision, No Keyword Overrides):
-        # Branch A: ANSWER / Direct Conversational Q&A (Lazy Planning: skips action planning computation)
-        if reasoning_action == ReasoningAction.ANSWER:
+        # 5. DECISION ROUTER:
+        # Branch A: ANSWER / Direct Conversational Q&A
+        if reasoning_action == ReasoningAction.ANSWER and not any(k in user_text.lower() for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
+            tracker.transition(GoalLifecycleState.EXECUTING, "Formulating direct conversational answer.")
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
+
+            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker)
+            trace.goal_verified = verify_res.verified_success
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -207,7 +213,8 @@ class CognitiveRuntime:
                 latency=latency,
                 surprisal=0.0,
                 lesson="",
-                gate_decision="passed"
+                gate_decision="passed",
+                goal_verified=verify_res.verified_success
             )
             return {
                 "success": True,
@@ -218,6 +225,8 @@ class CognitiveRuntime:
                 "executed_actions": [],
                 "action_type": "formulate_answer",
                 "reasoning_action": "answer",
+                "goal_lifecycle_state": tracker.current_state.value,
+                "goal_verified": verify_res.verified_success,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast")
@@ -225,6 +234,7 @@ class CognitiveRuntime:
 
         # Branch B: INVESTIGATE / Bounded Probe Evidence Gathering Loop
         elif reasoning_action == ReasoningAction.INVESTIGATE:
+            tracker.transition(GoalLifecycleState.EXECUTING, "Running bounded probe investigation loop.")
             investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s)" if loop_trace.results else "Diagnostic investigation completed."
             if loop_trace.results:
                 investigation_summary += ": " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
@@ -234,7 +244,9 @@ class CognitiveRuntime:
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
-            # Pass investigation results through Reflection & Memory Learning Loop
+            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [investigation_summary], assistant_reply, tracker=tracker)
+            trace.goal_verified = verify_res.verified_success
+
             try:
                 lesson_rec = self.learning.process_outcome_reflection(
                     task_title=f"Investigation: {user_text[:30]}",
@@ -253,7 +265,8 @@ class CognitiveRuntime:
                 latency=latency,
                 surprisal=0.1,
                 lesson=trace.reflection_lesson,
-                gate_decision="passed"
+                gate_decision="passed",
+                goal_verified=verify_res.verified_success
             )
             return {
                 "success": True,
@@ -264,6 +277,8 @@ class CognitiveRuntime:
                 "executed_actions": [investigation_summary],
                 "action_type": "investigate",
                 "reasoning_action": "investigate",
+                "goal_lifecycle_state": tracker.current_state.value,
+                "goal_verified": verify_res.verified_success,
                 "prediction_surprisal": 0.1,
                 "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
@@ -272,6 +287,7 @@ class CognitiveRuntime:
 
         # Branch C: DEFER / SAFELY ASK USER
         elif reasoning_action == ReasoningAction.DEFER:
+            tracker.transition(GoalLifecycleState.FAILED, "Evidence is insufficient for a safe decision.")
             defer_msg = f"Deferred task: {last_decision.reason if last_decision else 'Evidence is insufficient for a safe decision.'}"
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -280,7 +296,8 @@ class CognitiveRuntime:
                 latency=latency,
                 surprisal=0.0,
                 lesson="",
-                gate_decision="deferred"
+                gate_decision="deferred",
+                goal_verified=False
             )
             return {
                 "success": True,
@@ -291,14 +308,18 @@ class CognitiveRuntime:
                 "executed_actions": [],
                 "action_type": "defer",
                 "reasoning_action": "defer",
+                "goal_lifecycle_state": tracker.current_state.value,
+                "goal_verified": False,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": "ReasoningCycle"
             }
 
-        # Branch D: ACT / Cognitive Action Planning ➔ Counterfactual Branch Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Layer Execution
-        proposal = getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity)
+        # Branch D: ACT / Action Strategy Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Execution
+        tracker.transition(GoalLifecycleState.PLANNED, "Simulated candidate branches with CounterfactualSimulator.")
+        proposal = getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity, goal_rep=goal_rep)
         fine_action_type = proposal.action_type
+
         if not proposal.predicted_outcome:
             pred = self.prediction.predict_action(proposal.action_type, proposal.payload)
             proposal.predicted_outcome = pred.expected_changes
@@ -307,11 +328,12 @@ class CognitiveRuntime:
             pred = WorldPrediction(action_type=proposal.action_type, expected_changes=proposal.predicted_outcome)
         trace.predicted_outcome = proposal.predicted_outcome
 
-        # 6. Multi-Gate Checks (Policy, Resource, Prediction) - Reuses canonical prediction
+        # Multi-Gate Checks (Policy, Resource, Prediction)
         gate_res = ActionGate.evaluate_proposal(proposal)
         trace.gate_decision = gate_res.gate_name
 
         if not gate_res.allowed:
+            tracker.transition(GoalLifecycleState.FAILED, f"Action blocked by {gate_res.gate_name}")
             latency = (time.time() - start_time) * 1000
             blocked_msg = f"Action blocked by {gate_res.gate_name}: {gate_res.reason}"
             trace.finalize(
@@ -320,7 +342,8 @@ class CognitiveRuntime:
                 latency=latency,
                 surprisal=0.0,
                 lesson="",
-                gate_decision=gate_res.gate_name
+                gate_decision=gate_res.gate_name,
+                goal_verified=False
             )
             return {
                 "success": False,
@@ -331,18 +354,35 @@ class CognitiveRuntime:
                 "executed_actions": [],
                 "requires_approval": gate_res.requires_approval,
                 "gate_blocked": gate_res.gate_name,
+                "goal_lifecycle_state": tracker.current_state.value,
+                "goal_verified": False,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": "ActionGate"
             }
 
-        # 7. Capability Execution Layer (MasterAgent Capability Delegate)
+        # Capability Execution Layer
+        tracker.transition(GoalLifecycleState.EXECUTING, "Executing selected action strategy via capability layer.")
         from app.agents.master_agent import MasterAgentOrchestrator
         agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
         executed_actions = agent_res.get("executed_actions", [])
         assistant_reply = agent_res.get("assistant_reply", "Done.")
 
-        # 8. Observe Reality & Calculate Prediction Error (Surprisal)
+        # Goal Verification
+        verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, tracker=tracker)
+        trace.goal_verified = verify_res.verified_success
+
+        # Reassessment & Replanning on Goal Verification Failure
+        if not verify_res.verified_success:
+            replan_proposal = GoalReplanner.execute_reassessment_and_replan(user_text, goal_rep, verify_res, tracker, complexity=complexity)
+            if replan_proposal:
+                replan_agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
+                executed_actions.extend(replan_agent_res.get("executed_actions", []))
+                assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
+                verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, tracker=tracker)
+                trace.goal_verified = verify_res.verified_success
+
+        # Observe Reality & Calculate Prediction Error (Surprisal)
         try:
             self.world_ingest.ingest(
                 subject="system",
@@ -358,18 +398,18 @@ class CognitiveRuntime:
             "actions": executed_actions,
             "reply": assistant_reply[:100],
             "app_state": "running",
-            "success": agent_res.get("success", True)
+            "success": verify_res.verified_success
         }
         surprisal = self.prediction.evaluate_surprisal(pred, actual_state)
         trace.prediction_surprisal = surprisal
 
-        # 9. Reflection & Memory Learning (ReflectionEngine ➔ MemoryLearner ➔ MemoryStore)
+        # Reflection & Memory Learning
         lesson_text = ""
         try:
             lesson_rec = self.learning.process_outcome_reflection(
                 task_title=user_text[:50],
                 goal=user_text,
-                outcome_summary=f"Action: {fine_action_type} | Executed: {executed_actions} | Reply: {assistant_reply[:100]}",
+                outcome_summary=f"Action: {fine_action_type} | Executed: {executed_actions} | Verified: {verify_res.verified_success}",
                 surprisal=surprisal
             )
             lesson_text = getattr(lesson_rec, "content", "")
@@ -377,7 +417,7 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Memory reflection learning warning: {e}")
 
-        # 10. Event Bus Sync & Finalize Trace
+        # Event Bus Sync & Finalize Trace
         try:
             self.events.publish(CognitiveEvent(
                 event_type="cognitive_cycle_completed",
@@ -386,6 +426,8 @@ class CognitiveRuntime:
                     "user_text": user_text,
                     "action_type": fine_action_type,
                     "actions": executed_actions,
+                    "goal_state": tracker.current_state.value,
+                    "goal_verified": verify_res.verified_success,
                     "surprisal": surprisal,
                     "lesson": lesson_text
                 },
@@ -404,13 +446,14 @@ class CognitiveRuntime:
             latency=latency,
             surprisal=surprisal,
             lesson=lesson_text,
-            gate_decision=gate_res.gate_name
+            gate_decision=gate_res.gate_name,
+            goal_verified=verify_res.verified_success
         )
         trace.model_used = agent_res.get("model_used", "fast")
 
         app_logger.info(
             f"COGNITIVE RUNTIME TRACE [{trace.trace_id[:8]}] | Session: {session_id} | "
-            f"Action: {fine_action_type} | Latency: {latency:.0f}ms | Surprisal: {surprisal} | Actions: {len(executed_actions)}"
+            f"GoalLifecycleState: {tracker.current_state.value} | Verified: {verify_res.verified_success} | Latency: {latency:.0f}ms"
         )
 
         return {
@@ -422,6 +465,8 @@ class CognitiveRuntime:
             "executed_actions": executed_actions,
             "action_type": fine_action_type,
             "reasoning_action": reasoning_action.value if hasattr(reasoning_action, "value") else str(reasoning_action),
+            "goal_lifecycle_state": tracker.current_state.value,
+            "goal_verified": verify_res.verified_success,
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
             "latency_ms": round(latency, 2),
