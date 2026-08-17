@@ -361,23 +361,28 @@ class CognitiveRuntime:
                 "model_used": "ActionGate"
             }
 
-        # Capability Execution Layer
+        # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
         tracker.transition(GoalLifecycleState.EXECUTING, "Executing selected action strategy via capability layer.")
         from app.agents.master_agent import MasterAgentOrchestrator
-        agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
+        agent_res = MasterAgentOrchestrator.execute_proposal(proposal, user_text, complexity=complexity)
         executed_actions = agent_res.get("executed_actions", [])
         assistant_reply = agent_res.get("assistant_reply", "Done.")
 
         # Goal Verification
-        verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, tracker=tracker)
+        verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker)
         trace.goal_verified = verify_res.verified_success
 
         # Reassessment & Replanning on Goal Verification Failure
         if not verify_res.verified_success:
             replan_proposal = GoalReplanner.execute_reassessment_and_replan(user_text, goal_rep, verify_res, tracker, complexity=complexity)
             if replan_proposal:
-                replan_agent_res = MasterAgentOrchestrator.process_user_task(user_text, complexity=complexity)
-                executed_actions.extend(replan_agent_res.get("executed_actions", []))
+                replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)
+                if replan_gate_res.allowed:
+                    replan_agent_res = MasterAgentOrchestrator.execute_proposal(replan_proposal, user_text, complexity=complexity)
+                    executed_actions.extend(replan_agent_res.get("executed_actions", []))
+                    assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
+                    verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker)
+                    trace.goal_verified = verify_res.verified_success
                 assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
                 verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, tracker=tracker)
                 trace.goal_verified = verify_res.verified_success

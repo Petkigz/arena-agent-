@@ -17,8 +17,10 @@ class GoalVerificationResult:
     verified_success: bool
     final_state: GoalLifecycleState
     verification_reason: str
+    failed_action_type: str = ""
     met_conditions: List[str] = field(default_factory=list)
     failed_conditions: List[str] = field(default_factory=list)
+    observed_state: Dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=_now)
 
 class GoalVerifier:
@@ -35,6 +37,7 @@ class GoalVerifier:
         goal_rep: SemanticGoalRepresentation,
         executed_actions: List[str],
         assistant_reply: str,
+        failed_action_type: str = "",
         tracker: Optional[GoalTracker] = None
     ) -> GoalVerificationResult:
         goal_id = tracker.goal_id if tracker else "goal_verify_anon"
@@ -63,8 +66,8 @@ class GoalVerifier:
             elif "running" in succ_cond or "launched" in succ_cond or "opened" in actions_str:
                 met_conditions.append(succ_cond)
 
-        # Evaluate Overall Success
-        verified_success = len(failed_conditions) == 0 and (len(executed_actions) > 0 or len(reply_lower) > 10)
+        # Evaluate Strict Success
+        verified_success = len(failed_conditions) == 0 and (len(met_conditions) >= len(goal_rep.success_conditions) or len(executed_actions) > 0)
 
         final_state = GoalLifecycleState.ACHIEVED if verified_success else GoalLifecycleState.FAILED
         reason = f"Goal '{goal_rep.goal}' achieved: Met {len(met_conditions)} success criteria." if verified_success else f"Goal verification failed: {failed_conditions or 'Target state not verified.'}"
@@ -79,6 +82,8 @@ class GoalVerifier:
             verified_success=verified_success,
             final_state=final_state,
             verification_reason=reason,
+            failed_action_type=failed_action_type or goal_rep.primary_intent_type,
             met_conditions=met_conditions,
-            failed_conditions=failed_conditions
+            failed_conditions=failed_conditions,
+            observed_state={"executed_actions_count": len(executed_actions), "reply_snippet": assistant_reply[:100]}
         )

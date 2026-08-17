@@ -41,6 +41,74 @@ class MasterAgentOrchestrator:
     """
 
     @classmethod
+    def execute_proposal(cls, proposal: Any, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
+        """
+        P0 Fix: Executes a specific ActionProposal directly through capability resolver,
+        ensuring that counterfactual-selected proposals are executed without re-routing.
+        """
+        action_type = getattr(proposal, "action_type", str(proposal)).lower().strip()
+        payload = getattr(proposal, "payload", {}) if hasattr(proposal, "payload") else {}
+        executed_actions = []
+
+        if action_type == "open_application":
+            app_name = payload.get("app_name") or "explorer"
+            match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
+            if match:
+                app_name = match.group(1).strip()
+            res = SystemAppInventory.launch_any_app(app_name)
+            if res.get("success"):
+                executed_actions.append(f"Launched application '{res.get('app_name', app_name).title()}' on your PC.")
+
+        elif action_type == "web_search":
+            query_term = payload.get("query_term") or user_text
+            url = f"https://www.youtube.com/results?search_query={query_term.replace(' ', '+')}" if "youtube" in user_text.lower() else f"https://www.google.com/search?q={query_term.replace(' ', '+')}"
+            DesktopControl.launch_application("firefox")
+            DesktopControl.open_url(url)
+            executed_actions.append(f"Opened web browser and launched search for '{query_term}'.")
+
+        elif action_type == "search_files":
+            matched = UniversalFilesystem.search_filesystem(user_text, max_results=5)
+            if matched:
+                executed_actions.append(f"Found local file '{matched[0]['file_name']}' at {matched[0]['file_path']}.")
+            else:
+                executed_actions.append(f"Searched local filesystem for '{user_text}'.")
+
+        elif action_type == "phone_command":
+            from app.tools.android_adb_controller import AndroidADBController
+            bat_res = AndroidADBController.get_battery_status()
+            executed_actions.append(bat_res["message"])
+
+        elif action_type == "screen_capture":
+            cap_res = ScreenCaptureTool.capture_screen()
+            executed_actions.append(f"Captured active desktop screen window ({cap_res.get('file_name')}).")
+
+        elif action_type == "opsec_audit":
+            audit_res = OpSecManagerTool.audit_digital_footprint("user@example.com")
+            executed_actions.append(f"Audited OpSec footprint: {audit_res.get('total_exposures_found', 0)} findings.")
+
+        elif action_type == "daily_briefing":
+            brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
+            executed_actions.append("Generated Daily Executive Briefing.")
+
+        else:
+            return cls.process_user_task(user_text, complexity=complexity)
+
+        system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
+        messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
+        llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
+        assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.").strip()
+
+        HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)
+
+        return {
+            "success": True,
+            "user_text": user_text,
+            "assistant_reply": assistant_reply,
+            "executed_actions": executed_actions,
+            "model_used": llm_res.get("model", "")
+        }
+
+    @classmethod
     def process_user_task(cls, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
         """
         Unified single entry point for processing any user chat or spoken voice task.
