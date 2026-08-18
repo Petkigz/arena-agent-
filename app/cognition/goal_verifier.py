@@ -95,9 +95,18 @@ class GoalVerifier:
             has_screen_ok = obs_screen or any(k in reply_lower or k in actions_str for k in ["screenshot", "captured", "saved", "vision", "analyzed"])
             return has_screen_ok
 
-        # (h) Generic Fallback Condition
+        # (h) Generic Fallback Condition: Requires explicit WorldModel observation or entity match
         else:
-            return (len(reply_clean) > 0 or len(executed_actions) > 0)
+            cond_key = sc_lower.split("=")[0].strip() if "=" in sc_lower else sc_lower
+            for k, v in observations_map.items():
+                if cond_key in k.lower() and str(v).lower() not in ["failed", "false", "error"]:
+                    return True
+            for ent_name, ent_status in verified_entity_states.items():
+                if cond_key in ent_name.lower() and ent_status in ["running", "active", "completed"]:
+                    return True
+
+            # Unknown/unverified condition without WorldModel observation -> False (unverifiable)
+            return False
 
     @classmethod
     def verify_goal_achievement(
@@ -183,6 +192,8 @@ class GoalVerifier:
             )
             if cond_met:
                 met_conditions.append(succ_cond)
+            else:
+                failed_conditions.append(f"unverifiable_condition: {succ_cond}")
 
         # STRICT SUCCESS EVALUATION:
         # 1. Zero failure conditions detected
