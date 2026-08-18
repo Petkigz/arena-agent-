@@ -32,6 +32,74 @@ class GoalVerifier:
     """
 
     @classmethod
+    def evaluate_condition_against_world_model(
+        cls,
+        succ_cond: str,
+        goal_rep: SemanticGoalRepresentation,
+        observations_map: Dict[str, Any],
+        verified_entity_states: Dict[str, str],
+        executed_actions: List[str],
+        reply_clean: str,
+        failed_conditions: List[str]
+    ) -> bool:
+        """
+        Phase 4 Condition Evaluator:
+        Evaluates goal conditions directly against WorldModel observations and entities
+        rather than relying solely on string searching.
+        """
+        sc_lower = succ_cond.lower().strip()
+        actions_str = " ".join(executed_actions).lower()
+        reply_lower = reply_clean.lower()
+        has_crash_or_err = len(failed_conditions) > 0 or any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error", "not found", "cannot find"])
+
+        if has_crash_or_err:
+            return False
+
+        # (a) Response Delivery Condition
+        if "response_delivered" in sc_lower:
+            return len(reply_clean) > 0
+
+        # (b) App Process / Window Running Condition
+        elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
+            obs_running = any("running" in str(v).lower() or "active" in str(v).lower() for v in observations_map.values())
+            entity_running = any("running" in str(st).lower() or "active" in str(st).lower() for st in verified_entity_states.values())
+            action_executed = len(executed_actions) > 0 and any(k in actions_str for k in ["launched", "opened", "started", "running"])
+            return obs_running or entity_running or action_executed
+
+        # (c) File Path / Access Condition
+        elif any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
+            obs_found = any("file" in k or "path" in k for k in observations_map.keys())
+            has_file_path = obs_found or any(k in reply_lower or k in actions_str for k in ["path", "found file", "file located", "c:", "/home", "f:", "d:", ".txt", ".py", ".pdf", ".doc", ".png"])
+            return has_file_path
+
+        # (d) Web Research / Search Results Condition
+        elif any(k in sc_lower for k in ["search_results_retrieved", "results_found"]):
+            obs_results = any("web_search" in k or "search_results" in k for k in observations_map.keys())
+            has_results = obs_results or len(reply_clean) > 20 or any(k in reply_lower or k in actions_str for k in ["http", "search results", "retrieved", "found", "summary"])
+            return has_results
+
+        # (e) Diagnostic Evidence Condition
+        elif any(k in sc_lower for k in ["diagnostic_evidence_gathered", "evidence_gathered"]):
+            obs_evidence = any("diagnostic" in k or "evidence" in k for k in observations_map.keys())
+            return obs_evidence or len(reply_clean) > 10 or len(executed_actions) > 0
+
+        # (f) ADB / Phone Command Condition
+        elif any(k in sc_lower for k in ["adb_command_succeeded", "phone_action_completed"]):
+            obs_adb = any("adb" in k or "battery" in k for k in observations_map.keys())
+            has_adb_ok = obs_adb or any(k in reply_lower or k in actions_str for k in ["adb", "battery", "call", "sms", "photo", "screen", "succeeded", "ok", "done"])
+            return has_adb_ok
+
+        # (g) Screen Capture Condition
+        elif "screen_capture_saved" in sc_lower:
+            obs_screen = any("screen" in k or "vision" in k for k in observations_map.keys())
+            has_screen_ok = obs_screen or any(k in reply_lower or k in actions_str for k in ["screenshot", "captured", "saved", "vision", "analyzed"])
+            return has_screen_ok
+
+        # (h) Generic Fallback Condition
+        else:
+            return (len(reply_clean) > 0 or len(executed_actions) > 0)
+
+    @classmethod
     def verify_goal_achievement(
         cls,
         goal_rep: SemanticGoalRepresentation,
@@ -104,59 +172,17 @@ class GoalVerifier:
         target_conditions = goal_rep.success_conditions or ["response_delivered = true"]
 
         for succ_cond in target_conditions:
-            sc_lower = succ_cond.lower()
-
-            # (a) Response Delivery Condition
-            if "response_delivered" in sc_lower:
-                if len(reply_clean) > 0 and len(failed_conditions) == 0:
-                    met_conditions.append(succ_cond)
-
-            # (b) App Process / Window Running Condition
-            elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
-                obs_running = any("running" in str(v).lower() or "active" in str(v).lower() for v in observations_map.values())
-                entity_running = any("running" in str(st).lower() or "active" in str(st).lower() for st in verified_entity_states.values())
-                action_executed = len(executed_actions) > 0 and any(k in actions_str for k in ["launched", "opened", "started", "running"])
-                has_crash_or_err = len(failed_conditions) > 0 or any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error", "not found", "cannot find"])
-
-                if (obs_running or entity_running or action_executed) and not has_crash_or_err:
-                    met_conditions.append(succ_cond)
-
-            # (c) File Path / Access Condition
-            elif any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
-                has_file_path = any(k in reply_lower or k in actions_str for k in ["path", "found file", "file located", "c:", "/home", "f:", "d:", ".txt", ".py", ".pdf", ".doc", ".png"])
-                has_not_found = len(failed_conditions) > 0 or "not found" in reply_lower or "no such file" in reply_lower
-                if has_file_path and not has_not_found:
-                    met_conditions.append(succ_cond)
-
-            # (d) Web Research / Search Results Condition
-            elif any(k in sc_lower for k in ["search_results_retrieved", "results_found"]):
-                has_results = len(reply_clean) > 20 or any(k in reply_lower or k in actions_str for k in ["http", "search results", "retrieved", "found", "summary"])
-                has_net_err = len(failed_conditions) > 0 or "no results" in reply_lower or "network error" in reply_lower
-                if has_results and not has_net_err:
-                    met_conditions.append(succ_cond)
-
-            # (e) Diagnostic Evidence Condition
-            elif any(k in sc_lower for k in ["diagnostic_evidence_gathered", "evidence_gathered"]):
-                has_evidence = len(reply_clean) > 10 or len(executed_actions) > 0
-                if has_evidence and len(failed_conditions) == 0:
-                    met_conditions.append(succ_cond)
-
-            # (f) ADB / Phone Command Condition
-            elif any(k in sc_lower for k in ["adb_command_succeeded", "phone_action_completed"]):
-                has_adb_ok = any(k in reply_lower or k in actions_str for k in ["adb", "battery", "call", "sms", "photo", "screen", "succeeded", "ok", "done"])
-                if has_adb_ok and len(failed_conditions) == 0:
-                    met_conditions.append(succ_cond)
-
-            # (g) Screen Capture Condition
-            elif "screen_capture_saved" in sc_lower:
-                has_screen_ok = any(k in reply_lower or k in actions_str for k in ["screenshot", "captured", "saved", "vision", "analyzed"])
-                if has_screen_ok and len(failed_conditions) == 0:
-                    met_conditions.append(succ_cond)
-
-            # (h) Generic Fallback Condition
-            else:
-                if (len(reply_clean) > 0 or len(executed_actions) > 0) and len(failed_conditions) == 0:
-                    met_conditions.append(succ_cond)
+            cond_met = cls.evaluate_condition_against_world_model(
+                succ_cond,
+                goal_rep,
+                observations_map,
+                verified_entity_states,
+                executed_actions,
+                reply_clean,
+                failed_conditions
+            )
+            if cond_met:
+                met_conditions.append(succ_cond)
 
         # STRICT SUCCESS EVALUATION:
         # 1. Zero failure conditions detected
