@@ -381,11 +381,14 @@ class CognitiveRuntime:
                     replan_agent_res = MasterAgentOrchestrator.execute_proposal(replan_proposal, user_text, complexity=complexity)
                     executed_actions.extend(replan_agent_res.get("executed_actions", []))
                     assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
-                    verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker)
+                    verify_res = GoalVerifier.verify_goal_achievement(
+                        goal_rep, executed_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker
+                    )
                     trace.goal_verified = verify_res.verified_success
-                assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
-                verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, tracker=tracker)
-                trace.goal_verified = verify_res.verified_success
+                else:
+                    app_logger.warning(
+                        f"Replan proposal '{replan_proposal.action_type}' blocked by gate {replan_gate_res.gate_name}: {replan_gate_res.reason}"
+                    )
 
         # Observe Reality & Calculate Prediction Error (Surprisal)
         try:
