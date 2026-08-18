@@ -201,9 +201,14 @@ class CognitiveRuntime:
 
         obs_data = {}
         try:
-            obs = self.world.recent_observations(limit=15)
+            obs = self.world.recent_observations(limit=25)
             for o in obs:
-                obs_data[f"{o.subject}.{o.predicate}"] = o.value
+                obs_data[f"{o.subject}.{o.predicate}"] = {
+                    "value": o.value,
+                    "source": o.source,
+                    "confidence": o.confidence,
+                    "observation_type": getattr(o, "observation_type", "direct")
+                }
         except Exception as e:
             app_logger.warning(f"Could not read WorldModel observations: {e}")
 

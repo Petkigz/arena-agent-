@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 import sqlite3
+from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -14,6 +15,13 @@ from app.config import settings
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class ObservationType(str, Enum):
+    DIRECT = "direct"             # Direct OS/hardware/process perception probe (e.g. psutil, Win32 API, system inspection)
+    ENVIRONMENTAL = "environmental" # Environmental topology sensor/probe
+    SELF_REPORTED = "self_reported" # Tool execution output claim or self-reported execution log
+    INFERRED = "inferred"         # Inferred/heuristic observation
 
 
 @dataclass
@@ -49,6 +57,7 @@ class Observation:
     confidence: float = 1.0
     observed_at: str = field(default_factory=_now)
     task_id: Optional[str] = None
+    observation_type: str = "direct"  # 'direct', 'environmental', 'self_reported', 'inferred'
 
 
 @dataclass
@@ -94,10 +103,14 @@ class WorldModel:
                 CREATE TABLE IF NOT EXISTS world_observations (
                     id TEXT PRIMARY KEY, subject TEXT NOT NULL, predicate TEXT NOT NULL,
                     value TEXT NOT NULL, source TEXT NOT NULL, confidence REAL NOT NULL,
-                    observed_at TEXT NOT NULL, task_id TEXT
+                    observed_at TEXT NOT NULL, task_id TEXT, observation_type TEXT NOT NULL DEFAULT 'direct'
                 );
                 CREATE INDEX IF NOT EXISTS idx_world_obs_subject ON world_observations(subject, observed_at DESC);
             """)
+            try:
+                conn.execute("ALTER TABLE world_observations ADD COLUMN observation_type TEXT NOT NULL DEFAULT 'direct'")
+            except Exception:
+                pass
 
     @staticmethod
     def _check_confidence(value: float) -> float:
@@ -112,8 +125,18 @@ class WorldModel:
 
     @staticmethod
     def _observation(row: sqlite3.Row) -> Observation:
-        return Observation(row["id"], row["subject"], row["predicate"], json.loads(row["value"]),
-                           row["source"], row["confidence"], row["observed_at"], row["task_id"])
+        obs_type = row["observation_type"] if "observation_type" in row.keys() else "direct"
+        return Observation(
+            id=row["id"],
+            subject=row["subject"],
+            predicate=row["predicate"],
+            value=json.loads(row["value"]),
+            source=row["source"],
+            confidence=row["confidence"],
+            observed_at=row["observed_at"],
+            task_id=row["task_id"],
+            observation_type=obs_type
+        )
 
     def upsert_entity(self, name: str, entity_type: str = "unknown",
                       attributes: Optional[Dict[str, Any]] = None,
@@ -169,11 +192,14 @@ class WorldModel:
 
     def observe(self, observation: Observation) -> Observation:
         self._check_confidence(observation.confidence)
+        obs_type = getattr(observation, "observation_type", "direct")
         with self._connect() as conn:
-            conn.execute("INSERT INTO world_observations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                         (observation.id, observation.subject, observation.predicate,
-                          json.dumps(observation.value), observation.source, observation.confidence,
-                          observation.observed_at, observation.task_id))
+            conn.execute(
+                "INSERT INTO world_observations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (observation.id, observation.subject, observation.predicate,
+                 json.dumps(observation.value), observation.source, observation.confidence,
+                 observation.observed_at, observation.task_id, obs_type)
+            )
         return observation
 
     def recent_observations(self, subject: Optional[str] = None, limit: int = 50) -> List[Observation]:

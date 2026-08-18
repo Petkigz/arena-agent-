@@ -67,7 +67,9 @@ class ObservationCollector:
                     subject=fact.get("subject", "system"),
                     predicate=fact.get("predicate", "action_execution"),
                     value=fact.get("value", "executed"),
-                    source=fact.get("source", "execution_result")
+                    source=fact.get("source", "execution_result"),
+                    confidence=fact.get("confidence", 0.5),
+                    observation_type="self_reported"
                 )
                 world_model.observe(obs)
                 ingested_observations.append(obs)
@@ -101,13 +103,15 @@ class ObservationCollector:
                 subject=app_name,
                 predicate="status",
                 value=real_status,
-                source="os_process_probe"
+                source="os_process_probe",
+                confidence=1.0,
+                observation_type="direct"
             )
             world_model.observe(obs)
             ingested_observations.append(obs)
 
         elif action_type == "search_files":
-            raw_output = execution_result.get("raw_output", {})
+            raw_output = execution_result.get("raw_output", {}) if isinstance(execution_result, dict) else getattr(execution_result, "outputs", {})
             matched = raw_output.get("matched_files", []) if isinstance(raw_output, dict) else []
             if matched and isinstance(matched, list):
                 first_file = matched[0]
@@ -122,7 +126,9 @@ class ObservationCollector:
                         subject="filesystem",
                         predicate="file_path",
                         value=first_file["file_path"],
-                        source="filesystem_probe"
+                        source="filesystem_probe",
+                        confidence=1.0,
+                        observation_type="direct"
                     )
                     world_model.observe(obs)
                     ingested_observations.append(obs)
@@ -132,7 +138,9 @@ class ObservationCollector:
                     subject="filesystem",
                     predicate="file_path",
                     value="not_found",
-                    source="filesystem_probe"
+                    source="filesystem_probe",
+                    confidence=1.0,
+                    observation_type="direct"
                 )
                 world_model.observe(obs)
                 ingested_observations.append(obs)

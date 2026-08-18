@@ -33,6 +33,33 @@ class GoalVerifier:
     """
 
     @classmethod
+    def is_direct_provenance_evidence(cls, obs_entry: Any, allowed_types: Optional[List[str]] = None) -> tuple[bool, Any]:
+        """
+        P0 Fix: Enforces provenance and evidence_source contract.
+        Returns (is_authorized_evidence, value).
+        DIRECT / ENVIRONMENTAL evidence from process probes, system inspection, or filesystem probes
+        is authorized to satisfy environmental state conditions.
+        SELF_REPORTED tool execution logs alone CANNOT satisfy direct environmental conditions.
+        """
+        if allowed_types is None:
+            allowed_types = ["direct", "environmental"]
+
+        if isinstance(obs_entry, dict) and "value" in obs_entry:
+            val = obs_entry["value"]
+            obs_type = str(obs_entry.get("observation_type", "direct")).lower().strip()
+            source = str(obs_entry.get("source", "")).lower().strip()
+            confidence = float(obs_entry.get("confidence", 1.0))
+
+            is_authorized = (
+                obs_type in allowed_types or
+                any(k in source for k in ["os_process_probe", "filesystem_probe", "process_inspector", "system_probe", "win32_api"])
+            ) and confidence >= 0.8
+            return is_authorized, val
+        else:
+            # Primitive values default to direct for backward compatibility
+            return True, obs_entry
+
+    @classmethod
     def evaluate_condition_against_world_model(
         cls,
         succ_cond: str,
@@ -60,15 +87,19 @@ class GoalVerifier:
         if "response_delivered" in sc_lower:
             return len(reply_clean) > 0
 
-        # (b) App Process / Window Running Condition (Subject-Bound Verification)
+        # (b) App Process / Window Running Condition (Subject-Bound DIRECT Provenance Verification)
         elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
             target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
             if target_entities:
                 for ent in target_entities:
-                    ent_obs_running = any(
-                        ent in k.lower() and str(v).lower() in ["running", "active"]
-                        for k, v in observations_map.items()
-                    )
+                    ent_obs_running = False
+                    for k, obs_entry in observations_map.items():
+                        if ent in k.lower():
+                            is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
+                            if is_auth and str(val).lower() in ["running", "active"]:
+                                ent_obs_running = True
+                                break
+
                     ent_state_running = any(
                         ent in k.lower() and str(st).lower() in ["running", "active"]
                         for k, st in verified_entity_states.items()
@@ -77,7 +108,12 @@ class GoalVerifier:
                         return True
                 return False
             else:
-                obs_running = any(str(v).lower() in ["running", "active"] for v in observations_map.values())
+                obs_running = False
+                for k, obs_entry in observations_map.items():
+                    is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
+                    if is_auth and str(val).lower() in ["running", "active"]:
+                        obs_running = True
+                        break
                 entity_running = any(str(st).lower() in ["running", "active"] for st in verified_entity_states.values())
                 return obs_running or entity_running
 
