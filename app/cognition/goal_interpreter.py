@@ -152,7 +152,13 @@ class SemanticGoalInterpreter:
         return unique_candidates
 
     @classmethod
-    def interpret_goal(cls, user_text: str, complexity: str = "fast") -> SemanticGoalRepresentation:
+    def interpret_goal(
+        cls,
+        user_text: str,
+        complexity: str = "fast",
+        memory_store: Optional[Any] = None,
+        world_model: Optional[Any] = None
+    ) -> SemanticGoalRepresentation:
         text_lower = user_text.lower().strip()
 
         # Fast Heuristic Baseline
@@ -334,7 +340,9 @@ class SemanticGoalInterpreter:
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
-        candidates = cls.synthesize_candidates_from_context(domain, user_text)
+        candidates = cls.synthesize_candidates_from_context(
+            domain, user_text, memory_store=memory_store, world_model=world_model
+        )
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 
         app_logger.info(f"SemanticGoalInterpreter v2: Intent='{intent_type}', Domain='{domain}', Confidence={confidence:.2f}, Candidates={len(candidates)}")
