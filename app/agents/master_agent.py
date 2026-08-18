@@ -103,8 +103,11 @@ class MasterAgentOrchestrator:
         elif action_type == "search_files":
             search_query = payload.get("query") or payload.get("file_name") or payload.get("search_term") or user_text
             matched = UniversalFilesystem.search_filesystem(search_query, max_results=5)
+            result_found = bool(matched)
             raw_output_data["matched_files"] = matched
-            if matched:
+            raw_output_data["result_found"] = result_found
+
+            if result_found:
                 executed_actions.append(f"Found local file '{matched[0]['file_name']}' at {matched[0]['file_path']}.")
                 execution_facts.append({
                     "subject": "filesystem",
@@ -122,6 +125,12 @@ class MasterAgentOrchestrator:
                 })
             else:
                 executed_actions.append(f"Searched local filesystem for '{search_query}' (no matching files found).")
+                execution_facts.append({
+                    "subject": "filesystem",
+                    "predicate": "file_search_result",
+                    "value": "no_matching_files_found",
+                    "source": "universal_filesystem"
+                })
 
         elif action_type in ["phone_command", "make_phone_call", "send_sms"]:
             from app.tools.android_adb_controller import AndroidADBController

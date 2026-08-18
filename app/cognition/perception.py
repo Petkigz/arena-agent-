@@ -116,5 +116,15 @@ class ObservationCollector:
                     )
                     world_model.observe(obs)
                     ingested_observations.append(obs)
+            else:
+                obs = Observation(
+                    id=f"obs_env_fs_{os.urandom(4).hex()}",
+                    subject="filesystem",
+                    predicate="file_path",
+                    value="not_found",
+                    source="filesystem_probe"
+                )
+                world_model.observe(obs)
+                ingested_observations.append(obs)
 
         return ingested_observations
