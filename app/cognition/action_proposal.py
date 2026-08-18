@@ -35,26 +35,30 @@ class ActionProposal:
     ) -> ActionProposal:
         """
         Constructs an ActionProposal directly from a winning candidate branch or candidate dict,
-        preserving 100% of the candidate's custom payload fields rather than discarding them.
+        preserving 100% of the candidate's custom payload fields, predicted outcome, and provenance.
         """
         if hasattr(candidate, "candidate_payload") and hasattr(candidate, "hypothetical_action"):
             act_type = candidate.hypothetical_action
             c_payload = dict(getattr(candidate, "candidate_payload", {}) or {})
             pred_outcome = predicted_outcome or getattr(candidate, "predicted_state_change", {})
+            branch_name = getattr(candidate, "branch_name", "candidate_branch")
         elif isinstance(candidate, dict):
             act_type = candidate.get("action_type", "generic_action")
             c_payload = dict(candidate.get("payload", {}) or {})
             pred_outcome = predicted_outcome or candidate.get("predicted_outcome", {})
+            branch_name = candidate.get("name", "candidate_branch")
         else:
             act_type = str(candidate)
             c_payload = {}
             pred_outcome = predicted_outcome or {}
+            branch_name = "candidate_branch"
 
         if goal_text:
             c_payload.setdefault("query", goal_text)
         if complexity:
             c_payload.setdefault("complexity", complexity)
         c_payload.setdefault("action_type", act_type)
+        c_payload.setdefault("provenance", f"candidate_synthesizer:{branch_name}")
 
         return cls(
             action_type=act_type,

@@ -96,10 +96,7 @@ class CognitiveRuntime:
         )
         if isinstance(res, ActionProposal):
             return res
-        return ActionProposal(
-            action_type=str(res),
-            payload={"query": user_text, "complexity": complexity, "action_type": str(res)}
-        )
+        return ActionProposal.from_candidate(res, goal_text=user_text, complexity=complexity)
 
     def classify_fine_grained_action_type(self, user_text: str) -> str:
         prop = self.generate_candidate_action_proposal(user_text)
