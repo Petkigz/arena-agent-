@@ -16,7 +16,7 @@ def test_candidate_strategy_synthesis_combines_context():
 
     mock_world = MagicMock()
     mock_cap_entity = MagicMock()
-    mock_cap_entity.name = "Custom Dynamic Scanner"
+    mock_cap_entity.name = "screen_capture"
     mock_world.find_entities.return_value = [mock_cap_entity]
 
     candidates = SemanticGoalInterpreter.synthesize_candidates_from_context(
@@ -38,4 +38,4 @@ def test_candidate_strategy_synthesis_combines_context():
 
     # WorldModel dynamic capability candidate included
     assert "world_model_capability" in sources
-    assert "custom_dynamic_scanner" in action_types
+    assert "screen_capture" in action_types

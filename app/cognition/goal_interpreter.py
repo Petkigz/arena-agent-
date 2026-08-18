@@ -166,20 +166,35 @@ class SemanticGoalInterpreter:
         except Exception as e:
             app_logger.warning(f"Memory candidate synthesis note: {e}")
 
-        # 3. Inspect WorldModel capability graph for active entities/capabilities
+        # 3. Inspect WorldModel capability graph for active, EXECUTABLE capabilities
         try:
+            from app.cognition.tool_registry import ToolRegistry
+            tr = ToolRegistry()
+            executable_tools = set(tr._registry.keys())
+            NATIVE_EXECUTABLE_CAPS = {
+                "open_application", "launch_app", "web_search", "search_files",
+                "phone_command", "make_phone_call", "send_sms", "screen_capture",
+                "opsec_audit", "daily_briefing", "investigate", "diagnostic",
+                "formulate_answer", "answer", "workflow_execute"
+            }
+
             from app.cognition.world_model import WorldModel
             wm = world_model or WorldModel()
             active_caps = wm.find_entities(entity_type="capability")
-            for cap in active_caps[:3]:
+            for cap in active_caps[:5]:
                 cap_name = cap.name.lower().replace(" ", "_")
-                if cap_name not in [c.get("action_type") for c in candidates]:
-                    candidates.append({
-                        "name": f"Dynamic Capability: {cap.name}",
-                        "action_type": cap_name,
-                        "payload": {"query": user_text, "action_type": cap_name},
-                        "source": "world_model_capability"
-                    })
+                # EXECUTABILITY VERIFICATION: Ensure capability has an active handler before synthesizing candidate
+                is_executable = (cap_name in executable_tools) or (cap_name in NATIVE_EXECUTABLE_CAPS) or any(ec in cap_name for ec in NATIVE_EXECUTABLE_CAPS)
+                if is_executable:
+                    if cap_name not in [c.get("action_type") for c in candidates]:
+                        candidates.append({
+                            "name": f"Dynamic Capability: {cap.name}",
+                            "action_type": cap_name,
+                            "payload": {"query": user_text, "action_type": cap_name},
+                            "source": "world_model_capability"
+                        })
+                else:
+                    app_logger.warning(f"CandidateSynthesizer: Skipping non-executable capability entity '{cap.name}'")
         except Exception as e:
             app_logger.warning(f"WorldModel capability candidate synthesis note: {e}")
 
