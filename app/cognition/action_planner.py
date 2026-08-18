@@ -42,7 +42,8 @@ class ActionPlanner:
     ) -> ActionProposal:
         """
         Generates candidate strategies via SemanticGoalInterpreter (or uses provided candidates),
-        runs parallel counterfactual simulation in memory, and constructs the winning ActionProposal.
+        runs parallel counterfactual simulation in memory, and constructs the winning ActionProposal,
+        preserving 100% of the winning candidate's payload fields.
         """
         candidate_list = candidates if candidates is not None else cls.generate_candidate_actions(
             goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
@@ -52,8 +53,4 @@ class ActionPlanner:
 
         app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}'")
 
-        return ActionProposal(
-            action_type=winner.hypothetical_action,
-            payload={"query": goal_text, "complexity": complexity, "action_type": winner.hypothetical_action},
-            predicted_outcome=winner.predicted_state_change
-        )
+        return ActionProposal.from_candidate(winner, goal_text=goal_text, complexity=complexity)

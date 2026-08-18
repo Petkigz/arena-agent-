@@ -23,6 +23,7 @@ class SimulationBranch:
     estimated_surprisal: float
     utility_score: float
     reasoning_summary: str
+    candidate_payload: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class CounterfactualSimulationResult:
@@ -87,7 +88,8 @@ class CounterfactualSimulator:
                 goal_fit_score=goal_fit,
                 estimated_surprisal=0.15,
                 utility_score=utility,
-                reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.2f}"
+                reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.2f}",
+                candidate_payload=dict(payload)
             )
             branches.append(branch)
 

@@ -25,6 +25,43 @@ class ActionProposal:
     proposal_id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(default_factory=_now)
 
+    @classmethod
+    def from_candidate(
+        cls,
+        candidate: Any,
+        goal_text: str = "",
+        complexity: str = "fast",
+        predicted_outcome: Optional[Dict[str, Any]] = None
+    ) -> ActionProposal:
+        """
+        Constructs an ActionProposal directly from a winning candidate branch or candidate dict,
+        preserving 100% of the candidate's custom payload fields rather than discarding them.
+        """
+        if hasattr(candidate, "candidate_payload") and hasattr(candidate, "hypothetical_action"):
+            act_type = candidate.hypothetical_action
+            c_payload = dict(getattr(candidate, "candidate_payload", {}) or {})
+            pred_outcome = predicted_outcome or getattr(candidate, "predicted_state_change", {})
+        elif isinstance(candidate, dict):
+            act_type = candidate.get("action_type", "generic_action")
+            c_payload = dict(candidate.get("payload", {}) or {})
+            pred_outcome = predicted_outcome or candidate.get("predicted_outcome", {})
+        else:
+            act_type = str(candidate)
+            c_payload = {}
+            pred_outcome = predicted_outcome or {}
+
+        if goal_text:
+            c_payload.setdefault("query", goal_text)
+        if complexity:
+            c_payload.setdefault("complexity", complexity)
+        c_payload.setdefault("action_type", act_type)
+
+        return cls(
+            action_type=act_type,
+            payload=c_payload,
+            predicted_outcome=pred_outcome
+        )
+
 @dataclass
 class GateResult:
     allowed: bool
