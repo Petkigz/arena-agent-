@@ -107,14 +107,31 @@ class CognitiveRuntime:
         target_domain: str
     ) -> Dict[str, bool]:
         """
-        Dynamically resolves capability availability against ToolRegistry, CapabilityFactory,
-        and environmental device status.
+        P0 Fix: Dynamically resolves capability availability against ToolRegistry,
+        CapabilityFactory, WorldModel, and environmental device status without default 'or True'.
         """
         cap_map: Dict[str, bool] = {}
+
+        NATIVE_CAPABILITIES = {
+            "llm.generate", "os.launch_app", "filesystem.search", "filesystem.read",
+            "browser.open", "web.search", "screen.capture", "vision.analyze",
+            "system.probe"
+        }
+
+        registered_tools = set(self.registry._registry.keys())
+
+        # WorldModel active capabilities
+        wm_caps = set()
+        try:
+            caps_entities = self.world.find_entities(entity_type="capability")
+            wm_caps = {c.name.lower().replace(" ", "_") for c in caps_entities}
+        except Exception as e:
+            app_logger.warning(f"Could not read WorldModel capabilities: {e}")
 
         for cap in required_capabilities:
             cap_clean = cap.lower().strip()
 
+            # 1. Device-specific probe check (e.g. ADB phone controller)
             if any(k in cap_clean for k in ["phone", "adb"]):
                 try:
                     from app.tools.android_adb_controller import AndroidADBController
@@ -123,21 +140,21 @@ class CognitiveRuntime:
                 except Exception:
                     cap_map[cap] = False
 
-            elif any(k in cap_clean for k in ["browser", "web"]):
+            # 2. Check native capability list
+            elif any(cap_clean == nc or cap_clean in nc or nc in cap_clean for nc in NATIVE_CAPABILITIES):
                 cap_map[cap] = True
 
-            elif any(k in cap_clean for k in ["filesystem", "search", "read"]):
+            # 3. Check ToolRegistry registered tools
+            elif any(rt in cap_clean or cap_clean in rt for rt in registered_tools):
                 cap_map[cap] = True
 
-            elif any(k in cap_clean for k in ["screen", "vision"]):
+            # 4. Check WorldModel dynamic capabilities synthesized by CapabilityFactory
+            elif any(wc in cap_clean or cap_clean in wc for wc in wm_caps):
                 cap_map[cap] = True
 
-            elif any(k in cap_clean for k in ["os", "launch"]):
-                cap_map[cap] = True
-
+            # 5. Unsupported / Unknown capability -> FALSE
             else:
-                registered_tools = list(self.registry._registry.keys())
-                cap_map[cap] = any(rt in cap_clean for rt in registered_tools) or True
+                cap_map[cap] = False
 
         return cap_map
 
