@@ -20,11 +20,12 @@ class CapabilityFactory:
         cls,
         capability_name: str,
         description: str,
-        sample_params: Optional[Dict[str, Any]] = None
+        sample_params: Optional[Dict[str, Any]] = None,
+        world_model: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Synthesizes a new atomic capability, tests it in sandbox, registers it into WorldModel,
-        and hot-reloads it into running memory.
+        and hot-reloads it into running memory. Uses provided world_model instance if supplied.
         """
         app_logger.info(f"CapabilityFactory synthesizing capability: '{capability_name}' - {description}")
 
@@ -66,9 +67,9 @@ class CapabilityFactory:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(code_block)
 
-        # Register capability in WorldModel graph
+        # Register capability in WorldModel graph using provided or default instance
         try:
-            wm = WorldModel(str(settings.DB_PATH))
+            wm = world_model or WorldModel(str(settings.DB_PATH))
             wm.add_entity(entity_id=f"cap_{safe_name}", entity_type="capability", name=capability_name, properties={"description": description})
         except Exception as e:
             app_logger.warning(f"WorldModel registration note: {e}")

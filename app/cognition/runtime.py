@@ -516,7 +516,9 @@ class CognitiveRuntime:
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
         tracker.transition(GoalLifecycleState.EXECUTING, "Executing selected action strategy via capability layer.")
         from app.agents.master_agent import MasterAgentOrchestrator
-        agent_res = MasterAgentOrchestrator.execute_proposal(proposal, user_text, complexity=complexity)
+        agent_res = MasterAgentOrchestrator.execute_proposal(
+            proposal, user_text, complexity=complexity, world_model=self.world
+        )
         executed_actions = agent_res.get("executed_actions", [])
         assistant_reply = agent_res.get("assistant_reply", "Done.")
 
@@ -542,7 +544,9 @@ class CognitiveRuntime:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)
                 if replan_gate_res.allowed:
                     tracker.transition(GoalLifecycleState.EXECUTING, f"Executing Plan B proposal '{replan_proposal.action_type}'")
-                    replan_agent_res = MasterAgentOrchestrator.execute_proposal(replan_proposal, user_text, complexity=complexity)
+                    replan_agent_res = MasterAgentOrchestrator.execute_proposal(
+                        replan_proposal, user_text, complexity=complexity, world_model=self.world
+                    )
                     ObservationCollector.collect_and_ingest_observations(
                         replan_proposal, replan_agent_res, world_model=self.world, event_bus=self.events
                     )

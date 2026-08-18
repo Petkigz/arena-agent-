@@ -26,9 +26,10 @@ class EnvironmentGroundingEngine:
     """
 
     @classmethod
-    def probe_complete_environment(cls) -> Dict[str, Any]:
+    def probe_complete_environment(cls, world_model: Optional[Any] = None) -> Dict[str, Any]:
         """
         Gathers a complete environmental topology snapshot across hardware, OS, apps, and network.
+        Uses provided world_model instance if supplied.
         """
         host_os = platform.system()
         os_release = platform.release()
@@ -59,9 +60,9 @@ class EnvironmentGroundingEngine:
             "top_window_title": windows[0]["title"] if windows else "Desktop"
         }
 
-        # Update WorldModel
+        # Update WorldModel using provided or default instance
         try:
-            wm = WorldModel(str(settings.DB_PATH))
+            wm = world_model or WorldModel(str(settings.DB_PATH))
             wm.upsert_entity(
                 name=f"Host PC ({platform.node()})",
                 entity_type="host_environment",

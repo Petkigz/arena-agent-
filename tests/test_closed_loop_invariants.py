@@ -21,7 +21,7 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
 
     executed_proposal = None
 
-    def mock_execute_proposal(proposal, user_text, complexity="fast"):
+    def mock_execute_proposal(proposal, user_text, complexity="fast", **kwargs):
         nonlocal executed_proposal
         executed_proposal = proposal
         from app.cognition.world_model import Observation
@@ -50,7 +50,7 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
 
     executed_proposals = []
 
-    def mock_execute_proposal(proposal, user_text, complexity="fast"):
+    def mock_execute_proposal(proposal, user_text, complexity="fast", **kwargs):
         executed_proposals.append(proposal)
         if proposal.action_type == "search_files":
             return {

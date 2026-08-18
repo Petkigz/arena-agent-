@@ -40,17 +40,17 @@ class SemanticRAGEngine:
         return [m[1] for m in scored_memories[:limit]]
 
     @classmethod
-    def build_rag_context(cls, query: str, limit: int = 3) -> str:
+    def build_rag_context(cls, query: str, limit: int = 3, world_model: Optional[Any] = None) -> str:
         """
         Retrieves top relevant vector memories AND fuses structured Knowledge Graph entities (WorldModel)
-        into a unified, dual-layered RAG context string for LLM prompts.
+        into a unified, dual-layered RAG context string for LLM prompts. Uses provided world_model instance.
         """
         relevant = cls.search_memories(query, limit=limit)
         
         # Fuse Knowledge Graph Entity Nodes from WorldModel
         graph_entities = []
         try:
-            wm = WorldModel(str(settings.DB_PATH))
+            wm = world_model or WorldModel(str(settings.DB_PATH))
             words = [w for w in query.replace("?", "").replace("'", "").split() if len(w) > 3]
             search_key = words[0] if words else query
             matched_nodes = wm.query_entities(query=search_key, limit=3)

@@ -42,10 +42,17 @@ class MasterAgentOrchestrator:
     """
 
     @classmethod
-    def execute_proposal(cls, proposal: Any, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
+    def execute_proposal(
+        cls,
+        proposal: Any,
+        user_text: str,
+        complexity: str = "fast",
+        world_model: Optional[Any] = None
+    ) -> Dict[str, Any]:
         """
         Executes a specific ActionProposal directly through capability resolvers,
         producing a structured ExecutionResult carrying raw execution facts and outputs.
+        Uses the provided authoritative world_model instance if supplied.
         Does NOT directly write WorldModel observations; environmental observations are ingested
         downstream via the Perception Layer (ObservationCollector).
         """
