@@ -44,13 +44,16 @@ class MasterAgentOrchestrator:
     @classmethod
     def execute_proposal(cls, proposal: Any, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
         """
-        P0 Fix: Executes a specific ActionProposal directly through capability resolver,
-        ensuring that counterfactual-selected proposals are executed without re-routing.
-        Normalized to check tool success flags before recording action records or WorldModel observations.
+        Executes a specific ActionProposal directly through capability resolvers,
+        producing a structured ExecutionResult carrying raw execution facts and outputs.
+        Does NOT directly write WorldModel observations; environmental observations are ingested
+        downstream via the Perception Layer (ObservationCollector).
         """
         action_type = getattr(proposal, "action_type", str(proposal)).lower().strip()
         payload = getattr(proposal, "payload", {}) if hasattr(proposal, "payload") else {}
         executed_actions = []
+        execution_facts: List[Dict[str, Any]] = []
+        raw_output_data: Dict[str, Any] = {}
         execution_success = True
 
         if action_type in ["open_application", "launch_app"]:
@@ -59,27 +62,40 @@ class MasterAgentOrchestrator:
                 match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
                 app_name = match.group(1).strip() if match else "explorer"
             res = SystemAppInventory.launch_any_app(app_name)
+            raw_output_data["launch_res"] = res
             if res.get("success"):
                 executed_actions.append(f"Launched application '{res.get('app_name', app_name).title()}' on your PC.")
+                execution_facts.append({
+                    "subject": res.get("app_name", app_name).lower(),
+                    "predicate": "launch_command",
+                    "value": "succeeded",
+                    "source": "system_app_inventory"
+                })
             else:
                 execution_success = False
                 executed_actions.append(f"Failed to launch application '{app_name}': {res.get('error', 'Launch error')}")
+                execution_facts.append({
+                    "subject": app_name.lower(),
+                    "predicate": "launch_command",
+                    "value": "failed",
+                    "source": "system_app_inventory"
+                })
 
         elif action_type == "web_search":
             query_term = payload.get("query_term") or payload.get("query") or user_text
             url = f"https://www.youtube.com/results?search_query={str(query_term).replace(' ', '+')}" if "youtube" in str(query_term).lower() or "youtube" in user_text.lower() else f"https://www.google.com/search?q={str(query_term).replace(' ', '+')}"
             d_res = DesktopControl.launch_application("firefox")
             DesktopControl.open_url(url)
+            raw_output_data["url"] = url
+            raw_output_data["query_term"] = query_term
             if d_res.get("success", True):
                 executed_actions.append(f"Opened web browser and launched search for '{query_term}'.")
-                try:
-                    from app.cognition.world_model import WorldModel, Observation
-                    wm = WorldModel(str(settings.DB_PATH))
-                    wm.observe(Observation(
-                        id=f"obs_web_{os.urandom(4).hex()}", subject="web_search", predicate="search_results", value=url, source="web_researcher"
-                    ))
-                except Exception as e:
-                    app_logger.warning(f"WorldModel web_search observation note: {e}")
+                execution_facts.append({
+                    "subject": "web_search",
+                    "predicate": "search_results",
+                    "value": url,
+                    "source": "web_researcher"
+                })
             else:
                 execution_success = False
                 executed_actions.append(f"Failed to open web browser for search '{query_term}'.")
@@ -87,17 +103,23 @@ class MasterAgentOrchestrator:
         elif action_type == "search_files":
             search_query = payload.get("query") or payload.get("file_name") or payload.get("search_term") or user_text
             matched = UniversalFilesystem.search_filesystem(search_query, max_results=5)
+            raw_output_data["matched_files"] = matched
             if matched:
                 executed_actions.append(f"Found local file '{matched[0]['file_name']}' at {matched[0]['file_path']}.")
-                try:
-                    from app.cognition.world_model import WorldModel, Observation
-                    wm = WorldModel(str(settings.DB_PATH))
-                    wm.upsert_entity(name=matched[0]['file_name'], entity_type="file", attributes={"file_path": matched[0]['file_path'], "status": "identified"})
-                    wm.observe(Observation(
-                        id=f"obs_fs_{os.urandom(4).hex()}", subject="filesystem", predicate="file_path", value=matched[0]['file_path'], source="universal_filesystem"
-                    ))
-                except Exception as e:
-                    app_logger.warning(f"WorldModel search_files observation note: {e}")
+                execution_facts.append({
+                    "subject": "filesystem",
+                    "predicate": "file_path",
+                    "value": matched[0]['file_path'],
+                    "source": "universal_filesystem"
+                })
+                execution_facts.append({
+                    "subject": matched[0]['file_name'],
+                    "predicate": "status",
+                    "value": "identified",
+                    "source": "universal_filesystem",
+                    "entity_type": "file",
+                    "attributes": {"file_path": matched[0]['file_path']}
+                })
             else:
                 executed_actions.append(f"Searched local filesystem for '{search_query}' (no matching files found).")
 
@@ -153,33 +175,31 @@ class MasterAgentOrchestrator:
                     executed_actions.append("Failed to query phone status via Android ADB.")
 
             if execution_success:
-                try:
-                    from app.cognition.world_model import WorldModel, Observation
-                    wm = WorldModel(str(settings.DB_PATH))
-                    wm.observe(Observation(
-                        id=f"obs_adb_{os.urandom(4).hex()}", subject="phone", predicate="adb_status", value="succeeded", source="android_adb"
-                    ))
-                except Exception as e:
-                    app_logger.warning(f"WorldModel phone_command observation note: {e}")
+                execution_facts.append({
+                    "subject": "phone",
+                    "predicate": "adb_status",
+                    "value": "succeeded",
+                    "source": "android_adb"
+                })
 
         elif action_type == "screen_capture":
             cap_res = ScreenCaptureTool.capture_screen()
+            raw_output_data["cap_res"] = cap_res
             if cap_res.get("success"):
                 executed_actions.append(f"Captured active desktop screen window ({cap_res.get('file_name')}).")
-                try:
-                    from app.cognition.world_model import WorldModel, Observation
-                    wm = WorldModel(str(settings.DB_PATH))
-                    wm.observe(Observation(
-                        id=f"obs_screen_{os.urandom(4).hex()}", subject="screen_capture", predicate="screenshot", value=cap_res.get("file_name"), source="screen_capture_tool"
-                    ))
-                except Exception as e:
-                    app_logger.warning(f"WorldModel screen_capture observation note: {e}")
+                execution_facts.append({
+                    "subject": "screen_capture",
+                    "predicate": "screenshot",
+                    "value": cap_res.get("file_name"),
+                    "source": "screen_capture_tool"
+                })
             else:
                 execution_success = False
                 executed_actions.append(f"Failed to capture desktop screen window: {cap_res.get('error', 'Capture error')}")
 
         elif action_type == "opsec_audit":
             audit_res = OpSecManagerTool.audit_digital_footprint("user@example.com")
+            raw_output_data["audit_res"] = audit_res
             if audit_res.get("success", True):
                 executed_actions.append(f"Audited OpSec footprint: {audit_res.get('total_exposures_found', 0)} findings.")
             else:
@@ -188,6 +208,7 @@ class MasterAgentOrchestrator:
 
         elif action_type == "daily_briefing":
             brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
+            raw_output_data["brief_res"] = brief_res
             if brief_res.get("success", True):
                 executed_actions.append("Generated Daily Executive Briefing.")
             else:
@@ -206,21 +227,20 @@ class MasterAgentOrchestrator:
 
             probe_summary = f"Gathered diagnostic evidence for '{probe_query[:40]}': " + "; ".join(diag_details)
             executed_actions.append(probe_summary)
-
-            try:
-                from app.cognition.world_model import WorldModel, Observation
-                wm = WorldModel(str(settings.DB_PATH))
-                wm.observe(Observation(
-                    id=f"obs_diag_{os.urandom(4).hex()}", subject="diagnostic", predicate="evidence", value=probe_summary, source="investigation_probe"
-                ))
-            except Exception as e:
-                app_logger.warning(f"WorldModel investigation observation note: {e}")
+            execution_facts.append({
+                "subject": "diagnostic",
+                "predicate": "evidence",
+                "value": probe_summary,
+                "source": "investigation_probe"
+            })
+            raw_output_data["probe_summary"] = probe_summary
 
         elif action_type in ["formulate_answer", "answer"]:
             executed_actions.append("Formulated direct conversational answer.")
 
         elif action_type == "workflow_execute":
             wf_res = WorkflowEngine.execute_workflow(payload.get("workflow_name", "Task Workflow"), payload.get("steps", []))
+            raw_output_data["wf_res"] = wf_res
             if wf_res.get("overall_success", True):
                 executed_actions.append(f"Executed workflow '{wf_res.get('workflow_name')}'.")
             else:
@@ -234,6 +254,7 @@ class MasterAgentOrchestrator:
                 tr = ToolRegistry()
                 if action_type in tr._registry:
                     tr_res = tr.execute_registered_tool(action_type, payload)
+                    raw_output_data["tr_res"] = tr_res
                     if tr_res.get("success"):
                         executed_actions.append(f"Executed registered tool '{action_type}'.")
                     else:
@@ -279,6 +300,8 @@ class MasterAgentOrchestrator:
             "user_text": user_text,
             "assistant_reply": assistant_reply,
             "executed_actions": executed_actions,
+            "execution_facts": execution_facts,
+            "raw_output": raw_output_data,
             "model_used": llm_res.get("model", "")
         }
 

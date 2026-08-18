@@ -518,6 +518,12 @@ class CognitiveRuntime:
         executed_actions = agent_res.get("executed_actions", [])
         assistant_reply = agent_res.get("assistant_reply", "Done.")
 
+        # Perception Layer: Ingest Environmental Observations from ExecutionResult into WorldModel
+        from app.cognition.perception import ObservationCollector
+        ObservationCollector.collect_and_ingest_observations(
+            proposal, agent_res, world_model=self.world, event_bus=self.events
+        )
+
         # Goal Verification
         obs_state = self.capture_observed_world_state(executed_actions, assistant_reply, goal_rep)
         verify_res = GoalVerifier.verify_goal_achievement(
@@ -535,6 +541,9 @@ class CognitiveRuntime:
                 if replan_gate_res.allowed:
                     tracker.transition(GoalLifecycleState.EXECUTING, f"Executing Plan B proposal '{replan_proposal.action_type}'")
                     replan_agent_res = MasterAgentOrchestrator.execute_proposal(replan_proposal, user_text, complexity=complexity)
+                    ObservationCollector.collect_and_ingest_observations(
+                        replan_proposal, replan_agent_res, world_model=self.world, event_bus=self.events
+                    )
                     executed_actions.extend(replan_agent_res.get("executed_actions", []))
                     assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
                     obs_state = self.capture_observed_world_state(executed_actions, assistant_reply, goal_rep)
