@@ -486,6 +486,7 @@ class CognitiveRuntime:
             if replan_proposal:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)
                 if replan_gate_res.allowed:
+                    tracker.transition(GoalLifecycleState.EXECUTING, f"Executing Plan B proposal '{replan_proposal.action_type}'")
                     replan_agent_res = MasterAgentOrchestrator.execute_proposal(replan_proposal, user_text, complexity=complexity)
                     executed_actions.extend(replan_agent_res.get("executed_actions", []))
                     assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
@@ -495,6 +496,7 @@ class CognitiveRuntime:
                     )
                     trace.goal_verified = verify_res.verified_success
                 else:
+                    tracker.transition(GoalLifecycleState.BLOCKED, f"Plan B proposal '{replan_proposal.action_type}' blocked by gate {replan_gate_res.gate_name}")
                     app_logger.warning(
                         f"Replan proposal '{replan_proposal.action_type}' blocked by gate {replan_gate_res.gate_name}: {replan_gate_res.reason}"
                     )

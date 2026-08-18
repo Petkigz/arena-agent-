@@ -11,6 +11,7 @@ def test_replanner_uses_structured_failed_action_type_to_exclude_strategy():
     """
     goal_rep = SemanticGoalInterpreter.interpret_goal("Open Photoshop")
     tracker = GoalTracker("Open Photoshop")
+    tracker.current_state = GoalLifecycleState.FAILED
 
     failed_result = GoalVerificationResult(
         goal_id=tracker.goal_id,
