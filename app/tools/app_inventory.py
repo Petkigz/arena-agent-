@@ -254,6 +254,21 @@ class SystemAppInventory:
                 subprocess.Popen([exec_path], shell=True)
 
             audit_logger.info(f"Successfully launched application '{app_name}'")
+
+            # Ingest environmental observation into WorldModel
+            try:
+                from app.cognition.world_model import WorldModel, Observation
+                wm = WorldModel(str(settings.DB_PATH))
+                wm.observe(Observation(
+                    id=f"obs_launch_{app_name.lower()}_{os.urandom(4).hex()}",
+                    subject=app_name.lower(),
+                    predicate="status",
+                    value="running",
+                    source="system_app_inventory"
+                ))
+            except Exception as ex:
+                app_logger.warning(f"Could not log WorldModel launch observation: {ex}")
+
             return {
                 "success": True,
                 "app_name": app_name,

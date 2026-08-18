@@ -49,21 +49,21 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
 
     def mock_execute_proposal(proposal, user_text, complexity="fast"):
         executed_proposals.append(proposal)
-        if proposal.action_type == "open_application":
+        if proposal.action_type == "search_files":
             return {
-                "executed_actions": ["Launched app"],
-                "assistant_reply": "App launched but crashed immediately with code 1.",
+                "executed_actions": ["Searched filesystem"],
+                "assistant_reply": "Error: File report.pdf not found in workspace.",
                 "model_used": "fast"
             }
         else:
             return {
                 "executed_actions": ["Executed Plan B web search"],
-                "assistant_reply": "Retrieved web search results for application troubleshooting.",
+                "assistant_reply": "Retrieved web search results for report.pdf document http://example.com/report.pdf",
                 "model_used": "fast"
             }
 
     with patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal):
-        res = runtime.process_cognitive_cycle(user_text="Open Photoshop", complexity="fast")
+        res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         # Plan A executed, failed, Plan B executed
         assert len(executed_proposals) == 2
@@ -72,7 +72,7 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
 
         # Plan B MUST differ from Plan A
         assert plan_b.action_type != plan_a.action_type
-        assert plan_a.action_type == "open_application"
+        assert plan_a.action_type == "search_files"
         assert plan_b.action_type == "web_search"
         assert res["goal_verified"] is True
         assert res["goal_lifecycle_state"] == GoalLifecycleState.ACHIEVED.value
@@ -143,8 +143,12 @@ def test_invariant_e_goal_actually_satisfied_results_in_achieved():
 
     executed_actions = ["Launched Photoshop executable"]
     reply = "Photoshop process is running active on screen."
+    observed_state = {
+        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running"}],
+        "observations": {"photoshop.status": "running"}
+    }
 
-    res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply)
+    res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply, observed_state=observed_state)
 
     assert res.verified_success is True
     assert res.final_state == GoalLifecycleState.ACHIEVED

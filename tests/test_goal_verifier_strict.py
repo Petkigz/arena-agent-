@@ -31,8 +31,12 @@ def test_goal_verifier_successful_app_launch_passes_verification():
 
     executed_actions = ["Launched Photoshop executable"]
     reply = "Photoshop process is running active on screen."
+    observed_state = {
+        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running"}],
+        "observations": {"photoshop.status": "running"}
+    }
 
-    res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply)
+    res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply, observed_state=observed_state)
 
     assert res.verified_success is True
     assert res.final_state == GoalLifecycleState.ACHIEVED

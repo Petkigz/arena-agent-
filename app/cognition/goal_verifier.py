@@ -61,10 +61,11 @@ class GoalVerifier:
 
         # (b) App Process / Window Running Condition
         elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
+            # P0 Fix: Environmental verification requires an actual WorldModel observation or WorldModel entity status.
+            # Tool execution logs alone ("tool claims it launched it") do NOT prove the process is running.
             obs_running = any("running" in str(v).lower() or "active" in str(v).lower() for v in observations_map.values())
             entity_running = any("running" in str(st).lower() or "active" in str(st).lower() for st in verified_entity_states.values())
-            action_executed = len(executed_actions) > 0 and any(k in actions_str for k in ["launched", "opened", "started", "running"])
-            return obs_running or entity_running or action_executed
+            return obs_running or entity_running
 
         # (c) File Path / Access Condition
         elif any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
@@ -137,12 +138,10 @@ class GoalVerifier:
                 ent_status = ent.get("status", "unknown")
                 verified_entity_states[ent_name] = ent_status
 
-        # If entities_list empty, populate verified entity states from executed_actions
+        # If entities_list empty, default entity states to unknown (requires WorldModel observation)
         if not verified_entity_states and goal_rep.entities:
             for ent_name in goal_rep.entities:
-                # Require explicit tool execution record (actions_str), NOT LLM assistant_reply text
-                is_executed = len(executed_actions) > 0 and any(k in actions_str for k in ["running", "launched", "opened", "active"]) and not any(k in actions_str or k in reply_lower for k in ["crash", "crashed", "failed", "error", "not found"])
-                verified_entity_states[ent_name] = "running" if is_executed else "unknown"
+                verified_entity_states[ent_name] = "unknown"
 
         met_conditions = []
         failed_conditions = []
