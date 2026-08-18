@@ -500,97 +500,27 @@ def get_api_status():
 import re
 
 def _parse_and_execute_intent(user_text: str) -> Optional[str]:
-    """DEPRECATED: Legacy direct regex intent executor.
-    The single canonical cognitive execution route is CognitivePipeline -> CognitiveRuntime.
-    This helper is retained solely for legacy backwards compatibility during migration.
     """
-    app_logger.warning("Call to deprecated legacy route _parse_and_execute_intent(). Canonical route is CognitivePipeline -> CognitiveRuntime.")
-    text_lower = user_text.lower()
-
-    # 1. Open / Launch ANY Installed Application
-    if any(k in text_lower for k in ["open ", "launch ", "start ", "run ", "search for ", "look up "]):
-        # Check for browser search URL intent (e.g. YouTube/Google search)
-        if "youtube" in text_lower or "google" in text_lower:
-            query_term = "ordinary"
-            if "search" in text_lower or "for" in text_lower:
-                m = re.search(r'(?:search|look up|for|find)\s+(?:me\s+)?([a-zA-Z0-9_\-\s]+?)(?:\s+on youtube|\s+in firefox|\s+in chrome|\s+on google|$)', text_lower)
-                if m and m.group(1).strip():
-                    query_term = m.group(1).strip()
-
-            url = f"https://www.youtube.com/results?search_query={query_term.replace(' ', '+')}" if "youtube" in text_lower else f"https://www.google.com/search?q={query_term.replace(' ', '+')}"
-
-            app_to_launch = "firefox" if "firefox" in text_lower else "chrome"
-            DesktopControl.launch_application(app_to_launch)
-            DesktopControl.open_url(url)
-            return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Launched {app_to_launch.title()} and opened search for '{query_term}' ({url})."
-
-        # General open any installed application intent
-        match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', text_lower)
-        if match:
-            target_app_query = match.group(1).strip()
-            if len(target_app_query) > 1 and target_app_query not in ["file", "folder", "song", "task", "briefing", "sandbox"]:
-                res = SystemAppInventory.launch_any_app(target_app_query)
-                if res.get("success"):
-                    return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: {res.get('message', f'Launched {target_app_query}')}"
-
-    # 2. Screenshot / Screen Vision
-    if any(k in text_lower for k in ["take a screenshot", "capture screen", "snap desktop", "screen vision"]):
-        cap = ScreenCaptureTool.capture_screen()
-        return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Captured screen image: {cap.get('file_name', 'screenshot.png')}."
-
-    # 3. Daily Briefing
-    if any(k in text_lower for k in ["daily briefing", "morning report", "generate briefing"]):
-        b = DailyBriefingEngine.generate_briefing(generate_audio=False)
-        return f"[ACTION EXECUTED BY LOCAL SYSTEM OPERATOR]: Generated Executive Briefing for today."
-
+    Canonical Cognitive Route Delegation.
+    Delegates 100% to CognitivePipeline -> CognitiveRuntime, ensuring a single unified cognitive authority.
+    """
+    res = CognitivePipeline.process_request(user_text, complexity="fast")
+    if res.get("executed_actions"):
+        return f"[ACTION EXECUTED BY COGNITIVE RUNTIME]: " + "; ".join(res["executed_actions"])
     return None
 
 def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """DEPRECATED: Legacy prompt enrichment helper.
-    The single canonical cognitive execution route is CognitivePipeline -> CognitiveRuntime.
-    This helper is retained solely for legacy backwards compatibility during migration.
     """
-    app_logger.warning("Call to deprecated legacy route _enrich_messages_with_local_tools_and_rag(). Canonical route is CognitivePipeline -> CognitiveRuntime.")
-    rag_context = SemanticRAGEngine.build_rag_context(user_text) if user_text else ""
-
-    app_count = SystemAppInventory.get_installed_apps_count()
-
-    system_instruction = (
-        f"You are an advanced local personal assistant running natively on the user's local PC.\n"
-        f"You have full permission and native tools to access local files, search directories, read documents, "
-        f"play media, launch and operate ANY of the {app_count} installed applications on this PC, monitor hardware, and run sandboxes.\n"
-        f"Never state that you cannot access local files, applications, or the system — you ARE the local assistant running on this PC."
-    )
-
-    action_context = _parse_and_execute_intent(user_text) or ""
-
-    fs_context = ""
-    text_lower = user_text.lower()
-
-    # Ingest App Count Info if user asks about installed apps/PC apps
-    if any(k in text_lower for k in ["how many apps", "installed apps", "apps on my pc", "list my apps", "what apps"]):
-        scan_info = SystemAppInventory.scan_installed_applications()
-        top_apps = [a["app_name"] for a in scan_info.get("applications", [])[:15]]
-        fs_context += f"\n\n[SYSTEM INSTALLED APPLICATIONS INFO]: Discovered {scan_info.get('total_apps_count')} installed applications on this {scan_info.get('host_os')} PC. Sample installed apps: {', '.join(top_apps)}."
-
-    # Ingest Filesystem Search
-    if any(k in text_lower for k in ["song", "file", "document", "ordinary", "library", "folder", "do i have", "search my pc", "find on my pc"]):
-        words = [w for w in user_text.replace("?", "").replace("'", "").split() if len(w) > 3 and w.lower() not in ["have", "called", "song", "this", "library", "with", "from", "does", "what"]]
-        search_term = words[0] if words else "Ordinary"
-        matched = UniversalFilesystem.search_filesystem(search_term, max_results=10)
-        if matched:
-            fs_context += f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']:\n" + "\n".join([f"• {m['file_name']} (Path: {m['file_path']})" for m in matched])
-        else:
-            fs_context += f"\n\n[LOCAL FILESYSTEM SEARCH RESULTS FOR '{search_term}']: No files matching '{search_term}' were found in the scanned workspace/system directories."
-
-    combined_system_prompt = system_instruction + (f"\n\n{rag_context}" if rag_context else "") + (f"\n\n{action_context}" if action_context else "") + fs_context
-
+    Canonical Cognitive Route Delegation.
+    Delegates 100% to CognitivePipeline -> CognitiveRuntime, ensuring a single unified cognitive authority.
+    """
+    res = CognitivePipeline.process_request(user_text, complexity="fast")
     enriched = list(messages)
+    reply = res.get("assistant_reply", "")
     if enriched and enriched[0]["role"] == "system":
-        enriched[0]["content"] += f"\n\n{combined_system_prompt}"
+        enriched[0]["content"] += f"\n\n[COGNITIVE RUNTIME CONTEXT]: {reply}"
     else:
-        enriched.insert(0, {"role": "system", "content": combined_system_prompt})
-
+        enriched.insert(0, {"role": "system", "content": f"[COGNITIVE RUNTIME CONTEXT]: {reply}"})
     return enriched
 
 # 2. Local Chat Completions Route
