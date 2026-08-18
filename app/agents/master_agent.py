@@ -50,28 +50,31 @@ class MasterAgentOrchestrator:
         payload = getattr(proposal, "payload", {}) if hasattr(proposal, "payload") else {}
         executed_actions = []
 
-        if action_type == "open_application":
-            app_name = payload.get("app_name") or "explorer"
-            match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
-            if match:
-                app_name = match.group(1).strip()
+        if action_type in ["open_application", "launch_app"]:
+            app_name = payload.get("app_name") or payload.get("app") or payload.get("app_query") or payload.get("query")
+            if not app_name:
+                match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
+                app_name = match.group(1).strip() if match else "explorer"
             res = SystemAppInventory.launch_any_app(app_name)
             if res.get("success"):
                 executed_actions.append(f"Launched application '{res.get('app_name', app_name).title()}' on your PC.")
+            else:
+                executed_actions.append(f"Attempted to launch application '{app_name}'.")
 
         elif action_type == "web_search":
-            query_term = payload.get("query_term") or user_text
-            url = f"https://www.youtube.com/results?search_query={query_term.replace(' ', '+')}" if "youtube" in user_text.lower() else f"https://www.google.com/search?q={query_term.replace(' ', '+')}"
+            query_term = payload.get("query_term") or payload.get("query") or user_text
+            url = f"https://www.youtube.com/results?search_query={str(query_term).replace(' ', '+')}" if "youtube" in str(query_term).lower() or "youtube" in user_text.lower() else f"https://www.google.com/search?q={str(query_term).replace(' ', '+')}"
             DesktopControl.launch_application("firefox")
             DesktopControl.open_url(url)
             executed_actions.append(f"Opened web browser and launched search for '{query_term}'.")
 
         elif action_type == "search_files":
-            matched = UniversalFilesystem.search_filesystem(user_text, max_results=5)
+            search_query = payload.get("query") or payload.get("file_name") or payload.get("search_term") or user_text
+            matched = UniversalFilesystem.search_filesystem(search_query, max_results=5)
             if matched:
                 executed_actions.append(f"Found local file '{matched[0]['file_name']}' at {matched[0]['file_path']}.")
             else:
-                executed_actions.append(f"Searched local filesystem for '{user_text}'.")
+                executed_actions.append(f"Searched local filesystem for '{search_query}'.")
 
         elif action_type == "phone_command":
             from app.tools.android_adb_controller import AndroidADBController
