@@ -183,6 +183,30 @@ class SemanticGoalInterpreter:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
         intent_type, domain = cls.normalize_and_validate(intent_type, domain)
+
+        # Domain-aware success & failure conditions assignment
+        if domain == "desktop_os":
+            success_conditions = ["app_process_running = true"]
+            failure_conditions = ["process_crashed = true", "launch_failed = true"]
+        elif domain == "filesystem":
+            success_conditions = ["file_path_identified = true"]
+            failure_conditions = ["file_not_found = true"]
+        elif domain == "web_research":
+            success_conditions = ["search_results_retrieved = true"]
+            failure_conditions = ["network_error = true", "no_results_found = true"]
+        elif domain == "mobile_phone":
+            success_conditions = ["adb_command_succeeded = true"]
+            failure_conditions = ["adb_device_offline = true"]
+        elif domain == "vision_desktop":
+            success_conditions = ["screen_capture_saved = true"]
+            failure_conditions = ["screen_capture_failed = true"]
+        elif domain == "diagnostic":
+            success_conditions = ["diagnostic_evidence_gathered = true"]
+            failure_conditions = ["evidence_unavailable = true"]
+        else:
+            success_conditions = ["response_delivered = true"]
+            failure_conditions = ["response_empty = true"]
+
         candidates = cls.build_candidates_for_domain(domain, user_text)
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 
