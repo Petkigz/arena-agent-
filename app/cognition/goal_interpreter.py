@@ -41,6 +41,49 @@ class SemanticGoalInterpreter:
     VALID_DOMAINS = {"desktop_os", "filesystem", "web_research", "mobile_phone", "vision_desktop", "diagnostic", "conversation"}
 
     @classmethod
+    def extract_json_object(cls, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Robust JSON object extractor that handles markdown codeblocks, nested JSON objects,
+        Windows file path backslashes, and braces inside strings without regex limitations.
+        """
+        if not text:
+            return None
+
+        clean_text = text.strip()
+        if "```json" in clean_text:
+            clean_text = clean_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in clean_text:
+            clean_text = clean_text.split("```")[1].split("```")[0].strip()
+
+        def sanitize_json_str(s: str) -> str:
+            return re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', s)
+
+        # 1. Attempt direct parse
+        for candidate in [clean_text, sanitize_json_str(clean_text)]:
+            try:
+                data = json.loads(candidate)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+
+        # 2. Extract between first '{' and last '}'
+        start_idx = clean_text.find("{")
+        end_idx = clean_text.rfind("}")
+
+        if start_idx != -1 and end_idx > start_idx:
+            candidate = clean_text[start_idx:end_idx + 1]
+            for c_str in [candidate, sanitize_json_str(candidate)]:
+                try:
+                    data = json.loads(c_str)
+                    if isinstance(data, dict):
+                        return data
+                except Exception:
+                    pass
+
+        return None
+
+    @classmethod
     def normalize_and_validate(cls, intent_type: str, domain: str) -> tuple[str, str]:
         clean_intent = str(intent_type).lower().strip()
         clean_domain = str(domain).lower().strip()
@@ -312,9 +355,8 @@ class SemanticGoalInterpreter:
                 )
                 if llm_res.get("choices"):
                     content = llm_res["choices"][0]["message"]["content"]
-                    json_match = re.search(r'\{[^{}]*\}', content)
-                    if json_match:
-                        parsed_json = json.loads(json_match.group(0))
+                    parsed_json = cls.extract_json_object(content)
+                    if parsed_json:
                         raw_intent = parsed_json.get("primary_intent_type", intent_type)
                         raw_domain = parsed_json.get("target_domain", domain)
                         intent_type, domain = cls.normalize_and_validate(raw_intent, raw_domain)
