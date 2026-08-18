@@ -388,8 +388,8 @@ class CognitiveRuntime:
 
         # Branch C: DEFER / SAFELY ASK USER
         elif reasoning_action == ReasoningAction.DEFER:
-            tracker.transition(GoalLifecycleState.FAILED, "Evidence is insufficient for a safe decision.")
-            defer_msg = f"Deferred task: {last_decision.reason if last_decision else 'Evidence is insufficient for a safe decision.'}"
+            tracker.transition(GoalLifecycleState.DEFERRED, "Evidence or capabilities are insufficient for a safe decision.")
+            defer_msg = f"Deferred task: {last_decision.reason if last_decision else 'Evidence or capabilities are insufficient for a safe decision.'}"
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=defer_msg,
@@ -434,7 +434,11 @@ class CognitiveRuntime:
         trace.gate_decision = gate_res.gate_name
 
         if not gate_res.allowed:
-            tracker.transition(GoalLifecycleState.FAILED, f"Action blocked by {gate_res.gate_name}")
+            if gate_res.requires_approval:
+                tracker.transition(GoalLifecycleState.WAITING_FOR_USER, f"Action requires 1-click UI approval: {gate_res.reason}")
+            else:
+                tracker.transition(GoalLifecycleState.BLOCKED, f"Action blocked by {gate_res.gate_name}: {gate_res.reason}")
+
             latency = (time.time() - start_time) * 1000
             blocked_msg = f"Action blocked by {gate_res.gate_name}: {gate_res.reason}"
             trace.finalize(

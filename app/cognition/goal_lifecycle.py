@@ -18,6 +18,9 @@ class GoalLifecycleState(str, Enum):
     VERIFYING = "verifying"
     ACHIEVED = "achieved"
     FAILED = "failed"
+    BLOCKED = "blocked"
+    DEFERRED = "deferred"
+    WAITING_FOR_USER = "waiting_for_user"
     REASSESSING = "reassessing"
     REPLAN = "replan"
 

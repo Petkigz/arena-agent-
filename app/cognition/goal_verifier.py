@@ -163,7 +163,13 @@ class GoalVerifier:
         required_success_count = len(target_conditions)
         verified_success = (len(failed_conditions) == 0) and (len(met_conditions) >= required_success_count)
 
-        final_state = GoalLifecycleState.ACHIEVED if verified_success else GoalLifecycleState.FAILED
+        if verified_success:
+            final_state = GoalLifecycleState.ACHIEVED
+        elif any("blocked" in str(fc).lower() for fc in failed_conditions):
+            final_state = GoalLifecycleState.BLOCKED
+        else:
+            final_state = GoalLifecycleState.FAILED
+
         reason = (
             f"Goal '{goal_rep.goal}' achieved: Satisfied all {len(met_conditions)}/{required_success_count} success conditions against actual world state."
             if verified_success
