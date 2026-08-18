@@ -29,6 +29,20 @@ class AndroidADBController:
             return {"success": False, "stdout": "", "stderr": f"ADB Error: {str(e)}"}
 
     @classmethod
+    def is_adb_available(cls) -> bool:
+        """
+        Lightweight side-effect-free capability discovery check.
+        Checks if ADB is executable and an authorized Android device is connected,
+        without performing any user-facing operations or battery queries.
+        """
+        try:
+            res = cls.list_connected_devices()
+            devices = res.get("connected_android_devices", [])
+            return res.get("success", False) and len(devices) > 0
+        except Exception:
+            return False
+
+    @classmethod
     def list_connected_devices(cls) -> Dict[str, Any]:
         """
         Lists all Android phones connected over USB or local Wi-Fi.

@@ -137,8 +137,7 @@ class CognitiveRuntime:
             if any(k in cap_clean for k in ["phone", "adb"]):
                 try:
                     from app.tools.android_adb_controller import AndroidADBController
-                    status = AndroidADBController.get_battery_status()
-                    cap_map[cap] = status.get("success", False)
+                    cap_map[cap] = AndroidADBController.is_adb_available()
                 except Exception:
                     cap_map[cap] = False
 
