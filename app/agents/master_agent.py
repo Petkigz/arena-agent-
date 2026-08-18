@@ -8,6 +8,7 @@ from app.database import db
 from app.llm import llm_client
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
+from app.utils.hardware_monitor import HardwareMonitor
 
 from app.tools.app_inventory import SystemAppInventory
 from app.tools.desktop_control import DesktopControl
@@ -194,12 +195,23 @@ class MasterAgentOrchestrator:
                 executed_actions.append("Failed to generate Daily Executive Briefing.")
 
         elif action_type in ["investigate", "diagnostic"]:
-            executed_actions.append(f"Executed diagnostic investigation probe for '{user_text[:50]}'.")
+            probe_query = payload.get("query") or user_text
+            matched_evidence = UniversalFilesystem.search_filesystem(probe_query, max_results=3)
+            hw_stats = HardwareMonitor.get_hardware_stats()
+
+            diag_details = []
+            if matched_evidence:
+                diag_details.append(f"Located {len(matched_evidence)} relevant file/log path(s): {matched_evidence[0]['file_path']}")
+            diag_details.append(f"System status: CPU {hw_stats.get('cpu_used_percent', 0)}%, RAM {hw_stats.get('ram_used_percent', 0)}%")
+
+            probe_summary = f"Gathered diagnostic evidence for '{probe_query[:40]}': " + "; ".join(diag_details)
+            executed_actions.append(probe_summary)
+
             try:
                 from app.cognition.world_model import WorldModel, Observation
                 wm = WorldModel(str(settings.DB_PATH))
                 wm.observe(Observation(
-                    id=f"obs_diag_{os.urandom(4).hex()}", subject="diagnostic", predicate="evidence", value=user_text[:50], source="investigation_probe"
+                    id=f"obs_diag_{os.urandom(4).hex()}", subject="diagnostic", predicate="evidence", value=probe_summary, source="investigation_probe"
                 ))
             except Exception as e:
                 app_logger.warning(f"WorldModel investigation observation note: {e}")
