@@ -9,6 +9,12 @@ from app.llm import llm_client
 from app.utils.logger import app_logger
 
 @dataclass
+class SemanticGoalSchemaValidationResult:
+    is_valid: bool
+    data: Dict[str, Any] = field(default_factory=dict)
+    validation_error: Optional[str] = None
+
+@dataclass
 class SemanticGoalRepresentation:
     user_query: str
     primary_intent_type: str        # 'action_intent', 'information_need', 'knowledge_query'
@@ -39,6 +45,85 @@ class SemanticGoalInterpreter:
 
     VALID_INTENTS = {"action_intent", "information_need", "knowledge_query"}
     VALID_DOMAINS = {"desktop_os", "filesystem", "web_research", "mobile_phone", "vision_desktop", "diagnostic", "conversation"}
+
+    @classmethod
+    def validate_schema(cls, parsed_json: Any) -> SemanticGoalSchemaValidationResult:
+        """
+        P1 Fix: Validates parsed LLM JSON against the strict Goal Representation v2 schema contract.
+        Explicitly validates intent, domain, entities, conditions, capabilities, and risks.
+        Rejects malformed semantic representations if required fields or types are invalid.
+        """
+        if not isinstance(parsed_json, dict):
+            return SemanticGoalSchemaValidationResult(
+                is_valid=False,
+                data={},
+                validation_error="Payload is not a dictionary object"
+            )
+
+        errors = []
+
+        # 1. Validate intent type
+        raw_intent = parsed_json.get("primary_intent_type")
+        if not raw_intent or not isinstance(raw_intent, str):
+            errors.append("Missing or non-string 'primary_intent_type'")
+        else:
+            clean_intent = raw_intent.lower().strip()
+            if clean_intent not in cls.VALID_INTENTS:
+                errors.append(f"Invalid 'primary_intent_type' '{raw_intent}'. Must be one of {cls.VALID_INTENTS}")
+
+        # 2. Validate target domain
+        raw_domain = parsed_json.get("target_domain")
+        if not raw_domain or not isinstance(raw_domain, str):
+            errors.append("Missing or non-string 'target_domain'")
+        else:
+            clean_domain = raw_domain.lower().strip()
+            if clean_domain not in cls.VALID_DOMAINS:
+                errors.append(f"Invalid 'target_domain' '{raw_domain}'. Must be one of {cls.VALID_DOMAINS}")
+
+        # 3. Validate goal & desired outcome
+        goal = parsed_json.get("goal")
+        if not goal or not isinstance(goal, str) or not goal.strip():
+            errors.append("Missing or empty string field 'goal'")
+
+        outcome = parsed_json.get("desired_outcome")
+        if not outcome or not isinstance(outcome, str) or not outcome.strip():
+            errors.append("Missing or empty string field 'desired_outcome'")
+
+        # 4. Validate array fields: entities, conditions, capabilities, risks, constraints, etc.
+        LIST_FIELDS = [
+            "entities", "constraints", "assumptions", "unknowns",
+            "preconditions", "success_conditions", "failure_conditions",
+            "required_capabilities", "risk_factors"
+        ]
+        validated_lists = {}
+        for field_name in LIST_FIELDS:
+            val = parsed_json.get(field_name)
+            if val is not None and not isinstance(val, list):
+                errors.append(f"Field '{field_name}' must be a list of strings, got {type(val).__name__}")
+            elif isinstance(val, list):
+                if not all(isinstance(item, str) for item in val):
+                    errors.append(f"All elements in '{field_name}' must be strings")
+                else:
+                    validated_lists[field_name] = val
+            else:
+                validated_lists[field_name] = []
+
+        if errors:
+            return SemanticGoalSchemaValidationResult(
+                is_valid=False,
+                data={},
+                validation_error="; ".join(errors)
+            )
+
+        clean_data = {
+            "primary_intent_type": parsed_json["primary_intent_type"].lower().strip(),
+            "target_domain": parsed_json["target_domain"].lower().strip(),
+            "goal": parsed_json["goal"].strip(),
+            "desired_outcome": parsed_json["desired_outcome"].strip(),
+            **validated_lists
+        }
+
+        return SemanticGoalSchemaValidationResult(is_valid=True, data=clean_data)
 
     @classmethod
     def extract_json_object(cls, text: str) -> Optional[Dict[str, Any]]:
@@ -398,28 +483,36 @@ class SemanticGoalInterpreter:
                     content = llm_res["choices"][0]["message"]["content"]
                     parsed_json = cls.extract_json_object(content)
                     if parsed_json:
-                        raw_intent = parsed_json.get("primary_intent_type", intent_type)
-                        raw_domain = parsed_json.get("target_domain", domain)
-                        intent_type, domain = cls.normalize_and_validate(raw_intent, raw_domain)
-                        goal = parsed_json.get("goal", goal)
-                        outcome = parsed_json.get("desired_outcome", outcome)
-                        if isinstance(parsed_json.get("entities"), list) and parsed_json["entities"]: entities = parsed_json["entities"]
-                        if isinstance(parsed_json.get("constraints"), list) and parsed_json["constraints"]: constraints = parsed_json["constraints"]
-                        if isinstance(parsed_json.get("assumptions"), list) and parsed_json["assumptions"]: assumptions = parsed_json["assumptions"]
-                        if isinstance(parsed_json.get("unknowns"), list) and parsed_json["unknowns"]: unknowns = parsed_json["unknowns"]
-                        if isinstance(parsed_json.get("preconditions"), list) and parsed_json["preconditions"]: preconditions = parsed_json["preconditions"]
-                        if isinstance(parsed_json.get("success_conditions"), list) and parsed_json["success_conditions"]: success_conditions = parsed_json["success_conditions"]
-                        if isinstance(parsed_json.get("failure_conditions"), list) and parsed_json["failure_conditions"]: failure_conditions = parsed_json["failure_conditions"]
-                        if isinstance(parsed_json.get("required_capabilities"), list) and parsed_json["required_capabilities"]: req_caps = parsed_json["required_capabilities"]
-                        if isinstance(parsed_json.get("risk_factors"), list) and parsed_json["risk_factors"]: risks = parsed_json["risk_factors"]
+                        val_res = cls.validate_schema(parsed_json)
+                        if val_res.is_valid:
+                            val_data = val_res.data
+                            intent_type = val_data["primary_intent_type"]
+                            domain = val_data["target_domain"]
+                            goal = val_data["goal"]
+                            outcome = val_data["desired_outcome"]
+                            if val_data["entities"]: entities = val_data["entities"]
+                            if val_data["constraints"]: constraints = val_data["constraints"]
+                            if val_data["assumptions"]: assumptions = val_data["assumptions"]
+                            if val_data["unknowns"]: unknowns = val_data["unknowns"]
+                            if val_data["preconditions"]: preconditions = val_data["preconditions"]
+                            if val_data["success_conditions"]: success_conditions = val_data["success_conditions"]
+                            if val_data["failure_conditions"]: failure_conditions = val_data["failure_conditions"]
+                            if val_data["required_capabilities"]: req_caps = val_data["required_capabilities"]
+                            if val_data["risk_factors"]: risks = val_data["risk_factors"]
 
-                        # Epistemic Confidence Calibration after LLM parsing:
-                        if intent_type == heuristic_intent and domain == heuristic_domain:
-                            confidence = 0.95
-                            provenance = "llm_heuristic_agreement"
+                            # Epistemic Confidence Calibration after strict schema validation:
+                            if intent_type == heuristic_intent and domain == heuristic_domain:
+                                confidence = 0.95
+                                provenance = "llm_heuristic_agreement"
+                            else:
+                                confidence = 0.85 if is_ambiguous else 0.60
+                                provenance = "llm_semantic_disambiguation" if is_ambiguous else "llm_heuristic_conflict"
                         else:
-                            confidence = 0.85 if is_ambiguous else 0.60
-                            provenance = "llm_semantic_disambiguation" if is_ambiguous else "llm_heuristic_conflict"
+                            app_logger.warning(
+                                f"Rejected malformed LLM semantic goal representation: {val_res.validation_error}"
+                            )
+                            confidence = 0.50
+                            provenance = "rejected_malformed_llm_schema"
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
