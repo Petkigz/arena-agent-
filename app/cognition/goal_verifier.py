@@ -48,6 +48,47 @@ class GoalVerifier:
     """
 
     @classmethod
+    def matches_canonical_entity(
+        cls,
+        entity_needle: str,
+        subject_key: str,
+        entity_attributes: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        P1 Fix: Canonical Entity Matcher.
+        Binds condition evaluation to exact canonical entity names and aliases with token boundaries,
+        preventing substring collisions (e.g. 'chrome' matching 'chromedriver').
+        """
+        n_clean = entity_needle.lower().strip()
+        s_clean = subject_key.split(".")[0].lower().strip() if "." in subject_key else subject_key.lower().strip()
+
+        # 1. Exact canonical name match
+        if n_clean == s_clean:
+            return True
+
+        # 2. Check explicit aliases list if attributes supplied
+        if entity_attributes and isinstance(entity_attributes.get("aliases"), list):
+            aliases = [str(a).lower().strip() for a in entity_attributes["aliases"]]
+            if s_clean in aliases or n_clean in aliases:
+                return True
+
+        # 3. Exact word boundary token match (e.g. 'chrome.exe' matching 'chrome')
+        import re
+        tokens = [t for t in re.split(r'[\s._\-]+', s_clean) if t]
+        needle_tokens = [t for t in re.split(r'[\s._\-]+', n_clean) if t]
+
+        # Prevent substring collisions like 'chrome' matching 'chromedriver'
+        if needle_tokens and len(needle_tokens) == 1:
+            main_needle = needle_tokens[0]
+            # Exclude known distinct suffixes like 'driver', 'agent', 'helper', 'service', 'plugin'
+            if any(s_clean == f"{main_needle}{suf}" or s_clean == f"{main_needle}_{suf}" for suf in ["driver", "agent", "helper", "service", "plugin", "runner"]):
+                return False
+            if main_needle in tokens:
+                return True
+
+        return False
+
+    @classmethod
     def classify_condition_type(
         cls,
         succ_cond: str,
