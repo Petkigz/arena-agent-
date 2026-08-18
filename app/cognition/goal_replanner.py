@@ -18,6 +18,33 @@ class GoalReplanner:
     """
 
     @classmethod
+    def compute_strategy_id(cls, strategy: Dict[str, Any] | Any) -> str:
+        """
+        P1 Fix: Computes a deterministic strategy_id for candidate strategy branches and proposals.
+        Format: '<action_type>::<name_slug>::<query_slug>'
+        Makes strategy_id the unit of failure in GoalReplanner rather than prohibiting the entire capability.
+        """
+        if isinstance(strategy, dict):
+            act_type = str(strategy.get("action_type", "generic")).lower().strip()
+            name = str(strategy.get("name", "")).lower().strip()
+            payload = strategy.get("payload", {})
+            if not isinstance(payload, dict):
+                payload = {}
+        else:
+            act_type = getattr(strategy, "action_type", str(strategy)).lower().strip()
+            name = getattr(strategy, "branch_name", getattr(strategy, "name", "")).lower().strip()
+            payload = getattr(strategy, "payload", {}) if hasattr(strategy, "payload") else {}
+
+        query = str(payload.get("query") or payload.get("search_term") or payload.get("app_name") or "").lower().strip()
+        engine = str(payload.get("engine", "")).lower().strip()
+
+        name_slug = "".join(c for c in name if c.isalnum() or c == "_")[:20]
+        query_slug = "".join(c for c in query if c.isalnum() or c == "_")[:30]
+        engine_slug = f"_{engine}" if engine else ""
+
+        return f"{act_type}::{name_slug}::{query_slug}{engine_slug}"
+
+    @classmethod
     def is_failed_strategy_instance(
         cls,
         candidate: Dict[str, Any],
