@@ -166,13 +166,35 @@ class MasterAgentOrchestrator:
                     execution_success = False
                     executed_actions.append("Failed to tap screen coordinates via ADB.")
 
-            else:
+            elif any(k in phone_lower for k in ["battery", "charge", "power", "level"]):
                 adb_res = AndroidADBController.get_battery_status()
                 if adb_res.get("success"):
                     executed_actions.append(adb_res.get("message", "Queried phone battery level via Android ADB."))
                 else:
                     execution_success = False
                     executed_actions.append("Failed to query phone status via Android ADB.")
+
+            elif any(k in phone_lower for k in ["open", "launch", "start"]) and any(app_k in phone_lower for app_k in ["whatsapp", "chrome", "settings", "camera", "youtube"]):
+                pkg = "com.whatsapp" if "whatsapp" in phone_lower else ("com.android.chrome" if "chrome" in phone_lower else "com.android.settings")
+                adb_res = AndroidADBController.launch_android_app(pkg)
+                if adb_res.get("success"):
+                    executed_actions.append(f"Launched Android app package '{pkg}' via ADB.")
+                else:
+                    execution_success = False
+                    executed_actions.append(f"Failed to launch Android app '{pkg}': Device offline or package missing")
+
+            else:
+                # P0 Fix: Eliminates dangerous fallback that substituted battery status for unrecognized phone commands.
+                # Returns explicit structured capability failure to trigger Plan B replanning.
+                app_logger.warning(f"AndroidADBController: Unsupported phone_command query '{phone_query}'")
+                return {
+                    "success": False,
+                    "user_text": user_text,
+                    "assistant_reply": f"Capability execution failed: Unrecognized or unsupported phone command '{phone_query}'.",
+                    "executed_actions": [],
+                    "unsupported_capability": "unsupported_phone_command",
+                    "error": f"Unsupported phone_command query '{phone_query}'"
+                }
 
             if execution_success:
                 execution_facts.append({
