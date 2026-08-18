@@ -25,7 +25,7 @@ class SemanticGoalRepresentation:
     required_capabilities: List[str]# Capabilities needed (e.g. ["filesystem.search"])
     risk_factors: List[str]         # Potential risks (e.g. ["data modification"])
     recommended_candidates: List[Dict[str, Any]] = field(default_factory=list) # Candidate strategy branches
-    confidence: float = 0.95        # Confidence score (0.0 to 1.0)
+    confidence: float = 0.95        # Epistemic confidence score (0.0 to 1.0)
     provenance_source: str = "inferred_from_user"
     parsed_goal_summary: str = ""   # Legacy string summary for backward compatibility
 
@@ -143,64 +143,23 @@ class SemanticGoalInterpreter:
                 outcome = "Desktop application process running"
                 req_caps = ["os.launch_app"]
 
-    @classmethod
-    def interpret_goal(cls, user_text: str, complexity: str = "fast") -> SemanticGoalRepresentation:
-        text_lower = user_text.lower().strip()
-
-        # Fast Heuristic Baseline
-        intent_type = "knowledge_query"
-        domain = "conversation"
-        goal = f"Respond to user query: '{user_text[:60]}'"
-        outcome = "User receives helpful direct response"
-        entities = [w for w in user_text.split() if len(w) > 3 and w.lower() not in ["what", "where", "when", "how", "with", "this"]]
-        constraints = ["read_only_safe", "no_destructive_actions"]
-        assumptions = ["user expects concise human response"]
-        unknowns = []
-        preconditions = ["system active"]
-        success_conditions = ["response_delivered = true"]
-        failure_conditions = ["response_empty = true"]
-        req_caps = ["llm.generate"]
-        risks = ["low"]
-
-        # 1. Diagnostic, Research & Information Gathering queries FIRST
-        if any(k in text_lower for k in ["why ", "how come", "find out", "find whether", "find if", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
-            intent_type = "information_need"
-            domain = "diagnostic"
-            goal = f"Investigate cause or evidence for: '{user_text[:60]}'"
-            outcome = "Diagnostic evidence gathered and reported"
-            unknowns = ["underlying error cause", "evidence availability"]
-            req_caps = ["filesystem.search", "system.probe"]
-
-        # 2. Operational Action Commands SECOND
-        elif any(k in text_lower for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
-            intent_type = "action_intent"
-            if "phone" in text_lower or "mobile" in text_lower or "call" in text_lower or "sms" in text_lower or "battery" in text_lower or "charged" in text_lower:
-                domain = "mobile_phone"
-                goal = f"Execute mobile phone operation: '{user_text[:60]}'"
-                outcome = "Mobile phone action completed via ADB"
-                req_caps = ["phone.adb", "phone.control"]
-            elif "youtube" in text_lower or "google" in text_lower or "search web" in text_lower:
-                domain = "web_research"
-                goal = f"Perform web search or research: '{user_text[:60]}'"
-                outcome = "Web search results retrieved"
-                req_caps = ["browser.open", "web.search"]
-            elif "find" in text_lower or "file" in text_lower or "ordinary" in text_lower or "document" in text_lower or "song" in text_lower:
-                domain = "filesystem"
-                goal = f"Locate or inspect local file: '{user_text[:60]}'"
-                outcome = "Matching file path identified"
-                req_caps = ["filesystem.search", "filesystem.read"]
-            elif "screenshot" in text_lower or "screen" in text_lower:
-                domain = "vision_desktop"
-                goal = f"Capture and analyze active screen window"
-                outcome = "Desktop screen capture saved and analyzed"
-                req_caps = ["screen.capture", "vision.analyze"]
-            else:
-                domain = "desktop_os"
-                goal = f"Launch or operate desktop application: '{user_text[:60]}'"
-                outcome = "Desktop application process running"
-                req_caps = ["os.launch_app"]
-
         intent_type, domain = cls.normalize_and_validate(intent_type, domain)
+
+        # Epistemic Confidence Calculation based on intent clarity
+        has_explicit_keyword = any(
+            f"{k} " in text_lower or text_lower.startswith(k)
+            for k in ["open", "launch", "start", "run", "search", "find", "call", "sms", "screenshot", "play"]
+        )
+
+        if has_explicit_keyword:
+            confidence = 0.90
+            provenance = "clear_deterministic_keyword_intent"
+        else:
+            confidence = 0.55
+            provenance = "heuristic_baseline"
+
+        heuristic_intent = intent_type
+        heuristic_domain = domain
 
         # Domain-specific heuristic assignments for semantic attributes
         if domain == "desktop_os":
@@ -299,13 +258,21 @@ class SemanticGoalInterpreter:
                         if isinstance(parsed_json.get("failure_conditions"), list) and parsed_json["failure_conditions"]: failure_conditions = parsed_json["failure_conditions"]
                         if isinstance(parsed_json.get("required_capabilities"), list) and parsed_json["required_capabilities"]: req_caps = parsed_json["required_capabilities"]
                         if isinstance(parsed_json.get("risk_factors"), list) and parsed_json["risk_factors"]: risks = parsed_json["risk_factors"]
+
+                        # Epistemic Confidence Calibration after LLM parsing:
+                        if intent_type == heuristic_intent and domain == heuristic_domain:
+                            confidence = 0.95
+                            provenance = "llm_heuristic_agreement"
+                        else:
+                            confidence = 0.60
+                            provenance = "llm_heuristic_conflict"
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
         candidates = cls.build_candidates_for_domain(domain, user_text)
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 
-        app_logger.info(f"SemanticGoalInterpreter v2: Intent='{intent_type}', Domain='{domain}', Candidates={len(candidates)}")
+        app_logger.info(f"SemanticGoalInterpreter v2: Intent='{intent_type}', Domain='{domain}', Confidence={confidence:.2f}, Candidates={len(candidates)}")
 
         return SemanticGoalRepresentation(
             user_query=user_text,
@@ -323,7 +290,7 @@ class SemanticGoalInterpreter:
             required_capabilities=req_caps,
             risk_factors=risks,
             recommended_candidates=candidates,
-            confidence=0.95,
-            provenance_source="semantic_goal_interpreter_v2",
+            confidence=confidence,
+            provenance_source=provenance,
             parsed_goal_summary=summary
         )
