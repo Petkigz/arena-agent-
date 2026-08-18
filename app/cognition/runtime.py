@@ -164,16 +164,22 @@ class CognitiveRuntime:
         assistant_reply: str,
         goal_rep: Optional[Any] = None
     ) -> Dict[str, Any]:
-        """Captures real environmental world state from WorldModel, BeliefEngine, and system execution."""
+        """
+        P0 Fix: Captures real environmental world state from WorldModel, BeliefEngine, and system execution.
+        Defaults entity status to 'unknown' rather than fabricating 'running' or 'active'.
+        """
         entities_data = []
         try:
             entities = self.world.find_entities()[:15]
             for ent in entities:
+                latest_obs = self.world.latest_observation(ent.name, "status") or self.world.latest_observation(ent.name, "process_status")
+                real_status = str(latest_obs.value) if latest_obs else ent.attributes.get("status", "unknown")
+
                 entities_data.append({
                     "id": ent.id,
                     "name": ent.name,
                     "type": ent.entity_type,
-                    "status": ent.attributes.get("status", "running" if "process" in ent.entity_type else "active"),
+                    "status": real_status,
                     "attributes": ent.attributes
                 })
         except Exception as e:
@@ -181,13 +187,23 @@ class CognitiveRuntime:
 
         if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
             for e in goal_rep.entities:
-                reply_lower = assistant_reply.lower()
-                actions_str = " ".join(executed_actions).lower()
-                is_running = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active"]) and not any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error"])
+                latest_obs = self.world.latest_observation(e, "status")
+                if latest_obs:
+                    ent_status = str(latest_obs.value)
+                else:
+                    reply_lower = assistant_reply.lower()
+                    actions_str = " ".join(executed_actions).lower()
+                    if any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error"]):
+                        ent_status = "failed"
+                    elif any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active"]):
+                        ent_status = "running"
+                    else:
+                        ent_status = "unknown"
+
                 entities_data.append({
                     "name": e,
                     "type": "process" if getattr(goal_rep, "target_domain", "") == "desktop_os" else "entity",
-                    "status": "running" if is_running else "failed"
+                    "status": ent_status
                 })
 
         obs_data = {}
