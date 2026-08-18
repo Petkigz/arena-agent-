@@ -500,6 +500,11 @@ def get_api_status():
 import re
 
 def _parse_and_execute_intent(user_text: str) -> Optional[str]:
+    """DEPRECATED: Legacy direct regex intent executor.
+    The single canonical cognitive execution route is CognitivePipeline -> CognitiveRuntime.
+    This helper is retained solely for legacy backwards compatibility during migration.
+    """
+    app_logger.warning("Call to deprecated legacy route _parse_and_execute_intent(). Canonical route is CognitivePipeline -> CognitiveRuntime.")
     text_lower = user_text.lower()
 
     # 1. Open / Launch ANY Installed Application
@@ -541,6 +546,11 @@ def _parse_and_execute_intent(user_text: str) -> Optional[str]:
     return None
 
 def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """DEPRECATED: Legacy prompt enrichment helper.
+    The single canonical cognitive execution route is CognitivePipeline -> CognitiveRuntime.
+    This helper is retained solely for legacy backwards compatibility during migration.
+    """
+    app_logger.warning("Call to deprecated legacy route _enrich_messages_with_local_tools_and_rag(). Canonical route is CognitivePipeline -> CognitiveRuntime.")
     rag_context = SemanticRAGEngine.build_rag_context(user_text) if user_text else ""
 
     app_count = SystemAppInventory.get_installed_apps_count()
