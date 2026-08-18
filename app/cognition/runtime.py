@@ -550,12 +550,12 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldIngest response warning: {e}")
 
-        actual_state = {
-            "actions": executed_actions,
-            "reply": assistant_reply[:100],
-            "app_state": "running",
-            "success": verify_res.verified_success
-        }
+        actual_state = dict(obs_state or {})
+        actual_state["actions"] = executed_actions
+        actual_state["reply"] = assistant_reply[:100]
+        actual_state["success"] = verify_res.verified_success
+        actual_state["goal_state"] = tracker.current_state.value
+
         surprisal = self.prediction.evaluate_surprisal(pred, actual_state)
         trace.prediction_surprisal = surprisal
 
