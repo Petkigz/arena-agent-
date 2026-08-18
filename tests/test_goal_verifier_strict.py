@@ -68,3 +68,36 @@ def test_goal_verifier_filesystem_file_not_found_fails():
 
     assert res.verified_success is False
     assert res.final_state == GoalLifecycleState.FAILED
+
+
+def test_goal_verifier_returns_actual_world_state():
+    """
+    Ensure GoalVerifier returns real environmental world state (entities, observations, verified entity states)
+    in observed_state rather than raw action count / reply snippets.
+    """
+    goal_rep = SemanticGoalInterpreter.interpret_goal("Open Chrome")
+
+    observed_world_state = {
+        "entities": [
+            {"name": "chrome.exe", "type": "process", "status": "running"}
+        ],
+        "observations": {
+            "chrome.exe.status": "running"
+        },
+        "executed_actions": ["Launched Chrome browser"],
+        "assistant_reply": "Chrome is active and running."
+    }
+
+    res = GoalVerifier.verify_goal_achievement(
+        goal_rep,
+        executed_actions=["Launched Chrome browser"],
+        assistant_reply="Chrome is active and running.",
+        observed_state=observed_world_state
+    )
+
+    assert res.verified_success is True
+    assert "entities" in res.observed_state
+    assert "observations" in res.observed_state
+    assert "verified_entity_states" in res.observed_state
+    assert res.observed_state["verified_entity_states"].get("chrome.exe") == "running"
+    assert res.observed_state["observations"].get("chrome.exe.status") == "running"

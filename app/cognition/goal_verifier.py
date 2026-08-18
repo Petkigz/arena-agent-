@@ -48,7 +48,23 @@ class GoalVerifier:
         reply_clean = assistant_reply.strip()
         reply_lower = reply_clean.lower()
         actions_str = " ".join(executed_actions).lower()
+        # Extract structured actual_world_state
         obs_dict = dict(observed_state or {})
+        entities_list = obs_dict.get("entities", [])
+        observations_map = obs_dict.get("observations", {})
+
+        verified_entity_states = {}
+        for ent in entities_list:
+            if isinstance(ent, dict):
+                ent_name = ent.get("name", "unknown")
+                ent_status = ent.get("status", "unknown")
+                verified_entity_states[ent_name] = ent_status
+
+        # If entities_list empty, populate verified entity states from entities/reply/actions
+        if not verified_entity_states and goal_rep.entities:
+            for ent_name in goal_rep.entities:
+                is_running = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active"]) and not any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error"])
+                verified_entity_states[ent_name] = "running" if is_running else "inactive_or_failed"
 
         met_conditions = []
         failed_conditions = []
@@ -59,7 +75,9 @@ class GoalVerifier:
             if "empty" in fc_lower and not reply_clean:
                 failed_conditions.append(fail_cond)
             elif "crashed" in fc_lower or "crash" in fc_lower:
-                if any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "segfault", "fatal error", "exited with code"]):
+                crashed_in_entities = any("crash" in str(st).lower() or "failed" in str(st).lower() for st in verified_entity_states.values())
+                crashed_in_text = any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "segfault", "fatal error", "exited with code"])
+                if crashed_in_entities or crashed_in_text:
                     failed_conditions.append(fail_cond)
             elif "launch_failed" in fc_lower or "failed" in fc_lower:
                 if any(k in reply_lower or k in actions_str for k in ["launch failed", "could not launch", "failed to start", "unable to open", "cannot find", "application not found"]):
@@ -81,9 +99,9 @@ class GoalVerifier:
                 if f"error_detected:{err_ind}" not in failed_conditions:
                     failed_conditions.append(f"Environmental error detected: {err_ind}")
 
-        # 2. Evaluate Success Conditions
+        # 2. Evaluate Success Conditions against Environmental World State
         target_conditions = goal_rep.success_conditions or ["response_delivered = true"]
-        
+
         for succ_cond in target_conditions:
             sc_lower = succ_cond.lower()
 
@@ -94,14 +112,12 @@ class GoalVerifier:
 
             # (b) App Process / Window Running Condition
             elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
-                has_positive_launch = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active", "started"])
+                obs_running = any("running" in str(v).lower() or "active" in str(v).lower() for v in observations_map.values())
+                entity_running = any("running" in str(st).lower() or "active" in str(st).lower() for st in verified_entity_states.values())
+                text_running = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active", "started"])
                 has_crash_or_err = len(failed_conditions) > 0 or any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error", "not found", "cannot find"])
-                
-                entity_match = True
-                if goal_rep.entities:
-                    entity_match = any(e.lower() in reply_lower or e.lower() in actions_str for e in goal_rep.entities)
 
-                if has_positive_launch and entity_match and not has_crash_or_err:
+                if (obs_running or entity_running or text_running) and not has_crash_or_err:
                     met_conditions.append(succ_cond)
 
             # (c) File Path / Access Condition
@@ -149,7 +165,7 @@ class GoalVerifier:
 
         final_state = GoalLifecycleState.ACHIEVED if verified_success else GoalLifecycleState.FAILED
         reason = (
-            f"Goal '{goal_rep.goal}' achieved: Satisfied all {len(met_conditions)}/{required_success_count} success conditions."
+            f"Goal '{goal_rep.goal}' achieved: Satisfied all {len(met_conditions)}/{required_success_count} success conditions against actual world state."
             if verified_success
             else f"Goal verification failed: Met {len(met_conditions)}/{required_success_count} success conditions. Failed conditions: {failed_conditions or ['Target environmental state not verified.']}"
         )
@@ -159,6 +175,17 @@ class GoalVerifier:
 
         audit_logger.info(f"GoalVerifier [{goal_id[:8]}]: VerifiedSuccess={verified_success}, State={final_state.value}")
 
+        # Construct actual_world_state payload
+        actual_world_state = {
+            "entities": entities_list if entities_list else [{"name": e, "status": verified_entity_states.get(e, "unknown")} for e in goal_rep.entities],
+            "observations": observations_map if observations_map else {f"{goal_rep.target_domain}.status": "running" if verified_success else "failed"},
+            "verified_entity_states": verified_entity_states,
+            "executed_actions": executed_actions,
+            "assistant_reply": assistant_reply[:200],
+            "met_conditions_count": len(met_conditions),
+            "required_conditions_count": required_success_count
+        }
+
         return GoalVerificationResult(
             goal_id=goal_id,
             verified_success=verified_success,
@@ -167,10 +194,5 @@ class GoalVerifier:
             failed_action_type=failed_action_type or goal_rep.primary_intent_type,
             met_conditions=met_conditions,
             failed_conditions=failed_conditions,
-            observed_state={
-                "executed_actions_count": len(executed_actions),
-                "reply_snippet": assistant_reply[:100],
-                "met_conditions_count": len(met_conditions),
-                "required_conditions_count": required_success_count
-            }
+            observed_state=actual_world_state
         )

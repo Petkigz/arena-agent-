@@ -101,6 +101,55 @@ class CognitiveRuntime:
         prop = self.generate_candidate_action_proposal(user_text)
         return prop.action_type
 
+    def capture_observed_world_state(
+        self,
+        executed_actions: List[str],
+        assistant_reply: str,
+        goal_rep: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """Captures real environmental world state from WorldModel, BeliefEngine, and system execution."""
+        entities_data = []
+        try:
+            entities = self.world.find_entities()[:15]
+            for ent in entities:
+                entities_data.append({
+                    "id": ent.id,
+                    "name": ent.name,
+                    "type": ent.entity_type,
+                    "status": ent.attributes.get("status", "running" if "process" in ent.entity_type else "active"),
+                    "attributes": ent.attributes
+                })
+        except Exception as e:
+            app_logger.warning(f"Could not read WorldModel entities: {e}")
+
+        if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
+            for e in goal_rep.entities:
+                reply_lower = assistant_reply.lower()
+                actions_str = " ".join(executed_actions).lower()
+                is_running = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active"]) and not any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error"])
+                entities_data.append({
+                    "name": e,
+                    "type": "process" if getattr(goal_rep, "target_domain", "") == "desktop_os" else "entity",
+                    "status": "running" if is_running else "failed"
+                })
+
+        obs_data = {}
+        try:
+            obs = self.world.recent_observations(limit=15)
+            for o in obs:
+                obs_data[f"{o.subject}.{o.predicate}"] = o.value
+        except Exception as e:
+            app_logger.warning(f"Could not read WorldModel observations: {e}")
+
+        return {
+            "entities": entities_data,
+            "observations": obs_data,
+            "executed_actions": executed_actions,
+            "assistant_reply": assistant_reply,
+            "last_action": getattr(self.state.execution, "last_action", ""),
+            "last_result": getattr(self.state.execution, "last_result", "")
+        }
+
     def process_cognitive_cycle(
         self,
         user_text: str,
@@ -203,7 +252,8 @@ class CognitiveRuntime:
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
 
-            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker)
+            obs_state = self.capture_observed_world_state([], assistant_reply, goal_rep)
+            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)
             trace.goal_verified = verify_res.verified_success
 
             latency = (time.time() - start_time) * 1000
@@ -244,7 +294,8 @@ class CognitiveRuntime:
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
-            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [investigation_summary], assistant_reply, tracker=tracker)
+            obs_state = self.capture_observed_world_state([investigation_summary], assistant_reply, goal_rep)
+            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [investigation_summary], assistant_reply, tracker=tracker, observed_state=obs_state)
             trace.goal_verified = verify_res.verified_success
 
             try:
@@ -369,7 +420,10 @@ class CognitiveRuntime:
         assistant_reply = agent_res.get("assistant_reply", "Done.")
 
         # Goal Verification
-        verify_res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker)
+        obs_state = self.capture_observed_world_state(executed_actions, assistant_reply, goal_rep)
+        verify_res = GoalVerifier.verify_goal_achievement(
+            goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker, observed_state=obs_state
+        )
         trace.goal_verified = verify_res.verified_success
 
         # Reassessment & Replanning on Goal Verification Failure
@@ -381,8 +435,9 @@ class CognitiveRuntime:
                     replan_agent_res = MasterAgentOrchestrator.execute_proposal(replan_proposal, user_text, complexity=complexity)
                     executed_actions.extend(replan_agent_res.get("executed_actions", []))
                     assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
+                    obs_state = self.capture_observed_world_state(executed_actions, assistant_reply, goal_rep)
                     verify_res = GoalVerifier.verify_goal_achievement(
-                        goal_rep, executed_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker
+                        goal_rep, executed_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker, observed_state=obs_state
                     )
                     trace.goal_verified = verify_res.verified_success
                 else:
