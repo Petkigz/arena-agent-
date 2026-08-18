@@ -249,15 +249,27 @@ class GoalVerifier:
 
         audit_logger.info(f"GoalVerifier [{goal_id[:8]}]: VerifiedSuccess={verified_success}, State={final_state.value}")
 
-        # Construct actual_world_state payload - NEVER manufacture "running" based on verification result!
+        # Construct actual_world_state payload - Clean separation of Evidence, ExecutionTrace, and Response
         actual_world_state = {
+            "world_state": {
+                "entities": entities_list if entities_list else [{"name": e, "status": verified_entity_states.get(e, "unknown")} for e in goal_rep.entities],
+                "observations": observations_map if observations_map else {"status": "unknown", "evidence_source": "not_observed"},
+                "verified_entity_states": verified_entity_states,
+            },
+            "execution_trace": {
+                "executed_actions": executed_actions,
+                "met_conditions_count": len(met_conditions),
+                "required_conditions_count": required_success_count
+            },
+            "assistant_response": {
+                "text": assistant_reply[:200]
+            },
+            # Top-level aliases for backward compatibility
             "entities": entities_list if entities_list else [{"name": e, "status": verified_entity_states.get(e, "unknown")} for e in goal_rep.entities],
             "observations": observations_map if observations_map else {"status": "unknown", "evidence_source": "not_observed"},
             "verified_entity_states": verified_entity_states,
             "executed_actions": executed_actions,
-            "assistant_reply": assistant_reply[:200],
-            "met_conditions_count": len(met_conditions),
-            "required_conditions_count": required_success_count
+            "assistant_reply": assistant_reply[:200]
         }
 
         return GoalVerificationResult(

@@ -168,8 +168,9 @@ class CognitiveRuntime:
         goal_rep: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
-        P0 Fix: Captures real environmental world state from WorldModel, BeliefEngine, and system execution.
-        Defaults entity status to 'unknown' rather than fabricating 'running' or 'active'.
+        P0 Fix: Captures real environmental world state from WorldModel, BeliefEngine, and Perception.
+        Separates WorldState (pure environmental evidence) from ExecutionTrace and AssistantResponse to prevent
+        accidental evidence contamination.
         """
         entities_data = []
         try:
@@ -191,17 +192,7 @@ class CognitiveRuntime:
         if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
             for e in goal_rep.entities:
                 latest_obs = self.world.latest_observation(e, "status") or self.world.latest_observation(e, "process_status")
-                if latest_obs:
-                    ent_status = str(latest_obs.value)
-                else:
-                    actions_str = " ".join(executed_actions).lower()
-                    if any(k in actions_str for k in ["crash", "crashed", "failed", "error", "not found"]):
-                        ent_status = "failed"
-                    else:
-                        # P0 Fix: Do NOT infer 'running' from LLM assistant_reply text.
-                        # Environmental facts require explicit WorldModel observations.
-                        ent_status = "unknown"
-
+                ent_status = str(latest_obs.value) if latest_obs else "unknown"
                 entities_data.append({
                     "name": e,
                     "type": "process" if getattr(goal_rep, "target_domain", "") == "desktop_os" else "entity",
@@ -217,12 +208,23 @@ class CognitiveRuntime:
             app_logger.warning(f"Could not read WorldModel observations: {e}")
 
         return {
+            "world_state": {
+                "entities": entities_data,
+                "observations": obs_data,
+            },
+            "execution_trace": {
+                "executed_actions": executed_actions,
+                "last_action": getattr(self.state.execution, "last_action", ""),
+                "last_result": getattr(self.state.execution, "last_result", "")
+            },
+            "assistant_response": {
+                "text": assistant_reply
+            },
+            # Top-level aliases for backward compatibility
             "entities": entities_data,
             "observations": obs_data,
             "executed_actions": executed_actions,
-            "assistant_reply": assistant_reply,
-            "last_action": getattr(self.state.execution, "last_action", ""),
-            "last_result": getattr(self.state.execution, "last_result", "")
+            "assistant_reply": assistant_reply
         }
 
     def process_cognitive_cycle(
