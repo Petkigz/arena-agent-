@@ -26,7 +26,8 @@ class GoalReplanner:
         tracker: GoalTracker,
         complexity: str = "fast",
         memory_store: Optional[Any] = None,
-        world_model: Optional[Any] = None
+        world_model: Optional[Any] = None,
+        tool_registry: Optional[Any] = None
     ) -> Optional[ActionProposal]:
         app_logger.info(f"GoalReplanner triggered for goal '{tracker.goal_id[:8]}': Reassessing & generating Plan B...")
 
@@ -43,7 +44,7 @@ class GoalReplanner:
         app_logger.info(f"GoalReplanner filtering out failed action_type '{failed_action_type}' for goal '{tracker.goal_id[:8]}'")
 
         all_candidates = ActionPlanner.generate_candidate_actions(
-            user_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model
+            user_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
         )
         plan_b_candidates = [c for c in all_candidates if c.get("action_type") != failed_action_type]
 
@@ -56,7 +57,7 @@ class GoalReplanner:
             plan_b_candidates = [f for f in fallbacks if f.get("action_type") != failed_action_type]
 
         replan_proposal = ActionPlanner.plan_and_evaluate_action(
-            user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates, memory_store=memory_store, world_model=world_model
+            user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
         )
         audit_logger.info(f"GoalReplanner evaluated {len(plan_b_candidates)} Plan B branches, generated proposal '{replan_proposal.action_type}'")
 

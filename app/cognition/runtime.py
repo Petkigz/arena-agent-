@@ -84,13 +84,15 @@ class CognitiveRuntime:
 
     def classify_query_predicate(self, user_text: str) -> str:
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
-        goal_rep = SemanticGoalInterpreter.interpret_goal(user_text)
+        goal_rep = SemanticGoalInterpreter.interpret_goal(
+            user_text, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
+        )
         return goal_rep.primary_intent_type
 
     def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast", goal_rep: Optional[Any] = None) -> ActionProposal:
         from app.cognition.action_planner import ActionPlanner
         res = ActionPlanner.plan_and_evaluate_action(
-            user_text, complexity=complexity, goal_rep=goal_rep, memory_store=self.memory, world_model=self.world
+            user_text, complexity=complexity, goal_rep=goal_rep, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
         )
         if isinstance(res, ActionProposal):
             return res
@@ -281,7 +283,7 @@ class CognitiveRuntime:
         # 4. Semantic Goal Representation v2 & WorldModel / Belief Ingestion
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
         goal_rep = SemanticGoalInterpreter.interpret_goal(
-            user_text, complexity=complexity, memory_store=self.memory, world_model=self.world
+            user_text, complexity=complexity, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
         )
         query_pred = goal_rep.primary_intent_type
         tracker.transition(GoalLifecycleState.UNDERSTOOD, f"Parsed goal in domain '{goal_rep.target_domain}'")
@@ -526,7 +528,7 @@ class CognitiveRuntime:
         # Reassessment & Replanning on Goal Verification Failure
         if not verify_res.verified_success:
             replan_proposal = GoalReplanner.execute_reassessment_and_replan(
-                user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory, world_model=self.world
+                user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
             )
             if replan_proposal:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)

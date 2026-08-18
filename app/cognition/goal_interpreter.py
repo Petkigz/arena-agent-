@@ -136,13 +136,17 @@ class SemanticGoalInterpreter:
         user_text: str,
         goal_rep: Optional[SemanticGoalRepresentation] = None,
         memory_store: Optional[Any] = None,
-        world_model: Optional[Any] = None
+        world_model: Optional[Any] = None,
+        tool_registry: Optional[Any] = None
     ) -> List[Dict[str, Any]]:
         """
         Synthesizes candidate execution strategies by combining:
         1. Domain baseline strategy branches
-        2. System capabilities registered in WorldModel / ToolRegistry
-        3. MemoryStore reflections and past learned lessons for similar queries
+        2. System capabilities registered in WorldModel / ToolRegistry (if world_model supplied)
+        3. MemoryStore reflections and past learned lessons for similar queries (if memory_store supplied)
+
+        Note: Does NOT instantiate fallback MemoryStore() or WorldModel() instances when
+        context is not provided, preventing uncoordinated cognitive store creation.
         """
         domain_clean = domain.lower().strip()
         candidates: List[Dict[str, Any]] = []
@@ -150,53 +154,54 @@ class SemanticGoalInterpreter:
         # 1. Base domain candidate strategies
         candidates.extend(cls.build_candidates_for_domain(domain_clean, user_text))
 
-        # 2. Ingest learned strategy lessons from MemoryStore if available
-        try:
-            from app.cognition.memory import MemoryStore
-            ms = memory_store or MemoryStore()
-            past_memories = ms.search(user_text, limit=3)
-            for mem in past_memories:
-                if hasattr(mem, "content") and any(k in str(mem.content).lower() for k in ["strategy", "used", "worked", "lesson"]):
-                    candidates.append({
-                        "name": f"Memory Learned Strategy ({str(mem.task_id or 'past')[:6]})",
-                        "action_type": "investigate" if "investigat" in str(mem.content).lower() else "web_search",
-                        "payload": {"query": user_text, "memory_lesson": str(mem.content)[:100]},
-                        "source": "memory_store"
-                    })
-        except Exception as e:
-            app_logger.warning(f"Memory candidate synthesis note: {e}")
-
-        # 3. Inspect WorldModel capability graph for active, EXECUTABLE capabilities
-        try:
-            from app.cognition.tool_registry import ToolRegistry
-            tr = ToolRegistry()
-            executable_tools = set(tr._registry.keys())
-            NATIVE_EXECUTABLE_CAPS = {
-                "open_application", "launch_app", "web_search", "search_files",
-                "phone_command", "make_phone_call", "send_sms", "screen_capture",
-                "opsec_audit", "daily_briefing", "investigate", "diagnostic",
-                "formulate_answer", "answer", "workflow_execute"
-            }
-
-            from app.cognition.world_model import WorldModel
-            wm = world_model or WorldModel()
-            active_caps = wm.find_entities(entity_type="capability")
-            for cap in active_caps[:5]:
-                cap_name = cap.name.lower().replace(" ", "_")
-                # EXECUTABILITY VERIFICATION: Ensure capability has an active handler before synthesizing candidate
-                is_executable = (cap_name in executable_tools) or (cap_name in NATIVE_EXECUTABLE_CAPS) or any(ec in cap_name for ec in NATIVE_EXECUTABLE_CAPS)
-                if is_executable:
-                    if cap_name not in [c.get("action_type") for c in candidates]:
+        # 2. Ingest learned strategy lessons from MemoryStore if explicitly supplied
+        if memory_store is not None:
+            try:
+                past_memories = memory_store.search(user_text, limit=3)
+                for mem in past_memories:
+                    if hasattr(mem, "content") and any(k in str(mem.content).lower() for k in ["strategy", "used", "worked", "lesson"]):
                         candidates.append({
-                            "name": f"Dynamic Capability: {cap.name}",
-                            "action_type": cap_name,
-                            "payload": {"query": user_text, "action_type": cap_name},
-                            "source": "world_model_capability"
+                            "name": f"Memory Learned Strategy ({str(mem.task_id or 'past')[:6]})",
+                            "action_type": "investigate" if "investigat" in str(mem.content).lower() else "web_search",
+                            "payload": {"query": user_text, "memory_lesson": str(mem.content)[:100]},
+                            "source": "memory_store"
                         })
+            except Exception as e:
+                app_logger.warning(f"Memory candidate synthesis note: {e}")
+
+        # 3. Inspect WorldModel capability graph for active, EXECUTABLE capabilities if explicitly supplied
+        if world_model is not None:
+            try:
+                if tool_registry is not None:
+                    executable_tools = set(tool_registry._registry.keys())
                 else:
-                    app_logger.warning(f"CandidateSynthesizer: Skipping non-executable capability entity '{cap.name}'")
-        except Exception as e:
-            app_logger.warning(f"WorldModel capability candidate synthesis note: {e}")
+                    from app.cognition.tool_registry import ToolRegistry
+                    executable_tools = set(ToolRegistry()._registry.keys())
+
+                NATIVE_EXECUTABLE_CAPS = {
+                    "open_application", "launch_app", "web_search", "search_files",
+                    "phone_command", "make_phone_call", "send_sms", "screen_capture",
+                    "opsec_audit", "daily_briefing", "investigate", "diagnostic",
+                    "formulate_answer", "answer", "workflow_execute"
+                }
+
+                active_caps = world_model.find_entities(entity_type="capability")
+                for cap in active_caps[:5]:
+                    cap_name = cap.name.lower().replace(" ", "_")
+                    # EXECUTABILITY VERIFICATION: Ensure capability has an active handler before synthesizing candidate
+                    is_executable = (cap_name in executable_tools) or (cap_name in NATIVE_EXECUTABLE_CAPS) or any(ec in cap_name for ec in NATIVE_EXECUTABLE_CAPS)
+                    if is_executable:
+                        if cap_name not in [c.get("action_type") for c in candidates]:
+                            candidates.append({
+                                "name": f"Dynamic Capability: {cap.name}",
+                                "action_type": cap_name,
+                                "payload": {"query": user_text, "action_type": cap_name},
+                                "source": "world_model_capability"
+                            })
+                    else:
+                        app_logger.warning(f"CandidateSynthesizer: Skipping non-executable capability entity '{cap.name}'")
+            except Exception as e:
+                app_logger.warning(f"WorldModel capability candidate synthesis note: {e}")
 
         # Ensure candidates are unique
         seen_keys = set()
@@ -215,7 +220,8 @@ class SemanticGoalInterpreter:
         user_text: str,
         complexity: str = "fast",
         memory_store: Optional[Any] = None,
-        world_model: Optional[Any] = None
+        world_model: Optional[Any] = None,
+        tool_registry: Optional[Any] = None
     ) -> SemanticGoalRepresentation:
         text_lower = user_text.lower().strip()
 
@@ -398,7 +404,7 @@ class SemanticGoalInterpreter:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
         candidates = cls.synthesize_candidates_from_context(
-            domain, user_text, memory_store=memory_store, world_model=world_model
+            domain, user_text, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
         )
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 

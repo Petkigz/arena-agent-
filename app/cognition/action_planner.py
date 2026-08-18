@@ -20,11 +20,12 @@ class ActionPlanner:
         complexity: str = "fast",
         goal_rep: Optional[SemanticGoalRepresentation] = None,
         memory_store: Optional[Any] = None,
-        world_model: Optional[Any] = None
+        world_model: Optional[Any] = None,
+        tool_registry: Optional[Any] = None
     ) -> List[Dict[str, Any]]:
         if not goal_rep:
             goal_rep = SemanticGoalInterpreter.interpret_goal(
-                goal_text, complexity=complexity, memory_store=memory_store, world_model=world_model
+                goal_text, complexity=complexity, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
             )
         return goal_rep.recommended_candidates
 
@@ -36,14 +37,15 @@ class ActionPlanner:
         goal_rep: Optional[SemanticGoalRepresentation] = None,
         candidates: Optional[List[Dict[str, Any]]] = None,
         memory_store: Optional[Any] = None,
-        world_model: Optional[Any] = None
+        world_model: Optional[Any] = None,
+        tool_registry: Optional[Any] = None
     ) -> ActionProposal:
         """
         Generates candidate strategies via SemanticGoalInterpreter (or uses provided candidates),
         runs parallel counterfactual simulation in memory, and constructs the winning ActionProposal.
         """
         candidate_list = candidates if candidates is not None else cls.generate_candidate_actions(
-            goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model
+            goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
         )
         sim_res = CounterfactualSimulator.simulate_competing_branches(goal_text, candidate_list)
         winner = sim_res.winning_branch
