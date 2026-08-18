@@ -25,7 +25,7 @@ class ObservationCollector:
     def collect_and_ingest_observations(
         cls,
         proposal: Any,
-        execution_result: Dict[str, Any],
+        execution_result: Any,
         world_model: Optional[WorldModel] = None,
         event_bus: Optional[Any] = None
     ) -> List[Observation]:
@@ -39,10 +39,20 @@ class ObservationCollector:
         ingested_observations: List[Observation] = []
         action_type = getattr(proposal, "action_type", str(proposal)).lower().strip()
         payload = getattr(proposal, "payload", {}) if hasattr(proposal, "payload") else {}
-        exec_success = bool(execution_result.get("success", False))
-
-        # 1. Ingest raw execution facts returned in ExecutionResult
-        execution_facts = execution_result.get("execution_facts", [])
+        
+        # Support dict or ExecutionResult object
+        if hasattr(execution_result, "execution_facts"):
+            execution_facts = getattr(execution_result, "execution_facts", [])
+            raw_output = getattr(execution_result, "outputs", {})
+            exec_success = getattr(execution_result, "success", False)
+        elif isinstance(execution_result, dict):
+            execution_facts = execution_result.get("execution_facts", [])
+            raw_output = execution_result.get("raw_output", {})
+            exec_success = bool(execution_result.get("success", False))
+        else:
+            execution_facts = []
+            raw_output = {}
+            exec_success = False
         for fact in execution_facts:
             try:
                 if fact.get("entity_type") and fact.get("attributes"):
@@ -126,5 +136,8 @@ class ObservationCollector:
                 )
                 world_model.observe(obs)
                 ingested_observations.append(obs)
+
+        if hasattr(execution_result, "observations") and isinstance(execution_result.observations, list):
+            execution_result.observations.extend(ingested_observations)
 
         return ingested_observations

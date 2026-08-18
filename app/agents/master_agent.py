@@ -32,6 +32,7 @@ from app.memory.human_nature_engine import HumanNatureEngine
 from app.memory.coworker_brain import CoworkerBrain
 from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction, ReasoningDecision
 from app.cognition.belief_engine import BeliefEngine
+from app.cognition.execution_result import ExecutionResult, ExecutionStatus
 
 class MasterAgentOrchestrator:
     """
@@ -57,6 +58,7 @@ class MasterAgentOrchestrator:
         downstream via the Perception Layer (ObservationCollector).
         """
         action_type = getattr(proposal, "action_type", str(proposal)).lower().strip()
+        proposal_id = getattr(proposal, "proposal_id", f"prop_{os.urandom(4).hex()}")
         payload = getattr(proposal, "payload", {}) if hasattr(proposal, "payload") else {}
         executed_actions = []
         execution_facts: List[Dict[str, Any]] = []
@@ -203,14 +205,16 @@ class MasterAgentOrchestrator:
                 # P0 Fix: Eliminates dangerous fallback that substituted battery status for unrecognized phone commands.
                 # Returns explicit structured capability failure to trigger Plan B replanning.
                 app_logger.warning(f"AndroidADBController: Unsupported phone_command query '{phone_query}'")
-                return {
-                    "success": False,
-                    "user_text": user_text,
-                    "assistant_reply": f"Capability execution failed: Unrecognized or unsupported phone command '{phone_query}'.",
-                    "executed_actions": [],
-                    "unsupported_capability": "unsupported_phone_command",
-                    "error": f"Unsupported phone_command query '{phone_query}'"
-                }
+                return ExecutionResult(
+                    proposal_id=proposal_id,
+                    action_type=action_type,
+                    execution_status=ExecutionStatus.FAILED,
+                    attempted=True,
+                    executed_actions=[],
+                    assistant_reply=f"Capability execution failed: Unrecognized or unsupported phone command '{phone_query}'.",
+                    error=f"Unsupported phone_command query '{phone_query}'",
+                    outputs={"unsupported_capability": "unsupported_phone_command"}
+                )
 
             if execution_success:
                 execution_facts.append({
@@ -296,35 +300,41 @@ class MasterAgentOrchestrator:
                     if tr_res.get("success"):
                         executed_actions.append(f"Executed registered tool '{action_type}'.")
                     else:
-                        return {
-                            "success": False,
-                            "user_text": user_text,
-                            "assistant_reply": f"Registered tool '{action_type}' execution failed: {tr_res.get('error')}",
-                            "executed_actions": [],
-                            "unsupported_capability": action_type,
-                            "error": tr_res.get("error")
-                        }
+                        return ExecutionResult(
+                            proposal_id=proposal_id,
+                            action_type=action_type,
+                            execution_status=ExecutionStatus.FAILED,
+                            attempted=True,
+                            executed_actions=[],
+                            assistant_reply=f"Registered tool '{action_type}' execution failed: {tr_res.get('error')}",
+                            error=tr_res.get("error"),
+                            outputs={"unsupported_capability": action_type}
+                        )
                 else:
                     # CapabilityResolver: Unsupported capability proposal -> Structured Failure
                     app_logger.warning(f"CapabilityResolver: Proposal action_type '{action_type}' is unsupported.")
-                    return {
-                        "success": False,
-                        "user_text": user_text,
-                        "assistant_reply": f"Capability execution failed: Action proposal type '{action_type}' is unsupported by capability resolvers.",
-                        "executed_actions": [],
-                        "unsupported_capability": action_type,
-                        "error": f"Unsupported proposal action_type '{action_type}'"
-                    }
+                    return ExecutionResult(
+                        proposal_id=proposal_id,
+                        action_type=action_type,
+                        execution_status=ExecutionStatus.FAILED,
+                        attempted=True,
+                        executed_actions=[],
+                        assistant_reply=f"Capability execution failed: Action proposal type '{action_type}' is unsupported by capability resolvers.",
+                        error=f"Unsupported proposal action_type '{action_type}'",
+                        outputs={"unsupported_capability": action_type}
+                    )
             except Exception as e:
                 app_logger.warning(f"CapabilityResolver lookup exception for '{action_type}': {e}")
-                return {
-                    "success": False,
-                    "user_text": user_text,
-                    "assistant_reply": f"Capability execution failed: Action proposal type '{action_type}' is unsupported.",
-                    "executed_actions": [],
-                    "unsupported_capability": action_type,
-                    "error": str(e)
-                }
+                return ExecutionResult(
+                    proposal_id=proposal_id,
+                    action_type=action_type,
+                    execution_status=ExecutionStatus.FAILED,
+                    attempted=True,
+                    executed_actions=[],
+                    assistant_reply=f"Capability execution failed: Action proposal type '{action_type}' is unsupported.",
+                    error=str(e),
+                    outputs={"unsupported_capability": action_type}
+                )
 
         system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
         messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
@@ -333,15 +343,18 @@ class MasterAgentOrchestrator:
 
         HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)
 
-        return {
-            "success": execution_success,
-            "user_text": user_text,
-            "assistant_reply": assistant_reply,
-            "executed_actions": executed_actions,
-            "execution_facts": execution_facts,
-            "raw_output": raw_output_data,
-            "model_used": llm_res.get("model", "")
-        }
+        status = ExecutionStatus.SUCCEEDED if execution_success else ExecutionStatus.FAILED
+        return ExecutionResult(
+            proposal_id=proposal_id,
+            action_type=action_type,
+            execution_status=status,
+            attempted=True,
+            executed_actions=executed_actions,
+            assistant_reply=assistant_reply,
+            execution_facts=execution_facts,
+            outputs=raw_output_data,
+            model_used=llm_res.get("model", "")
+        )
 
     @classmethod
     def process_user_task(cls, user_text: str, complexity: str = "fast") -> Dict[str, Any]:
