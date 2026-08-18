@@ -143,6 +143,116 @@ class SemanticGoalInterpreter:
                 outcome = "Desktop application process running"
                 req_caps = ["os.launch_app"]
 
+    @classmethod
+    def interpret_goal(cls, user_text: str, complexity: str = "fast") -> SemanticGoalRepresentation:
+        text_lower = user_text.lower().strip()
+
+        # Fast Heuristic Baseline
+        intent_type = "knowledge_query"
+        domain = "conversation"
+        goal = f"Respond to user query: '{user_text[:60]}'"
+        outcome = "User receives helpful direct response"
+        entities = [w for w in user_text.split() if len(w) > 3 and w.lower() not in ["what", "where", "when", "how", "with", "this"]]
+        constraints = ["read_only_safe", "no_destructive_actions"]
+        assumptions = ["user expects concise human response"]
+        unknowns = []
+        preconditions = ["system active"]
+        success_conditions = ["response_delivered = true"]
+        failure_conditions = ["response_empty = true"]
+        req_caps = ["llm.generate"]
+        risks = ["low"]
+
+        # 1. Diagnostic, Research & Information Gathering queries FIRST
+        if any(k in text_lower for k in ["why ", "how come", "find out", "find whether", "find if", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
+            intent_type = "information_need"
+            domain = "diagnostic"
+            goal = f"Investigate cause or evidence for: '{user_text[:60]}'"
+            outcome = "Diagnostic evidence gathered and reported"
+            unknowns = ["underlying error cause", "evidence availability"]
+            req_caps = ["filesystem.search", "system.probe"]
+
+        # 2. Operational Action Commands SECOND
+        elif any(k in text_lower for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
+            intent_type = "action_intent"
+            if "phone" in text_lower or "mobile" in text_lower or "call" in text_lower or "sms" in text_lower or "battery" in text_lower or "charged" in text_lower:
+                domain = "mobile_phone"
+                goal = f"Execute mobile phone operation: '{user_text[:60]}'"
+                outcome = "Mobile phone action completed via ADB"
+                req_caps = ["phone.adb", "phone.control"]
+            elif "youtube" in text_lower or "google" in text_lower or "search web" in text_lower:
+                domain = "web_research"
+                goal = f"Perform web search or research: '{user_text[:60]}'"
+                outcome = "Web search results retrieved"
+                req_caps = ["browser.open", "web.search"]
+            elif "find" in text_lower or "file" in text_lower or "ordinary" in text_lower or "document" in text_lower or "song" in text_lower:
+                domain = "filesystem"
+                goal = f"Locate or inspect local file: '{user_text[:60]}'"
+                outcome = "Matching file path identified"
+                req_caps = ["filesystem.search", "filesystem.read"]
+            elif "screenshot" in text_lower or "screen" in text_lower:
+                domain = "vision_desktop"
+                goal = f"Capture and analyze active screen window"
+                outcome = "Desktop screen capture saved and analyzed"
+                req_caps = ["screen.capture", "vision.analyze"]
+            else:
+                domain = "desktop_os"
+                goal = f"Launch or operate desktop application: '{user_text[:60]}'"
+                outcome = "Desktop application process running"
+                req_caps = ["os.launch_app"]
+
+        intent_type, domain = cls.normalize_and_validate(intent_type, domain)
+
+        # Domain-specific heuristic assignments for semantic attributes
+        if domain == "desktop_os":
+            constraints = ["user_session_active", "no_unauthorized_deletion"]
+            assumptions = ["application installed on host PC"]
+            preconditions = ["os_gui_running"]
+            success_conditions = ["app_process_running = true"]
+            failure_conditions = ["process_crashed = true", "launch_failed = true"]
+            risks = ["unwanted_process_execution"]
+        elif domain == "filesystem":
+            constraints = ["workspace_boundary_enforced", "read_only_default"]
+            assumptions = ["file resides in local storage"]
+            preconditions = ["storage_mounted"]
+            success_conditions = ["file_path_identified = true"]
+            failure_conditions = ["file_not_found = true"]
+            risks = ["unintended_file_modification"]
+        elif domain == "web_research":
+            constraints = ["network_timeout_10s", "no_paid_apis"]
+            assumptions = ["local_wifi_or_internet_connected"]
+            preconditions = ["network_available"]
+            success_conditions = ["search_results_retrieved = true"]
+            failure_conditions = ["network_error = true", "no_results_found = true"]
+            risks = ["untrusted_web_content"]
+        elif domain == "mobile_phone":
+            constraints = ["adb_authorized", "no_remote_wiping"]
+            assumptions = ["phone_connected_via_usb_or_wifi"]
+            preconditions = ["adb_daemon_listening"]
+            success_conditions = ["adb_command_succeeded = true"]
+            failure_conditions = ["adb_device_offline = true"]
+            risks = ["cellular_data_or_call_cost"]
+        elif domain == "vision_desktop":
+            constraints = ["screen_privacy_boundary", "no_credential_leak"]
+            assumptions = ["desktop_display_active"]
+            preconditions = ["screen_capture_permission_granted"]
+            success_conditions = ["screen_capture_saved = true"]
+            failure_conditions = ["screen_capture_failed = true"]
+            risks = ["sensitive_screen_data"]
+        elif domain == "diagnostic":
+            constraints = ["read_only_investigation", "bounded_probe_steps"]
+            assumptions = ["system_logs_or_probes_accessible"]
+            preconditions = ["diagnostic_tools_registered"]
+            success_conditions = ["diagnostic_evidence_gathered = true"]
+            failure_conditions = ["evidence_unavailable = true"]
+            risks = ["misdiagnosed_root_cause"]
+        else:
+            constraints = ["read_only_safe", "no_destructive_actions"]
+            assumptions = ["user expects concise human response"]
+            preconditions = ["system active"]
+            success_conditions = ["response_delivered = true"]
+            failure_conditions = ["response_empty = true"]
+            risks = ["low"]
+
         # Deep LLM-Assisted Goal Decomposition Path when complexity in ["main", "deep"]
         if complexity in ["main", "deep"]:
             try:
@@ -153,9 +263,14 @@ class SemanticGoalInterpreter:
                     "'goal' (1 phrase actionable goal), "
                     "'desired_outcome' (1 phrase target state), "
                     "'entities' (array of string noun entities), "
-                    "'constraints' (array of safety constraints), "
-                    "'unknowns' (array of missing facts/gaps), "
-                    "'required_capabilities' (array of capability strings)."
+                    "'constraints' (array of safety constraint strings), "
+                    "'assumptions' (array of assumption strings), "
+                    "'unknowns' (array of missing fact strings), "
+                    "'preconditions' (array of precondition strings), "
+                    "'success_conditions' (array of success criterion strings), "
+                    "'failure_conditions' (array of failure criterion strings), "
+                    "'required_capabilities' (array of capability strings), "
+                    "'risk_factors' (array of risk factor strings)."
                 )
                 llm_res = llm_client.generate_chat_completion(
                     messages=[
@@ -163,7 +278,7 @@ class SemanticGoalInterpreter:
                         {"role": "user", "content": f"Parse goal v2: '{user_text}'"}
                     ],
                     complexity="fast",
-                    max_tokens=250
+                    max_tokens=300
                 )
                 if llm_res.get("choices"):
                     content = llm_res["choices"][0]["message"]["content"]
@@ -175,37 +290,17 @@ class SemanticGoalInterpreter:
                         intent_type, domain = cls.normalize_and_validate(raw_intent, raw_domain)
                         goal = parsed_json.get("goal", goal)
                         outcome = parsed_json.get("desired_outcome", outcome)
-                        if isinstance(parsed_json.get("entities"), list): entities = parsed_json["entities"]
-                        if isinstance(parsed_json.get("constraints"), list): constraints = parsed_json["constraints"]
-                        if isinstance(parsed_json.get("unknowns"), list): unknowns = parsed_json["unknowns"]
-                        if isinstance(parsed_json.get("required_capabilities"), list): req_caps = parsed_json["required_capabilities"]
+                        if isinstance(parsed_json.get("entities"), list) and parsed_json["entities"]: entities = parsed_json["entities"]
+                        if isinstance(parsed_json.get("constraints"), list) and parsed_json["constraints"]: constraints = parsed_json["constraints"]
+                        if isinstance(parsed_json.get("assumptions"), list) and parsed_json["assumptions"]: assumptions = parsed_json["assumptions"]
+                        if isinstance(parsed_json.get("unknowns"), list) and parsed_json["unknowns"]: unknowns = parsed_json["unknowns"]
+                        if isinstance(parsed_json.get("preconditions"), list) and parsed_json["preconditions"]: preconditions = parsed_json["preconditions"]
+                        if isinstance(parsed_json.get("success_conditions"), list) and parsed_json["success_conditions"]: success_conditions = parsed_json["success_conditions"]
+                        if isinstance(parsed_json.get("failure_conditions"), list) and parsed_json["failure_conditions"]: failure_conditions = parsed_json["failure_conditions"]
+                        if isinstance(parsed_json.get("required_capabilities"), list) and parsed_json["required_capabilities"]: req_caps = parsed_json["required_capabilities"]
+                        if isinstance(parsed_json.get("risk_factors"), list) and parsed_json["risk_factors"]: risks = parsed_json["risk_factors"]
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
-
-        intent_type, domain = cls.normalize_and_validate(intent_type, domain)
-
-        # Domain-aware success & failure conditions assignment
-        if domain == "desktop_os":
-            success_conditions = ["app_process_running = true"]
-            failure_conditions = ["process_crashed = true", "launch_failed = true"]
-        elif domain == "filesystem":
-            success_conditions = ["file_path_identified = true"]
-            failure_conditions = ["file_not_found = true"]
-        elif domain == "web_research":
-            success_conditions = ["search_results_retrieved = true"]
-            failure_conditions = ["network_error = true", "no_results_found = true"]
-        elif domain == "mobile_phone":
-            success_conditions = ["adb_command_succeeded = true"]
-            failure_conditions = ["adb_device_offline = true"]
-        elif domain == "vision_desktop":
-            success_conditions = ["screen_capture_saved = true"]
-            failure_conditions = ["screen_capture_failed = true"]
-        elif domain == "diagnostic":
-            success_conditions = ["diagnostic_evidence_gathered = true"]
-            failure_conditions = ["evidence_unavailable = true"]
-        else:
-            success_conditions = ["response_delivered = true"]
-            failure_conditions = ["response_empty = true"]
 
         candidates = cls.build_candidates_for_domain(domain, user_text)
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
