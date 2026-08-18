@@ -94,10 +94,15 @@ class ObservationCollector:
             except Exception as e:
                 app_logger.warning(f"ObservationCollector process probe warning for '{app_name}': {e}")
 
-            # Status determination: Running if process probe finds it, launched if command succeeded, or failed
-            real_status = "running" if process_running else ("launched" if exec_success else "failed")
+            # P0 Fix: Process probe strictly establishes 'running' or 'not_running' for direct environmental state.
+            # "Launch command succeeded" belongs strictly to self_reported execution facts.
+            real_status = "running" if process_running else "not_running"
 
-            world_model.upsert_entity(name=app_name, entity_type="process", attributes={"status": real_status})
+            world_model.upsert_entity(
+                name=app_name,
+                entity_type="process",
+                attributes={"status": real_status, "source": "os_process_probe", "observation_type": "direct"}
+            )
             obs = Observation(
                 id=f"obs_env_proc_{os.urandom(4).hex()}",
                 subject=app_name,

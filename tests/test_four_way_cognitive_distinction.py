@@ -48,18 +48,18 @@ def test_four_way_cognitive_distinction_pipeline(tmp_path):
 
     # Stage 3: ObservationCollector ingests observations into WorldModel
     with patch("psutil.process_iter", return_value=[]):
-        # Case A: Tool command succeeded, but process probe fails -> observed status is 'launched', NOT 'running'
+        # Case A: Tool command succeeded, but process probe fails -> observed status is 'not_running', NOT 'running'
         obs_a = ObservationCollector.collect_and_ingest_observations(proposal, exec_res, world_model=wm)
         status_obs_a = wm.latest_observation("photoshop", "status")
         assert status_obs_a is not None
-        assert status_obs_a.value == "launched"
+        assert status_obs_a.value == "not_running"
 
         # Verification fails because 'running' was NOT observed!
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
         goal_rep = SemanticGoalInterpreter.interpret_goal("Open Photoshop")
         obs_state_a = {
-            "entities": [{"name": "photoshop", "status": "launched"}],
-            "observations": {"photoshop.status": "launched"},
+            "entities": [{"name": "photoshop", "status": "not_running"}],
+            "observations": {"photoshop.status": "not_running"},
             "executed_actions": exec_res.executed_actions,
             "assistant_reply": exec_res.assistant_reply
         }

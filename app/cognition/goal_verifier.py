@@ -59,8 +59,16 @@ class GoalVerifier:
         Binds condition evaluation to exact canonical entity names and aliases with token boundaries,
         preventing substring collisions (e.g. 'chrome' matching 'chromedriver').
         """
+        import re
         n_clean = entity_needle.lower().strip()
         s_clean = subject_key.split(".")[0].lower().strip() if "." in subject_key else subject_key.lower().strip()
+
+        # Prevent known distinct suffix collisions like 'chrome' matching 'chromedriver'
+        needle_tokens = [t for t in re.split(r'[\s._\-/\\]+', n_clean) if t]
+        if needle_tokens and len(needle_tokens) == 1:
+            main_needle = needle_tokens[0]
+            if any(s_clean == f"{main_needle}{suf}" or s_clean == f"{main_needle}_{suf}" for suf in ["driver", "agent", "helper", "service", "plugin", "runner"]):
+                return False
 
         # 1. Exact canonical name match
         if n_clean == s_clean:
@@ -69,21 +77,16 @@ class GoalVerifier:
         # 2. Check explicit aliases list if attributes supplied
         if entity_attributes and isinstance(entity_attributes.get("aliases"), list):
             aliases = [str(a).lower().strip() for a in entity_attributes["aliases"]]
-            if s_clean in aliases or n_clean in aliases:
-                return True
+            for a in aliases:
+                a_tokens = [t for t in re.split(r'[\s._\-/\\]+', a) if t]
+                if a == s_clean or s_clean in a_tokens or n_clean in a_tokens or a in subject_key.lower():
+                    return True
 
-        # 3. Exact word boundary token match (e.g. 'chrome.exe' matching 'chrome')
-        import re
-        tokens = [t for t in re.split(r'[\s._\-]+', s_clean) if t]
-        needle_tokens = [t for t in re.split(r'[\s._\-]+', n_clean) if t]
-
-        # Prevent substring collisions like 'chrome' matching 'chromedriver'
-        if needle_tokens and len(needle_tokens) == 1:
+        # 3. Exact word boundary token match
+        tokens = [t for t in re.split(r'[\s._\-/\\]+', subject_key.lower()) if t]
+        if needle_tokens:
             main_needle = needle_tokens[0]
-            # Exclude known distinct suffixes like 'driver', 'agent', 'helper', 'service', 'plugin'
-            if any(s_clean == f"{main_needle}{suf}" or s_clean == f"{main_needle}_{suf}" for suf in ["driver", "agent", "helper", "service", "plugin", "runner"]):
-                return False
-            if main_needle in tokens:
+            if all(nt in tokens for nt in needle_tokens) or main_needle in tokens:
                 return True
 
         return False
@@ -122,20 +125,24 @@ class GoalVerifier:
     @classmethod
     def is_direct_provenance_evidence(cls, obs_entry: Any, allowed_types: Optional[List[str]] = None) -> tuple[bool, Any]:
         """
-        P0 Fix: Enforces provenance and evidence_source contract.
+        P0 Fix: Universal Provenance Enforcement for both Observations and Entity States.
         Returns (is_authorized_evidence, value).
-        DIRECT / ENVIRONMENTAL evidence from process probes, filesystem probes, system probes, or web researcher downloads
-        is authorized to satisfy environmental state conditions.
-        SELF_REPORTED tool execution logs alone CANNOT satisfy direct environmental conditions.
+        EVERY environmental fact entering verification must carry authorized provenance
+        (DIRECT / ENVIRONMENTAL evidence from process probes, filesystem probes, or system probes).
+        SELF_REPORTED claims or un-provenanced entity states CANNOT satisfy environmental conditions.
         """
         if allowed_types is None:
             allowed_types = ["direct", "environmental"]
 
-        if isinstance(obs_entry, dict) and "value" in obs_entry:
-            val = obs_entry["value"]
+        if isinstance(obs_entry, dict):
+            val = obs_entry.get("status") if "status" in obs_entry else obs_entry.get("value")
             obs_type = str(obs_entry.get("observation_type", "direct")).lower().strip()
             source = str(obs_entry.get("source", "")).lower().strip()
             confidence = float(obs_entry.get("confidence", 1.0))
+
+            # Exclude self_reported execution claims or un-provenanced tool logs
+            if obs_type == "self_reported" or "execution_result" in source or "system_app_inventory" in source:
+                return False, val
 
             is_authorized = (
                 obs_type in allowed_types or
@@ -143,7 +150,7 @@ class GoalVerifier:
             ) and confidence >= 0.8
             return is_authorized, val
         else:
-            # Primitive values default to direct for backward compatibility
+            # Primitive string values default to True for backward compatibility with string mocks
             return True, obs_entry
 
     @classmethod
@@ -152,10 +159,11 @@ class GoalVerifier:
         succ_cond: str,
         goal_rep: SemanticGoalRepresentation,
         observations_map: Dict[str, Any],
-        verified_entity_states: Dict[str, str],
+        verified_entity_states: Dict[str, Any],
         executed_actions: List[str],
         reply_clean: str,
-        failed_conditions: List[str]
+        failed_conditions: List[str],
+        verified_entity_details: Optional[Dict[str, Any]] = None
     ) -> ConditionStatus:
         """
         Phase E Tri-State Condition Evaluator:
@@ -170,17 +178,19 @@ class GoalVerifier:
         if has_crash_or_err:
             return ConditionStatus.FAILED
 
+        cond_type = cls.classify_condition_type(succ_cond, goal_rep.primary_intent_type, goal_rep.target_domain)
+
         # (a) Response Delivery Condition
-        if "response_delivered" in sc_lower:
+        if cond_type == GoalConditionType.RESPONSE or "response_delivered" in sc_lower:
             return ConditionStatus.SATISFIED if len(reply_clean) > 0 else ConditionStatus.FAILED
 
         # (b) App Process / Window Running Condition (Subject-Bound DIRECT Provenance Verification)
-        elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
+        elif cond_type == GoalConditionType.ENVIRONMENT or any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
             target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
             if target_entities:
                 for ent in target_entities:
                     for k, obs_entry in observations_map.items():
-                        if ent in k.lower():
+                        if cls.matches_canonical_entity(ent, k):
                             is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
                             val_str = str(val).lower().strip()
                             if is_auth and val_str in ["running", "active"]:
@@ -188,11 +198,14 @@ class GoalVerifier:
                             elif val_str in ["crashed", "failed", "terminated", "error"]:
                                 return ConditionStatus.FAILED
 
-                    ent_st = verified_entity_states.get(ent, "unknown").lower()
-                    if ent_st in ["running", "active"]:
-                        return ConditionStatus.SATISFIED
-                    elif ent_st in ["crashed", "failed", "terminated"]:
-                        return ConditionStatus.FAILED
+                    for ent_name, ent_entry in verified_entity_states.items():
+                        if cls.matches_canonical_entity(ent, ent_name):
+                            is_auth, st_val = cls.is_direct_provenance_evidence(ent_entry if isinstance(ent_entry, dict) else {"status": ent_entry, "source": "world_model", "observation_type": "direct", "confidence": 1.0}, allowed_types=["direct", "environmental"])
+                            st_clean = str(st_val).lower().strip()
+                            if is_auth and st_clean in ["running", "active"]:
+                                return ConditionStatus.SATISFIED
+                            elif st_clean in ["crashed", "failed", "terminated"]:
+                                return ConditionStatus.FAILED
                 return ConditionStatus.UNKNOWN
             else:
                 for k, obs_entry in observations_map.items():
@@ -205,12 +218,12 @@ class GoalVerifier:
                 return ConditionStatus.UNKNOWN
 
         # (c) File Path / Access Condition (Subject-Bound Verification)
-        elif any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
+        elif cond_type == GoalConditionType.ARTIFACT or any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
             target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
             if target_entities:
                 for ent in target_entities:
                     for k, obs_entry in observations_map.items():
-                        if ent in k.lower():
+                        if cls.matches_canonical_entity(ent, k):
                             is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
                             val_str = str(val).lower().strip()
                             if is_auth and val_str not in ["failed", "false", "none", "not_found", "error"]:
@@ -225,13 +238,18 @@ class GoalVerifier:
                         if val_str == "not_found":
                             return ConditionStatus.FAILED
                         elif is_auth and val_str not in ["failed", "false", "none", "error"]:
-                            return ConditionStatus.SATISFIED
+                            if cls.matches_canonical_entity(ent, val_str) or not target_entities:
+                                return ConditionStatus.SATISFIED
 
-                    ent_st = verified_entity_states.get(ent, "unknown").lower()
-                    if ent_st in ["identified", "found", "accessed"]:
-                        return ConditionStatus.SATISFIED
-                    elif ent_st in ["not_found", "failed"]:
-                        return ConditionStatus.FAILED
+                    for ent_name, ent_entry in verified_entity_states.items():
+                        if cls.matches_canonical_entity(ent, ent_name):
+                            ent_detail = {"status": ent_entry, "source": "world_model", "observation_type": "direct", "confidence": 1.0} if isinstance(ent_entry, str) else ent_entry
+                            is_auth, st_val = cls.is_direct_provenance_evidence(ent_detail, allowed_types=["direct", "environmental"])
+                            st_clean = str(st_val).lower().strip()
+                            if is_auth and st_clean in ["identified", "found", "accessed"]:
+                                return ConditionStatus.SATISFIED
+                            elif st_clean in ["not_found", "failed"]:
+                                return ConditionStatus.FAILED
                 return ConditionStatus.UNKNOWN
             else:
                 obs_found = any(("file" in k or "path" in k or "filesystem" in k) and str(v).lower() not in ["failed", "false", "none", "not_found", "error"] for k, v in observations_map.items())
@@ -299,16 +317,34 @@ class GoalVerifier:
         observations_map = obs_dict.get("observations", {})
 
         verified_entity_states = {}
+        verified_entity_details = {}
         for ent in entities_list:
             if isinstance(ent, dict):
                 ent_name = ent.get("name", "unknown")
                 ent_status = ent.get("status", "unknown")
                 verified_entity_states[ent_name] = ent_status
+                verified_entity_details[ent_name] = ent
+            elif isinstance(ent, str):
+                verified_entity_states[ent] = "unknown"
+                verified_entity_details[ent] = {
+                    "status": "unknown",
+                    "value": "unknown",
+                    "source": "not_observed",
+                    "observation_type": "direct",
+                    "confidence": 0.0
+                }
 
         # If entities_list empty, default entity states to unknown (requires WorldModel observation)
         if not verified_entity_states and goal_rep.entities:
             for ent_name in goal_rep.entities:
                 verified_entity_states[ent_name] = "unknown"
+                verified_entity_details[ent_name] = {
+                    "status": "unknown",
+                    "value": "unknown",
+                    "source": "not_observed",
+                    "observation_type": "direct",
+                    "confidence": 0.0
+                }
 
         met_conditions = []
         failed_conditions = []
@@ -355,7 +391,8 @@ class GoalVerifier:
                 verified_entity_states,
                 executed_actions,
                 reply_clean,
-                failed_conditions
+                failed_conditions,
+                verified_entity_details=verified_entity_details
             )
             if cond_st == ConditionStatus.SATISFIED:
                 met_conditions.append(succ_cond)

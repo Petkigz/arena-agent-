@@ -166,21 +166,33 @@ class CognitiveRuntime:
     ) -> Dict[str, Any]:
         """
         P0 Fix: Captures real environmental world state from WorldModel, BeliefEngine, and Perception.
-        Separates WorldState (pure environmental evidence) from ExecutionTrace and AssistantResponse to prevent
-        accidental evidence contamination.
+        Ensures all entity states carry explicit provenance (source, observation_type, confidence)
+        so GoalVerifier can enforce universal provenance validation.
         """
         entities_data = []
         try:
             entities = self.world.find_entities()[:15]
             for ent in entities:
                 latest_obs = self.world.latest_observation(ent.name, "status") or self.world.latest_observation(ent.name, "process_status")
-                real_status = str(latest_obs.value) if latest_obs else ent.attributes.get("status", "unknown")
+                if latest_obs:
+                    real_status = str(latest_obs.value)
+                    obs_source = latest_obs.source
+                    obs_type = getattr(latest_obs, "observation_type", "direct")
+                    obs_conf = latest_obs.confidence
+                else:
+                    real_status = ent.attributes.get("status", "unknown")
+                    obs_source = ent.attributes.get("source", "world_model")
+                    obs_type = ent.attributes.get("observation_type", "direct")
+                    obs_conf = float(ent.confidence)
 
                 entities_data.append({
                     "id": ent.id,
                     "name": ent.name,
                     "type": ent.entity_type,
                     "status": real_status,
+                    "source": obs_source,
+                    "observation_type": obs_type,
+                    "confidence": obs_conf,
                     "attributes": ent.attributes
                 })
         except Exception as e:
@@ -189,11 +201,24 @@ class CognitiveRuntime:
         if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
             for e in goal_rep.entities:
                 latest_obs = self.world.latest_observation(e, "status") or self.world.latest_observation(e, "process_status")
-                ent_status = str(latest_obs.value) if latest_obs else "unknown"
+                if latest_obs:
+                    ent_status = str(latest_obs.value)
+                    obs_source = latest_obs.source
+                    obs_type = getattr(latest_obs, "observation_type", "direct")
+                    obs_conf = latest_obs.confidence
+                else:
+                    ent_status = "unknown"
+                    obs_source = "not_observed"
+                    obs_type = "direct"
+                    obs_conf = 0.0
+
                 entities_data.append({
                     "name": e,
                     "type": "process" if getattr(goal_rep, "target_domain", "") == "desktop_os" else "entity",
-                    "status": ent_status
+                    "status": ent_status,
+                    "source": obs_source,
+                    "observation_type": obs_type,
+                    "confidence": obs_conf
                 })
 
         obs_data = {}
