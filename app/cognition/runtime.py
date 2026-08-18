@@ -352,6 +352,9 @@ class CognitiveRuntime:
                 goal_verified=verify_res.verified_success
             )
             return {
+                "request_success": True,
+                "execution_success": True,
+                "goal_verified": verify_res.verified_success,
                 "success": True,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
@@ -361,7 +364,6 @@ class CognitiveRuntime:
                 "action_type": "formulate_answer",
                 "reasoning_action": "answer",
                 "goal_lifecycle_state": tracker.current_state.value,
-                "goal_verified": verify_res.verified_success,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast")
@@ -405,6 +407,9 @@ class CognitiveRuntime:
                 goal_verified=verify_res.verified_success
             )
             return {
+                "request_success": True,
+                "execution_success": True,
+                "goal_verified": verify_res.verified_success,
                 "success": True,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
@@ -414,7 +419,6 @@ class CognitiveRuntime:
                 "action_type": "investigate",
                 "reasoning_action": "investigate",
                 "goal_lifecycle_state": tracker.current_state.value,
-                "goal_verified": verify_res.verified_success,
                 "prediction_surprisal": 0.1,
                 "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
@@ -436,6 +440,9 @@ class CognitiveRuntime:
                 goal_verified=False
             )
             return {
+                "request_success": True,
+                "execution_success": False,
+                "goal_verified": False,
                 "success": True,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
@@ -445,7 +452,6 @@ class CognitiveRuntime:
                 "action_type": "defer",
                 "reasoning_action": "defer",
                 "goal_lifecycle_state": tracker.current_state.value,
-                "goal_verified": False,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": "ReasoningCycle"
@@ -486,6 +492,9 @@ class CognitiveRuntime:
                 goal_verified=False
             )
             return {
+                "request_success": False,
+                "execution_success": False,
+                "goal_verified": False,
                 "success": False,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
@@ -495,7 +504,6 @@ class CognitiveRuntime:
                 "requires_approval": gate_res.requires_approval,
                 "gate_blocked": gate_res.gate_name,
                 "goal_lifecycle_state": tracker.current_state.value,
-                "goal_verified": False,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": "ActionGate"
@@ -612,8 +620,13 @@ class CognitiveRuntime:
             f"GoalLifecycleState: {tracker.current_state.value} | Verified: {verify_res.verified_success} | Latency: {latency:.0f}ms"
         )
 
+        exec_success = bool(agent_res.get("success", True)) if isinstance(agent_res, dict) else True
+
         return {
-            "success": True,
+            "request_success": True,
+            "execution_success": exec_success,
+            "goal_verified": verify_res.verified_success,
+            "success": exec_success,
             "session_id": session_id,
             "trace_id": trace.trace_id,
             "user_text": user_text,
@@ -622,7 +635,6 @@ class CognitiveRuntime:
             "action_type": fine_action_type,
             "reasoning_action": reasoning_action.value if hasattr(reasoning_action, "value") else str(reasoning_action),
             "goal_lifecycle_state": tracker.current_state.value,
-            "goal_verified": verify_res.verified_success,
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
             "latency_ms": round(latency, 2),
