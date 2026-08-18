@@ -24,9 +24,12 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
     def mock_execute_proposal(proposal, user_text, complexity="fast"):
         nonlocal executed_proposal
         executed_proposal = proposal
+        from app.cognition.world_model import Observation
+        runtime.world.upsert_entity(name="report.pdf", entity_type="file", attributes={"status": "identified"})
+        runtime.world.observe(Observation(id="obs_a", subject="filesystem", predicate="file_path", value="/home/user/documents/report.pdf", source="fs"))
         return {
             "executed_actions": [f"Executed {proposal.action_type}"],
-            "assistant_reply": f"Found file report.pdf at /home/user/documents/report.pdf",
+            "assistant_reply": "Found file report.pdf at /home/user/documents/report.pdf",
             "model_used": "fast"
         }
 
@@ -56,9 +59,14 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
                 "model_used": "fast"
             }
         else:
+            from app.cognition.world_model import Observation
+            runtime.world.upsert_entity(name="report.pdf", entity_type="file", attributes={"status": "identified"})
+            runtime.world.observe(Observation(
+                id="obs_web1", subject="filesystem", predicate="file_path", value="/home/user/downloads/report.pdf", source="web_researcher"
+            ))
             return {
                 "executed_actions": ["Executed Plan B web search"],
-                "assistant_reply": "Retrieved web search results for report.pdf document http://example.com/report.pdf",
+                "assistant_reply": "Found and downloaded report.pdf at /home/user/downloads/report.pdf",
                 "model_used": "fast"
             }
 

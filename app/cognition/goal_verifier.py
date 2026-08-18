@@ -69,32 +69,29 @@ class GoalVerifier:
 
         # (c) File Path / Access Condition
         elif any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
-            obs_found = any("file" in k or "path" in k for k in observations_map.keys())
-            has_file_path = obs_found or any(k in reply_lower or k in actions_str for k in ["path", "found file", "file located", "c:", "/home", "f:", "d:", ".txt", ".py", ".pdf", ".doc", ".png"])
-            return has_file_path
+            obs_found = any(("file" in k or "path" in k or "filesystem" in k) and str(v).lower() not in ["failed", "false", "none", "not_found", "error"] for k, v in observations_map.items())
+            entity_file_found = any(str(st).lower() in ["identified", "found", "accessed", "running"] for st in verified_entity_states.values())
+            return obs_found or entity_file_found
 
         # (d) Web Research / Search Results Condition
         elif any(k in sc_lower for k in ["search_results_retrieved", "results_found"]):
-            obs_results = any("web_search" in k or "search_results" in k for k in observations_map.keys())
-            has_results = obs_results or len(reply_clean) > 20 or any(k in reply_lower or k in actions_str for k in ["http", "search results", "retrieved", "found", "summary"])
-            return has_results
+            obs_results = any(("web_search" in k or "search_results" in k) and str(v).lower() not in ["failed", "false", "error"] for k, v in observations_map.items())
+            return obs_results
 
         # (e) Diagnostic Evidence Condition
         elif any(k in sc_lower for k in ["diagnostic_evidence_gathered", "evidence_gathered"]):
-            obs_evidence = any("diagnostic" in k or "evidence" in k for k in observations_map.keys())
-            return obs_evidence or len(reply_clean) > 10 or len(executed_actions) > 0
+            obs_evidence = any(("diagnostic" in k or "evidence" in k) and str(v).lower() not in ["failed", "false", "error"] for k, v in observations_map.items())
+            return obs_evidence
 
         # (f) ADB / Phone Command Condition
         elif any(k in sc_lower for k in ["adb_command_succeeded", "phone_action_completed"]):
-            obs_adb = any("adb" in k or "battery" in k for k in observations_map.keys())
-            has_adb_ok = obs_adb or any(k in reply_lower or k in actions_str for k in ["adb", "battery", "call", "sms", "photo", "screen", "succeeded", "ok", "done"])
-            return has_adb_ok
+            obs_adb = any(("adb" in k or "battery" in k or "phone" in k) and str(v).lower() not in ["failed", "false", "error", "offline"] for k, v in observations_map.items())
+            return obs_adb
 
         # (g) Screen Capture Condition
         elif "screen_capture_saved" in sc_lower:
-            obs_screen = any("screen" in k or "vision" in k for k in observations_map.keys())
-            has_screen_ok = obs_screen or any(k in reply_lower or k in actions_str for k in ["screenshot", "captured", "saved", "vision", "analyzed"])
-            return has_screen_ok
+            obs_screen = any(("screen" in k or "vision" in k or "screenshot" in k) and str(v).lower() not in ["failed", "false", "error"] for k, v in observations_map.items())
+            return obs_screen
 
         # (h) Generic Fallback Condition: Requires explicit WorldModel observation or entity match
         else:

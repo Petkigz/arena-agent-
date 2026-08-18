@@ -67,23 +67,56 @@ class MasterAgentOrchestrator:
             DesktopControl.launch_application("firefox")
             DesktopControl.open_url(url)
             executed_actions.append(f"Opened web browser and launched search for '{query_term}'.")
+            try:
+                from app.cognition.world_model import WorldModel, Observation
+                wm = WorldModel(str(settings.DB_PATH))
+                wm.observe(Observation(
+                    id=f"obs_web_{os.urandom(4).hex()}", subject="web_search", predicate="search_results", value=url, source="web_researcher"
+                ))
+            except Exception as e:
+                app_logger.warning(f"WorldModel web_search observation note: {e}")
 
         elif action_type == "search_files":
             search_query = payload.get("query") or payload.get("file_name") or payload.get("search_term") or user_text
             matched = UniversalFilesystem.search_filesystem(search_query, max_results=5)
             if matched:
                 executed_actions.append(f"Found local file '{matched[0]['file_name']}' at {matched[0]['file_path']}.")
+                try:
+                    from app.cognition.world_model import WorldModel, Observation
+                    wm = WorldModel(str(settings.DB_PATH))
+                    wm.upsert_entity(name=matched[0]['file_name'], entity_type="file", attributes={"file_path": matched[0]['file_path'], "status": "identified"})
+                    wm.observe(Observation(
+                        id=f"obs_fs_{os.urandom(4).hex()}", subject="filesystem", predicate="file_path", value=matched[0]['file_path'], source="universal_filesystem"
+                    ))
+                except Exception as e:
+                    app_logger.warning(f"WorldModel search_files observation note: {e}")
             else:
                 executed_actions.append(f"Searched local filesystem for '{search_query}'.")
 
         elif action_type == "phone_command":
             from app.tools.android_adb_controller import AndroidADBController
             bat_res = AndroidADBController.get_battery_status()
-            executed_actions.append(bat_res["message"])
+            executed_actions.append(bat_res.get("message", "Executed ADB command"))
+            try:
+                from app.cognition.world_model import WorldModel, Observation
+                wm = WorldModel(str(settings.DB_PATH))
+                wm.observe(Observation(
+                    id=f"obs_adb_{os.urandom(4).hex()}", subject="phone", predicate="adb_status", value="succeeded", source="android_adb"
+                ))
+            except Exception as e:
+                app_logger.warning(f"WorldModel phone_command observation note: {e}")
 
         elif action_type == "screen_capture":
             cap_res = ScreenCaptureTool.capture_screen()
             executed_actions.append(f"Captured active desktop screen window ({cap_res.get('file_name')}).")
+            try:
+                from app.cognition.world_model import WorldModel, Observation
+                wm = WorldModel(str(settings.DB_PATH))
+                wm.observe(Observation(
+                    id=f"obs_screen_{os.urandom(4).hex()}", subject="screen_capture", predicate="screenshot", value=cap_res.get("file_name"), source="screen_capture_tool"
+                ))
+            except Exception as e:
+                app_logger.warning(f"WorldModel screen_capture observation note: {e}")
 
         elif action_type == "opsec_audit":
             audit_res = OpSecManagerTool.audit_digital_footprint("user@example.com")
@@ -95,6 +128,14 @@ class MasterAgentOrchestrator:
 
         elif action_type in ["investigate", "diagnostic"]:
             executed_actions.append(f"Executed diagnostic investigation probe for '{user_text[:50]}'.")
+            try:
+                from app.cognition.world_model import WorldModel, Observation
+                wm = WorldModel(str(settings.DB_PATH))
+                wm.observe(Observation(
+                    id=f"obs_diag_{os.urandom(4).hex()}", subject="diagnostic", predicate="evidence", value=user_text[:50], source="investigation_probe"
+                ))
+            except Exception as e:
+                app_logger.warning(f"WorldModel investigation observation note: {e}")
 
         elif action_type in ["formulate_answer", "answer"]:
             executed_actions.append("Formulated direct conversational answer.")
