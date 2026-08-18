@@ -66,11 +66,11 @@ class GoalVerifier:
             if target_entities:
                 for ent in target_entities:
                     ent_obs_running = any(
-                        ent in k.lower() and str(v).lower() in ["running", "active", "launched"]
+                        ent in k.lower() and str(v).lower() in ["running", "active"]
                         for k, v in observations_map.items()
                     )
                     ent_state_running = any(
-                        ent in k.lower() and str(st).lower() in ["running", "active", "launched"]
+                        ent in k.lower() and str(st).lower() in ["running", "active"]
                         for k, st in verified_entity_states.items()
                     )
                     if ent_obs_running or ent_state_running:
