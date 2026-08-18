@@ -280,18 +280,37 @@ class SemanticGoalInterpreter:
 
         intent_type, domain = cls.normalize_and_validate(intent_type, domain)
 
-        # Epistemic Confidence Calculation based on intent clarity
-        has_explicit_keyword = any(
-            f"{k} " in text_lower or text_lower.startswith(k)
-            for k in ["open", "launch", "start", "run", "search", "find", "call", "sms", "screenshot", "play"]
+        # Collision & Ambiguity Detection:
+        # Unambiguous action verbs with explicit operational targets (e.g. open, launch) yield high confidence.
+        # Ambiguous collision verbs (e.g. find, check, search) or baseline queries flag is_ambiguous=True.
+        UNAMBIGUOUS_ACTION_VERBS = {"open", "launch", "start", "run", "call", "sms", "screenshot"}
+        AMBIGUOUS_COLLISION_VERBS = {"find", "check", "search", "look", "get", "inspect", "where"}
+
+        words = text_lower.split()
+        first_word = words[0] if words else ""
+
+        is_unambiguous_action = (
+            first_word in UNAMBIGUOUS_ACTION_VERBS or
+            any(text_lower.startswith(v + " ") for v in UNAMBIGUOUS_ACTION_VERBS)
         )
 
-        if has_explicit_keyword:
+        is_ambiguous_collision = (
+            first_word in AMBIGUOUS_COLLISION_VERBS or
+            any(f" {v} " in f" {text_lower} " or text_lower.startswith(v + " ") for v in AMBIGUOUS_COLLISION_VERBS)
+        )
+
+        if is_unambiguous_action and not is_ambiguous_collision:
             confidence = 0.90
             provenance = "clear_deterministic_keyword_intent"
+            is_ambiguous = False
+        elif is_ambiguous_collision:
+            confidence = 0.60
+            provenance = "ambiguous_keyword_collision"
+            is_ambiguous = True
         else:
             confidence = 0.55
             provenance = "heuristic_baseline"
+            is_ambiguous = True
 
         heuristic_intent = intent_type
         heuristic_domain = domain
@@ -347,8 +366,9 @@ class SemanticGoalInterpreter:
             failure_conditions = ["response_empty = true"]
             risks = ["low"]
 
-        # Deep LLM-Assisted Goal Decomposition Path when complexity in ["main", "deep"]
-        if complexity in ["main", "deep"]:
+        # Deeper Semantic Interpretation Path:
+        # Triggered when explicitly requested (complexity in ["main", "deep"]) OR when fast heuristics detect ambiguity/collisions (is_ambiguous)
+        if complexity in ["main", "deep"] or is_ambiguous:
             try:
                 system_prompt = (
                     "You are a Goal Representation v2 Decomposition Engine. Parse user input into JSON with keys: "
@@ -374,7 +394,7 @@ class SemanticGoalInterpreter:
                     complexity="fast",
                     max_tokens=300
                 )
-                if llm_res.get("choices"):
+                if llm_res and llm_res.get("choices"):
                     content = llm_res["choices"][0]["message"]["content"]
                     parsed_json = cls.extract_json_object(content)
                     if parsed_json:
@@ -398,8 +418,8 @@ class SemanticGoalInterpreter:
                             confidence = 0.95
                             provenance = "llm_heuristic_agreement"
                         else:
-                            confidence = 0.60
-                            provenance = "llm_heuristic_conflict"
+                            confidence = 0.85 if is_ambiguous else 0.60
+                            provenance = "llm_semantic_disambiguation" if is_ambiguous else "llm_heuristic_conflict"
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
