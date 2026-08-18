@@ -219,10 +219,10 @@ class GoalVerifier:
 
         audit_logger.info(f"GoalVerifier [{goal_id[:8]}]: VerifiedSuccess={verified_success}, State={final_state.value}")
 
-        # Construct actual_world_state payload
+        # Construct actual_world_state payload - NEVER manufacture "running" based on verification result!
         actual_world_state = {
             "entities": entities_list if entities_list else [{"name": e, "status": verified_entity_states.get(e, "unknown")} for e in goal_rep.entities],
-            "observations": observations_map if observations_map else {f"{goal_rep.target_domain}.status": "running" if verified_success else "failed"},
+            "observations": observations_map if observations_map else {"status": "unknown", "evidence_source": "not_observed"},
             "verified_entity_states": verified_entity_states,
             "executed_actions": executed_actions,
             "assistant_reply": assistant_reply[:200],
