@@ -293,9 +293,9 @@ class CognitiveRuntime:
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
 
-        # 5. DECISION ROUTER:
+        # 5. DECISION ROUTER (100% Authoritative ReasoningAction Routing):
         # Branch A: ANSWER / Direct Conversational Q&A
-        if reasoning_action == ReasoningAction.ANSWER and not any(k in user_text.lower() for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
+        if reasoning_action == ReasoningAction.ANSWER:
             tracker.transition(GoalLifecycleState.EXECUTING, "Formulating direct conversational answer.")
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
