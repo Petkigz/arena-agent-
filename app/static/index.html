@@ -6,7 +6,6 @@
     <title>Local Personal Assistant - Visual Dashboard</title>
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#0b0f19">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #0b0f19;
@@ -630,19 +629,27 @@
     </div>
 
     <!-- Navigation -->
-    <nav>
-        <button class="nav-btn active" onclick="switchTab('chat')">💬 Assistant</button>
-        <button class="nav-btn" onclick="switchTab('tasks')">📋 Tasks</button>
-        <button class="nav-btn" onclick="switchTab('workspace')">📁 Workspace</button>
-        <button class="nav-btn" onclick="switchTab('mobile-app')">📱 Mobile & Desktop App</button>
-        <button class="nav-btn expert-only" onclick="switchTab('memory')">🧠 Memory Vault</button>
-        <button class="nav-btn expert-only" onclick="switchTab('models')">⚙️ Models & Voices</button>
-        <button class="nav-btn expert-only" onclick="switchTab('security')">🛡️ Security & Logs</button>
-        <button class="nav-btn expert-only" onclick="switchTab('manual')">📖 Manual & Rules</button>
+    <nav aria-label="Dashboard sections">
+        <button class="nav-btn active" onclick="switchTab('chat', this)">💬 Assistant</button>
+        <button class="nav-btn" onclick="switchTab('tasks', this)">📋 Tasks</button>
+        <button class="nav-btn" onclick="switchTab('workspace', this)">📁 Workspace</button>
+        <button class="nav-btn" onclick="switchTab('models', this)">📱 Mobile, Models & Voices</button>
+        <button class="nav-btn expert-only" onclick="switchTab('specialists', this)">🧩 Specialists</button>
+        <button class="nav-btn expert-only" onclick="switchTab('automation', this)">🤖 Automation</button>
+        <button class="nav-btn expert-only" onclick="switchTab('vision', this)">👁️ Vision</button>
+        <button class="nav-btn expert-only" onclick="switchTab('learner', this)">📚 Learning</button>
+        <button class="nav-btn expert-only" onclick="switchTab('memory', this)">🧠 Memory Vault</button>
+        <button class="nav-btn expert-only" onclick="switchTab('security', this)">🛡️ Security & Logs</button>
+        <button class="nav-btn expert-only" onclick="switchTab('manual', this)">📖 Manual & Rules</button>
+        <button class="nav-btn expert-only" onclick="switchTab('playground', this)">🧪 Policy Playground</button>
     </nav>
 
     <!-- Main Content -->
     <main>
+        <div class="card" role="alert" style="border-color: var(--warning); padding: 0.9rem 1rem;">
+            <strong style="color: var(--warning);">Local-only security notice:</strong>
+            API authentication is not implemented yet. Run this dashboard on <code>127.0.0.1</code> only; do not expose it to Wi-Fi, port forwarding, or public tunnels.
+        </div>
 
         <!-- 1. Chat & Voice Tab -->
         <div id="tab-chat" class="tab-content active">
@@ -656,28 +663,28 @@
                         <!-- Auto-Speak Output Toggle -->
                         <div class="brain-selector" style="cursor: pointer;">
                             <label style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
-                                <input type="checkbox" id="voice-output-toggle" checked style="cursor: pointer;"> 🔊 Speak Audio
+                                <input aria-label="Speak assistant responses aloud" type="checkbox" id="voice-output-toggle" checked style="cursor: pointer;"> 🔊 Speak Audio
                             </label>
                         </div>
 
                         <!-- Microphone Device Selector -->
                         <div class="brain-selector">
                             <span style="font-size: 0.8rem; color: var(--text-muted);">Mic:</span>
-                            <select id="mic-device-select">
+                            <select aria-label="Microphone device" id="mic-device-select">
                                 <option value="">Default Microphone</option>
                             </select>
                         </div>
 
                         <div class="brain-selector">
                             <span style="font-size: 0.8rem; color: var(--text-muted);">Voice Profile:</span>
-                            <select id="active-voice-profile" onchange="changeVoiceProfile(event)">
+                            <select aria-label="Active voice reference profile" id="active-voice-profile" onchange="changeVoiceProfile(event)">
                                 <option value="Default Assistant">Default Assistant</option>
                             </select>
                         </div>
 
                         <div class="brain-selector">
                             <span style="font-size: 0.8rem; color: var(--text-muted);">Brain:</span>
-                            <select id="brain-model">
+                            <select aria-label="Language model routing mode" id="brain-model">
                                 <option value="fast">Fast Brain</option>
                                 <option value="main">Main Brain</option>
                             </select>
@@ -691,7 +698,7 @@
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" style="flex: 1;" placeholder="Type or click '🎙️ Record Voice' to speak..." onkeypress="handleKeyPress(event)">
+                    <input aria-label="Message to the assistant" type="text" id="chat-input" style="flex: 1;" placeholder="Type or click '🎙️ Record Voice' to speak..." onkeypress="handleKeyPress(event)">
                     
                     <button class="btn btn-secondary" id="voice-rec-btn" onclick="toggleVoiceRecording()">🎙️ Record Voice</button>
 
@@ -735,9 +742,9 @@
                     </h2>
                     <div class="form-group">
                         <label>File Path</label>
-                        <input type="text" id="editor-filepath" placeholder="data/workspace/drafts/example.md">
+                        <input aria-label="Workspace file path" type="text" id="editor-filepath" placeholder="data/workspace/drafts/example.md">
                     </div>
-                    <textarea id="editor-file-content" style="height: 320px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Select a file from the list or type path to edit..."></textarea>
+                    <textarea aria-label="Workspace file content" id="editor-file-content" style="height: 320px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Select a file from the list or type path to edit..."></textarea>
                 </div>
             </div>
         </div>
@@ -752,7 +759,7 @@
                 <form onsubmit="runMultiAgentCollaboration(event)">
                     <div class="form-group">
                         <label>Collaborative Multi-Agent Objective</label>
-                        <input type="text" id="multi-agent-obj" placeholder="e.g. Design an automated trading journal pipeline in Python" required>
+                        <input aria-label="Collaborative multi-agent objective" type="text" id="multi-agent-obj" placeholder="e.g. Design an automated trading journal pipeline in Python" required>
                     </div>
                     <button type="submit" class="btn" style="width: 100%;">👥 Run Multi-Agent Persona Team Collaboration</button>
                 </form>
@@ -767,7 +774,7 @@
                     <form onsubmit="runSecurityScan(event)">
                         <div class="form-group">
                             <label>Authorized Lab Target IP / Host</label>
-                            <input type="text" id="sec-target" placeholder="127.0.0.1 or 192.168.1.1" required>
+                            <input aria-label="Authorized security lab target" type="text" id="sec-target" placeholder="127.0.0.1 or 192.168.1.1" required>
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">🛡️ Scan Authorized Lab Target</button>
                     </form>
@@ -782,19 +789,19 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                             <div class="form-group">
                                 <label>Bankroll ($)</label>
-                                <input type="number" id="trd-bankroll" value="1000" required>
+                                <input aria-label="Trading simulation bankroll" type="number" id="trd-bankroll" value="1000" required>
                             </div>
                             <div class="form-group">
                                 <label>Max Risk (%)</label>
-                                <input type="number" id="trd-risk" value="1.0" step="0.1" required>
+                                <input aria-label="Maximum risk percent" type="number" id="trd-risk" value="1.0" step="0.1" required>
                             </div>
                             <div class="form-group">
                                 <label>Entry Price ($)</label>
-                                <input type="number" id="trd-entry" value="100" step="0.1" required>
+                                <input aria-label="Entry price" type="number" id="trd-entry" value="100" step="0.1" required>
                             </div>
                             <div class="form-group">
                                 <label>Stop Loss ($)</label>
-                                <input type="number" id="trd-stop" value="95" step="0.1" required>
+                                <input aria-label="Stop loss price" type="number" id="trd-stop" value="95" step="0.1" required>
                             </div>
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">📈 Calculate Position Size & Risk</button>
@@ -812,7 +819,7 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                             <div class="form-group">
                                 <label>Genre</label>
-                                <select id="mus-genre">
+                                <select aria-label="Music genre" id="mus-genre">
                                     <option value="hiphop">Hip-Hop / Rap</option>
                                     <option value="pop">Pop / Melodic</option>
                                     <option value="rock">Rock / Alternative</option>
@@ -821,7 +828,7 @@
                             </div>
                             <div class="form-group">
                                 <label>Vocal Style</label>
-                                <select id="mus-style">
+                                <select aria-label="Vocal style" id="mus-style">
                                     <option value="male_rap">Male Rap / Aggressive</option>
                                     <option value="female_singing">Female Melodic / Airy</option>
                                     <option value="backing_harmony">Backing Vocals / Harmony</option>
@@ -840,12 +847,12 @@
                     <form onsubmit="generateContentScript(event)">
                         <div class="form-group">
                             <label>Content Topic</label>
-                            <input type="text" id="cnt-topic" placeholder="e.g. How to build a local AI assistant on RX 580" required>
+                            <input aria-label="Content topic" type="text" id="cnt-topic" placeholder="e.g. How to build a local AI assistant on RX 580" required>
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                             <div class="form-group">
                                 <label>Platform</label>
-                                <select id="cnt-platform">
+                                <select aria-label="Content platform" id="cnt-platform">
                                     <option value="youtube">YouTube Video</option>
                                     <option value="twitter">Twitter / X Thread</option>
                                     <option value="shorts">YouTube Short / Reel</option>
@@ -854,7 +861,7 @@
                             </div>
                             <div class="form-group">
                                 <label>Target Audience</label>
-                                <input type="text" id="cnt-audience" value="Developers & Tech Enthusiasts">
+                                <input aria-label="Target audience" type="text" id="cnt-audience" value="Developers & Tech Enthusiasts">
                             </div>
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">📝 Generate Script & Save Draft</button>
@@ -879,11 +886,11 @@
                     <form onsubmit="runWebAgentWorkflow(event)">
                         <div class="form-group">
                             <label>Target Web Objective</label>
-                            <input type="text" id="web-objective" placeholder="e.g. Find Solana developer job requirements" required>
+                            <input aria-label="Browser automation objective" type="text" id="web-objective" placeholder="e.g. Find Solana developer job requirements" required>
                         </div>
                         <div class="form-group">
                             <label>Target URL</label>
-                            <input type="text" id="web-target-url" placeholder="https://github.com or https://example.com" required>
+                            <input aria-label="Browser automation target URL" type="text" id="web-target-url" placeholder="https://github.com or https://example.com" required>
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">🚀 Execute Web Agent Workflow</button>
                     </form>
@@ -896,7 +903,7 @@
                     </p>
                     <div class="form-group">
                         <label>Approved Desktop App</label>
-                        <select id="desktop-app-select">
+                        <select aria-label="Approved desktop application" id="desktop-app-select">
                             <option value="vscode">VS Code</option>
                             <option value="chrome">Google Chrome</option>
                             <option value="lm_studio">LM Studio</option>
@@ -925,7 +932,7 @@
                     </p>
                     <div class="form-group">
                         <label>Optional Inspection Focus Filter</label>
-                        <input type="text" id="vision-focus" placeholder="e.g. Look for compiler error message, DAW track window">
+                        <input aria-label="Screen inspection focus" type="text" id="vision-focus" placeholder="e.g. Look for compiler error message, DAW track window">
                     </div>
                     <button class="btn" style="width: 100%;" onclick="captureAndAnalyzeScreen()">📸 Snap & Analyze Active Screen</button>
                 </div>
@@ -955,11 +962,11 @@
                     <form onsubmit="learnYouTubeVideo(event)">
                         <div class="form-group">
                             <label>YouTube Video URL or ID</label>
-                            <input type="text" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." required>
+                            <input aria-label="YouTube video URL or ID" type="text" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." required>
                         </div>
                         <div class="form-group">
                             <label>Optional Topic / Focus Filter</label>
-                            <input type="text" id="yt-focus" placeholder="e.g. EQ settings for vocal mixing, smart contract security">
+                            <input aria-label="YouTube learning topic filter" type="text" id="yt-focus" placeholder="e.g. EQ settings for vocal mixing, smart contract security">
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">📹 Learn & Extract Skill Checklist</button>
                     </form>
@@ -973,7 +980,7 @@
                     <form onsubmit="learnWebArticle(event)">
                         <div class="form-group">
                             <label>Article URL or Web Search Query</label>
-                            <input type="text" id="web-url" placeholder="https://example.com/tutorial or 'Rust Solana tutorial'" required>
+                            <input aria-label="Article URL or web search query" type="text" id="web-url" placeholder="https://example.com/tutorial or 'Rust Solana tutorial'" required>
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">🌐 Scrape & Learn Knowledge</button>
                     </form>
@@ -1005,11 +1012,11 @@
                     <form id="memory-form" onsubmit="saveMemory(event)">
                         <div class="form-group">
                             <label>Fact or Preference Content</label>
-                            <input type="text" id="mem-content" placeholder="e.g. User prefers short direct plans" required>
+                            <input aria-label="Memory content" type="text" id="mem-content" placeholder="e.g. User prefers short direct plans" required>
                         </div>
                         <div class="form-group">
                             <label>Category</label>
-                            <select id="mem-category">
+                            <select aria-label="Memory category" id="mem-category">
                                 <option value="preference">Preference</option>
                                 <option value="goal">Goal</option>
                                 <option value="rule">Rule</option>
@@ -1019,7 +1026,7 @@
                         </div>
                         <div class="form-group">
                             <label>Confidence Rating (0.0 to 1.0)</label>
-                            <input type="number" id="mem-confidence" step="0.1" min="0" max="1" value="1.0">
+                            <input aria-label="Memory confidence" type="number" id="mem-confidence" step="0.1" min="0" max="1" value="1.0">
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">Save to Permanent Memory</button>
                     </form>
@@ -1038,13 +1045,13 @@
         <div id="tab-models" class="tab-content">
             <div class="grid-2">
                 <div class="card">
-                    <h2>🎙️ Custom Voice Profile Cloner</h2>
+                    <h2>🎙️ Experimental Voice Reference Profiles</h2>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-                        Record a 6-10 second sample of your voice (or another person's voice). Give it a profile name and save it. You can switch voices anytime!
+                        Record and organize 6-10 second reference samples. The current <code>pyttsx3</code> speech backend does not clone a person's timbre; these files are references for a future local voice model.
                     </p>
                     <div class="form-group">
                         <label>Voice Profile Name</label>
-                        <input type="text" id="voice-profile-name" placeholder="e.g. Petar's Voice, Partner Voice, Sarcastic AI">
+                        <input aria-label="Voice reference profile name" type="text" id="voice-profile-name" placeholder="e.g. Petar's Voice, Partner Voice, Sarcastic AI">
                     </div>
                     <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
                         <button class="btn btn-secondary" id="voice-profile-rec-btn" style="flex: 1;" onclick="toggleVoiceProfileRecording()">🎙️ Record 6s Voice Sample</button>
@@ -1053,11 +1060,11 @@
                 </div>
 
                 <div class="card">
-                    <h2>📱 Mobile Wi-Fi Access Information</h2>
-                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-                        To open this dashboard on your Android or iPhone, connect your phone to the same home Wi-Fi network as this PC, then open any of these links in Chrome or Safari:
+                    <h2>📱 Mobile Access (Security Work Required)</h2>
+                    <p style="font-size: 0.85rem; color: var(--warning); margin-bottom: 1.25rem;">
+                        Remote/LAN access is unsafe until authentication and route-level authorization are implemented. Keep the server on <code>127.0.0.1</code>; the addresses below are diagnostic only and must not be exposed.
                     </p>
-                    <div id="mobile-urls-box" class="console" style="height: 180px;">Querying local network IP address...</div>
+                    <div id="mobile-urls-box" class="console" style="height: 180px;">Querying diagnostic network information...</div>
                 </div>
             </div>
 
@@ -1081,19 +1088,19 @@
                     <form onsubmit="saveModelConfig(event)">
                         <div class="form-group">
                             <label>Fast Model Selector (Routine / Instant Tasks)</label>
-                            <select id="cfg-fast-model">
+                            <select aria-label="Fast model selector" id="cfg-fast-model">
                                 <!-- Populated dynamically -->
                             </select>
                         </div>
                         <div class="form-group">
                             <label>Main Model Selector (Deep Reasoning & Planning)</label>
-                            <select id="cfg-main-model">
+                            <select aria-label="Main model selector" id="cfg-main-model">
                                 <!-- Populated dynamically -->
                             </select>
                         </div>
                         <div class="form-group">
                             <label>LM Studio Local Server Base URL</label>
-                            <input type="text" id="cfg-lm-url" placeholder="http://localhost:1234/v1" required>
+                            <input aria-label="LM Studio server base URL" type="text" id="cfg-lm-url" placeholder="http://localhost:1234/v1" required>
                         </div>
                         <button type="submit" class="btn" style="width: 100%;">Save Model Settings</button>
                     </form>
@@ -1123,7 +1130,7 @@
                     <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
                         Edit goals, hardware context, and preferences. Saved directly to <code>memory/user_operating_manual.md</code>.
                     </p>
-                    <textarea id="manual-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading manual..."></textarea>
+                    <textarea aria-label="User operating manual content" id="manual-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading manual..."></textarea>
                 </div>
                 <div class="card">
                     <h2>
@@ -1133,7 +1140,7 @@
                     <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
                         Edit permission boundaries & authority levels. Saved directly to <code>memory/rules.md</code>.
                     </p>
-                    <textarea id="rules-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading rules..."></textarea>
+                    <textarea aria-label="Rules and permission boundaries" id="rules-content" style="height: 450px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.4; resize: vertical;" placeholder="Loading rules..."></textarea>
                 </div>
             </div>
         </div>
@@ -1149,11 +1156,11 @@
                     <div>
                         <div class="form-group">
                             <label>Action Type</label>
-                            <input type="text" id="sim-action" placeholder="e.g. send_email, read_file, execute_trade">
+                            <input aria-label="Policy simulation action type" type="text" id="sim-action" placeholder="e.g. send_email, read_file, execute_trade">
                         </div>
                         <div class="form-group">
                             <label>Details (JSON format)</label>
-                            <textarea id="sim-details" rows="5" style="font-family: 'JetBrains Mono', monospace;">{"target": "client@example.com", "body": "Draft report"}</textarea>
+                            <textarea aria-label="Policy simulation details in JSON format" id="sim-details" rows="5" style="font-family: 'JetBrains Mono', monospace;">{"target": "client@example.com", "body": "Draft report"}</textarea>
                         </div>
                         <button class="btn" onclick="runPolicySimulation()">Evaluate Policy Permission</button>
                     </div>
@@ -1174,15 +1181,15 @@
             <form onsubmit="submitNewTask(event)">
                 <div class="form-group">
                     <label>Task Title</label>
-                    <input type="text" id="task-title" required placeholder="e.g. Research Social Media Strategy">
+                    <input aria-label="Task title" type="text" id="task-title" required placeholder="e.g. Research Social Media Strategy">
                 </div>
                 <div class="form-group">
                     <label>Task Goal</label>
-                    <input type="text" id="task-goal" required placeholder="e.g. Gather top competitor analytics and draft report">
+                    <input aria-label="Task goal" type="text" id="task-goal" required placeholder="e.g. Gather top competitor analytics and draft report">
                 </div>
                 <div class="form-group">
                     <label>Priority</label>
-                    <select id="task-priority">
+                    <select aria-label="Task priority" id="task-priority">
                         <option value="normal">Normal</option>
                         <option value="high">High</option>
                         <option value="urgent">Urgent</option>
@@ -1190,7 +1197,7 @@
                 </div>
                 <div class="form-group">
                     <label>Plan Steps (Comma separated)</label>
-                    <textarea id="task-plan" rows="3" placeholder="Read requirements, Search web, Draft summary report" required></textarea>
+                    <textarea aria-label="Task plan steps" id="task-plan" rows="3" placeholder="Read requirements, Search web, Draft summary report" required></textarea>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 1rem;">
                     <button type="button" class="btn btn-secondary" onclick="closeNewTaskModal()">Cancel</button>
@@ -1433,17 +1440,20 @@
         }
 
         // Tab Switching
-        function switchTab(tabId) {
+        function switchTab(tabId, triggerButton = null) {
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-            
-            if (event && event.target) event.target.classList.add('active');
+
+            if (triggerButton) triggerButton.classList.add('active');
             const targetTab = document.getElementById(`tab-${tabId}`);
-            if (targetTab) targetTab.classList.add('active');
+            if (!targetTab) {
+                console.error(`Dashboard tab not found: ${tabId}`);
+                return;
+            }
+            targetTab.classList.add('active');
 
             if (tabId === 'workspace') loadWorkspaceFiles();
             if (tabId === 'tasks') loadTasks();
-            if (tabId === 'mobile-app') loadNetworkInfo();
             if (tabId === 'memory') loadMemories();
             if (tabId === 'models') loadModelsTab();
             if (tabId === 'security') loadAuditLogs();
@@ -2593,6 +2603,7 @@
         }
 
         // Init
+        setUIMode(currentUIMode);
         checkLLMStatus();
         setInterval(checkLLMStatus, 10000);
     </script>

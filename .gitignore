@@ -19,6 +19,11 @@ logs/
 .coverage
 htmlcov/
 
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
 # Editor files
 .vscode/
 .idea/
