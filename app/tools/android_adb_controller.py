@@ -43,6 +43,46 @@ class AndroidADBController:
             return False
 
     @classmethod
+    def make_phone_call(cls, phone_number: str, target_device: Optional[str] = None) -> Dict[str, Any]:
+        """Initiates a phone call to phone_number over ADB."""
+        clean_num = "".join(c for c in phone_number if c.isdigit() or c in "+*#")
+        res = cls.run_adb_cmd(["shell", "am", "start", "-a", "android.intent.action.CALL", "-d", f"tel:{clean_num}"], target_device=target_device)
+        audit_logger.info(f"Android ADB initiated phone call to '{clean_num}'")
+        res["message"] = f"Initiated phone call to {clean_num}" if res["success"] else f"Failed to initiate call to {clean_num}"
+        return res
+
+    @classmethod
+    def send_sms(cls, phone_number: str, message_text: str, target_device: Optional[str] = None) -> Dict[str, Any]:
+        """Sends an SMS text message over ADB."""
+        clean_num = "".join(c for c in phone_number if c.isdigit() or c in "+*#")
+        res = cls.run_adb_cmd(["shell", "am", "start", "-a", "android.intent.action.SENDTO", "-d", f"sms:{clean_num}", "--es", "sms_body", message_text, "--ez", "exit_on_sent", "true"], target_device=target_device)
+        audit_logger.info(f"Android ADB sent SMS to '{clean_num}': '{message_text[:30]}'")
+        res["message"] = f"Sent SMS to {clean_num}" if res["success"] else f"Failed to send SMS to {clean_num}"
+        return res
+
+    @classmethod
+    def get_battery_status(cls, target_device: Optional[str] = None) -> Dict[str, Any]:
+        """Queries Android battery level & charging state over ADB."""
+        res = cls.run_adb_cmd(["shell", "dumpsys", "battery"], target_device=target_device)
+        level = "unknown"
+        if res["success"] and res["stdout"]:
+            for line in res["stdout"].split("\n"):
+                if "level:" in line:
+                    level = line.split(":", 1)[1].strip() + "%"
+        res["message"] = f"Android Phone Battery Level: {level}" if res["success"] else "Could not query Android battery level"
+        res["battery_level"] = level
+        return res
+
+    @classmethod
+    def take_camera_photo(cls, target_device: Optional[str] = None) -> Dict[str, Any]:
+        """Launches camera and triggers photo capture over ADB."""
+        cls.run_adb_cmd(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], target_device=target_device)
+        res = cls.run_adb_cmd(["shell", "input", "keyevent", "27"], target_device=target_device)
+        audit_logger.info("Captured Android camera photo via ADB shutter keyevent")
+        res["message"] = "Captured camera photo on Android phone" if res["success"] else "Failed to capture photo"
+        return res
+
+    @classmethod
     def list_connected_devices(cls) -> Dict[str, Any]:
         """
         Lists all Android phones connected over USB or local Wi-Fi.

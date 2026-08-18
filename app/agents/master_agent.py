@@ -100,11 +100,58 @@ class MasterAgentOrchestrator:
             else:
                 executed_actions.append(f"Searched local filesystem for '{search_query}' (no matching files found).")
 
-        elif action_type == "phone_command":
+        elif action_type in ["phone_command", "make_phone_call", "send_sms"]:
             from app.tools.android_adb_controller import AndroidADBController
-            bat_res = AndroidADBController.get_battery_status()
-            if bat_res.get("success"):
-                executed_actions.append(bat_res.get("message", "Executed ADB command successfully."))
+            phone_query = payload.get("query") or payload.get("command") or payload.get("action") or user_text
+            phone_lower = str(phone_query).lower()
+
+            if "sms" in phone_lower or "text" in phone_lower or payload.get("sms_body"):
+                num = payload.get("phone_number") or payload.get("number") or "555-0199"
+                sms_msg = payload.get("sms_body") or payload.get("message") or phone_query
+                adb_res = AndroidADBController.send_sms(num, str(sms_msg))
+                if adb_res.get("success"):
+                    executed_actions.append(f"Sent SMS text to {num} via Android ADB.")
+                else:
+                    execution_success = False
+                    executed_actions.append(f"Failed to send SMS to {num}: {adb_res.get('error', 'Device offline')}")
+
+            elif "call" in phone_lower or "dial" in phone_lower or action_type == "make_phone_call":
+                num = payload.get("phone_number") or payload.get("number")
+                if not num:
+                    digits = "".join(c for c in str(phone_query) if c.isdigit() or c in "+*#")
+                    num = digits if len(digits) >= 3 else "555-0199"
+                adb_res = AndroidADBController.make_phone_call(num)
+                if adb_res.get("success"):
+                    executed_actions.append(f"Initiated phone call to {num} via Android ADB.")
+                else:
+                    execution_success = False
+                    executed_actions.append(f"Failed to make phone call to {num}: {adb_res.get('error', 'Device offline')}")
+
+            elif "photo" in phone_lower or "camera" in phone_lower:
+                adb_res = AndroidADBController.take_camera_photo()
+                if adb_res.get("success"):
+                    executed_actions.append("Captured camera photo via Android ADB.")
+                else:
+                    execution_success = False
+                    executed_actions.append(f"Failed to capture camera photo: {adb_res.get('error', 'Device offline')}")
+
+            elif "tap" in phone_lower and payload.get("x") is not None and payload.get("y") is not None:
+                adb_res = AndroidADBController.tap_screen(int(payload["x"]), int(payload["y"]))
+                if adb_res.get("success"):
+                    executed_actions.append(f"Tapped screen coordinates ({payload['x']}, {payload['y']}) via Android ADB.")
+                else:
+                    execution_success = False
+                    executed_actions.append("Failed to tap screen coordinates via ADB.")
+
+            else:
+                adb_res = AndroidADBController.get_battery_status()
+                if adb_res.get("success"):
+                    executed_actions.append(adb_res.get("message", "Queried phone battery level via Android ADB."))
+                else:
+                    execution_success = False
+                    executed_actions.append("Failed to query phone status via Android ADB.")
+
+            if execution_success:
                 try:
                     from app.cognition.world_model import WorldModel, Observation
                     wm = WorldModel(str(settings.DB_PATH))
@@ -113,9 +160,6 @@ class MasterAgentOrchestrator:
                     ))
                 except Exception as e:
                     app_logger.warning(f"WorldModel phone_command observation note: {e}")
-            else:
-                execution_success = False
-                executed_actions.append(f"Failed to execute phone command: {bat_res.get('error', 'Device offline or ADB error')}")
 
         elif action_type == "screen_capture":
             cap_res = ScreenCaptureTool.capture_screen()
