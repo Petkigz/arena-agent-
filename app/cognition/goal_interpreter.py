@@ -87,6 +87,71 @@ class SemanticGoalInterpreter:
         return candidates
 
     @classmethod
+    def synthesize_candidates_from_context(
+        cls,
+        domain: str,
+        user_text: str,
+        goal_rep: Optional[SemanticGoalRepresentation] = None,
+        memory_store: Optional[Any] = None,
+        world_model: Optional[Any] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Synthesizes candidate execution strategies by combining:
+        1. Domain baseline strategy branches
+        2. System capabilities registered in WorldModel / ToolRegistry
+        3. MemoryStore reflections and past learned lessons for similar queries
+        """
+        domain_clean = domain.lower().strip()
+        candidates: List[Dict[str, Any]] = []
+
+        # 1. Base domain candidate strategies
+        candidates.extend(cls.build_candidates_for_domain(domain_clean, user_text))
+
+        # 2. Ingest learned strategy lessons from MemoryStore if available
+        try:
+            from app.cognition.memory import MemoryStore
+            ms = memory_store or MemoryStore()
+            past_memories = ms.search(user_text, limit=3)
+            for mem in past_memories:
+                if hasattr(mem, "content") and any(k in str(mem.content).lower() for k in ["strategy", "used", "worked", "lesson"]):
+                    candidates.append({
+                        "name": f"Memory Learned Strategy ({str(mem.task_id or 'past')[:6]})",
+                        "action_type": "investigate" if "investigat" in str(mem.content).lower() else "web_search",
+                        "payload": {"query": user_text, "memory_lesson": str(mem.content)[:100]},
+                        "source": "memory_store"
+                    })
+        except Exception as e:
+            app_logger.warning(f"Memory candidate synthesis note: {e}")
+
+        # 3. Inspect WorldModel capability graph for active entities/capabilities
+        try:
+            from app.cognition.world_model import WorldModel
+            wm = world_model or WorldModel()
+            active_caps = wm.find_entities(entity_type="capability")
+            for cap in active_caps[:3]:
+                cap_name = cap.name.lower().replace(" ", "_")
+                if cap_name not in [c.get("action_type") for c in candidates]:
+                    candidates.append({
+                        "name": f"Dynamic Capability: {cap.name}",
+                        "action_type": cap_name,
+                        "payload": {"query": user_text, "action_type": cap_name},
+                        "source": "world_model_capability"
+                    })
+        except Exception as e:
+            app_logger.warning(f"WorldModel capability candidate synthesis note: {e}")
+
+        # Ensure candidates are unique
+        seen_keys = set()
+        unique_candidates = []
+        for c in candidates:
+            key = (c.get("action_type"), c.get("name"))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique_candidates.append(c)
+
+        return unique_candidates
+
+    @classmethod
     def interpret_goal(cls, user_text: str, complexity: str = "fast") -> SemanticGoalRepresentation:
         text_lower = user_text.lower().strip()
 
@@ -269,7 +334,7 @@ class SemanticGoalInterpreter:
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
-        candidates = cls.build_candidates_for_domain(domain, user_text)
+        candidates = cls.synthesize_candidates_from_context(domain, user_text)
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 
         app_logger.info(f"SemanticGoalInterpreter v2: Intent='{intent_type}', Domain='{domain}', Confidence={confidence:.2f}, Candidates={len(candidates)}")
