@@ -203,12 +203,14 @@ class CognitiveRuntime:
         try:
             obs = self.world.recent_observations(limit=25)
             for o in obs:
-                obs_data[f"{o.subject}.{o.predicate}"] = {
-                    "value": o.value,
-                    "source": o.source,
-                    "confidence": o.confidence,
-                    "observation_type": getattr(o, "observation_type", "direct")
-                }
+                key = f"{o.subject}.{o.predicate}"
+                if key not in obs_data:
+                    obs_data[key] = {
+                        "value": o.value,
+                        "source": o.source,
+                        "confidence": o.confidence,
+                        "observation_type": getattr(o, "observation_type", "direct")
+                    }
         except Exception as e:
             app_logger.warning(f"Could not read WorldModel observations: {e}")
 

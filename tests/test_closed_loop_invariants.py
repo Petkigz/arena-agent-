@@ -25,8 +25,9 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
         nonlocal executed_proposal
         executed_proposal = proposal
         from app.cognition.world_model import Observation
+        import os
         runtime.world.upsert_entity(name="report.pdf", entity_type="file", attributes={"status": "identified"})
-        runtime.world.observe(Observation(id="obs_a", subject="filesystem", predicate="file_path", value="/home/user/documents/report.pdf", source="fs"))
+        runtime.world.observe(Observation(id=f"obs_a_{os.urandom(4).hex()}", subject="filesystem", predicate="file_path", value="/home/user/documents/report.pdf", source="fs"))
         return {
             "executed_actions": [f"Executed {proposal.action_type}"],
             "assistant_reply": "Found file report.pdf at /home/user/documents/report.pdf",

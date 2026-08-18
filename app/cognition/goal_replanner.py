@@ -68,6 +68,19 @@ class GoalReplanner:
     ) -> Optional[ActionProposal]:
         app_logger.info(f"GoalReplanner triggered for goal '{tracker.goal_id[:8]}': Reassessing & generating Plan B...")
 
+        # Handle UNKNOWN verification (perception evidence missing, zero hard failures)
+        if failed_result.is_unknown and not failed_result.failed_conditions:
+            app_logger.info(f"GoalReplanner: Verification status is UNKNOWN (missing perception evidence). Triggering re-observation probe...")
+            tracker.transition(GoalLifecycleState.REASSESSING, f"Re-observing environment for unknown conditions: {failed_result.unknown_conditions}")
+            tracker.transition(GoalLifecycleState.REPLAN, "Generating diagnostic re-observation probe strategy.")
+
+            re_obs_candidates = [
+                {"name": "Diagnostic Re-observation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}}
+            ]
+            return ActionPlanner.plan_and_evaluate_action(
+                user_text, complexity=complexity, goal_rep=goal_rep, candidates=re_obs_candidates, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
+            )
+
         tracker.transition(GoalLifecycleState.REASSESSING, f"Reassessing failed conditions: {failed_result.failed_conditions}")
 
         # Update Goal Representation unknowns

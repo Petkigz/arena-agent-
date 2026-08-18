@@ -33,5 +33,5 @@ def test_unknown_success_condition_without_observation_fails_as_unverifiable():
     )
 
     assert res.verified_success is False
-    assert res.final_state == GoalLifecycleState.FAILED
-    assert any("unverifiable_condition" in fc for fc in res.failed_conditions)
+    assert res.is_unknown is True
+    assert any("unverifiable_condition" in uc for uc in res.unknown_conditions)

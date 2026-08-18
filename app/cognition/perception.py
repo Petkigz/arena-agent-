@@ -113,6 +113,8 @@ class ObservationCollector:
         elif action_type == "search_files":
             raw_output = execution_result.get("raw_output", {}) if isinstance(execution_result, dict) else getattr(execution_result, "outputs", {})
             matched = raw_output.get("matched_files", []) if isinstance(raw_output, dict) else []
+            has_fs_fact = any(f.get("subject") == "filesystem" and f.get("predicate") == "file_path" for f in execution_facts)
+
             if matched and isinstance(matched, list):
                 first_file = matched[0]
                 if isinstance(first_file, dict) and first_file.get("file_path"):
@@ -132,7 +134,7 @@ class ObservationCollector:
                     )
                     world_model.observe(obs)
                     ingested_observations.append(obs)
-            else:
+            elif not has_fs_fact and raw_output.get("result_found") is False:
                 obs = Observation(
                     id=f"obs_env_fs_{os.urandom(4).hex()}",
                     subject="filesystem",
