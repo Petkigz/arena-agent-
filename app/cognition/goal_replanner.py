@@ -18,6 +18,42 @@ class GoalReplanner:
     """
 
     @classmethod
+    def is_failed_strategy_instance(
+        cls,
+        candidate: Dict[str, Any],
+        failed_action_type: str,
+        failed_payload: Dict[str, Any]
+    ) -> bool:
+        """
+        Checks if a candidate is the exact failed strategy instance.
+        Two candidates with the same action_type are DIFFERENT strategies if their
+        payload queries, engines, or strategy parameters differ.
+        """
+        if candidate.get("action_type") != failed_action_type:
+            return False
+
+        c_payload = candidate.get("payload", {})
+        if not isinstance(c_payload, dict):
+            c_payload = {}
+
+        c_query = str(c_payload.get("query") or c_payload.get("search_term") or c_payload.get("app_name") or "").lower().strip()
+        f_query = str(failed_payload.get("query") or failed_payload.get("search_term") or failed_payload.get("app_name") or "").lower().strip()
+
+        c_engine = str(c_payload.get("engine", "")).lower().strip()
+        f_engine = str(failed_payload.get("engine", "")).lower().strip()
+
+        # If engines differ (e.g. Google vs YouTube), they are different strategy instances
+        if c_engine and f_engine and c_engine != f_engine:
+            return False
+
+        # If queries differ (e.g. query A vs query B), they are different strategy instances
+        if c_query and f_query and c_query != f_query:
+            return False
+
+        # If action_type matches and query/engine match (or no query differentiation provided), it's the failed strategy instance
+        return True
+
+    @classmethod
     def execute_reassessment_and_replan(
         cls,
         user_text: str,
@@ -27,7 +63,8 @@ class GoalReplanner:
         complexity: str = "fast",
         memory_store: Optional[Any] = None,
         world_model: Optional[Any] = None,
-        tool_registry: Optional[Any] = None
+        tool_registry: Optional[Any] = None,
+        failed_payload: Optional[Dict[str, Any]] = None
     ) -> Optional[ActionProposal]:
         app_logger.info(f"GoalReplanner triggered for goal '{tracker.goal_id[:8]}': Reassessing & generating Plan B...")
 
@@ -39,14 +76,18 @@ class GoalReplanner:
 
         tracker.transition(GoalLifecycleState.REPLAN, "Generating alternative Plan B candidate strategies.")
 
-        # Filter out primary failed action strategy explicitly using structured failed_action_type
+        # Filter out exact failed strategy instance (same action_type AND same query/engine)
         failed_action_type = failed_result.failed_action_type or goal_rep.primary_intent_type
-        app_logger.info(f"GoalReplanner filtering out failed action_type '{failed_action_type}' for goal '{tracker.goal_id[:8]}'")
+        f_payload = failed_payload or getattr(failed_result, "failed_payload", {}) or {}
+        app_logger.info(f"GoalReplanner filtering out failed strategy instance '{failed_action_type}' for goal '{tracker.goal_id[:8]}'")
 
         all_candidates = ActionPlanner.generate_candidate_actions(
             user_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
         )
-        plan_b_candidates = [c for c in all_candidates if c.get("action_type") != failed_action_type]
+        plan_b_candidates = [
+            c for c in all_candidates
+            if not cls.is_failed_strategy_instance(c, failed_action_type, f_payload)
+        ]
 
         if not plan_b_candidates:
             fallbacks = [
@@ -54,7 +95,10 @@ class GoalReplanner:
                 {"name": "Diagnostic Investigation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}},
                 {"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}}
             ]
-            plan_b_candidates = [f for f in fallbacks if f.get("action_type") != failed_action_type]
+            plan_b_candidates = [
+                f for f in fallbacks
+                if not cls.is_failed_strategy_instance(f, failed_action_type, f_payload)
+            ]
 
         replan_proposal = ActionPlanner.plan_and_evaluate_action(
             user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry

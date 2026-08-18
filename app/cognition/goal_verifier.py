@@ -18,6 +18,7 @@ class GoalVerificationResult:
     final_state: GoalLifecycleState
     verification_reason: str
     failed_action_type: str = ""
+    failed_payload: Dict[str, Any] = field(default_factory=dict)
     met_conditions: List[str] = field(default_factory=list)
     failed_conditions: List[str] = field(default_factory=list)
     observed_state: Dict[str, Any] = field(default_factory=dict)
@@ -114,7 +115,8 @@ class GoalVerifier:
         assistant_reply: str,
         failed_action_type: str = "",
         tracker: Optional[GoalTracker] = None,
-        observed_state: Optional[Dict[str, Any]] = None
+        observed_state: Optional[Dict[str, Any]] = None,
+        failed_payload: Optional[Dict[str, Any]] = None
     ) -> GoalVerificationResult:
         goal_id = tracker.goal_id if tracker else "goal_verify_anon"
         if tracker:
@@ -232,6 +234,7 @@ class GoalVerifier:
             final_state=final_state,
             verification_reason=reason,
             failed_action_type=failed_action_type or goal_rep.primary_intent_type,
+            failed_payload=failed_payload or {},
             met_conditions=met_conditions,
             failed_conditions=failed_conditions,
             observed_state=actual_world_state

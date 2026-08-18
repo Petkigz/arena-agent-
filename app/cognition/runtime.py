@@ -527,14 +527,14 @@ class CognitiveRuntime:
         # Goal Verification
         obs_state = self.capture_observed_world_state(executed_actions, assistant_reply, goal_rep)
         verify_res = GoalVerifier.verify_goal_achievement(
-            goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker, observed_state=obs_state
+            goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker, observed_state=obs_state, failed_payload=proposal.payload
         )
         trace.goal_verified = verify_res.verified_success
 
         # Reassessment & Replanning on Goal Verification Failure
         if not verify_res.verified_success:
             replan_proposal = GoalReplanner.execute_reassessment_and_replan(
-                user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
+                user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory, world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload
             )
             if replan_proposal:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)
