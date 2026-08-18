@@ -60,19 +60,51 @@ class GoalVerifier:
         if "response_delivered" in sc_lower:
             return len(reply_clean) > 0
 
-        # (b) App Process / Window Running Condition
+        # (b) App Process / Window Running Condition (Subject-Bound Verification)
         elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
-            # P0 Fix: Environmental verification requires an actual WorldModel observation or WorldModel entity status.
-            # Tool execution logs alone ("tool claims it launched it") do NOT prove the process is running.
-            obs_running = any("running" in str(v).lower() or "active" in str(v).lower() for v in observations_map.values())
-            entity_running = any("running" in str(st).lower() or "active" in str(st).lower() for st in verified_entity_states.values())
-            return obs_running or entity_running
+            target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
+            if target_entities:
+                for ent in target_entities:
+                    ent_obs_running = any(
+                        ent in k.lower() and str(v).lower() in ["running", "active", "launched"]
+                        for k, v in observations_map.items()
+                    )
+                    ent_state_running = any(
+                        ent in k.lower() and str(st).lower() in ["running", "active", "launched"]
+                        for k, st in verified_entity_states.items()
+                    )
+                    if ent_obs_running or ent_state_running:
+                        return True
+                return False
+            else:
+                obs_running = any(str(v).lower() in ["running", "active"] for v in observations_map.values())
+                entity_running = any(str(st).lower() in ["running", "active"] for st in verified_entity_states.values())
+                return obs_running or entity_running
 
-        # (c) File Path / Access Condition
+        # (c) File Path / Access Condition (Subject-Bound Verification)
         elif any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
-            obs_found = any(("file" in k or "path" in k or "filesystem" in k) and str(v).lower() not in ["failed", "false", "none", "not_found", "error"] for k, v in observations_map.items())
-            entity_file_found = any(str(st).lower() in ["identified", "found", "accessed", "running"] for st in verified_entity_states.values())
-            return obs_found or entity_file_found
+            target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
+            if target_entities:
+                for ent in target_entities:
+                    ent_obs_found = any(
+                        ent in k.lower() and str(v).lower() not in ["failed", "false", "none", "not_found", "error"]
+                        for k, v in observations_map.items()
+                    )
+                    ent_state_found = any(
+                        ent in k.lower() and str(st).lower() in ["identified", "found", "accessed", "running"]
+                        for k, st in verified_entity_states.items()
+                    )
+                    fs_obs = observations_map.get("filesystem.file_path")
+                    if fs_obs and str(fs_obs).lower() not in ["failed", "false", "none", "not_found", "error"]:
+                        if ent in str(fs_obs).lower() or not target_entities:
+                            return True
+                    if ent_obs_found or ent_state_found:
+                        return True
+                return False
+            else:
+                obs_found = any(("file" in k or "path" in k or "filesystem" in k) and str(v).lower() not in ["failed", "false", "none", "not_found", "error"] for k, v in observations_map.items())
+                entity_file_found = any(str(st).lower() in ["identified", "found", "accessed", "running"] for st in verified_entity_states.values())
+                return obs_found or entity_file_found
 
         # (d) Web Research / Search Results Condition
         elif any(k in sc_lower for k in ["search_results_retrieved", "results_found"]):
