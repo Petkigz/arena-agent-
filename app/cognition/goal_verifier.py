@@ -17,6 +17,13 @@ class ConditionStatus(str, Enum):
     FAILED = "failed"
     UNKNOWN = "unknown"
 
+class GoalConditionType(str, Enum):
+    RESPONSE = "response"       # Language-level response (valid ONLY for conversational/knowledge_query goals)
+    ENVIRONMENT = "environment" # Environmental OS process or hardware state (requires DIRECT perception probe)
+    STATE = "state"             # Entity state / attribute condition
+    ARTIFACT = "artifact"       # Created file, image, or output artifact
+    EXTERNAL = "external"       # External system / ADB / network confirmation
+
 @dataclass
 class GoalVerificationResult:
     goal_id: str
@@ -39,6 +46,37 @@ class GoalVerifier:
     goal_rep.success_conditions and failure_conditions, distinguishing tool execution success
     from true environmental goal achievement.
     """
+
+    @classmethod
+    def classify_condition_type(
+        cls,
+        succ_cond: str,
+        primary_intent_type: str,
+        target_domain: str
+    ) -> GoalConditionType:
+        """
+        Classifies goal conditions into explicit condition types:
+        RESPONSE, ENVIRONMENT, STATE, ARTIFACT, EXTERNAL.
+        Routes verification strictly to the authoritative evidence channel for that condition type.
+        """
+        sc_lower = succ_cond.lower().strip()
+
+        if "response_delivered" in sc_lower or "answer_provided" in sc_lower:
+            if primary_intent_type == "knowledge_query" or target_domain == "conversation":
+                return GoalConditionType.RESPONSE
+            else:
+                return GoalConditionType.ENVIRONMENT
+
+        if any(k in sc_lower for k in ["app_process_running", "process_running", "window_active", "status = running"]):
+            return GoalConditionType.ENVIRONMENT
+
+        if any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found", "screen_capture_saved", "artifact_created"]):
+            return GoalConditionType.ARTIFACT
+
+        if any(k in sc_lower for k in ["adb_command_succeeded", "phone_action_completed", "network_available"]):
+            return GoalConditionType.EXTERNAL
+
+        return GoalConditionType.STATE
 
     @classmethod
     def is_direct_provenance_evidence(cls, obs_entry: Any, allowed_types: Optional[List[str]] = None) -> tuple[bool, Any]:
