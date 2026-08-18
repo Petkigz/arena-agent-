@@ -187,17 +187,16 @@ class CognitiveRuntime:
 
         if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
             for e in goal_rep.entities:
-                latest_obs = self.world.latest_observation(e, "status")
+                latest_obs = self.world.latest_observation(e, "status") or self.world.latest_observation(e, "process_status")
                 if latest_obs:
                     ent_status = str(latest_obs.value)
                 else:
-                    reply_lower = assistant_reply.lower()
                     actions_str = " ".join(executed_actions).lower()
-                    if any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error"]):
+                    if any(k in actions_str for k in ["crash", "crashed", "failed", "error", "not found"]):
                         ent_status = "failed"
-                    elif any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active"]):
-                        ent_status = "running"
                     else:
+                        # P0 Fix: Do NOT infer 'running' from LLM assistant_reply text.
+                        # Environmental facts require explicit WorldModel observations.
                         ent_status = "unknown"
 
                 entities_data.append({

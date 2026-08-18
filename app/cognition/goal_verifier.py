@@ -60,11 +60,12 @@ class GoalVerifier:
                 ent_status = ent.get("status", "unknown")
                 verified_entity_states[ent_name] = ent_status
 
-        # If entities_list empty, populate verified entity states from entities/reply/actions
+        # If entities_list empty, populate verified entity states from executed_actions
         if not verified_entity_states and goal_rep.entities:
             for ent_name in goal_rep.entities:
-                is_running = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active"]) and not any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error"])
-                verified_entity_states[ent_name] = "running" if is_running else "inactive_or_failed"
+                # Require explicit tool execution record (actions_str), NOT LLM assistant_reply text
+                is_executed = len(executed_actions) > 0 and any(k in actions_str for k in ["running", "launched", "opened", "active"]) and not any(k in actions_str or k in reply_lower for k in ["crash", "crashed", "failed", "error", "not found"])
+                verified_entity_states[ent_name] = "running" if is_executed else "unknown"
 
         met_conditions = []
         failed_conditions = []
@@ -114,10 +115,10 @@ class GoalVerifier:
             elif any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
                 obs_running = any("running" in str(v).lower() or "active" in str(v).lower() for v in observations_map.values())
                 entity_running = any("running" in str(st).lower() or "active" in str(st).lower() for st in verified_entity_states.values())
-                text_running = any(k in reply_lower or k in actions_str for k in ["running", "launched", "opened", "active", "started"])
+                action_executed = len(executed_actions) > 0 and any(k in actions_str for k in ["launched", "opened", "started", "running"])
                 has_crash_or_err = len(failed_conditions) > 0 or any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error", "not found", "cannot find"])
 
-                if (obs_running or entity_running or text_running) and not has_crash_or_err:
+                if (obs_running or entity_running or action_executed) and not has_crash_or_err:
                     met_conditions.append(succ_cond)
 
             # (c) File Path / Access Condition
