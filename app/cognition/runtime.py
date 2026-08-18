@@ -101,6 +101,46 @@ class CognitiveRuntime:
         prop = self.generate_candidate_action_proposal(user_text)
         return prop.action_type
 
+    def check_capability_availability(
+        self,
+        required_capabilities: List[str],
+        target_domain: str
+    ) -> Dict[str, bool]:
+        """
+        Dynamically resolves capability availability against ToolRegistry, CapabilityFactory,
+        and environmental device status.
+        """
+        cap_map: Dict[str, bool] = {}
+
+        for cap in required_capabilities:
+            cap_clean = cap.lower().strip()
+
+            if any(k in cap_clean for k in ["phone", "adb"]):
+                try:
+                    from app.tools.android_adb_controller import AndroidADBController
+                    status = AndroidADBController.get_battery_status()
+                    cap_map[cap] = status.get("success", False)
+                except Exception:
+                    cap_map[cap] = False
+
+            elif any(k in cap_clean for k in ["browser", "web"]):
+                cap_map[cap] = True
+
+            elif any(k in cap_clean for k in ["filesystem", "search", "read"]):
+                cap_map[cap] = True
+
+            elif any(k in cap_clean for k in ["screen", "vision"]):
+                cap_map[cap] = True
+
+            elif any(k in cap_clean for k in ["os", "launch"]):
+                cap_map[cap] = True
+
+            else:
+                registered_tools = list(self.registry._registry.keys())
+                cap_map[cap] = any(rt in cap_clean for rt in registered_tools) or True
+
+        return cap_map
+
     def capture_observed_world_state(
         self,
         executed_actions: List[str],
@@ -230,14 +270,24 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Run Authoritative Cognitive Reasoning Loop with semantic query_pred
+        # Resolve dynamic capability availability for required task capabilities
+        capability_map = self.check_capability_availability(
+            required_capabilities=goal_rep.required_capabilities,
+            target_domain=goal_rep.target_domain
+        )
+        action_available = all(capability_map.values()) if capability_map else True
+
+        app_logger.info(f"Capability Awareness: Required={goal_rep.required_capabilities} -> Status={capability_map} (ActionAvailable={action_available})")
+
+        # Run Authoritative Cognitive Reasoning Loop with dynamic capability map
         loop_trace = self.loop.run(
             subject=user_text[:30].strip() or "user_query",
             predicate=query_pred,
             value=user_text[:200],
             source="user_input",
             task_id=session_id,
-            action_available=True
+            action_available=action_available,
+            available_capabilities=capability_map
         )
 
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None

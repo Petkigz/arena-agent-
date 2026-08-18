@@ -45,18 +45,29 @@ class ReasoningCycle:
         information_needs: list[InformationNeed] | None = None,
         action_available: bool = False,
         proposed_action: Optional[Any] = None,
+        available_capabilities: Optional[dict[str, bool]] = None,
     ) -> ReasoningDecision:
         belief = self.engine.inspect(subject, predicate)
 
         # 1. Action Intent: Direct system modification or tool execution requested
-        if action_available and predicate == "action_intent":
-            return ReasoningDecision(
-                ReasoningAction.ACT,
-                belief.confidence if belief else 0.9,
-                "Explicit action intent provided with available execution capabilities.",
-                belief=belief,
-                proposed_action=proposed_action
-            )
+        if predicate == "action_intent":
+            if action_available:
+                return ReasoningDecision(
+                    ReasoningAction.ACT,
+                    belief.confidence if belief else 0.9,
+                    "Explicit action intent provided with verified available execution capabilities.",
+                    belief=belief,
+                    proposed_action=proposed_action
+                )
+            else:
+                missing_caps = [c for c, avail in (available_capabilities or {}).items() if not avail]
+                missing_str = missing_caps[0] if missing_caps else "requested"
+                return ReasoningDecision(
+                    ReasoningAction.DEFER,
+                    0.0,
+                    f"Action intent requested, but required capability '{missing_str}' is currently unavailable or offline.",
+                    belief=belief
+                )
 
         # 2. Information Need: Diagnostic or missing evidence query
         if predicate == "information_need" or belief is None:
@@ -86,6 +97,6 @@ class ReasoningCycle:
 
         return ReasoningDecision(ReasoningAction.DEFER, belief.confidence if belief else 0.0, "Evidence is insufficient for a safe decision.", belief=belief)
 
-    def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False, proposed_action: Optional[Any] = None) -> ReasoningDecision:
+    def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False, proposed_action: Optional[Any] = None, available_capabilities: Optional[dict[str, bool]] = None) -> ReasoningDecision:
         self.engine.ingest(subject, predicate, value, source=source, confidence=confidence, rationale=rationale)
-        return self.decide(subject, predicate, information_needs=information_needs, action_available=action_available, proposed_action=proposed_action)
+        return self.decide(subject, predicate, information_needs=information_needs, action_available=action_available, proposed_action=proposed_action, available_capabilities=available_capabilities)

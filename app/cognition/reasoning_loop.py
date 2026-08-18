@@ -37,7 +37,8 @@ class CognitiveReasoningLoop:
     def run(self, subject: str, predicate: str, *, value: Any = None, source: Optional[str] = None,
             confidence: float = 1.0, information_needs: Optional[list[InformationNeed]] = None,
             task_id: Optional[str] = None, action_available: bool = True,
-            proposed_action: Optional[Any] = None) -> CycleTrace:
+            proposed_action: Optional[Any] = None,
+            available_capabilities: Optional[dict[str, bool]] = None) -> CycleTrace:
         trace = CycleTrace()
         if self.cognitive_state is not None:
             self.cognitive_state.attention.focus = f"{subject}.{predicate}"
@@ -53,7 +54,8 @@ class CognitiveReasoningLoop:
                 predicate,
                 information_needs=needs,
                 action_available=action_available,
-                proposed_action=proposed_action
+                proposed_action=proposed_action,
+                available_capabilities=available_capabilities
             )
             trace.decisions.append(decision)
             if self.cognitive_state is not None:
