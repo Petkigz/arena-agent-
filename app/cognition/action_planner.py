@@ -20,13 +20,19 @@ class ActionPlanner:
         return goal_rep.recommended_candidates
 
     @classmethod
-    def plan_and_evaluate_action(cls, goal_text: str, complexity: str = "fast", goal_rep: Optional[SemanticGoalRepresentation] = None) -> ActionProposal:
+    def plan_and_evaluate_action(
+        cls,
+        goal_text: str,
+        complexity: str = "fast",
+        goal_rep: Optional[SemanticGoalRepresentation] = None,
+        candidates: Optional[List[Dict[str, Any]]] = None
+    ) -> ActionProposal:
         """
-        Generates candidate strategies via SemanticGoalInterpreter, runs parallel counterfactual simulation in memory,
-        and constructs the winning ActionProposal.
+        Generates candidate strategies via SemanticGoalInterpreter (or uses provided candidates),
+        runs parallel counterfactual simulation in memory, and constructs the winning ActionProposal.
         """
-        candidates = cls.generate_candidate_actions(goal_text, complexity=complexity, goal_rep=goal_rep)
-        sim_res = CounterfactualSimulator.simulate_competing_branches(goal_text, candidates)
+        candidate_list = candidates if candidates is not None else cls.generate_candidate_actions(goal_text, complexity=complexity, goal_rep=goal_rep)
+        sim_res = CounterfactualSimulator.simulate_competing_branches(goal_text, candidate_list)
         winner = sim_res.winning_branch
 
         app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}'")

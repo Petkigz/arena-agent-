@@ -36,16 +36,24 @@ class GoalReplanner:
 
         tracker.transition(GoalLifecycleState.REPLAN, "Generating alternative Plan B candidate strategies.")
 
-        # Filter out primary failed candidate and generate alternative candidate branches
+        # Filter out primary failed action strategy explicitly using structured failed_action_type
+        failed_action_type = failed_result.failed_action_type or goal_rep.primary_intent_type
+        app_logger.info(f"GoalReplanner filtering out failed action_type '{failed_action_type}' for goal '{tracker.goal_id[:8]}'")
+
         all_candidates = ActionPlanner.generate_candidate_actions(user_text, complexity=complexity, goal_rep=goal_rep)
-        primary_action = failed_result.failed_conditions[0] if failed_result.failed_conditions else ""
+        plan_b_candidates = [c for c in all_candidates if c.get("action_type") != failed_action_type]
 
-        # Alternative candidate strategy (Plan B)
-        plan_b_candidates = [c for c in all_candidates if c.get("action_type") not in primary_action]
         if not plan_b_candidates:
-            plan_b_candidates = [{"name": "Web Research Fallback Strategy", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}}]
+            fallbacks = [
+                {"name": "Web Research Fallback Strategy", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}},
+                {"name": "Diagnostic Investigation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}},
+                {"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}}
+            ]
+            plan_b_candidates = [f for f in fallbacks if f.get("action_type") != failed_action_type]
 
-        replan_proposal = ActionPlanner.plan_and_evaluate_action(user_text, complexity=complexity, goal_rep=goal_rep)
-        audit_logger.info(f"GoalReplanner generated Plan B proposal '{replan_proposal.action_type}'")
+        replan_proposal = ActionPlanner.plan_and_evaluate_action(
+            user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates
+        )
+        audit_logger.info(f"GoalReplanner evaluated {len(plan_b_candidates)} Plan B branches, generated proposal '{replan_proposal.action_type}'")
 
         return replan_proposal
