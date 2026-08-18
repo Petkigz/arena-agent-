@@ -1,23 +1,19 @@
 {
   "short_name": "PA Local",
   "name": "Local Personal Assistant",
-  "description": "Local-first dashboard for the personal assistant cognitive agent platform.",
   "icons": [
     {
       "src": "/static/icon-192.png",
       "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
+      "sizes": "192x192"
     },
     {
       "src": "/static/icon-512.png",
       "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any maskable"
+      "sizes": "512x512"
     }
   ],
   "start_url": "/",
-  "scope": "/",
   "background_color": "#0b0f19",
   "theme_color": "#0b0f19",
   "display": "standalone",
