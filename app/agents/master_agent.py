@@ -90,8 +90,55 @@ class MasterAgentOrchestrator:
             brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
             executed_actions.append("Generated Daily Executive Briefing.")
 
+        elif action_type in ["investigate", "diagnostic"]:
+            executed_actions.append(f"Executed diagnostic investigation probe for '{user_text[:50]}'.")
+
+        elif action_type in ["formulate_answer", "answer"]:
+            executed_actions.append("Formulated direct conversational answer.")
+
+        elif action_type == "workflow_execute":
+            wf_res = WorkflowEngine.execute_workflow(payload.get("workflow_name", "Task Workflow"), payload.get("steps", []))
+            executed_actions.append(f"Executed workflow '{wf_res.get('workflow_name')}'.")
+
         else:
-            return cls.process_user_task(user_text, complexity=complexity)
+            # Check ToolRegistry for dynamically registered capabilities
+            try:
+                from app.cognition.tool_registry import ToolRegistry
+                tr = ToolRegistry()
+                if action_type in tr._registry:
+                    tr_res = tr.execute_registered_tool(action_type, payload)
+                    if tr_res.get("success"):
+                        executed_actions.append(f"Executed registered tool '{action_type}'.")
+                    else:
+                        return {
+                            "success": False,
+                            "user_text": user_text,
+                            "assistant_reply": f"Registered tool '{action_type}' execution failed: {tr_res.get('error')}",
+                            "executed_actions": [],
+                            "unsupported_capability": action_type,
+                            "error": tr_res.get("error")
+                        }
+                else:
+                    # CapabilityResolver: Unsupported capability proposal -> Structured Failure
+                    app_logger.warning(f"CapabilityResolver: Proposal action_type '{action_type}' is unsupported.")
+                    return {
+                        "success": False,
+                        "user_text": user_text,
+                        "assistant_reply": f"Capability execution failed: Action proposal type '{action_type}' is unsupported by capability resolvers.",
+                        "executed_actions": [],
+                        "unsupported_capability": action_type,
+                        "error": f"Unsupported proposal action_type '{action_type}'"
+                    }
+            except Exception as e:
+                app_logger.warning(f"CapabilityResolver lookup exception for '{action_type}': {e}")
+                return {
+                    "success": False,
+                    "user_text": user_text,
+                    "assistant_reply": f"Capability execution failed: Action proposal type '{action_type}' is unsupported.",
+                    "executed_actions": [],
+                    "unsupported_capability": action_type,
+                    "error": str(e)
+                }
 
         system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
         messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
