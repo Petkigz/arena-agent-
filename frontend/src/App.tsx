@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { ErrorBoundary, LoadingFallback, KeyboardShortcutsModal, HelpCenter } from './components/ui';
+import { ErrorBoundary, PageErrorBoundary, LoadingFallback, KeyboardShortcutsModal, HelpCenter } from './components/ui';
 import { OnboardingFlow } from './components/onboarding';
 import {
   MobileLayout,
@@ -85,35 +85,35 @@ function App() {
           {/* Mobile routes */}
           {isMobile ? (
             <Route element={<MobileLayout />}>
-              <Route path="/beanie" element={<BeaniePage />} />
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/pansophy" element={<PansophyPage />} />
-              <Route path="/files" element={<FilesPage />} />
-              <Route path="/code" element={<CodeExecutionPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/settings/voice" element={<VoiceSettingsPage />} />
-              <Route path="/settings/models" element={<ModelSettingsPage />} />
-              <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
-              <Route path="/settings/appearance" element={<AppearanceSettingsPage />} />
-              <Route path="/settings/accessibility" element={<AccessibilitySettingsPage />} />
-              <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+              <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
+              <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
+              <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
+              <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
+              <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
+              <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
+              <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           ) : (
             /* Desktop routes */
             <Route element={<DesktopLayout />}>
-              <Route path="/beanie" element={<BeaniePage />} />
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/pansophy" element={<PansophyPage />} />
-              <Route path="/files" element={<FilesPage />} />
-              <Route path="/code" element={<CodeExecutionPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/settings/voice" element={<VoiceSettingsPage />} />
-              <Route path="/settings/models" element={<ModelSettingsPage />} />
-              <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
-              <Route path="/settings/appearance" element={<AppearanceSettingsPage />} />
-              <Route path="/settings/accessibility" element={<AccessibilitySettingsPage />} />
-              <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+              <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
+              <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
+              <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
+              <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
+              <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
+              <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
+              <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
+              <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           )}

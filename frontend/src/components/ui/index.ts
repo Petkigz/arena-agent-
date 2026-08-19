@@ -7,6 +7,7 @@ export { Skeleton, SkeletonText } from './Skeleton';
 export { SkeletonCard, SkeletonList, SkeletonPage, SkeletonForm } from './SkeletonCard';
 export { EmptyState } from './EmptyState';
 export { ErrorBoundary } from './ErrorBoundary';
+export { PageErrorBoundary } from './PageErrorBoundary';
 export { Banner } from './Banner';
 export { VoiceOverlay } from './VoiceOverlay';
 export { LoadingFallback } from './LoadingFallback';

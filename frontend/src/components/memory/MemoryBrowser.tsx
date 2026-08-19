@@ -1,25 +1,17 @@
+import { useState, useRef } from 'react';
+import { Card, EmptyState } from '../../components/ui';
+import { useMemoryBrowserStore, type Memory, type MemoryCategory } from '../../stores';
+import { Database, Search, Calendar, Star, Trash2, Plus, Download, Upload, Clock, List, Edit, MessageCircle, X } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { highlightText } from '../../utils/searchHighlight';
+import { MemoryTimeline } from './MemoryTimeline';
+import { MemoryEditorModal } from './MemoryEditorModal';
 import {
-import { notifications } from '../services/notifications'; useState, useRef } from 'react';
-import {
-import { notifications } from '../services/notifications'; Card, EmptyState } from '../../components/ui';
-import {
-import { notifications } from '../services/notifications'; useMemoryBrowserStore, type Memory, type MemoryCategory } from '../../stores';
-import {
-import { notifications } from '../services/notifications'; Database, Search, Calendar, Star, Trash2, Plus, Download, Upload, Clock, List, Edit, MessageCircle, X } from 'lucide-react';
-import {
-import { notifications } from '../services/notifications'; formatDistanceToNow } from 'date-fns';
-import {
-import { notifications } from '../services/notifications'; highlightText } from '../../utils/searchHighlight';
-import {
-import { notifications } from '../services/notifications'; MemoryTimeline } from './MemoryTimeline';
-import {
-import { notifications } from '../services/notifications'; MemoryEditorModal } from './MemoryEditorModal';
-import {
-import { notifications } from '../services/notifications';
   exportMemoriesAsJSON,
   importMemoriesFromJSON,
   downloadFile,
 } from '../../utils/graphExport';
+import { notifications } from '../../services/notifications';
 
 const categoryIcons: Record<MemoryCategory, string> = {
   episodic: '🎭',

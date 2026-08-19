@@ -4,7 +4,7 @@ import { InteractiveTutorial, FAQ } from './InteractiveTutorial';
 import { mainTutorialSteps, faqItems, keyboardShortcuts, tips } from '../../utils/helpContent';
 import { HelpCircle, Book, Keyboard, Lightbulb, MessageCircle } from 'lucide-react';
 import { Button } from './Button';
-import { notifications } from '../services/notifications';
+import { notifications } from '../../services/notifications';
 
 interface HelpCenterProps {
   isOpen: boolean;

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useWakeWordStore } from '../../stores/wakeWordStore';
 import { Button } from './Button';
 import { Mic, StopCircle, Trash2, Play, Zap } from 'lucide-react';
-import { notifications } from '../services/notifications';
+import { notifications } from '../../services/notifications';
 
 interface WakeWordTrainerProps {
   onModelTrained?: () => void;

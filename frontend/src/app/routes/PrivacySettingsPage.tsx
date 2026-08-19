@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { usePrivacySettingsStore } from '../../stores';
 import { ArrowLeft, Database, BarChart3, Lock, FileText, Download, Upload } from 'lucide-react';
-import { notifications } from '../services/notifications';
+import { notifications } from '../../services/notifications';
 
 export function PrivacySettingsPage() {
   const navigate = useNavigate();

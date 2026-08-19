@@ -6,7 +6,6 @@
 
 import toast from 'react-hot-toast';
 
-type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
 interface NotificationOptions {
   duration?: number;

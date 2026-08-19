@@ -1,7 +1,7 @@
 import { useProjectStore, type Project } from '../../stores/projectStore';
 import { FileText, Download, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { notifications } from '../services/notifications';
+import { notifications } from '../../services/notifications';
 
 interface ProjectFilesProps {
   project: Project;

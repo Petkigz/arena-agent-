@@ -1,7 +1,7 @@
 import { useAppearanceSettingsStore } from '../../stores';
 import { Card } from '../ui/Card';
 import { Eye, Type, Activity, Info } from 'lucide-react';
-import { notifications } from '../services/notifications';
+import { notifications } from '../../services/notifications';
 
 export function AccessibilitySettings() {
   const {
