@@ -4,10 +4,11 @@ import { ProjectCard } from '../../components/projects/ProjectCard';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { SkeletonList } from '../../components/ui/SkeletonCard';
 import { Plus, FolderKanban, Search } from 'lucide-react';
 
 export function ProjectsPage() {
-  const { projects, createProject } = useProjectStore();
+  const { projects, createProject, isLoading } = useProjectStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'archived' | 'on-hold'>('all');
