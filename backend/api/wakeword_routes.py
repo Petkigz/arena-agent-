@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.utils.logger import app_logger
 
 router = APIRouter(prefix="/api/wakeword", tags=["wakeword"])
@@ -33,6 +33,7 @@ class WakeWordTrainingRequest(BaseModel):
 
 class WakeWordTrainingResponse(BaseModel):
     """Response from wake word training."""
+    model_config = ConfigDict(protected_namespaces=())
     success: bool
     model_id: Optional[str] = None
     model_path: Optional[str] = None
@@ -42,6 +43,7 @@ class WakeWordTrainingResponse(BaseModel):
 
 class WakeWordModel(BaseModel):
     """A trained wake word model."""
+    model_config = ConfigDict(protected_namespaces=())
     id: str
     name: str
     wake_word: str

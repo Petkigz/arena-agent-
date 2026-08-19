@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from app.utils.logger import app_logger
 from app.cognition.runtime import CognitiveRuntime
 from backend.websocket_server import ws_manager
-from backend.message_router import initialize_message_router, message_router
+import backend.message_router as message_router_module
 from backend.voice.service import voice_service
 from backend.api.phase6_routes import router as phase6_router
 from backend.api.screenshot_routes import router as screenshot_router
@@ -59,11 +59,11 @@ runtime = CognitiveRuntime()
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     app_logger.info("Starting Arena backend...")
-    initialize_message_router(runtime)
+    message_router_module.initialize_message_router(runtime)
 
     # Wire voice service into message router
-    if message_router:
-        message_router.set_voice_service(voice_service)
+    if message_router_module.message_router:
+        message_router_module.message_router.set_voice_service(voice_service)
         app_logger.info("Voice service wired into message router")
 
     app_logger.info(f"Arena backend started (CORS: {CORS_ORIGINS}, Auth: {'enabled' if API_KEY_ENABLED else 'disabled'})")
@@ -136,8 +136,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     app_logger.warning("Invalid JSON received")
                     continue
 
-                if message_router:
-                    await message_router.handle_message(websocket, data)
+                if message_router_module.message_router:
+                    await message_router_module.message_router.handle_message(websocket, data)
                 else:
                     app_logger.error("Message router not initialized")
                     await websocket.send_json({
