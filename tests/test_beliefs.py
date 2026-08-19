@@ -34,7 +34,9 @@ def test_repeated_same_source_does_not_inflate_confidence():
     # Source B reports "not_running" first
     engine.ingest("chrome", "status", "not_running", source="filesystem_probe", observation_type="direct", confidence=1.0)
     # Source A reports "running" 5 times (most recent overall)
-    for _ in range(5):
+    import time
+    for i in range(5):
+        time.sleep(0.001)  # Small delay to ensure distinct timestamps
         engine.ingest("chrome", "status", "running", source="os_process_probe", observation_type="direct", confidence=1.0)
     
     result = engine.inspect("chrome", "status")
