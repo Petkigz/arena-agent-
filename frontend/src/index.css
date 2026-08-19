@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 /* Theme CSS Variables */
 :root {
   --arena-font-size: 14px;
