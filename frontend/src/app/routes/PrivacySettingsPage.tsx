@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { usePrivacySettingsStore } from '../../stores';
 import { ArrowLeft, Database, BarChart3, Lock, FileText, Download, Upload } from 'lucide-react';
+import { notifications } from '../services/notifications';
 
 export function PrivacySettingsPage() {
   const navigate = useNavigate();
@@ -40,11 +41,11 @@ export function PrivacySettingsPage() {
   const handleImport = () => {
     const success = importSettings(importData);
     if (success) {
-      alert('Settings imported successfully!');
+      notifications.success('Settings imported successfully!');
       setShowImportDialog(false);
       setImportData('');
     } else {
-      alert('Failed to import settings. Please check the format.');
+      notifications.error('Failed to import settings. Please check the format.');
     }
   };
 

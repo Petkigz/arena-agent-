@@ -1,5 +1,6 @@
 import { logger } from '../services/logger';
 import { create } from 'zustand';
+import { notifications } from '../services/notifications';
 
 export interface WakeWordSample {
   id: string;
@@ -80,7 +81,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
     const { samples } = get();
 
     if (samples.length < 5) {
-      alert('At least 5 samples required for training');
+      notifications.warning('At least 5 samples required for training');
       return false;
     }
 
@@ -105,15 +106,15 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
         // Refresh models
         await get().fetchModels();
         set({ samples: [] }); // Clear samples after successful training
-        alert('Wake word model trained successfully!');
+        notifications.success('Wake word model trained successfully!');
         return true;
       } else {
-        alert(`Training failed: ${result.error}`);
+        notifications.error(`Training failed: ${result.error}`);
         return false;
       }
     } catch (error) {
       logger.error('Failed to train wake word model', error);
-      alert('Failed to train wake word model');
+      notifications.error('Failed to train wake word model');
       return false;
     } finally {
       set({ isTraining: false });
@@ -131,11 +132,11 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
       await get().fetchModels();
       await get().fetchActiveModel();
 
-      alert('Wake word model activated!');
+      notifications.success('Wake word model activated!');
       return true;
     } catch (error) {
       logger.error('Failed to activate wake word model', error);
-      alert('Failed to activate wake word model');
+      notifications.error('Failed to activate wake word model');
       return false;
     }
   },
@@ -155,11 +156,11 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
       await get().fetchModels();
       await get().fetchActiveModel();
 
-      alert('Wake word model deleted!');
+      notifications.success('Wake word model deleted!');
       return true;
     } catch (error) {
       logger.error('Failed to delete wake word model', error);
-      alert('Failed to delete wake word model');
+      notifications.error('Failed to delete wake word model');
       return false;
     }
   },

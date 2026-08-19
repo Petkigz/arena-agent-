@@ -4,6 +4,7 @@ import { InteractiveTutorial, FAQ } from './InteractiveTutorial';
 import { mainTutorialSteps, faqItems, keyboardShortcuts, tips } from '../../utils/helpContent';
 import { HelpCircle, Book, Keyboard, Lightbulb, MessageCircle } from 'lucide-react';
 import { Button } from './Button';
+import { notifications } from '../services/notifications';
 
 interface HelpCenterProps {
   isOpen: boolean;
@@ -135,7 +136,7 @@ export function HelpCenter({ isOpen, onClose }: HelpCenterProps) {
                   <Button
                     onClick={() => {
                       // In production, this would open an issue reporting form
-                      alert('Issue reporting will be available in a future update.');
+                      notifications.info('Issue reporting will be available in a future update.');
                     }}
                     variant="secondary"
                     size="sm"
@@ -152,7 +153,7 @@ export function HelpCenter({ isOpen, onClose }: HelpCenterProps) {
                   <Button
                     onClick={() => {
                       // In production, this would open a feature request form
-                      alert('Feature requests will be available in a future update.');
+                      notifications.info('Feature requests will be available in a future update.');
                     }}
                     variant="secondary"
                     size="sm"

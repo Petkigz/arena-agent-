@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useWakeWordStore } from '../../stores/wakeWordStore';
 import { Button } from './Button';
 import { Mic, StopCircle, Trash2, Play, Zap } from 'lucide-react';
+import { notifications } from '../services/notifications';
 
 interface WakeWordTrainerProps {
   onModelTrained?: () => void;
@@ -82,7 +83,7 @@ export function WakeWordTrainer({ onModelTrained }: WakeWordTrainerProps) {
       }, 3000);
     } catch (error) {
       logger.error('Failed to start recording:', error);
-      alert('Failed to access microphone');
+      notifications.error('Failed to access microphone');
     }
   };
 
@@ -117,7 +118,7 @@ export function WakeWordTrainer({ onModelTrained }: WakeWordTrainerProps) {
 
   const handleTrain = async () => {
     if (!wakeWord.trim()) {
-      alert('Please enter a wake word');
+      notifications.warning('Please enter a wake word');
       return;
     }
 

@@ -1,6 +1,7 @@
 import { useAppearanceSettingsStore } from '../../stores';
 import { Card } from '../ui/Card';
 import { Eye, Type, Activity, Info } from 'lucide-react';
+import { notifications } from '../services/notifications';
 
 export function AccessibilitySettings() {
   const {
@@ -165,7 +166,7 @@ export function AccessibilitySettings() {
             <button
               onClick={() => {
                 // In production, this would open a feedback form
-                alert('Accessibility feedback will be available in a future update.');
+                notifications.info('Accessibility feedback will be available in a future update.');
               }}
               className="text-sm text-accent-primary hover:underline"
             >

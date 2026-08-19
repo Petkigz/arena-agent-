@@ -1,6 +1,7 @@
 import { useProjectStore, type Project } from '../../stores/projectStore';
 import { FileText, Download, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { notifications } from '../services/notifications';
 
 interface ProjectFilesProps {
   project: Project;
@@ -62,7 +63,7 @@ export function ProjectFiles({ project }: ProjectFilesProps) {
               <button
                 onClick={() => {
                   // In production, this would download the file
-                  alert('Download functionality would be implemented here');
+                  notifications.info('Download functionality would be implemented here');
                 }}
                 className="p-2 hover:bg-background-primary rounded-lg transition-colors"
               >

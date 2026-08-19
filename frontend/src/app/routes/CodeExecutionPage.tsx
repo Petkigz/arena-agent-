@@ -6,6 +6,7 @@ import { ExecutionResults } from '../../components/ui/ExecutionResults';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { SkeletonList } from '../../components/ui/SkeletonCard';
 import { useCodeStore } from '../../stores/codeStore';
+import { notifications } from '../services/notifications';
 
 export function CodeExecutionPage() {
   const {
@@ -78,7 +79,7 @@ export function CodeExecutionPage() {
   const handleSave = (codeToSave: string, lang: string) => {
     if (currentSnippet) {
       updateSnippet(currentSnippet.id, { code: codeToSave, language: lang });
-      alert('Snippet saved!');
+      notifications.success('Snippet saved!');
     }
   };
 

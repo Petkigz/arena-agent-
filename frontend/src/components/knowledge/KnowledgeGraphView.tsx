@@ -11,14 +11,22 @@ import ReactFlow, {
   MiniMap,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { useKnowledgeGraphStore, type KnowledgeNode, type NodeType } from '../../stores';
-import { EmptyState } from '../ui/EmptyState';
-import { Brain, FileText, MessageCircle, Database, Plus, Search, Download, Upload, Filter, X } from 'lucide-react';
-import { NodeDetailPanel } from './NodeDetailPanel';
-import { NodeEditorModal } from './NodeEditorModal';
-import { EdgeEditorModal } from './EdgeEditorModal';
-import { computeForceLayout } from '../../utils/graphLayout';
 import {
+import { notifications } from '../services/notifications'; useKnowledgeGraphStore, type KnowledgeNode, type NodeType } from '../../stores';
+import {
+import { notifications } from '../services/notifications'; EmptyState } from '../ui/EmptyState';
+import {
+import { notifications } from '../services/notifications'; Brain, FileText, MessageCircle, Database, Plus, Search, Download, Upload, Filter, X } from 'lucide-react';
+import {
+import { notifications } from '../services/notifications'; NodeDetailPanel } from './NodeDetailPanel';
+import {
+import { notifications } from '../services/notifications'; NodeEditorModal } from './NodeEditorModal';
+import {
+import { notifications } from '../services/notifications'; EdgeEditorModal } from './EdgeEditorModal';
+import {
+import { notifications } from '../services/notifications'; computeForceLayout } from '../../utils/graphLayout';
+import {
+import { notifications } from '../services/notifications';
   exportGraphAsJSON,
   exportGraphAsGraphML,
   importGraphFromJSON,
@@ -225,7 +233,7 @@ export function KnowledgeGraphView() {
         const { nodes: importedNodes, edges: importedEdges } = importGraphFromJSON(content);
         importGraph(importedNodes, importedEdges);
       } catch (err) {
-        alert('Failed to import graph: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        notifications.error('Failed to import graph: ' + (err instanceof Error ? err.message : 'Unknown error'));
       }
     };
     reader.readAsText(file);
