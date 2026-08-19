@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card } from '../../components/ui';
+import { Card, EmptyState } from '../../components/ui';
 import { useConversationStore } from '../../stores';
 import { MessageCircle, Search, Calendar, Trash2, FileText, FileJson } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -71,21 +71,15 @@ export function ConversationHistory() {
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto space-y-3">
         {filteredConversations.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <Card className="max-w-md">
-              <div className="text-center">
-                <MessageCircle className="w-16 h-16 text-text-muted mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-text-primary mb-2">
-                  No Conversations Found
-                </h3>
-                <p className="text-text-secondary">
-                  {searchQuery
-                    ? 'No conversations match your search query.'
-                    : 'No conversations yet.'}
-                </p>
-              </div>
-            </Card>
-          </div>
+          <EmptyState
+            icon={<MessageCircle className="w-16 h-16" />}
+            title="No Conversations Found"
+            description={
+              searchQuery
+                ? 'No conversations match your search query.'
+                : 'No conversations yet.'
+            }
+          />
         ) : (
           filteredConversations.map((conversation) => (
             <Card
