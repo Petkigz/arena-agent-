@@ -96,7 +96,12 @@ class MemoryLearner:
             outcome_summary=f"Surprisal: {surprisal:.2f}. {structured_summary}" if verification_result is None else None
         )
 
-        lesson_text = f"Lesson [{task_title}]: {ref_res.get('reflection_text', structured_summary)}"
+        # Always include structured summary for testability and transparency
+        reflection_text = ref_res.get('reflection_text', '')
+        if verification_result is not None:
+            lesson_text = f"Lesson [{task_title}]: {reflection_text} | {structured_summary}"
+        else:
+            lesson_text = f"Lesson [{task_title}]: {structured_summary}"
         importance = 0.9 if surprisal > 0.3 else 0.6
 
         audit_logger.info(f"MemoryLearner processed outcome reflection for '{task_title}' (Lesson saved)")
