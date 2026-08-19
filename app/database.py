@@ -123,6 +123,7 @@ class DatabaseManager:
     _TASK_UPDATE_COLUMNS = {
         "title", "description", "status", "priority", "plan",
         "checkpoint", "tags", "updated_at", "due_date", "assignee",
+        "current_step",
     }
 
     def update_task(self, task_id: str, updates: Dict[str, Any]) -> bool:
