@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useConversationStore } from '../../stores';
 import { Button } from '../ui/Button';
 import { Search, Filter, X, Calendar, Folder, CheckCircle, XCircle } from 'lucide-react';
+import { useDebounce } from '../../hooks/usePerformance';
 
 export function ConversationFilters() {
   const { conversations } = useConversationStore();
@@ -14,22 +15,28 @@ export function ConversationFilters() {
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedOutcome, setSelectedOutcome] = useState<'all' | 'success' | 'failed'>('all');
 
-  // Get unique projects from conversations
-  const projects = Array.from(
-    new Set(conversations.map((c) => c.projectId).filter(Boolean))
-  );
+  // Debounce search query to avoid expensive filtering on every keystroke
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-  // Filter conversations based on current filters
-  const filteredConversations = conversations.filter((conversation) => {
-    // Search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesTitle = conversation.title.toLowerCase().includes(query);
-      const matchesMessages = conversation.messages.some((m) =>
-        m.content.toLowerCase().includes(query)
-      );
-      if (!matchesTitle && !matchesMessages) return false;
-    }
+  // Get unique projects from conversations (memoized)
+  const projects = useMemo(() => {
+    return Array.from(
+      new Set(conversations.map((c) => c.projectId).filter(Boolean))
+    );
+  }, [conversations]);
+
+  // Filter conversations based on current filters (memoized)
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((conversation) => {
+      // Search query filter
+      if (debouncedSearchQuery) {
+        const query = debouncedSearchQuery.toLowerCase();
+        const matchesTitle = conversation.title.toLowerCase().includes(query);
+        const matchesMessages = conversation.messages.some((m) =>
+          m.content.toLowerCase().includes(query)
+        );
+        if (!matchesTitle && !matchesMessages) return false;
+      }
 
     // Date range filter
     if (dateRange.start || dateRange.end) {
@@ -67,6 +74,7 @@ export function ConversationFilters() {
 
     return true;
   });
+  }, [conversations, debouncedSearchQuery, dateRange, selectedProject, selectedOutcome]);
 
   const activeFiltersCount = [
     searchQuery,
@@ -76,12 +84,12 @@ export function ConversationFilters() {
     selectedOutcome !== 'all',
   ].filter(Boolean).length;
 
-  const clearFilters = () => {
+  const clearAllFilters = useCallback(() => {
     setSearchQuery('');
     setDateRange({ start: '', end: '' });
     setSelectedProject('');
     setSelectedOutcome('all');
-  };
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -124,7 +132,7 @@ export function ConversationFilters() {
 
         {activeFiltersCount > 0 && (
           <button
-            onClick={clearFilters}
+            onClick={clearAllFilters}
             className="text-sm text-text-muted hover:text-text-primary transition-colors"
           >
             Clear all

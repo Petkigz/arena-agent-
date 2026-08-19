@@ -73,7 +73,7 @@ export function ConversationShareMenu({ conversation, isOpen, onClose }: Convers
       } else {
         toast.success('Shareable link generated');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to generate shareable link');
     } finally {
       setIsGeneratingLink(false);

@@ -3,6 +3,25 @@ import { Card } from '../../components/ui';
 import { useAppearanceSettingsStore } from '../../stores';
 import { ArrowLeft, Palette, Type, Monitor, Layout, Bell } from 'lucide-react';
 
+interface ToggleSwitchProps {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}
+
+function ToggleSwitch({ checked, onChange }: ToggleSwitchProps) {
+  return (
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only peer"
+      />
+      <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-background-surface after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+    </label>
+  );
+}
+
 export function AppearanceSettingsPage() {
   const navigate = useNavigate();
   const {
@@ -25,18 +44,6 @@ export function AppearanceSettingsPage() {
     setContextPanelVisible,
     updateNotificationSettings,
   } = useAppearanceSettingsStore();
-
-  const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
-    <label className="relative inline-flex items-center cursor-pointer">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only peer"
-      />
-      <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
-    </label>
-  );
 
   return (
     <div className="h-full overflow-y-auto bg-background-primary">

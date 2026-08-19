@@ -22,7 +22,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
   ];
 
   const priorityConfig = {
-    low: { color: 'text-gray-500', bg: 'bg-gray-500/10', label: 'Low' },
+    low: { color: 'text-text-muted', bg: 'bg-background-surface/10', label: 'Low' },
     medium: { color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Medium' },
     high: { color: 'text-orange-500', bg: 'bg-orange-500/10', label: 'High' },
     urgent: { color: 'text-red-500', bg: 'bg-red-500/10', label: 'Urgent' },
@@ -200,7 +200,7 @@ function TaskForm({
   onCancel,
 }: {
   task?: ProjectTask;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState<{

@@ -20,7 +20,7 @@ export function PresenceOrb({ status, size = 'lg', className }: PresenceOrbProps
     working: 'bg-presence-working',
     listening: 'bg-presence-listening',
     speaking: 'bg-presence-speaking',
-    offline: 'bg-gray-500',
+    offline: 'bg-background-surface',
   };
 
   const animationVariants: Record<PresenceStatus, TargetAndTransition> = {

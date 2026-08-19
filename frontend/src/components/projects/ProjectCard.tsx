@@ -14,7 +14,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const statusConfig = {
     active: { color: 'text-green-500', bg: 'bg-green-500/10', label: 'Active' },
     completed: { color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Completed' },
-    archived: { color: 'text-gray-500', bg: 'bg-gray-500/10', label: 'Archived' },
+    archived: { color: 'text-text-muted', bg: 'bg-background-surface/10', label: 'Archived' },
     'on-hold': { color: 'text-yellow-500', bg: 'bg-yellow-500/10', label: 'On Hold' },
   };
 

@@ -52,7 +52,7 @@ export function NodeEditorModal({ node, onSave, onClose }: NodeEditorModalProps)
       .filter(Boolean);
 
     const newNode: KnowledgeNode = {
-      id: node?.id || `node-${Date.now()}`,
+      id: node?.id || crypto.randomUUID(),
       type: data.type,
       label: data.label,
       description: data.description || undefined,

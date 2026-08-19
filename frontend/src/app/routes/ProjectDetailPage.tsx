@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores';
+import type { Project } from '../../stores/projectStore';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { TaskBoard } from '../../components/projects/TaskBoard';
@@ -183,8 +184,8 @@ function EditProjectForm({
   onUpdate,
   onCancel,
 }: {
-  project: any;
-  onUpdate: (updates: any) => void;
+  project: Project;
+  onUpdate: (updates: Partial<Project>) => void;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
@@ -236,7 +237,7 @@ function EditProjectForm({
         </label>
         <select
           value={formData.status}
-          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value as Project['status'] })}
           className="w-full px-4 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary"
         >
           <option value="active">Active</option>

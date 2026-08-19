@@ -10,7 +10,7 @@ export function WakeWordManager() {
   useEffect(() => {
     fetchModels();
     fetchActiveModel();
-  }, []);
+  }, [fetchModels, fetchActiveModel]);
 
   if (models.length === 0) {
     return (

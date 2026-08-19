@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
+import { MotionConfig } from 'framer-motion';
 import { ErrorBoundary, PageErrorBoundary, LoadingFallback, KeyboardShortcutsModal, HelpCenter, SkipLink } from './components/ui';
 import { OnboardingFlow } from './components/onboarding';
 import {
@@ -12,7 +13,9 @@ import { useThemeApplication } from './utils/themeApplication';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAccessibility, useSkipToContent } from './hooks/useAccessibility';
 import { useOnboardingStore } from './stores/onboardingStore';
+import { useAppearanceSettingsStore } from './stores/appearanceSettingsStore';
 import { webSocketService } from './services/websocket';
+import { registerServiceWorker } from './utils/serviceWorker';
 
 // Lazy load all pages
 const BeaniePage = lazy(() => import('./app/routes/BeaniePage').then(m => ({ default: m.BeaniePage })));
@@ -34,6 +37,8 @@ function App() {
   const { shortcuts, showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts();
   const { completed: onboardingCompleted } = useOnboardingStore();
   const [showHelpCenter, setShowHelpCenter] = useState(false);
+  const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const showAnimations = useAppearanceSettingsStore((s) => s.showAnimations);
 
   // Apply theme, font, compact mode, animations, and contrast settings to the DOM
   useThemeApplication();
@@ -51,6 +56,11 @@ function App() {
     return () => {
       webSocketService.disconnect();
     };
+  }, []);
+
+  // Register service worker for offline support
+  useEffect(() => {
+    registerServiceWorker();
   }, []);
 
   // Show tutorial on first visit after onboarding
@@ -76,6 +86,8 @@ function App() {
 
   return (
     <ErrorBoundary>
+      {/* Configure Framer Motion to respect reduced motion preferences */}
+      <MotionConfig reducedMotion={prefersReducedMotion || !showAnimations ? 'always' : 'never'}>
       {/* Skip to content link for screen readers */}
       <SkipLink />
       
@@ -124,8 +136,9 @@ function App() {
         position="top-right"
         toastOptions={{
           style: {
-            background: '#1E293B',
-            color: '#F1F5F9',
+            background: 'var(--color-background-secondary)',
+            color: 'var(--color-text-primary)',
+            border: '1px solid var(--color-background-surface)',
           },
         }}
       />
@@ -138,6 +151,7 @@ function App() {
         isOpen={showHelpCenter}
         onClose={() => setShowHelpCenter(false)}
       />
+      </MotionConfig>
     </ErrorBoundary>
   );
 }

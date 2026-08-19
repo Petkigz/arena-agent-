@@ -86,7 +86,7 @@ class WebSocketService {
             const parsed = JSON.parse(event.data);
             const wsEvent: WebSocketEvent = { type: parsed.type, data: parsed };
             this.emit(wsEvent);
-          } catch (e) {
+          } catch {
             logger.warn('[WS] Failed to parse message', { data: event.data });
           }
         } else if (event.data instanceof ArrayBuffer) {

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { MessageCircle, Brain, User } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
 export function BottomNavigation() {
@@ -10,7 +11,12 @@ export function BottomNavigation() {
   ];
 
   return (
-    <nav className="bg-background-secondary border-t border-background-surface">
+    <motion.nav
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="bg-background-secondary border-t border-background-surface"
+    >
       <div className="flex justify-around items-center h-16">
         {links.map(({ to, icon: Icon, label }) => (
           <NavLink
@@ -20,14 +26,13 @@ export function BottomNavigation() {
               cn(
                 'flex flex-col items-center justify-center gap-1 px-4 py-2 transition-colors',
                 isActive ? 'text-accent-primary' : 'text-text-muted hover:text-text-secondary'
-              )
-            }
-          >
+              )}
+            >
             <Icon className="w-6 h-6" />
             <span className="text-xs font-medium">{label}</span>
           </NavLink>
         ))}
       </div>
-    </nav>
+    </motion.nav>
   );
 }

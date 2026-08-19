@@ -1,6 +1,7 @@
 import { Card } from '../ui/Card';
 import { usePresenceStore, useMemoryBrowserStore, useKnowledgeGraphStore, useConversationStore, useLayoutStore } from '../../stores';
 import { Brain, Database, MessageCircle, Target, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
 export function ContextPanel() {
@@ -16,7 +17,11 @@ export function ContextPanel() {
   const recentMemories = memories.slice(0, 5);
 
   return (
-    <aside
+    <motion.aside
+      initial={{ x: 20, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      aria-label="Context panel"
       className={cn(
         'bg-background-secondary border-l border-background-surface overflow-y-auto transition-all duration-300',
         contextPanelCollapsed ? 'w-16' : 'w-80'
@@ -26,7 +31,7 @@ export function ContextPanel() {
         {/* Current Goal */}
         <Card>
           <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4 text-accent-primary flex-shrink-0" />
+            <Target className="w-4 h-4 text-accent-primary flex-shrink-0" aria-hidden="true" />
             {!contextPanelCollapsed && (
               <h3 className="text-sm font-semibold text-text-secondary">Current Goal</h3>
             )}
@@ -53,7 +58,7 @@ export function ContextPanel() {
         {presence.progress !== undefined && (
           <Card>
             <div className="flex items-center gap-2 mb-2">
-              <Zap className="w-4 h-4 text-accent-primary flex-shrink-0" />
+              <Zap className="w-4 h-4 text-accent-primary flex-shrink-0" aria-hidden="true" />
               {!contextPanelCollapsed && (
                 <h3 className="text-sm font-semibold text-text-secondary">Progress</h3>
               )}
@@ -67,6 +72,11 @@ export function ContextPanel() {
                   <div
                     className="bg-accent-primary h-2 rounded-full transition-all duration-300"
                     style={{ width: `${presence.progress * 100}%` }}
+                    role="progressbar"
+                    aria-valuenow={Math.round(presence.progress * 100)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Task progress"
                   />
                 </div>
               </div>
@@ -81,7 +91,7 @@ export function ContextPanel() {
           )}
           <div className={cn('grid gap-3', contextPanelCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
             <div className="flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-blue-400 flex-shrink-0" />
+              <MessageCircle className="w-4 h-4 text-blue-400 flex-shrink-0" aria-hidden="true" />
               {!contextPanelCollapsed && (
                 <div>
                   <p className="text-lg font-bold text-text-primary">{totalMessages}</p>
@@ -90,7 +100,7 @@ export function ContextPanel() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <Database className="w-4 h-4 text-green-400 flex-shrink-0" aria-hidden="true" />
               {!contextPanelCollapsed && (
                 <div>
                   <p className="text-lg font-bold text-text-primary">{memories.length}</p>
@@ -187,6 +197,6 @@ export function ContextPanel() {
           )}
         </button>
       </div>
-    </aside>
+    </motion.aside>
   );
 }

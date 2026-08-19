@@ -1,12 +1,12 @@
 import { logger } from '../../services/logger';
 import { useState, useRef, useEffect } from 'react';
-import { useScreenshotStore } from '../../stores/screenshotStore';
+import { useScreenshotStore, type Screenshot } from '../../stores/screenshotStore';
 import { Button } from './Button';
 import { Monitor, StopCircle, Camera, Maximize2 } from 'lucide-react';
 
 interface ScreenCaptureProps {
   conversationId: string;
-  onCapture?: (screenshot: any) => void;
+  onCapture?: (screenshot: Screenshot) => void;
 }
 
 export function ScreenCapture({ conversationId, onCapture }: ScreenCaptureProps) {
@@ -129,6 +129,7 @@ export function ScreenCapture({ conversationId, onCapture }: ScreenCaptureProps)
     return () => {
       stopScreenCapture();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

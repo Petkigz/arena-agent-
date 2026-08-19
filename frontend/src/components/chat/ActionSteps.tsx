@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 import type { ActionStep as ActionStepType } from '../../types';
 
@@ -5,7 +6,7 @@ interface ActionStepsProps {
   steps: ActionStepType[];
 }
 
-export function ActionSteps({ steps }: ActionStepsProps) {
+function ActionStepsComponent({ steps }: ActionStepsProps) {
   if (!steps || steps.length === 0) return null;
 
   return (
@@ -20,7 +21,7 @@ export function ActionSteps({ steps }: ActionStepsProps) {
               <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
             )}
             {step.status === 'pending' && (
-              <Circle className="w-4 h-4 text-slate-400" />
+              <Circle className="w-4 h-4 text-text-muted" />
             )}
             {step.status === 'error' && (
               <Circle className="w-4 h-4 text-red-500" />
@@ -31,12 +32,12 @@ export function ActionSteps({ steps }: ActionStepsProps) {
               step.status === 'complete' ? 'text-green-500' :
               step.status === 'in_progress' ? 'text-blue-500' :
               step.status === 'error' ? 'text-red-500' :
-              'text-slate-400'
+              'text-text-muted'
             }>
               {step.description}
             </div>
             {step.details && (
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="text-xs text-text-muted mt-0.5">
                 {step.details}
               </div>
             )}
@@ -46,3 +47,5 @@ export function ActionSteps({ steps }: ActionStepsProps) {
     </div>
   );
 }
+
+export const ActionSteps = memo(ActionStepsComponent);

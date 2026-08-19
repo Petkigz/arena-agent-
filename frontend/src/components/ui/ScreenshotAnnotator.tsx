@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Screenshot } from '../../stores/screenshotStore';
 import { Button } from './Button';
 import { Square, Circle, ArrowRight, Type, Trash2, Check } from 'lucide-react';
@@ -11,13 +11,69 @@ interface ScreenshotAnnotatorProps {
 
 type AnnotationType = 'rect' | 'circle' | 'arrow' | 'text';
 
+interface Annotation {
+  type: AnnotationType;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  color: string;
+  text?: string;
+}
+
+function drawSingleAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation): void {
+  ctx.strokeStyle = annotation.color;
+  ctx.lineWidth = 3;
+  ctx.fillStyle = annotation.color;
+
+  if (annotation.type === 'rect') {
+    ctx.strokeRect(annotation.x, annotation.y, annotation.width || 0, annotation.height || 0);
+  } else if (annotation.type === 'circle') {
+    ctx.beginPath();
+    ctx.arc(annotation.x, annotation.y, annotation.width || 0, 0, 2 * Math.PI);
+    ctx.stroke();
+  } else if (annotation.type === 'arrow') {
+    const w = annotation.width || 0;
+    const h = annotation.height || 0;
+    ctx.beginPath();
+    ctx.moveTo(annotation.x, annotation.y);
+    ctx.lineTo(annotation.x + w, annotation.y + h);
+    ctx.stroke();
+
+    // Draw arrowhead
+    const angle = Math.atan2(h, w);
+    const arrowLength = 15;
+    ctx.beginPath();
+    ctx.moveTo(annotation.x + w, annotation.y + h);
+    ctx.lineTo(
+      annotation.x + w - arrowLength * Math.cos(angle - Math.PI / 6),
+      annotation.y + h - arrowLength * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.moveTo(annotation.x + w, annotation.y + h);
+    ctx.lineTo(
+      annotation.x + w - arrowLength * Math.cos(angle + Math.PI / 6),
+      annotation.y + h - arrowLength * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.stroke();
+  } else if (annotation.type === 'text' && annotation.text) {
+    ctx.font = '16px Arial';
+    ctx.fillText(annotation.text, annotation.x, annotation.y);
+  }
+}
+
+function drawAllAnnotations(ctx: CanvasRenderingContext2D, annots: Annotation[]): void {
+  annots.forEach((annotation) => drawSingleAnnotation(ctx, annotation));
+}
+
 export function ScreenshotAnnotator({ screenshot, onSave, onCancel }: ScreenshotAnnotatorProps) {
-  const [annotations, setAnnotations] = useState(screenshot.annotations || []);
+  const [annotations, setAnnotations] = useState<Annotation[]>(
+    (screenshot.annotations as Annotation[]) || []
+  );
   const [selectedTool, setSelectedTool] = useState<AnnotationType>('rect');
   const [selectedColor, setSelectedColor] = useState('#ef4444');
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
-  const [currentAnnotation, setCurrentAnnotation] = useState<any>(null);
+  const [currentAnnotation, setCurrentAnnotation] = useState<Annotation | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -40,60 +96,18 @@ export function ScreenshotAnnotator({ screenshot, onSave, onCancel }: Screenshot
       ctx.drawImage(img, 0, 0);
 
       // Draw annotations
-      drawAnnotations(ctx, annotations);
+      drawAllAnnotations(ctx, annotations);
 
       // Draw current annotation if drawing
       if (currentAnnotation) {
-        drawAnnotation(ctx, currentAnnotation);
+        drawSingleAnnotation(ctx, currentAnnotation);
       }
     };
 
     img.src = `data:image/${screenshot.format};base64,${screenshot.image}`;
   }, [screenshot, annotations, currentAnnotation]);
 
-  const drawAnnotations = (ctx: CanvasRenderingContext2D, annots: any[]) => {
-    annots.forEach((annotation) => drawAnnotation(ctx, annotation));
-  };
-
-  const drawAnnotation = (ctx: CanvasRenderingContext2D, annotation: any) => {
-    ctx.strokeStyle = annotation.color;
-    ctx.lineWidth = 3;
-    ctx.fillStyle = annotation.color;
-
-    if (annotation.type === 'rect') {
-      ctx.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height);
-    } else if (annotation.type === 'circle') {
-      ctx.beginPath();
-      ctx.arc(annotation.x, annotation.y, annotation.width, 0, 2 * Math.PI);
-      ctx.stroke();
-    } else if (annotation.type === 'arrow') {
-      ctx.beginPath();
-      ctx.moveTo(annotation.x, annotation.y);
-      ctx.lineTo(annotation.x + annotation.width, annotation.y + annotation.height);
-      ctx.stroke();
-
-      // Draw arrowhead
-      const angle = Math.atan2(annotation.height, annotation.width);
-      const arrowLength = 15;
-      ctx.beginPath();
-      ctx.moveTo(annotation.x + annotation.width, annotation.y + annotation.height);
-      ctx.lineTo(
-        annotation.x + annotation.width - arrowLength * Math.cos(angle - Math.PI / 6),
-        annotation.y + annotation.height - arrowLength * Math.sin(angle - Math.PI / 6)
-      );
-      ctx.moveTo(annotation.x + annotation.width, annotation.y + annotation.height);
-      ctx.lineTo(
-        annotation.x + annotation.width - arrowLength * Math.cos(angle + Math.PI / 6),
-        annotation.y + annotation.height - arrowLength * Math.sin(angle + Math.PI / 6)
-      );
-      ctx.stroke();
-    } else if (annotation.type === 'text' && annotation.text) {
-      ctx.font = '16px Arial';
-      ctx.fillText(annotation.text, annotation.x, annotation.y);
-    }
-  };
-
-  const getCanvasPosition = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getCanvasPosition = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
 
@@ -105,9 +119,9 @@ export function ScreenshotAnnotator({ screenshot, onSave, onCancel }: Screenshot
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
     };
-  };
+  }, []);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const pos = getCanvasPosition(e);
     setIsDrawing(true);
     setStartPos(pos);
@@ -115,20 +129,20 @@ export function ScreenshotAnnotator({ screenshot, onSave, onCancel }: Screenshot
     if (selectedTool === 'text') {
       const text = prompt('Enter text:');
       if (text) {
-        const newAnnotation: any = {
+        const newAnnotation: Annotation = {
           type: 'text',
           x: pos.x,
           y: pos.y,
           color: selectedColor,
           text,
         };
-        setAnnotations([...annotations, newAnnotation]);
+        setAnnotations((prev) => [...prev, newAnnotation]);
       }
       setIsDrawing(false);
     }
-  };
+  }, [getCanvasPosition, selectedTool, selectedColor]);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !startPos || selectedTool === 'text') return;
 
     const pos = getCanvasPosition(e);
@@ -163,27 +177,27 @@ export function ScreenshotAnnotator({ screenshot, onSave, onCancel }: Screenshot
         color: selectedColor,
       });
     }
-  };
+  }, [isDrawing, startPos, selectedTool, selectedColor, getCanvasPosition]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     if (!isDrawing || !currentAnnotation) {
       setIsDrawing(false);
       return;
     }
 
-    setAnnotations([...annotations, currentAnnotation]);
+    setAnnotations((prev) => [...prev, currentAnnotation]);
     setCurrentAnnotation(null);
     setIsDrawing(false);
     setStartPos(null);
-  };
+  }, [isDrawing, currentAnnotation]);
 
-  const handleDeleteLast = () => {
-    setAnnotations(annotations.slice(0, -1));
-  };
+  const handleDeleteLast = useCallback(() => {
+    setAnnotations((prev) => prev.slice(0, -1));
+  }, []);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     onSave(annotations);
-  };
+  }, [onSave, annotations]);
 
   return (
     <div className="space-y-4">
@@ -229,6 +243,7 @@ export function ScreenshotAnnotator({ screenshot, onSave, onCancel }: Screenshot
                 selectedColor === color ? 'border-white scale-110' : 'border-transparent'
               }`}
               style={{ backgroundColor: color }}
+              aria-label={`Select color ${color}`}
             />
           ))}
 

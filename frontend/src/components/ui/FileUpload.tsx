@@ -14,7 +14,7 @@ export function FileUpload({
   onUpload,
   accept = '*',
   multiple = true,
-  conversationId,
+  conversationId: _conversationId,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -37,7 +37,7 @@ export function FileUpload({
         setUploading(false);
       }
     },
-    [onUpload, setError, conversationId]
+    [onUpload, setError]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

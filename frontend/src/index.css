@@ -1,39 +1,70 @@
+/* Theme CSS Variables */
+:root {
+  --arena-font-size: 14px;
+  --arena-font-family: system-ui;
+  
+  /* Dark theme (default) */
+  --color-background-primary: #0F172A;
+  --color-background-secondary: #1E293B;
+  --color-background-surface: #334155;
+  --color-text-primary: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+}
+
+/* Light theme */
+html.light {
+  --color-background-primary: #F8FAFC;
+  --color-background-secondary: #E2E8F0;
+  --color-background-surface: #CBD5E1;
+  --color-text-primary: #1E293B;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748B;
+}
+
+html {
+  font-size: var(--arena-font-size);
+  font-family: var(--arena-font-family), Inter, system-ui, sans-serif;
+}
+
 body {
-  background-color: #0f172a;
-  color: #f1f5f9;
+  background-color: var(--color-background-primary);
+  color: var(--color-text-primary);
   font-family: Inter, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+/* Smooth theme transition */
+body,
+.bg-background-primary,
+.bg-background-secondary,
+.bg-background-surface,
+.text-text-primary,
+.text-text-secondary,
+.text-text-muted,
+.border-background-surface,
+.border-background-secondary {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Custom scrollbar - theme-aware */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: #1e293b;
+  background-color: var(--color-background-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #334155;
+  background-color: var(--color-background-surface);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #475569;
-}
-
-/* Theme application utilities */
-:root {
-  --arena-font-size: 14px;
-  --arena-font-family: system-ui;
-}
-
-html {
-  font-size: var(--arena-font-size);
-  font-family: var(--arena-font-family), Inter, system-ui, sans-serif;
+  background-color: var(--color-text-muted);
 }
 
 /* Compact mode - reduce spacing */
@@ -78,19 +109,7 @@ html {
   color: #c0c0c0 !important;
 }
 
-/* Light theme overrides */
-html.light body {
-  background-color: #f8fafc;
-  color: #1e293b;
-}
-
-html.light ::-webkit-scrollbar-track {
-  background-color: #e2e8f0;
-}
-
-html.light ::-webkit-scrollbar-thumb {
-  background-color: #94a3b8;
-}
+/* Light theme is handled via CSS variables above */
 
 /* Reduced motion preference (media query) */
 @media (prefers-reduced-motion: reduce) {

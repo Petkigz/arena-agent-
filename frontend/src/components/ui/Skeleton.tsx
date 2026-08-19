@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
 export interface SkeletonProps {
@@ -10,11 +11,23 @@ export function Skeleton({ className, width, height }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'animate-pulse bg-background-surface rounded',
+        'relative overflow-hidden bg-background-surface rounded',
         className
       )}
       style={{ width, height }}
-    />
+    >
+      <motion.div
+        className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-background-surface/30 to-transparent"
+        animate={{
+          x: ['-100%', '100%'],
+        }}
+        transition={{
+          duration: 1.5,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+      />
+    </div>
   );
 }
 

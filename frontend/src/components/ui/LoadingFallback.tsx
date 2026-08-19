@@ -1,4 +1,4 @@
-import { Spinner } from './Spinner';
+import { AnimatedSpinner, PulseDots } from '../animations/LoadingAnimations';
 
 interface LoadingFallbackProps {
   message?: string;
@@ -7,8 +7,11 @@ interface LoadingFallbackProps {
 export function LoadingFallback({ message = 'Loading...' }: LoadingFallbackProps) {
   return (
     <div className="h-full flex flex-col items-center justify-center bg-background-primary">
-      <Spinner size="lg" />
-      <p className="mt-4 text-text-secondary text-sm">{message}</p>
+      <AnimatedSpinner size="xl" />
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <p className="text-text-secondary text-sm">{message}</p>
+        <PulseDots count={3} />
+      </div>
     </div>
   );
 }

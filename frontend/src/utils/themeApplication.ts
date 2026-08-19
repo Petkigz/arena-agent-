@@ -27,7 +27,7 @@ export function useThemeApplication() {
     const root = document.documentElement;
     const resolved = getResolvedTheme(theme);
 
-    // Apply theme class
+    // Apply theme class with smooth transition
     root.classList.remove('dark', 'light');
     root.classList.add(resolved);
     root.setAttribute('data-theme', resolved);

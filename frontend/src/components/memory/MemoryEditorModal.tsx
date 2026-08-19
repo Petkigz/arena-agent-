@@ -49,7 +49,7 @@ export function MemoryEditorModal({ memory, onSave, onClose }: MemoryEditorModal
       .filter(Boolean);
 
     const newMemory: Memory = {
-      id: memory?.id || `mem-${Date.now()}`,
+      id: memory?.id || crypto.randomUUID(),
       category: data.category,
       title: data.title,
       content: data.content,

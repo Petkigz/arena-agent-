@@ -2,6 +2,8 @@ import { logger } from '../services/logger';
 import { create } from 'zustand';
 import { notifications } from '../services/notifications';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export interface WakeWordSample {
   id: string;
   audio: string; // Base64 encoded
@@ -67,7 +69,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
 
   fetchModels: async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/wakeword/models');
+      const response = await fetch(API_BASE_URL + '/api/wakeword/models');
       if (!response.ok) throw new Error('Failed to fetch models');
 
       const models = await response.json();
@@ -88,7 +90,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
     set({ isTraining: true });
 
     try {
-      const response = await fetch('http://localhost:8000/api/wakeword/train', {
+      const response = await fetch(API_BASE_URL + '/api/wakeword/train', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,7 +125,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
 
   activateModel: async (modelId) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/wakeword/models/${modelId}/activate`, {
+      const response = await fetch(`${API_BASE_URL}/api/wakeword/models/${modelId}/activate`, {
         method: 'POST',
       });
 
@@ -147,7 +149,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/wakeword/models/${modelId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/wakeword/models/${modelId}`, {
         method: 'DELETE',
       });
 
@@ -167,7 +169,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
 
   fetchActiveModel: async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/wakeword/active');
+      const response = await fetch(API_BASE_URL + '/api/wakeword/active');
       if (!response.ok) throw new Error('Failed to fetch active model');
 
       const result = await response.json();

@@ -28,3 +28,7 @@ export { ScreenshotViewer } from './ScreenshotViewer';
 export { ScreenshotAnnotator } from './ScreenshotAnnotator';
 export { WakeWordTrainer } from './WakeWordTrainer';
 export { WakeWordManager } from './WakeWordManager';
+export { OfflineBanner } from './OfflineBanner';
+
+// Re-export animations for convenience
+export * from '../animations';

@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, memo, useCallback, useMemo, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { motion } from 'framer-motion';
 import { User, Bot, RotateCcw, Trash2, Copy, Check } from 'lucide-react';
 import { ActionSteps } from './ActionSteps';
 import { ReasoningTrace } from './ReasoningTrace';
 import { CodeChanges } from './CodeChanges';
 import { AttachmentDisplay } from '../ui/AttachmentDisplay';
+import { messageVariants } from '../animations/variants';
 import type { Message } from '../../types';
 
 interface MessageBubbleProps {
@@ -14,30 +16,69 @@ interface MessageBubbleProps {
   onDelete?: (messageId: string) => void;
 }
 
-export function MessageBubble({ message, onRetry, onDelete }: MessageBubbleProps) {
+function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleCopy = () => {
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+  }, [message.content]);
+
+  const handleRetry = useCallback(() => {
+    onRetry?.(message.id);
+  }, [onRetry, message.id]);
+
+  const handleDelete = useCallback(() => {
+    onDelete?.(message.id);
+  }, [onDelete, message.id]);
+
+  // Memoize timestamp formatting
+  const formattedTime = useMemo(() => {
+    return new Date(message.timestamp).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }, [message.timestamp]);
 
   return (
-    <div className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
+    <motion.div
+      variants={messageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      layout
+      role="article"
+      aria-label={`${isUser ? 'You' : 'Arena'} said at ${formattedTime}`}
+      className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
+    >
       {/* Avatar */}
-      <div className="flex-shrink-0">
+      <motion.div
+        className="flex-shrink-0"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ delay: 0.1, type: 'spring', stiffness: 300 }}
+      >
         <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
           isUser ? 'bg-blue-600' : 'bg-purple-600'
         }`}>
           {isUser ? (
-            <User className="w-5 h-5 text-white" />
+            <User className="w-5 h-5 text-white" aria-hidden="true" />
           ) : (
-            <Bot className="w-5 h-5 text-white" />
+            <Bot className="w-5 h-5 text-white" aria-hidden="true" />
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Message content */}
       <div className={`flex-1 max-w-[80%] ${isUser ? 'items-end' : ''}`}>
@@ -45,21 +86,21 @@ export function MessageBubble({ message, onRetry, onDelete }: MessageBubbleProps
         <div className={`rounded-2xl px-4 py-2.5 ${
           isUser
             ? 'bg-blue-600 text-white'
-            : 'bg-slate-800 text-slate-100'
+            : 'bg-background-secondary text-text-primary'
         }`}>
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
           ) : (
             <div className="text-sm leading-relaxed prose prose-invert prose-sm max-w-none
-              prose-headings:text-slate-100 prose-p:text-slate-200 prose-a:text-blue-400
-              prose-code:text-emerald-400 prose-code:bg-slate-900 prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-              prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-700
-              prose-strong:text-slate-100 prose-li:text-slate-200">
+              prose-headings:text-text-primary prose-p:text-text-primary prose-a:text-blue-400
+              prose-code:text-emerald-400 prose-code:bg-background-primary prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+              prose-pre:bg-background-primary prose-pre:border prose-pre:border-background-surface
+              prose-strong:text-text-primary prose-li:text-text-primary">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.content}
               </ReactMarkdown>
               {message.status === 'streaming' && (
-                <span className="inline-block w-2 h-4 bg-slate-400 animate-pulse ml-0.5" />
+                <span className="inline-block w-2 h-4 bg-text-muted animate-pulse ml-0.5" />
               )}
             </div>
           )}
@@ -71,15 +112,10 @@ export function MessageBubble({ message, onRetry, onDelete }: MessageBubbleProps
         )}
 
         {/* Metadata and actions */}
-        <div className={`mt-1 flex items-center gap-2 text-xs text-slate-500 ${
+        <div className={`mt-1 flex items-center gap-2 text-xs text-text-muted ${
           isUser ? 'justify-end' : ''
         }`}>
-          <span>
-            {new Date(message.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </span>
+          <span>{formattedTime}</span>
           {message.status === 'sending' && (
             <span className="text-blue-500">Sending...</span>
           )}
@@ -94,27 +130,27 @@ export function MessageBubble({ message, onRetry, onDelete }: MessageBubbleProps
           <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
             <button
               onClick={handleCopy}
-              className="p-1 hover:text-slate-300 transition-colors"
-              title="Copy message"
+              className="p-1 hover:text-text-secondary transition-colors"
+              aria-label={copied ? 'Copied' : 'Copy message'}
             >
-              {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+              {copied ? <Check className="w-3 h-3 text-green-500" aria-hidden="true" /> : <Copy className="w-3 h-3" aria-hidden="true" />}
             </button>
             {message.status === 'error' && onRetry && (
               <button
-                onClick={() => onRetry(message.id)}
+                onClick={handleRetry}
                 className="p-1 hover:text-blue-400 transition-colors"
-                title="Retry"
+                aria-label="Retry sending message"
               >
-                <RotateCcw className="w-3 h-3" />
+                <RotateCcw className="w-3 h-3" aria-hidden="true" />
               </button>
             )}
             {onDelete && (
               <button
-                onClick={() => onDelete(message.id)}
+                onClick={handleDelete}
                 className="p-1 hover:text-red-400 transition-colors"
-                title="Delete"
+                aria-label="Delete message"
               >
-                <Trash2 className="w-3 h-3" />
+                <Trash2 className="w-3 h-3" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -135,6 +171,21 @@ export function MessageBubble({ message, onRetry, onDelete }: MessageBubbleProps
           <CodeChanges changes={message.codeChanges} />
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
+
+// Custom comparison function for React.memo
+function arePropsEqual(prevProps: MessageBubbleProps, nextProps: MessageBubbleProps): boolean {
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.message.status === nextProps.message.status &&
+    prevProps.message.timestamp === nextProps.message.timestamp &&
+    prevProps.onRetry === nextProps.onRetry &&
+    prevProps.onDelete === nextProps.onDelete
+  );
+}
+
+export const MessageBubble = memo(MessageBubbleComponent, arePropsEqual);
+MessageBubble.displayName = 'MessageBubble';

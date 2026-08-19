@@ -50,22 +50,22 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
       case 'speaking':
         return 'bg-green-500';
       default:
-        return 'bg-gray-500';
+        return 'bg-background-surface';
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white dark:bg-background-secondary rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-xl font-semibold text-text-primary">
               Voice Input
             </h2>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              className="p-2 hover:bg-background-surface rounded-full transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -75,14 +75,14 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
           <div className="mb-6">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${getStateColor()} animate-pulse`} />
-              <span className="text-gray-700 dark:text-gray-300">{getStateLabel()}</span>
+              <span className="text-text-secondary">{getStateLabel()}</span>
             </div>
           </div>
 
           {/* Transcript */}
           {transcript && (
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <p className="text-gray-900 dark:text-white">{transcript}</p>
+            <div className="mb-6 p-4 bg-background-primary rounded-lg">
+              <p className="text-text-primary">{transcript}</p>
             </div>
           )}
 
@@ -115,7 +115,7 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
           </div>
 
           {/* Instructions */}
-          <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
+          <div className="mt-6 text-sm text-text-muted">
             <p className="mb-2">
               <strong>Instructions:</strong>
             </p>

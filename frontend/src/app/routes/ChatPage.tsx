@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { MessageBubble, ChatInput, ConversationShareMenu } from '../../components/chat';
+import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
 import { EmptyState } from '../../components/ui';
 import { MessageCircle, Share2 } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
@@ -205,17 +205,17 @@ export function ChatPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-slate-700 bg-slate-900">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-background-surface bg-background-primary">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-slate-100">{currentConversation.title}</h1>
+            <h1 className="text-xl font-semibold text-text-primary">{currentConversation.title}</h1>
             {currentConversation.projectId && (
-              <p className="text-sm text-slate-400 mt-0.5">Project: {currentConversation.projectId}</p>
+              <p className="text-sm text-text-muted mt-0.5">Project: {currentConversation.projectId}</p>
             )}
           </div>
           <button
             onClick={() => setShowShareMenu(true)}
-            className="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 text-text-muted hover:text-text-primary hover:bg-background-secondary rounded-lg transition-colors"
             title="Share conversation"
           >
             <Share2 className="w-5 h-5" />
@@ -224,27 +224,36 @@ export function ChatPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-        {currentConversation.messages.length === 0 ? (
+      {currentConversation.messages.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center px-6 py-4" role="region" aria-label="Messages">
           <EmptyState
             icon={<MessageCircle className="w-12 h-12" />}
             title="Start a conversation"
             description="Send a message or use voice input to begin"
           />
-        ) : (
-          <>
-            {currentConversation.messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                onRetry={handleRetry}
-                onDelete={handleDelete}
-              />
-            ))}
-            <div ref={messagesEndRef} />
-          </>
-        )}
-      </div>
+        </div>
+      ) : currentConversation.messages.length > 50 ? (
+        /* Virtual scrolling for large message lists */
+        <VirtualMessageList
+          messages={currentConversation.messages}
+          onRetry={handleRetry}
+          onDelete={handleDelete}
+          className="px-6"
+        />
+      ) : (
+        /* Regular rendering for small message lists */
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions">
+          {currentConversation.messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              onRetry={handleRetry}
+              onDelete={handleDelete}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
 
       {/* Input */}
       <div className="flex-shrink-0">

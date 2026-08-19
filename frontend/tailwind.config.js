@@ -7,19 +7,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Arena color palette
+        // Theme-aware colors using CSS variables
         background: {
-          primary: '#0F172A',    // dark slate
-          secondary: '#1E293B',  // slate
-          surface: '#334155',    // lighter slate
+          primary: 'var(--color-background-primary)',
+          secondary: 'var(--color-background-secondary)',
+          surface: 'var(--color-background-surface)',
         },
         text: {
-          primary: '#F1F5F9',    // off-white
-          secondary: '#94A3B8',  // gray
-          muted: '#64748B',      // dark gray
+          primary: 'var(--color-text-primary)',
+          secondary: 'var(--color-text-secondary)',
+          muted: 'var(--color-text-muted)',
         },
         accent: {
-          primary: '#3B82F6',    // blue
+          primary: '#3B82F6',    // blue (same in both themes)
           success: '#10B981',    // green
           warning: '#F59E0B',    // amber
           error: '#EF4444',      // red
@@ -29,6 +29,12 @@ export default {
           working: '#F59E0B',    // amber, fast pulse
           listening: '#10B981',  // green, pulsing
           speaking: '#8B5CF6',   // purple, pulsing
+        },
+        // Legacy dark-only colors for backward compatibility
+        'background-dark': {
+          primary: '#0F172A',
+          secondary: '#1E293B',
+          surface: '#334155',
         },
       },
       fontFamily: {

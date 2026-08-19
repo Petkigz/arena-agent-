@@ -30,26 +30,30 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
 
   const isListening = voiceState !== 'idle' && voiceState !== 'stopped';
 
-  // Handle incoming WebSocket events
-  useEffect(() => {
-    const unsubscribe = webSocketService.subscribe((event) => {
-      if (event.type === 'voice_state') {
-        setVoiceState(event.data.state);
-      } else if (event.type === 'voice_transcript') {
-        const { text, is_final } = event.data;
-        setTranscript(text);
-        onTranscript?.(text, is_final);
-      } else if (event.type === 'voice_audio') {
-        // Queue audio for playback
-        playAudioChunk(event.data);
-      } else if (event.type === 'error') {
-        setError(event.data.message);
-        onError?.(event.data.message);
-      }
-    });
+  // Use ref to break circular reference for React Compiler
+  const playNextBufferRef = useRef<() => void>(() => {});
 
-    return unsubscribe;
-  }, [onTranscript, onError]);
+  // Play next buffer from queue
+  const playNextBuffer = useCallback(() => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingRef.current = false;
+      return;
+    }
+
+    isPlayingRef.current = true;
+    const audioContext = audioContextRef.current;
+    if (!audioContext) return;
+
+    const buffer = audioQueueRef.current.shift()!;
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.onended = () => playNextBufferRef.current();
+    source.start();
+  }, []);
+
+  // Keep ref in sync
+  playNextBufferRef.current = playNextBuffer;
 
   // Play audio chunk from TTS
   const playAudioChunk = useCallback(async (audioData: ArrayBuffer) => {
@@ -79,25 +83,28 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
     } catch (err) {
       logger.error('Error playing audio chunk:', err);
     }
-  }, []);
+  }, [playNextBuffer]);
 
-  const playNextBuffer = useCallback(() => {
-    if (audioQueueRef.current.length === 0) {
-      isPlayingRef.current = false;
-      return;
-    }
+  // Handle incoming WebSocket events
+  useEffect(() => {
+    const unsubscribe = webSocketService.subscribe((event) => {
+      if (event.type === 'voice_state') {
+        setVoiceState(event.data.state);
+      } else if (event.type === 'voice_transcript') {
+        const { text, is_final } = event.data;
+        setTranscript(text);
+        onTranscript?.(text, is_final);
+      } else if (event.type === 'voice_audio') {
+        // Queue audio for playback
+        playAudioChunk(event.data);
+      } else if (event.type === 'error') {
+        setError(event.data.message);
+        onError?.(event.data.message);
+      }
+    });
 
-    isPlayingRef.current = true;
-    const audioContext = audioContextRef.current;
-    if (!audioContext) return;
-
-    const buffer = audioQueueRef.current.shift()!;
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-    source.onended = playNextBuffer;
-    source.start();
-  }, []);
+    return unsubscribe;
+  }, [onTranscript, onError, playAudioChunk]);
 
   // Start listening (request microphone and stream audio)
   const startListening = useCallback(async () => {

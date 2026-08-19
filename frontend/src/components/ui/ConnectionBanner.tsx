@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Wifi, WifiOff, RefreshCw, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { webSocketService } from '../../services/websocket';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
@@ -55,20 +56,46 @@ export function ConnectionBanner() {
   const { icon: Icon, bg, text, showReconnect } = config[status];
 
   return (
-    <div className={`${bg} border-b text-white px-4 py-2 flex items-center gap-3 text-sm`}>
-      <Icon className={`w-4 h-4 ${status === 'connecting' || status === 'reconnecting' ? 'animate-spin' : ''}`} />
-      <span className="flex-1">{text}</span>
-      {showReconnect && (
-        <button
-          onClick={handleReconnect}
-          className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-xs font-medium transition-colors"
-        >
-          Reconnect
-        </button>
-      )}
-      <button onClick={() => setDismissed(true)} className="p-0.5 hover:bg-white/20 rounded transition-colors">
-        <X className="w-4 h-4" />
-      </button>
-    </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: 'auto', opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="overflow-hidden"
+        role="alert"
+        aria-live="assertive"
+      >
+        <div className={`${bg} border-b text-white px-4 py-2 flex items-center gap-3 text-sm`}>
+          <motion.div
+            animate={status === 'connecting' || status === 'reconnecting' ? { rotate: 360 } : {}}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          >
+            <Icon className="w-4 h-4" />
+          </motion.div>
+          <span className="flex-1">{text}</span>
+          {showReconnect && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleReconnect}
+              className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-xs font-medium transition-colors"
+              aria-label="Reconnect to server"
+            >
+              Reconnect
+            </motion.button>
+          )}
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setDismissed(true)}
+            className="p-0.5 hover:bg-white/20 rounded transition-colors"
+            aria-label="Dismiss notification"
+          >
+            <X className="w-4 h-4" />
+          </motion.button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
