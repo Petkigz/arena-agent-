@@ -302,8 +302,8 @@ class MessageRouter:
 
     async def _handle_create_conversation(self, websocket, message: Dict[str, Any]):
         """Handle creating a new conversation."""
-        now = time.time()
-        conversation_id = f"conv_{now}"
+        # Use client-provided ID if available, otherwise generate one
+        conversation_id = message.get("conversation_id") or f"conv_{time.time()}"
         title = message.get("title", "New Conversation")
 
         # Initialize empty history

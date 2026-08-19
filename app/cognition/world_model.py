@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import sqlite3
 from enum import Enum
@@ -378,7 +378,7 @@ class WorldModel:
                            subject: Optional[str] = None) -> List[Observation]:
         """Find observations whose latest value is older than max_age_hours."""
         now = datetime.now(timezone.utc)
-        cutoff = (now - __import__("datetime").timedelta(hours=max_age_hours)).isoformat()
+        cutoff = (now - timedelta(hours=max_age_hours)).isoformat()
 
         query = "SELECT * FROM world_observations"
         params: list = []

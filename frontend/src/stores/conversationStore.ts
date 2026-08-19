@@ -127,8 +127,8 @@ export const useConversationStore = create<ConversationState>()(
           currentConversation: newConversation,
         }));
 
-        // Notify backend
-        webSocketService.createConversation(title);
+        // Notify backend with the client-generated ID
+        webSocketService.createConversation(title, conversationId);
 
         return conversationId;
       },

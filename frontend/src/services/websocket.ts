@@ -185,8 +185,11 @@ class WebSocketService {
     return this.send('join_conversation', { conversation_id: conversationId });
   }
 
-  createConversation(title?: string) {
-    return this.send('create_conversation', { title: title || 'New Conversation' });
+  createConversation(title?: string, conversationId?: string) {
+    return this.send('create_conversation', { 
+      title: title || 'New Conversation',
+      conversation_id: conversationId,
+    });
   }
 
   requestConversationList() {

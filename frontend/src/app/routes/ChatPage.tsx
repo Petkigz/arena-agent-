@@ -84,12 +84,7 @@ export function ChatPage() {
           updateMessage(step.message_id, { actionSteps: updatedSteps });
         }
       } else if (event.type === 'conversation_created') {
-        const { conversation_id, title } = event.data as { conversation_id: string; title: string };
-        // Server confirmed conversation creation
-        const conv = conversations.find((c) => c.id === conversation_id);
-        if (conv && title) {
-          // Update title if server provided a different one
-        }
+        // Server confirmed conversation creation — frontend already created it optimistically
       }
     });
 
