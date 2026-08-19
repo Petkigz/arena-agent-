@@ -102,8 +102,8 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
         b'<?php': ('text/x-php', 'code', '.php'),
     }
     
-    # Check magic bytes (first 16 bytes should be enough for most signatures)
-    header = content[:16]
+    # Check magic bytes (first 32 bytes to accommodate longer shebangs)
+    header = content[:32]
     detected_type = None
     detected_category = None
     detected_ext = None
