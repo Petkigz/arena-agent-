@@ -1,6 +1,7 @@
 import { Card } from '../ui/Card';
-import { usePresenceStore, useMemoryBrowserStore, useKnowledgeGraphStore, useConversationStore } from '../../stores';
-import { Brain, Database, MessageCircle, Target, Zap } from 'lucide-react';
+import { usePresenceStore, useMemoryBrowserStore, useKnowledgeGraphStore, useConversationStore, useLayoutStore } from '../../stores';
+import { Brain, Database, MessageCircle, Target, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '../../utils/cn';
 
 export function ContextPanel() {
   const { presence } = usePresenceStore();
@@ -9,30 +10,42 @@ export function ContextPanel() {
   const knowledgeEdges = useKnowledgeGraphStore((s) => s.edges);
   const conversations = useConversationStore((s) => s.conversations);
   const currentConversation = useConversationStore((s) => s.currentConversation);
+  const { contextPanelCollapsed, toggleContextPanel } = useLayoutStore();
 
   const totalMessages = conversations.reduce((sum, c) => sum + c.messages.length, 0);
   const recentMemories = memories.slice(0, 5);
 
   return (
-    <aside className="w-80 bg-background-secondary border-l border-background-surface overflow-y-auto">
-      <div className="p-4 space-y-4">
+    <aside
+      className={cn(
+        'bg-background-secondary border-l border-background-surface overflow-y-auto transition-all duration-300',
+        contextPanelCollapsed ? 'w-16' : 'w-80'
+      )}
+    >
+      <div className={cn('p-4 space-y-4', contextPanelCollapsed && 'px-2')}>
         {/* Current Goal */}
         <Card>
           <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4 text-accent-primary" />
-            <h3 className="text-sm font-semibold text-text-secondary">Current Goal</h3>
+            <Target className="w-4 h-4 text-accent-primary flex-shrink-0" />
+            {!contextPanelCollapsed && (
+              <h3 className="text-sm font-semibold text-text-secondary">Current Goal</h3>
+            )}
           </div>
-          {presence.currentGoal ? (
-            <p className="text-text-primary">{presence.currentGoal}</p>
-          ) : (
-            <p className="text-text-muted italic text-sm">No active goal</p>
-          )}
-          {presence.currentTask && (
-            <div className="mt-2 pt-2 border-t border-background-surface">
-              <p className="text-xs text-text-muted">
-                <span className="font-medium">Task:</span> {presence.currentTask}
-              </p>
-            </div>
+          {!contextPanelCollapsed && (
+            <>
+              {presence.currentGoal ? (
+                <p className="text-text-primary">{presence.currentGoal}</p>
+              ) : (
+                <p className="text-text-muted italic text-sm">No active goal</p>
+              )}
+              {presence.currentTask && (
+                <div className="mt-2 pt-2 border-t border-background-surface">
+                  <p className="text-xs text-text-muted">
+                    <span className="font-medium">Task:</span> {presence.currentTask}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </Card>
 
@@ -40,60 +53,74 @@ export function ContextPanel() {
         {presence.progress !== undefined && (
           <Card>
             <div className="flex items-center gap-2 mb-2">
-              <Zap className="w-4 h-4 text-accent-primary" />
-              <h3 className="text-sm font-semibold text-text-secondary">Progress</h3>
+              <Zap className="w-4 h-4 text-accent-primary flex-shrink-0" />
+              {!contextPanelCollapsed && (
+                <h3 className="text-sm font-semibold text-text-secondary">Progress</h3>
+              )}
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-text-secondary">{Math.round(presence.progress * 100)}%</span>
+            {!contextPanelCollapsed && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-secondary">{Math.round(presence.progress * 100)}%</span>
+                </div>
+                <div className="w-full bg-background-surface rounded-full h-2">
+                  <div
+                    className="bg-accent-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${presence.progress * 100}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full bg-background-surface rounded-full h-2">
-                <div
-                  className="bg-accent-primary h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${presence.progress * 100}%` }}
-                />
-              </div>
-            </div>
+            )}
           </Card>
         )}
 
         {/* Stats */}
         <Card>
-          <h3 className="text-sm font-semibold text-text-secondary mb-3">Statistics</h3>
-          <div className="grid grid-cols-2 gap-3">
+          {!contextPanelCollapsed && (
+            <h3 className="text-sm font-semibold text-text-secondary mb-3">Statistics</h3>
+          )}
+          <div className={cn('grid gap-3', contextPanelCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
             <div className="flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-blue-400" />
-              <div>
-                <p className="text-lg font-bold text-text-primary">{totalMessages}</p>
-                <p className="text-xs text-text-muted">Messages</p>
-              </div>
+              <MessageCircle className="w-4 h-4 text-blue-400 flex-shrink-0" />
+              {!contextPanelCollapsed && (
+                <div>
+                  <p className="text-lg font-bold text-text-primary">{totalMessages}</p>
+                  <p className="text-xs text-text-muted">Messages</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-green-400" />
-              <div>
-                <p className="text-lg font-bold text-text-primary">{memories.length}</p>
-                <p className="text-xs text-text-muted">Memories</p>
-              </div>
+              <Database className="w-4 h-4 text-green-400 flex-shrink-0" />
+              {!contextPanelCollapsed && (
+                <div>
+                  <p className="text-lg font-bold text-text-primary">{memories.length}</p>
+                  <p className="text-xs text-text-muted">Memories</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <Brain className="w-4 h-4 text-purple-400" />
-              <div>
-                <p className="text-lg font-bold text-text-primary">{knowledgeNodes.length}</p>
-                <p className="text-xs text-text-muted">Knowledge</p>
-              </div>
+              <Brain className="w-4 h-4 text-purple-400 flex-shrink-0" />
+              {!contextPanelCollapsed && (
+                <div>
+                  <p className="text-lg font-bold text-text-primary">{knowledgeNodes.length}</p>
+                  <p className="text-xs text-text-muted">Knowledge</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-amber-400" />
-              <div>
-                <p className="text-lg font-bold text-text-primary">{conversations.length}</p>
-                <p className="text-xs text-text-muted">Chats</p>
-              </div>
+              <MessageCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              {!contextPanelCollapsed && (
+                <div>
+                  <p className="text-lg font-bold text-text-primary">{conversations.length}</p>
+                  <p className="text-xs text-text-muted">Chats</p>
+                </div>
+              )}
             </div>
           </div>
         </Card>
 
         {/* Recent Memories */}
-        {recentMemories.length > 0 && (
+        {!contextPanelCollapsed && recentMemories.length > 0 && (
           <Card>
             <h3 className="text-sm font-semibold text-text-secondary mb-2">Recent Memories</h3>
             <div className="space-y-1.5">
@@ -110,7 +137,7 @@ export function ContextPanel() {
         )}
 
         {/* Knowledge */}
-        {knowledgeNodes.length > 0 && (
+        {!contextPanelCollapsed && knowledgeNodes.length > 0 && (
           <Card>
             <h3 className="text-sm font-semibold text-text-secondary mb-2">Knowledge Graph</h3>
             <div className="space-y-1">
@@ -132,7 +159,7 @@ export function ContextPanel() {
         )}
 
         {/* Current Conversation */}
-        {currentConversation && (
+        {!contextPanelCollapsed && currentConversation && (
           <Card>
             <h3 className="text-sm font-semibold text-text-secondary mb-2">Current Chat</h3>
             <p className="text-sm text-text-primary font-medium">{currentConversation.title}</p>
@@ -141,6 +168,24 @@ export function ContextPanel() {
             </p>
           </Card>
         )}
+      </div>
+
+      {/* Collapse toggle */}
+      <div className="p-2 border-t border-background-surface">
+        <button
+          onClick={toggleContextPanel}
+          className="w-full flex items-center justify-center p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-background-surface transition-colors"
+          aria-label={contextPanelCollapsed ? 'Expand context panel' : 'Collapse context panel'}
+        >
+          {contextPanelCollapsed ? (
+            <ChevronLeft className="w-5 h-5" />
+          ) : (
+            <>
+              <ChevronRight className="w-5 h-5" />
+              <span className="ml-2 text-sm">Collapse</span>
+            </>
+          )}
+        </button>
       </div>
     </aside>
   );

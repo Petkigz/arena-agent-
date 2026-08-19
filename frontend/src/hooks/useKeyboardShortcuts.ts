@@ -1,7 +1,7 @@
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { useConversationStore } from '../stores';
+import { useConversationStore, useLayoutStore } from '../stores';
 
 export interface KeyboardShortcut {
   keys: string[];
@@ -13,6 +13,7 @@ export interface KeyboardShortcut {
 export function useKeyboardShortcuts() {
   const navigate = useNavigate();
   const { currentConversation, conversations, createConversation, setCurrentConversation } = useConversationStore();
+  const { toggleSidebar, toggleContextPanel } = useLayoutStore();
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
   // Help modal
@@ -89,6 +90,15 @@ export function useKeyboardShortcuts() {
     }
   }, { preventDefault: true });
 
+  // Panel toggle shortcuts
+  useHotkeys('ctrl+b', () => {
+    toggleSidebar();
+  }, { preventDefault: true });
+
+  useHotkeys('ctrl+j', () => {
+    toggleContextPanel();
+  }, { preventDefault: true });
+
   // Return list of all shortcuts for help modal
   const shortcuts: KeyboardShortcut[] = [
     { keys: ['Ctrl', 'N'], description: 'New conversation', action: () => {} },
@@ -103,6 +113,8 @@ export function useKeyboardShortcuts() {
     { keys: ['Ctrl', '↑'], description: 'Previous conversation', action: () => {} },
     { keys: ['Ctrl', '↓'], description: 'Next conversation', action: () => {} },
     { keys: ['?'], description: 'Show keyboard shortcuts', action: () => {} },
+    { keys: ['Ctrl', 'B'], description: 'Toggle sidebar', action: () => {} },
+    { keys: ['Ctrl', 'J'], description: 'Toggle context panel', action: () => {} },
   ];
 
   return { shortcuts, showShortcutsModal, setShowShortcutsModal };

@@ -60,3 +60,4 @@ export {
 } from './projectStore';
 export { useScreenshotStore, type Screenshot } from './screenshotStore';
 export { useWakeWordStore, type WakeWordSample, type WakeWordModel } from './wakeWordStore';
+export { useLayoutStore } from './layoutStore';
