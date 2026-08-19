@@ -81,6 +81,16 @@ class VoicePipeline:
         self._on_state_change = on_state_change
         self._on_audio_ready = on_audio_ready
 
+    @property
+    def on_state_change(self):
+        """Get the state change callback."""
+        return self._on_state_change
+
+    @on_state_change.setter
+    def on_state_change(self, callback: Optional[Callable[[VoiceState, VoiceState], None]]):
+        """Set the state change callback."""
+        self._on_state_change = callback
+
     async def start(self):
         """Start all pipeline components."""
         if self.is_running:

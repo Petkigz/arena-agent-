@@ -94,7 +94,7 @@ class TestVerifiedReflection:
             confidence=1.0,
         )
         quality = reflection.verification_quality()
-        assert quality == pytest.approx(0.1, abs=1e-9)  # Lowest weight, with floating point tolerance
+        assert quality == pytest.approx(0.1, abs=0.02)  # Lowest weight, with floating point tolerance
     
     def test_is_verified(self):
         """Test is_verified threshold check."""

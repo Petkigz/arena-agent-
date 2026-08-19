@@ -296,7 +296,7 @@ class BeliefStore:
         latest_by_source: Dict[str, Evidence] = {}
         for ev in belief.evidence:
             existing = latest_by_source.get(ev.source)
-            if existing is None or ev.observed_at > existing.observed_at:
+            if existing is None or ev.observed_at >= existing.observed_at:
                 latest_by_source[ev.source] = ev
 
         # Score each distinct value by weighted independent evidence

@@ -94,7 +94,9 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
         b'7z\xBC\xAF\x27\x1C': ('application/x-7z-compressed', 'archive', '.7z'),
         
         # Code/Text - check for Python shebang first
+        b'#!/usr/bin/env python3': ('text/x-python', 'code', '.py'),
         b'#!/usr/bin/env python': ('text/x-python', 'code', '.py'),
+        b'#!/usr/bin/python3': ('text/x-python', 'code', '.py'),
         b'#!/usr/bin/python': ('text/x-python', 'code', '.py'),
         b'#!/': ('text/x-shellscript', 'code', '.sh'),
         b'<?php': ('text/x-php', 'code', '.php'),
