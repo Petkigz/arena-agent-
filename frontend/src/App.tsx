@@ -51,9 +51,17 @@ function App() {
 
   // Connect WebSocket on app startup (URL resolved from env or hostname)
   useEffect(() => {
-    webSocketService.connect();
+    try {
+      webSocketService.connect();
+    } catch (error) {
+      console.warn('WebSocket connection failed (non-fatal):', error);
+    }
     return () => {
-      webSocketService.disconnect();
+      try {
+        webSocketService.disconnect();
+      } catch (error) {
+        console.warn('WebSocket disconnect failed (non-fatal):', error);
+      }
     };
   }, []);
 

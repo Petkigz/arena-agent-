@@ -9,6 +9,27 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>Arena - Local AI Assistant</title>
+    <style>
+      /* Show loading indicator before React mounts */
+      #root:empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #0F172A;
+        color: #F1F5F9;
+        font-family: Inter, system-ui, sans-serif;
+      }
+      #root:empty::after {
+        content: 'Loading Arena...';
+        font-size: 1.2rem;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
