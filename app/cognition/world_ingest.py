@@ -24,6 +24,7 @@ class WorldChange:
     current: Any
     source: str
     confidence: float
+    observation_type: str  # Phase 2: required, no default
 
 
 class WorldIngestor:
@@ -37,10 +38,17 @@ class WorldIngestor:
         predicate: str,
         value: Any,
         *,
-        source: str = "unknown",
+        source: str,
         confidence: float = 1.0,
         task_id: Optional[str] = None,
+        observation_type: str,
     ) -> tuple[Observation, Optional[WorldChange]]:
+        """
+        Ingest a raw observation into the WorldModel.
+        
+        Phase 2: source and observation_type are required (no defaults).
+        Every observation must be explicitly classified.
+        """
         recent = self.model.recent_observations(subject, limit=100)
         previous = next((item for item in recent if item.predicate == predicate), None)
         observation = Observation(
@@ -51,6 +59,7 @@ class WorldIngestor:
             source=source,
             confidence=confidence,
             task_id=task_id,
+            observation_type=observation_type,
         )
         self.model.observe(observation)
 
@@ -63,6 +72,7 @@ class WorldIngestor:
                 current=value,
                 source=source,
                 confidence=confidence,
+                observation_type=observation_type,
             )
             if self.event_bus is not None:
                 self.event_bus.publish(

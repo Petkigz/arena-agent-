@@ -40,19 +40,63 @@ class MemoryLearner:
         self,
         task_title: str,
         goal: str,
-        outcome_summary: str,
-        surprisal: float = 0.0
+        verification_result: Optional[Any] = None,
+        surprisal: float = 0.0,
+        outcome_summary: Optional[str] = None
     ) -> MemoryRecord:
         """
-        Feeds execution outcomes into ReflectionEngine, extracts lessons learned, and stores in MemoryStore.
+        Feeds verified execution outcomes into ReflectionEngine, extracts lessons learned,
+        and stores in MemoryStore.
+        
+        Args:
+            task_title: Short identifier for the task
+            goal: Original goal text
+            verification_result: GoalVerificationResult with verified outcomes (required for new code)
+            surprisal: Prediction error (0.0 = expected, 1.0 = surprise)
+            outcome_summary: Legacy string summary (deprecated, use verification_result)
+        
+        The lesson is generated from verified outcomes, not arbitrary strings.
+        If verification_result is provided, the lesson includes:
+          - verified_success status
+          - met_conditions and failed_conditions
+          - lifecycle state
+          - verification reason
         """
+        # Build structured summary from verified outcomes
+        if verification_result is not None:
+            verified = getattr(verification_result, 'verified_success', False)
+            lifecycle = getattr(verification_result, 'final_state', None)
+            lifecycle_str = lifecycle.value if hasattr(lifecycle, 'value') else str(lifecycle)
+            met = getattr(verification_result, 'met_conditions', [])
+            failed = getattr(verification_result, 'failed_conditions', [])
+            reason = getattr(verification_result, 'verification_reason', '')
+            
+            summary_parts = [
+                f"Verified: {verified}",
+                f"State: {lifecycle_str}",
+                f"Met: {len(met)} conditions",
+                f"Failed: {len(failed)} conditions",
+            ]
+            if failed:
+                summary_parts.append(f"Failed details: {'; '.join(failed[:3])}")
+            if reason:
+                summary_parts.append(f"Reason: {reason}")
+            
+            structured_summary = " | ".join(summary_parts)
+        elif outcome_summary is not None:
+            # Legacy path: accept string but mark as unverified
+            structured_summary = f"[UNVERIFIED] {outcome_summary}"
+        else:
+            raise ValueError("Either verification_result or outcome_summary must be provided")
+        
         ref_res = self.reflection.reflect_on_task_execution(
             task_title=task_title,
             task_goal=goal,
-            outcome_summary=f"Surprisal: {surprisal:.2f}. {outcome_summary}"
+            verification_result=verification_result,
+            outcome_summary=f"Surprisal: {surprisal:.2f}. {structured_summary}" if verification_result is None else None
         )
 
-        lesson_text = f"Lesson [{task_title}]: {ref_res.get('key_takeaway', outcome_summary)}"
+        lesson_text = f"Lesson [{task_title}]: {ref_res.get('reflection_text', structured_summary)}"
         importance = 0.9 if surprisal > 0.3 else 0.6
 
         audit_logger.info(f"MemoryLearner processed outcome reflection for '{task_title}' (Lesson saved)")

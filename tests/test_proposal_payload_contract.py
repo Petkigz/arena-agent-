@@ -20,7 +20,8 @@ def test_execute_proposal_uses_payload_search_query_authoritatively():
 
         assert res["success"] is True
         # Search query executed MUST be 'project_backup' from proposal payload, NOT 'Find my documents and music'
-        mock_search.assert_called_once_with("project_backup", max_results=5)
+        # max_results=6 (limit 5 + 1 for truncation detection)
+        mock_search.assert_called_once_with("project_backup", max_results=6)
         assert "project_backup.zip" in res["executed_actions"][0]
 
 

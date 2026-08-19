@@ -1,0 +1,1 @@
+export { AccessibilitySettings } from './AccessibilitySettings';

@@ -28,8 +28,12 @@ def test_observed_state_separates_world_state_execution_trace_and_response():
     )
 
     observed_input = {
-        "entities": [{"name": "photoshop", "status": "running"}],
-        "observations": {"photoshop.status": "running"}
+        "entities": [{"name": "photoshop", "status": "running",
+                       "source": "os_process_probe", "observation_type": "direct", "confidence": 1.0}],
+        "observations": {"photoshop.status": {
+            "value": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }}
     }
 
     res = GoalVerifier.verify_goal_achievement(
@@ -51,7 +55,12 @@ def test_observed_state_separates_world_state_execution_trace_and_response():
     world_state = obs_payload["world_state"]
     assert "entities" in world_state
     assert "observations" in world_state
-    assert world_state["observations"].get("photoshop.status") == "running"
+    ps_obs = world_state["observations"].get("photoshop.status")
+    # Observation may be structured (dict) or carry the value directly
+    if isinstance(ps_obs, dict):
+        assert ps_obs.get("value") == "running"
+    else:
+        assert ps_obs == "running"
 
     # Execution history in execution_trace
     exec_trace = obs_payload["execution_trace"]

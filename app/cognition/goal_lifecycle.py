@@ -22,6 +22,7 @@ class GoalLifecycleState(str, Enum):
     BLOCKED = "blocked"
     DEFERRED = "deferred"
     WAITING_FOR_USER = "waiting_for_user"
+    WAITING_FOR_EVIDENCE = "waiting_for_evidence"
     REASSESSING = "reassessing"
     REPLAN = "replan"
 
@@ -60,7 +61,16 @@ VALID_TRANSITIONS: Dict[GoalLifecycleState, List[GoalLifecycleState]] = {
         GoalLifecycleState.FAILED,
         GoalLifecycleState.BLOCKED,
         GoalLifecycleState.DEFERRED,
+        GoalLifecycleState.WAITING_FOR_EVIDENCE,
         GoalLifecycleState.REASSESSING
+    ],
+    GoalLifecycleState.WAITING_FOR_EVIDENCE: [
+        GoalLifecycleState.REASSESSING,
+        GoalLifecycleState.REPLAN,
+        GoalLifecycleState.EXECUTING,
+        GoalLifecycleState.FAILED,
+        GoalLifecycleState.DEFERRED,
+        GoalLifecycleState.WAITING_FOR_USER
     ],
     GoalLifecycleState.FAILED: [
         GoalLifecycleState.REASSESSING,

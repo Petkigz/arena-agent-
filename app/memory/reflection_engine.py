@@ -9,13 +9,48 @@ class ReflectionEngine:
         cls, 
         task_title: str, 
         task_goal: str, 
-        outcome_summary: str,
-        user_feedback: Optional[str] = None
+        verification_result: Optional[Any] = None,
+        user_feedback: Optional[str] = None,
+        outcome_summary: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Runs an AI self-reflection post-mortem on completed tasks to extract lessons learned,
         correct mistakes, and save improved preferences into SQLite permanent memory.
+        
+        Phase 4: Accepts GoalVerificationResult and derives confidence from verification quality.
         """
+        # Build structured outcome from verification result
+        if verification_result is not None:
+            verified = getattr(verification_result, 'verified_success', False)
+            lifecycle = getattr(verification_result, 'final_state', None)
+            lifecycle_str = lifecycle.value if hasattr(lifecycle, 'value') else str(lifecycle)
+            met = getattr(verification_result, 'met_conditions', [])
+            failed = getattr(verification_result, 'failed_conditions', [])
+            reason = getattr(verification_result, 'verification_reason', '')
+            
+            outcome_text = f"Verified: {verified} | State: {lifecycle_str} | Met: {len(met)} conditions | Failed: {len(failed)} conditions"
+            if failed:
+                outcome_text += f" | Failed details: {'; '.join(failed[:3])}"
+            if reason:
+                outcome_text += f" | Reason: {reason}"
+            
+            # Derive confidence from verification quality
+            if verified and len(failed) == 0:
+                confidence = 0.95  # High confidence: verified success with no failures
+            elif verified and len(failed) > 0:
+                confidence = 0.75  # Medium confidence: verified but with some failures
+            elif not verified and len(failed) > 0:
+                confidence = 0.60  # Lower confidence: verification failed
+            else:
+                confidence = 0.50  # Lowest confidence: unknown or no verification
+        elif outcome_summary is not None:
+            # Legacy path: unverified string summary
+            outcome_text = f"[UNVERIFIED] {outcome_summary}"
+            confidence = 0.50  # Low confidence for unverified summaries
+        else:
+            outcome_text = "No outcome information provided"
+            confidence = 0.30
+        
         system_prompt = (
             "You are an AI self-reflection evaluator. Analyze completed task execution "
             "and user feedback to extract lessons learned and permanent preference rules."
@@ -28,7 +63,7 @@ Task Title: "{task_title}"
 Task Goal: "{task_goal}"
 Execution Outcome:
 \"\"\"
-{outcome_summary}
+{outcome_text}
 \"\"\"
 {feedback_str}
 
@@ -58,7 +93,7 @@ Reflect on this execution and summarize:
                 "content": mem_content,
                 "category": "task_reflection",
                 "source": "self_reflection_engine",
-                "confidence": 0.95
+                "confidence": confidence
             })
 
             audit_logger.info(f"Self-reflection logged for task '{task_title}' (Memory #{mem_id})")

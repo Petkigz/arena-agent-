@@ -56,18 +56,23 @@ def test_observation_collector_ingests_facts_and_probes_process_state(tmp_path):
         proposal, exec_res, world_model=wm
     )
 
-    assert len(obs_list) >= 2
+    # Execution facts do NOT create WorldModel observations.
+    # Only the environmental process probe writes to WorldModel.
+    assert len(obs_list) >= 1
     subjects = [o.subject for o in obs_list]
     predicates = [o.predicate for o in obs_list]
 
     assert "photoshop" in subjects
-    assert "launch_command" in predicates
     assert "status" in predicates
 
-    # Verify WorldModel query reflects observations
+    # Execution fact predicate must NOT appear in WorldModel
+    assert "launch_command" not in predicates
     latest_launch = wm.latest_observation("photoshop", "launch_command")
-    assert latest_launch is not None
-    assert latest_launch.value == "succeeded"
+    assert latest_launch is None, \
+        "Execution fact 'launch_command' must not be in WorldModel"
 
+    # Environmental probe observation IS in WorldModel
     latest_status = wm.latest_observation("photoshop", "status")
     assert latest_status is not None
+    assert latest_status.source == "os_process_probe"
+    assert latest_status.observation_type == "direct"

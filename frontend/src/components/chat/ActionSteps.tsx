@@ -1,0 +1,48 @@
+import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import type { ActionStep as ActionStepType } from '../../types';
+
+interface ActionStepsProps {
+  steps: ActionStepType[];
+}
+
+export function ActionSteps({ steps }: ActionStepsProps) {
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      {steps.map((step, index) => (
+        <div key={step.id || index} className="flex items-start gap-2 text-sm">
+          <div className="mt-0.5 flex-shrink-0">
+            {step.status === 'complete' && (
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            )}
+            {step.status === 'in_progress' && (
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+            )}
+            {step.status === 'pending' && (
+              <Circle className="w-4 h-4 text-slate-400" />
+            )}
+            {step.status === 'error' && (
+              <Circle className="w-4 h-4 text-red-500" />
+            )}
+          </div>
+          <div className="flex-1">
+            <div className={
+              step.status === 'complete' ? 'text-green-500' :
+              step.status === 'in_progress' ? 'text-blue-500' :
+              step.status === 'error' ? 'text-red-500' :
+              'text-slate-400'
+            }>
+              {step.description}
+            </div>
+            {step.details && (
+              <div className="text-xs text-slate-500 mt-0.5">
+                {step.details}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

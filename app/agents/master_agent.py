@@ -111,10 +111,27 @@ class MasterAgentOrchestrator:
 
         elif action_type == "search_files":
             search_query = payload.get("query") or payload.get("file_name") or payload.get("search_term") or user_text
-            matched = UniversalFilesystem.search_filesystem(search_query, max_results=5)
+
+            # Determine search limit: normal=5, "all" or all_matches=up to 1000
+            search_limit = 5
+            all_matches = payload.get("all_matches", False)
+            explicit_max = payload.get("max_results")
+
+            if explicit_max is not None:
+                search_limit = max(1, min(int(explicit_max), 1000))
+            elif all_matches or "all" in str(search_query).lower().split():
+                search_limit = 1000
+
+            matched = UniversalFilesystem.search_filesystem(search_query, max_results=search_limit + 1)
+            truncated = len(matched) > search_limit
+            if truncated:
+                matched = matched[:search_limit]
             result_found = bool(matched)
             raw_output_data["matched_files"] = matched
             raw_output_data["result_found"] = result_found
+            raw_output_data["query"] = search_query
+            raw_output_data["max_results"] = search_limit
+            raw_output_data["truncated"] = truncated
 
             if result_found:
                 executed_actions.append(f"Found local file '{matched[0]['file_name']}' at {matched[0]['file_path']}.")
@@ -132,6 +149,19 @@ class MasterAgentOrchestrator:
                     "entity_type": "file",
                     "attributes": {"file_path": matched[0]['file_path']}
                 })
+                # Add execution facts for additional results (beyond first)
+                for extra_file in matched[1:]:
+                    if isinstance(extra_file, dict) and extra_file.get("file_path"):
+                        execution_facts.append({
+                            "subject": extra_file.get("file_name", "file"),
+                            "predicate": "status",
+                            "value": "identified",
+                            "source": "universal_filesystem",
+                            "entity_type": "file",
+                            "attributes": {"file_path": extra_file["file_path"]}
+                        })
+                if len(matched) > 1:
+                    executed_actions.append(f"({len(matched)} total matches found, limit={search_limit})")
             else:
                 executed_actions.append(f"Searched local filesystem for '{search_query}' (no matching files found).")
                 execution_facts.append({

@@ -10,9 +10,11 @@ from app.cognition.world_model import WorldModel
 
 def test_persistent_beliefs_round_trip(tmp_path):
     path = str(tmp_path / "beliefs.db")
-    store = BeliefStore(path)
-    store.observe("chrome", "status", "running", source="process", confidence=0.9)
-    restored = BeliefStore(path).get("chrome", "status")
+    engine = BeliefEngine(db_path=path)
+    engine.ingest("chrome", "status", "running", source="os_process_probe",
+                 observation_type="direct", confidence=0.9)
+    engine2 = BeliefEngine(db_path=path)
+    restored = engine2.beliefs.get("chrome", "status")
     assert restored is not None
     assert restored.value == "running"
     assert len(restored.evidence) == 1
@@ -35,7 +37,8 @@ def test_closed_loop_executes_probe_and_reasons_again(tmp_path):
     executor.register("probe_chrome", lambda: "responsive")
     loop = CognitiveReasoningLoop(engine=BeliefEngine(), action_selector=selector, executor=executor,
                                   world_ingestor=ingestor, event_bus=bus, max_steps=2)
-    trace = loop.run("chrome", "status", value="unknown", source="vision", confidence=0.2,
+    # Use self_reported source → inadmissible → no belief → triggers investigation
+    trace = loop.run("chrome", "status", value="unknown", source="self_reported", confidence=0.2,
                      information_needs=[need])
     assert trace.results[0].success is True
     assert trace.results[0].output == "responsive"

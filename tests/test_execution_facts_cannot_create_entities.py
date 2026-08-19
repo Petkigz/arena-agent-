@@ -38,11 +38,19 @@ def test_execution_facts_do_not_create_world_model_entities(tmp_path):
     with patch("psutil.process_iter", return_value=[]):
         ObservationCollector.collect_and_ingest_observations(proposal, exec_res, world_model=wm)
 
-        # Self-reported execution fact MUST NOT create Photoshop entity with status = running
+        # P0 STRICT: Execution facts MUST NOT create ANY WorldModel entities.
+        # Entity state is established exclusively by environmental probes, not execution claims.
         entities = wm.find_entities(name="photoshop")
-        if entities:
-            # If process probe ran and process was not found in OS, process status MUST NOT be 'running'
-            assert entities[0].attributes.get("status") != "running"
+        # The process probe creates a "photoshop" entity with status "not_running" —
+        # that is the environmental probe, not the execution fact.
+        # Verify no entity was created with the execution fact's attributes (status=running)
+        for ent in entities:
+            assert ent.attributes.get("status") != "running", \
+                "Execution fact must not establish entity status in WorldModel"
+            # The only valid source for entity status is the environmental probe
+            if ent.attributes.get("source"):
+                assert ent.attributes["source"] != "system_app_inventory", \
+                    "Entity must not carry execution-claim provenance"
 
         # GoalVerifier MUST NOT verify app_process_running = true from self-reported facts alone
         goal_rep = SemanticGoalRepresentation(

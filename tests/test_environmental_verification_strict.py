@@ -19,7 +19,8 @@ def test_action_log_alone_without_world_model_observation_fails_verification():
     )
 
     assert res.verified_success is False
-    assert res.final_state == GoalLifecycleState.FAILED
+    # No observations → conditions are UNKNOWN, not explicitly FAILED
+    assert res.final_state == GoalLifecycleState.WAITING_FOR_EVIDENCE
 
 
 def test_world_model_observation_satisfies_process_running_verification():
@@ -30,8 +31,12 @@ def test_world_model_observation_satisfies_process_running_verification():
     goal_rep = SemanticGoalInterpreter.interpret_goal("Open Photoshop")
 
     observed_world_state = {
-        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running"}],
-        "observations": {"photoshop.status": "running"}
+        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running",
+                       "source": "os_process_probe", "observation_type": "direct", "confidence": 1.0}],
+        "observations": {"photoshop.status": {
+            "value": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }}
     }
 
     res = GoalVerifier.verify_goal_achievement(

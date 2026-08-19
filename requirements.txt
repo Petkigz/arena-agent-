@@ -25,3 +25,12 @@ pandas>=2.0.0
 matplotlib>=3.7.0
 openpyxl>=3.1.0
 numpy>=1.24.0
+# Voice pipeline dependencies (Phase 3a)
+openwakeword>=0.6.0
+silero-vad>=5.1.0
+piper-tts>=1.2.0
+pyaudio>=0.2.14
+soundfile>=0.12.0
+torch>=2.0.0
+torchaudio>=2.0.0
+webrtc-audio-processing>=0.4

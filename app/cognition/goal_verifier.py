@@ -136,9 +136,18 @@ class GoalVerifier:
 
         if isinstance(obs_entry, dict):
             val = obs_entry.get("status") if "status" in obs_entry else obs_entry.get("value")
-            obs_type = str(obs_entry.get("observation_type", "direct")).lower().strip()
-            source = str(obs_entry.get("source", "")).lower().strip()
-            confidence = float(obs_entry.get("confidence", 1.0))
+            # Require explicit provenance fields — missing keys do NOT default to authoritative
+            raw_obs_type = obs_entry.get("observation_type")
+            raw_source = obs_entry.get("source")
+            raw_confidence = obs_entry.get("confidence")
+
+            # If observation_type or source is missing, this dict has no provenance metadata
+            if raw_obs_type is None and raw_source is None:
+                return False, val
+
+            obs_type = str(raw_obs_type or "").lower().strip()
+            source = str(raw_source or "").lower().strip()
+            confidence = float(raw_confidence) if raw_confidence is not None else 0.0
 
             # Exclude self_reported execution claims or un-provenanced tool logs
             if obs_type == "self_reported" or "execution_result" in source or "system_app_inventory" in source:
@@ -150,8 +159,9 @@ class GoalVerifier:
             ) and confidence >= 0.8
             return is_authorized, val
         else:
-            # Primitive string values default to True for backward compatibility with string mocks
-            return True, obs_entry
+            # Primitive (non-dict) evidence carries no provenance metadata.
+            # It cannot be verified as direct/environmental — return non-authoritative.
+            return False, obs_entry
 
     @classmethod
     def evaluate_condition_status_against_world_model(
@@ -195,16 +205,26 @@ class GoalVerifier:
                             val_str = str(val).lower().strip()
                             if is_auth and val_str in ["running", "active"]:
                                 return ConditionStatus.SATISFIED
-                            elif val_str in ["crashed", "failed", "terminated", "error"]:
+                            elif is_auth and val_str in ["crashed", "failed", "terminated", "error"]:
                                 return ConditionStatus.FAILED
 
                     for ent_name, ent_entry in verified_entity_states.items():
                         if cls.matches_canonical_entity(ent, ent_name):
-                            is_auth, st_val = cls.is_direct_provenance_evidence(ent_entry if isinstance(ent_entry, dict) else {"status": ent_entry, "source": "world_model", "observation_type": "direct", "confidence": 1.0}, allowed_types=["direct", "environmental"])
+                            # Use the detailed entity record from verified_entity_details;
+                            # do NOT fabricate provenance for primitive entity states.
+                            ent_detail = None
+                            if verified_entity_details and ent_name in verified_entity_details:
+                                ent_detail = verified_entity_details[ent_name]
+                            elif isinstance(ent_entry, dict):
+                                ent_detail = ent_entry
+                            if ent_detail is None:
+                                # Primitive entity state without provenance — cannot verify
+                                continue
+                            is_auth, st_val = cls.is_direct_provenance_evidence(ent_detail, allowed_types=["direct", "environmental"])
                             st_clean = str(st_val).lower().strip()
                             if is_auth and st_clean in ["running", "active"]:
                                 return ConditionStatus.SATISFIED
-                            elif st_clean in ["crashed", "failed", "terminated"]:
+                            elif is_auth and st_clean in ["crashed", "failed", "terminated"]:
                                 return ConditionStatus.FAILED
                 return ConditionStatus.UNKNOWN
             else:
@@ -213,7 +233,7 @@ class GoalVerifier:
                     val_str = str(val).lower().strip()
                     if is_auth and val_str in ["running", "active"]:
                         return ConditionStatus.SATISFIED
-                    elif val_str in ["crashed", "failed", "terminated", "error"]:
+                    elif is_auth and val_str in ["crashed", "failed", "terminated", "error"]:
                         return ConditionStatus.FAILED
                 return ConditionStatus.UNKNOWN
 
@@ -228,14 +248,14 @@ class GoalVerifier:
                             val_str = str(val).lower().strip()
                             if is_auth and val_str not in ["failed", "false", "none", "not_found", "error"]:
                                 return ConditionStatus.SATISFIED
-                            elif val_str in ["not_found", "failed", "error"]:
+                            elif is_auth and val_str in ["not_found", "failed", "error"]:
                                 return ConditionStatus.FAILED
 
                     fs_obs = observations_map.get("filesystem.file_path")
                     if fs_obs:
                         is_auth, val = cls.is_direct_provenance_evidence(fs_obs, allowed_types=["direct", "environmental"])
                         val_str = str(val).lower().strip()
-                        if val_str == "not_found":
+                        if is_auth and val_str == "not_found":
                             return ConditionStatus.FAILED
                         elif is_auth and val_str not in ["failed", "false", "none", "error"]:
                             if cls.matches_canonical_entity(ent, val_str) or not target_entities:
@@ -243,12 +263,19 @@ class GoalVerifier:
 
                     for ent_name, ent_entry in verified_entity_states.items():
                         if cls.matches_canonical_entity(ent, ent_name):
-                            ent_detail = {"status": ent_entry, "source": "world_model", "observation_type": "direct", "confidence": 1.0} if isinstance(ent_entry, str) else ent_entry
+                            # Use detailed entity record; do NOT fabricate provenance for primitives
+                            ent_detail = None
+                            if verified_entity_details and ent_name in verified_entity_details:
+                                ent_detail = verified_entity_details[ent_name]
+                            elif isinstance(ent_entry, dict):
+                                ent_detail = ent_entry
+                            if ent_detail is None:
+                                continue
                             is_auth, st_val = cls.is_direct_provenance_evidence(ent_detail, allowed_types=["direct", "environmental"])
                             st_clean = str(st_val).lower().strip()
                             if is_auth and st_clean in ["identified", "found", "accessed"]:
                                 return ConditionStatus.SATISFIED
-                            elif st_clean in ["not_found", "failed"]:
+                            elif is_auth and st_clean in ["not_found", "failed"]:
                                 return ConditionStatus.FAILED
                 return ConditionStatus.UNKNOWN
             else:
@@ -411,6 +438,10 @@ class GoalVerifier:
 
         if verified_success:
             final_state = GoalLifecycleState.ACHIEVED
+        elif is_unknown:
+            # Conditions are UNKNOWN (missing perception evidence, no explicit failures)
+            # Lifecycle reflects the epistemic state: waiting for evidence, not failed.
+            final_state = GoalLifecycleState.WAITING_FOR_EVIDENCE
         elif any("blocked" in str(fc).lower() for fc in failed_conditions):
             final_state = GoalLifecycleState.BLOCKED
         else:

@@ -10,8 +10,8 @@ def test_ingestor_emits_change_event(tmp_path):
     bus.subscribe("world_state_changed", events.append)
     ingestor = WorldIngestor(model, bus)
 
-    ingestor.ingest("chrome", "status", "stopped", source="desktop")
-    _, change = ingestor.ingest("chrome", "status", "running", source="desktop")
+    ingestor.ingest("chrome", "status", "stopped", source="desktop", observation_type="direct")
+    _, change = ingestor.ingest("chrome", "status", "running", source="desktop", observation_type="direct")
 
     assert change is not None
     assert change.previous == "stopped"

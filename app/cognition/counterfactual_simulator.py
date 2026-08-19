@@ -1,4 +1,9 @@
-"""Milestone 4: Counterfactual Parallel Mental Simulator Engine."""
+"""Milestone 4: Counterfactual Parallel Mental Simulator Engine.
+
+Phase 1B: Utility scores are now adjusted by historical strategy outcomes.
+Strategies with high success rates are boosted; those with consecutive
+failures are deprioritized.
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -24,6 +29,7 @@ class SimulationBranch:
     utility_score: float
     reasoning_summary: str
     candidate_payload: Dict[str, Any] = field(default_factory=dict)
+    history_adjustment: float = 1.0  # Phase 1B: multiplier from historical outcomes
 
 @dataclass
 class CounterfactualSimulationResult:
@@ -37,13 +43,19 @@ class CounterfactualSimulator:
     """
     Simulates competing hypothetical execution branches (S_A, S_B, S_C) in memory,
     evaluating predicted outcomes, risk scores, goal fit, and utility BEFORE touching the live host system.
+
+    Phase 1B: Utility scores are adjusted by historical strategy outcomes when available.
     """
 
     @classmethod
     def simulate_competing_branches(
         cls,
         target_goal: str,
-        candidate_actions: List[Dict[str, Any]]
+        candidate_actions: List[Dict[str, Any]],
+        goal_type: Optional[str] = None,
+        outcome_store: Optional[Any] = None,
+        lesson_store: Optional[Any] = None,
+        skill_classifier: Optional[Any] = None
     ) -> CounterfactualSimulationResult:
         app_logger.info(f"CounterfactualSimulator running parallel simulation for goal: '{target_goal}' ({len(candidate_actions)} branches)")
 
@@ -76,9 +88,31 @@ class CounterfactualSimulator:
             elif act_type in ["phone_command"] and any(k in goal_lower for k in ["phone", "call", "sms", "battery"]):
                 goal_fit = 0.95
 
-            # Composite utility = 0.5*GoalFit + 0.3*(1 - Risk) + 0.2*(1 - Surprisal)
-            utility = round(0.5 * goal_fit + 0.3 * (1.0 - risk) + 0.2 * (1.0 - 0.15), 2)
+            # 4. Phase 1B: Historical outcome adjustment
+            history_adj = 1.0
+            if outcome_store and goal_type:
+                history_adj = outcome_store.adjustment_factor(goal_type, act_type)
 
+            # Phase 1C: Lesson-based adjustment (failure pattern influence)
+            lesson_adj = 1.0
+            if lesson_store and goal_type:
+                lesson_adj = lesson_store.lesson_influence(goal_type, act_type)
+
+            # Phase 3A: Skill-based transfer adjustment
+            skill_adj = 1.0
+            if skill_classifier and outcome_store and goal_type:
+                skill_adj = skill_classifier.transfer_adjustment(
+                    act_type, outcome_store, goal_type
+                )
+
+            # Combined adjustment: outcome history × lessons × skill transfer
+            combined_adj = history_adj * lesson_adj * skill_adj
+
+            # Composite utility = (0.5*GoalFit + 0.3*(1 - Risk) + 0.2*(1 - Surprisal)) × combined_adjustment
+            base_utility = 0.5 * goal_fit + 0.3 * (1.0 - risk) + 0.2 * (1.0 - 0.15)
+            utility = round(base_utility * combined_adj, 4)
+
+            history_note = f", HistoryAdj={combined_adj:.2f}" if combined_adj != 1.0 else ""
             branch = SimulationBranch(
                 branch_id=uuid4().hex[:8],
                 branch_name=act_name,
@@ -88,8 +122,9 @@ class CounterfactualSimulator:
                 goal_fit_score=goal_fit,
                 estimated_surprisal=0.15,
                 utility_score=utility,
-                reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.2f}",
-                candidate_payload=dict(payload)
+                reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.4f}{history_note}",
+                candidate_payload=dict(payload),
+                history_adjustment=combined_adj
             )
             branches.append(branch)
 

@@ -16,10 +16,12 @@ def test_runtime_composes_phase3_components(tmp_path):
         ),
     )
     runtime.executor.register("service_probe", lambda: "healthy")
+    # Use self_reported source → inadmissible → no belief → triggers investigation
     trace = runtime.loop.run(
-        "service", "status", value="unknown", source="monitor", confidence=0.2,
+        "service", "status", value="unknown", source="self_reported", confidence=0.2,
         information_needs=[InformationNeed("Is it healthy?", "service", "uncertain", 0.9)],
     )
+    assert len(trace.results) > 0
     assert trace.results[0].success
     assert runtime.world.latest_observation("service", "health").value == "healthy"
 

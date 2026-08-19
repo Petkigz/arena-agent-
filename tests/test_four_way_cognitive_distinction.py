@@ -68,7 +68,8 @@ def test_four_way_cognitive_distinction_pipeline(tmp_path):
         )
         # 4. 'The goal is proven achieved' -> FALSE when process_running is not observed
         assert verify_a.verified_success is False
-        assert verify_a.final_state == GoalLifecycleState.FAILED
+        # No authoritative observation → conditions UNKNOWN (waiting for evidence)
+        assert verify_a.final_state in (GoalLifecycleState.FAILED, GoalLifecycleState.WAITING_FOR_EVIDENCE)
 
     # Case B: Process probe observes 'running' in OS
     wm.observe(Observation(id="obs_running", subject="photoshop", predicate="status", value="running", source="os_process_probe"))
@@ -79,8 +80,12 @@ def test_four_way_cognitive_distinction_pipeline(tmp_path):
     assert status_obs_b.value == "running"
 
     obs_state_b = {
-        "entities": [{"name": "photoshop", "status": "running"}],
-        "observations": {"photoshop.status": "running"},
+        "entities": [{"name": "photoshop", "status": "running",
+                       "source": "os_process_probe", "observation_type": "direct", "confidence": 1.0}],
+        "observations": {"photoshop.status": {
+            "value": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }},
         "executed_actions": exec_res.executed_actions,
         "assistant_reply": exec_res.assistant_reply
     }
