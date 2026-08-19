@@ -33,4 +33,3 @@ pyaudio>=0.2.14
 soundfile>=0.12.0
 torch>=2.0.0
 torchaudio>=2.0.0
-webrtc-audio-processing>=0.1.0

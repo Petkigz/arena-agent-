@@ -9,8 +9,9 @@ try:
     import torch
     import torchaudio
 except ImportError:
-    app_logger.error("PyTorch not installed. Run: pip install torch torchaudio")
-    raise
+    torch = None
+    torchaudio = None
+    app_logger.warning("PyTorch not installed. VAD unavailable.")
 
 
 class VoiceActivityDetector:

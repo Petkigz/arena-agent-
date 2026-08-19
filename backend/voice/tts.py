@@ -11,8 +11,8 @@ from app.utils.logger import app_logger
 try:
     import soundfile as sf
 except ImportError:
-    app_logger.error("soundfile not installed. Run: pip install soundfile")
-    raise
+    sf = None
+    app_logger.warning("soundfile not installed. TTS unavailable.")
 
 
 class TextToSpeechService:

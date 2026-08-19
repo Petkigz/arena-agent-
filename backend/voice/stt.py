@@ -8,8 +8,8 @@ from app.utils.logger import app_logger
 try:
     from faster_whisper import WhisperModel
 except ImportError:
-    app_logger.error("faster-whisper not installed. Run: pip install faster-whisper")
-    raise
+    WhisperModel = None
+    app_logger.warning("faster-whisper not installed. STT unavailable.")
 
 
 class SpeechToTextService:

@@ -1,4 +1,8 @@
-"""Audio capture service using PyAudio."""
+"""Audio capture service using PyAudio.
+
+Gracefully degrades if PyAudio is not installed — the backend will
+still start and text chat will work, but voice features will be unavailable.
+"""
 
 import asyncio
 import queue
@@ -8,9 +12,14 @@ from app.utils.logger import app_logger
 
 try:
     import pyaudio
+    PYAUDIO_AVAILABLE = True
 except ImportError:
-    app_logger.error("PyAudio not installed. Run: pip install pyaudio")
-    raise
+    pyaudio = None
+    PYAUDIO_AVAILABLE = False
+    app_logger.warning(
+        "PyAudio not installed. Voice features unavailable. "
+        "Install with: pip install pyaudio"
+    )
 
 
 class AudioCaptureService:
@@ -37,14 +46,18 @@ class AudioCaptureService:
         
         self.audio_queue: queue.Queue = queue.Queue(maxsize=100)
         self.is_running = False
-        self.stream: Optional[pyaudio.Stream] = None
-        self.pyaudio_instance: Optional[pyaudio.PyAudio] = None
+        self.stream = None
+        self.pyaudio_instance = None
         
         # Callbacks
         self.on_audio_chunk: Optional[Callable[[np.ndarray], None]] = None
         
     def start(self):
         """Start audio capture."""
+        if not PYAUDIO_AVAILABLE:
+            app_logger.warning("Cannot start audio capture: PyAudio not installed")
+            return
+
         if self.is_running:
             return
             
