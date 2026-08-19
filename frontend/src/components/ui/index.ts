@@ -9,6 +9,7 @@ export { EmptyState } from './EmptyState';
 export { ErrorBoundary } from './ErrorBoundary';
 export { PageErrorBoundary } from './PageErrorBoundary';
 export { FormField } from './FormField';
+export { SkipLink } from './SkipLink';
 export { Banner } from './Banner';
 export { VoiceOverlay } from './VoiceOverlay';
 export { LoadingFallback } from './LoadingFallback';

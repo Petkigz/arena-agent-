@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { ErrorBoundary, PageErrorBoundary, LoadingFallback, KeyboardShortcutsModal, HelpCenter } from './components/ui';
+import { ErrorBoundary, PageErrorBoundary, LoadingFallback, KeyboardShortcutsModal, HelpCenter, SkipLink } from './components/ui';
 import { OnboardingFlow } from './components/onboarding';
 import {
   MobileLayout,
@@ -77,9 +77,7 @@ function App() {
   return (
     <ErrorBoundary>
       {/* Skip to content link for screen readers */}
-      <a href="#main-content" className="skip-to-content">
-        Skip to main content
-      </a>
+      <SkipLink />
       
       <BrowserRouter>
         <Suspense fallback={<LoadingFallback message="Loading Arena..." />}>
