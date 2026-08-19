@@ -43,17 +43,24 @@ class WebSocketService {
     this.statusHandlers.forEach((h) => h(status));
   }
 
-  connect(url: string = 'ws://localhost:8000/ws') {
+  connect(url?: string) {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
-    this.url = url;
+    // Resolve WebSocket URL: parameter > env var > hostname-based default
+    const wsUrl = url || import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8000/ws`;
+
+    // Append API key if configured
+    const apiKey = import.meta.env.VITE_API_KEY;
+    const finalUrl = apiKey ? `${wsUrl}?api_key=${encodeURIComponent(apiKey)}` : wsUrl;
+
+    this.url = finalUrl;
     this.shouldReconnect = true;
     this.setStatus('connecting');
 
     try {
-      this.ws = new WebSocket(url);
+      this.ws = new WebSocket(finalUrl);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {

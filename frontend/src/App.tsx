@@ -49,10 +49,9 @@ function App() {
   // Enable skip to content link
   useSkipToContent();
 
-  // Connect WebSocket on app startup
+  // Connect WebSocket on app startup (URL resolved from env or hostname)
   useEffect(() => {
-    const wsUrl = `ws://${window.location.hostname}:8000/ws`;
-    webSocketService.connect(wsUrl);
+    webSocketService.connect();
     return () => {
       webSocketService.disconnect();
     };

@@ -10,7 +10,8 @@ export interface OnlineStatus {
  * Hook to monitor both internet connectivity and local backend status.
  * For fully offline PC operation, "online" means the local backend is reachable.
  */
-export function useOnlineStatus(backendUrl: string = `ws://${window.location.hostname}:8000/ws`): OnlineStatus {
+export function useOnlineStatus(): OnlineStatus {
+  const backendUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [backendConnected, setBackendConnected] = useState(false);
   const [lastChecked, setLastChecked] = useState(Date.now());
@@ -38,8 +39,8 @@ export function useOnlineStatus(backendUrl: string = `ws://${window.location.hos
   // Periodically check if the local backend is reachable
   const checkBackend = useCallback(async () => {
     try {
-      const httpUrl = backendUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '/health');
-      const response = await fetch(httpUrl, { 
+      const healthUrl = `${backendUrl.replace(/\/$/, '')}/health`;
+      const response = await fetch(healthUrl, { 
         method: 'GET',
         signal: AbortSignal.timeout(3000),
       });

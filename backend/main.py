@@ -1,7 +1,11 @@
-"""FastAPI application with WebSocket support."""
+"""FastAPI application with WebSocket support, CORS, and authentication."""
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import os
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 from app.utils.logger import app_logger
 from app.cognition.runtime import CognitiveRuntime
@@ -15,7 +19,37 @@ from backend.api.language_routes import router as language_router
 from backend.api.device_routes import router as device_router
 from backend.api.theme_routes import router as theme_router
 from backend.api.speaker_routes import router as speaker_router
+from pathlib import Path
 
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+# CORS: Restrict origins via environment variable (comma-separated)
+# Default: localhost dev servers only
+CORS_ORIGINS = os.getenv(
+    "ARENA_CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000,http://localhost:8080,http://127.0.0.1:5173"
+).split(",")
+
+# API Key authentication (optional — set ARENA_API_KEY env var to enable)
+API_KEY = os.getenv("ARENA_API_KEY", "")
+API_KEY_ENABLED = bool(API_KEY)
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(request: Request, api_key: str = Depends(api_key_header)):
+    """Verify API key if authentication is enabled."""
+    if not API_KEY_ENABLED:
+        return  # Auth disabled, allow all
+    if api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+
+
+# ============================================================================
+# App Initialization
+# ============================================================================
 
 # Initialize cognitive runtime
 runtime = CognitiveRuntime()
@@ -24,7 +58,6 @@ runtime = CognitiveRuntime()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    # Startup
     app_logger.info("Starting Arena backend...")
     initialize_message_router(runtime)
 
@@ -33,11 +66,11 @@ async def lifespan(app: FastAPI):
         message_router.set_voice_service(voice_service)
         app_logger.info("Voice service wired into message router")
 
-    app_logger.info("Arena backend started successfully")
+    app_logger.info(f"Arena backend started (CORS: {CORS_ORIGINS}, Auth: {'enabled' if API_KEY_ENABLED else 'disabled'})")
 
     yield
 
-    # Shutdown - clean up voice service
+    # Shutdown
     app_logger.info("Shutting down Arena backend...")
     try:
         await voice_service.stop()
@@ -46,24 +79,23 @@ async def lifespan(app: FastAPI):
         app_logger.error(f"Error stopping voice service during shutdown: {e}")
 
 
-# Create FastAPI app
 app = FastAPI(
     title="Arena Backend",
-    description="Cognitive runtime backend with WebSocket support",
+    description="Cognitive runtime backend with WebSocket, LLM integration, and voice support",
     version="2.0.0",
     lifespan=lifespan
 )
 
-# CORS middleware for frontend communication
+# CORS middleware — restricted to configured origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Register API routes
+# Register API routes (with optional API key auth)
 app.include_router(phase6_router)
 app.include_router(screenshot_router)
 app.include_router(wakeword_router)
@@ -73,21 +105,30 @@ app.include_router(theme_router)
 app.include_router(speaker_router)
 
 
+# ============================================================================
+# WebSocket Endpoints
+# ============================================================================
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication."""
+    # Optional API key verification via query parameter
+    if API_KEY_ENABLED:
+        ws_api_key = websocket.query_params.get("api_key", "")
+        if ws_api_key != API_KEY:
+            await websocket.close(code=4003, reason="Invalid API key")
+            return
+
     await ws_manager.connect(websocket)
 
     try:
         while True:
-            # Receive message from client (JSON or binary audio)
             try:
                 message = await websocket.receive()
             except Exception:
                 break
 
             if "text" in message:
-                # JSON text message
                 import json
                 try:
                     data = json.loads(message["text"])
@@ -95,7 +136,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     app_logger.warning("Invalid JSON received")
                     continue
 
-                # Route message to appropriate handler
                 if message_router:
                     await message_router.handle_message(websocket, data)
                 else:
@@ -106,12 +146,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
 
             elif "bytes" in message:
-                # Binary audio data - forward to voice service
                 audio_bytes = message["bytes"]
                 if voice_service and voice_service.pipeline and voice_service.pipeline.audio_capture:
-                    # Feed binary audio to the voice pipeline
-                    # The audio capture service will handle converting to the right format
-                    pass  # Audio comes via the local mic, not over WS in PC mode
+                    pass  # Audio comes via local mic in PC mode
                 else:
                     app_logger.debug(f"Received {len(audio_bytes)} audio bytes (no pipeline active)")
 
@@ -125,23 +162,24 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.websocket("/ws/voice")
 async def websocket_voice_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for Android voice streaming.
-
-    Android app streams audio here. Same handler as /ws but allows
-    the Android client to connect to a dedicated voice endpoint.
-    """
+    """WebSocket endpoint for Android voice streaming."""
     await websocket_endpoint(websocket)
 
 
+# ============================================================================
+# REST Endpoints
+# ============================================================================
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint (no auth required)."""
     return {
         "status": "healthy",
         "service": "arena-backend",
         "version": "2.0.0",
         "active_conversations": len(ws_manager.get_active_conversations()),
         "voice_service_enabled": voice_service is not None,
+        "auth_enabled": API_KEY_ENABLED,
     }
 
 
@@ -151,3 +189,48 @@ async def list_conversations():
     return {
         "conversations": ws_manager.get_active_conversations()
     }
+
+
+# ============================================================================
+# Serve Frontend (Production Mode)
+# ============================================================================
+
+FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.exists():
+    # Serve static assets
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(request: Request, full_path: str):
+        """Serve the frontend SPA — all routes return index.html."""
+        # Check if the requested file exists in dist
+        file_path = FRONTEND_DIST / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+
+        # For all other routes, serve index.html (SPA routing)
+        index_path = FRONTEND_DIST / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+
+        # Fallback: API-style JSON response
+        return JSONResponse({
+            "status": "online",
+            "app_name": "Arena - Local AI Assistant",
+            "message": "Frontend not built. Run 'cd frontend && npm run build' to build it.",
+            "api_docs": "/docs"
+        })
+else:
+    @app.get("/")
+    async def root():
+        """Root endpoint when frontend is not built."""
+        return {
+            "status": "online",
+            "app_name": "Arena - Local AI Assistant",
+            "version": "2.0.0",
+            "message": "Backend running. Frontend not built yet.",
+            "build_frontend": "cd frontend && npm run build",
+            "api_docs": "/docs",
+            "health": "/health"
+        }
