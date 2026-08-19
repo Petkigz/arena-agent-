@@ -84,9 +84,11 @@ function App() {
   if (!onboardingCompleted) {
     return (
       <ErrorBoundary>
-        <OnboardingFlow onComplete={() => {
-          // Onboarding completed, app will re-render with main interface
-        }} />
+        <BrowserRouter>
+          <OnboardingFlow onComplete={() => {
+            // Onboarding completed, app will re-render with main interface
+          }} />
+        </BrowserRouter>
       </ErrorBoundary>
     );
   }
