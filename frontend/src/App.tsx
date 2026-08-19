@@ -1,24 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary, PageErrorBoundary, LoadingFallback, KeyboardShortcutsModal, HelpCenter } from './components/ui';
 import { OnboardingFlow } from './components/onboarding';
 import {
   MobileLayout,
   DesktopLayout,
-  BeaniePage,
-  ChatPage,
-  PansophyPage,
-  FilesPage,
-  CodeExecutionPage,
-  SettingsPage,
-  VoiceSettingsPage,
-  ModelSettingsPage,
-  PrivacySettingsPage,
-  AppearanceSettingsPage,
-  AccessibilitySettingsPage,
-  ProjectDetailPage,
-  NotFoundPage,
 } from './app/routes';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useThemeApplication } from './utils/themeApplication';
@@ -26,6 +13,21 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAccessibility, useSkipToContent } from './hooks/useAccessibility';
 import { useOnboardingStore } from './stores/onboardingStore';
 import { webSocketService } from './services/websocket';
+
+// Lazy load all pages
+const BeaniePage = lazy(() => import('./app/routes/BeaniePage').then(m => ({ default: m.BeaniePage })));
+const ChatPage = lazy(() => import('./app/routes/ChatPage').then(m => ({ default: m.ChatPage })));
+const PansophyPage = lazy(() => import('./app/routes/PansophyPage').then(m => ({ default: m.PansophyPage })));
+const FilesPage = lazy(() => import('./app/routes/FilesPage').then(m => ({ default: m.FilesPage })));
+const CodeExecutionPage = lazy(() => import('./app/routes/CodeExecutionPage').then(m => ({ default: m.CodeExecutionPage })));
+const SettingsPage = lazy(() => import('./app/routes/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const VoiceSettingsPage = lazy(() => import('./app/routes/VoiceSettingsPage').then(m => ({ default: m.VoiceSettingsPage })));
+const ModelSettingsPage = lazy(() => import('./app/routes/ModelSettingsPage').then(m => ({ default: m.ModelSettingsPage })));
+const PrivacySettingsPage = lazy(() => import('./app/routes/PrivacySettingsPage').then(m => ({ default: m.PrivacySettingsPage })));
+const AppearanceSettingsPage = lazy(() => import('./app/routes/AppearanceSettingsPage').then(m => ({ default: m.AppearanceSettingsPage })));
+const AccessibilitySettingsPage = lazy(() => import('./app/routes/AccessibilitySettingsPage').then(m => ({ default: m.AccessibilitySettingsPage })));
+const ProjectDetailPage = lazy(() => import('./app/routes/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
+const NotFoundPage = lazy(() => import('./app/routes/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
 function App() {
   const isMobile = useMediaQuery('(max-width: 768px)');

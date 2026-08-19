@@ -1,17 +1,2 @@
 export { MobileLayout } from './MobileLayout';
 export { DesktopLayout } from './DesktopLayout';
-export { BeaniePage } from './BeaniePage';
-export { ChatPage } from './ChatPage';
-export { PansophyPage } from './PansophyPage';
-export { ProjectsPage } from './ProjectsPage';
-export { ImagesPage } from './ImagesPage';
-export { FilesPage } from './FilesPage';
-export { CodeExecutionPage } from './CodeExecutionPage';
-export { SettingsPage } from './SettingsPage';
-export { VoiceSettingsPage } from './VoiceSettingsPage';
-export { ModelSettingsPage } from './ModelSettingsPage';
-export { PrivacySettingsPage } from './PrivacySettingsPage';
-export { AppearanceSettingsPage } from './AppearanceSettingsPage';
-export { AccessibilitySettingsPage } from './AccessibilitySettingsPage';
-export { ProjectDetailPage } from './ProjectDetailPage';
-export { NotFoundPage } from './NotFoundPage';
