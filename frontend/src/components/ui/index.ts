@@ -4,6 +4,7 @@ export { Card } from './Card';
 export { Modal } from './Modal';
 export { Spinner } from './Spinner';
 export { Skeleton, SkeletonText } from './Skeleton';
+export { SkeletonCard, SkeletonList, SkeletonPage, SkeletonForm } from './SkeletonCard';
 export { EmptyState } from './EmptyState';
 export { ErrorBoundary } from './ErrorBoundary';
 export { Banner } from './Banner';
