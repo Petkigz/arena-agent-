@@ -1,11 +1,21 @@
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import type { Memory, MemoryCategory } from '../../stores/memoryBrowserStore';
 import { X } from 'lucide-react';
+import { FormField } from '../ui/FormField';
 
 interface MemoryEditorModalProps {
   memory?: Memory | null;
   onSave: (memory: Memory) => void;
   onClose: () => void;
+}
+
+interface MemoryFormData {
+  title: string;
+  category: MemoryCategory;
+  content: string;
+  importance: number;
+  tagsInput: string;
+  conversationId: string;
 }
 
 const categories: { value: MemoryCategory; label: string; icon: string }[] = [
@@ -16,35 +26,39 @@ const categories: { value: MemoryCategory; label: string; icon: string }[] = [
 ];
 
 export function MemoryEditorModal({ memory, onSave, onClose }: MemoryEditorModalProps) {
-  const [title, setTitle] = useState(memory?.title || '');
-  const [category, setCategory] = useState<MemoryCategory>(memory?.category || 'semantic');
-  const [content, setContent] = useState(memory?.content || '');
-  const [importance, setImportance] = useState(memory?.metadata.importance || 5);
-  const [tagsInput, setTagsInput] = useState(memory?.metadata.tags.join(', ') || '');
-  const [conversationId, setConversationId] = useState(memory?.metadata.conversationId || '');
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<MemoryFormData>({
+    defaultValues: {
+      title: memory?.title || '',
+      category: memory?.category || 'semantic',
+      content: memory?.content || '',
+      importance: memory?.metadata.importance || 5,
+      tagsInput: memory?.metadata.tags.join(', ') || '',
+      conversationId: memory?.metadata.conversationId || '',
+    },
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const onSubmit = (data: MemoryFormData) => {
     const now = new Date().toISOString();
-    const tags = tagsInput
+    const tags = data.tagsInput
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
 
     const newMemory: Memory = {
       id: memory?.id || `mem-${Date.now()}`,
-      category,
-      title,
-      content,
+      category: data.category,
+      title: data.title,
+      content: data.content,
       metadata: {
         createdAt: memory?.metadata.createdAt || now,
         updatedAt: now,
-        importance,
+        importance: data.importance,
         tags,
-        conversationId: conversationId || undefined,
-        sourceType: memory?.metadata.sourceType || 'user',
-        relatedMemoryIds: memory?.metadata.relatedMemoryIds,
+        conversationId: data.conversationId || undefined,
       },
     };
 
@@ -66,116 +80,106 @@ export function MemoryEditorModal({ memory, onSave, onClose }: MemoryEditorModal
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-4 space-y-4">
           {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Title *
-            </label>
+          <FormField label="Title" required error={errors.title}>
             <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
+              {...register('title', {
+                required: 'Title is required',
+                minLength: { value: 3, message: 'Title must be at least 3 characters' },
+                maxLength: { value: 200, message: 'Title must be less than 200 characters' },
+              })}
+              className={`w-full px-3 py-2 bg-background-surface border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary ${
+                errors.title ? 'border-accent-error' : 'border-border'
+              }`}
               placeholder="Memory title"
             />
-          </div>
+          </FormField>
 
           {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">
-              Category
-            </label>
+          <FormField label="Category">
             <div className="grid grid-cols-2 gap-2">
               {categories.map((cat) => (
-                <button
+                <label
                   key={cat.value}
-                  type="button"
-                  onClick={() => setCategory(cat.value)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    category === cat.value
-                      ? 'bg-accent-primary text-white'
-                      : 'bg-background-surface text-text-secondary hover:bg-background-surface/80'
+                  className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                    memory?.category === cat.value
+                      ? 'border-accent-primary bg-accent-primary/10'
+                      : 'border-border hover:border-accent-primary/50'
                   }`}
                 >
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                </button>
+                  <input
+                    type="radio"
+                    value={cat.value}
+                    {...register('category')}
+                    className="sr-only"
+                  />
+                  <span className="text-lg">{cat.icon}</span>
+                  <span className="text-sm font-medium text-text-primary">{cat.label}</span>
+                </label>
               ))}
             </div>
-          </div>
+          </FormField>
 
           {/* Content */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Content *
-            </label>
+          <FormField label="Content" required error={errors.content}>
             <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              required
-              rows={5}
-              className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary resize-none"
+              {...register('content', {
+                required: 'Content is required',
+                minLength: { value: 10, message: 'Content must be at least 10 characters' },
+                maxLength: { value: 5000, message: 'Content must be less than 5000 characters' },
+              })}
+              rows={6}
+              className={`w-full px-3 py-2 bg-background-surface border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary resize-none ${
+                errors.content ? 'border-accent-error' : 'border-border'
+              }`}
               placeholder="What do you want to remember?"
             />
-          </div>
+          </FormField>
 
           {/* Importance */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Importance: {importance}/10
-            </label>
+          <FormField label={`Importance: ${5}`} helpText="Rate the importance of this memory (1-10)">
             <input
               type="range"
               min={1}
               max={10}
-              value={importance}
-              onChange={(e) => setImportance(Number(e.target.value))}
+              {...register('importance', { valueAsNumber: true })}
               className="w-full"
             />
-          </div>
+          </FormField>
 
           {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Tags (comma-separated)
-            </label>
+          <FormField label="Tags" helpText="Comma-separated tags">
             <input
               type="text"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
+              {...register('tagsInput')}
               className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
               placeholder="tag1, tag2, tag3"
             />
-          </div>
+          </FormField>
 
           {/* Conversation ID */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Linked Conversation ID
-            </label>
+          <FormField label="Conversation ID" helpText="Optional conversation ID to link">
             <input
               type="text"
-              value={conversationId}
-              onChange={(e) => setConversationId(e.target.value)}
+              {...register('conversationId')}
               className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
-              placeholder="conv-..."
+              placeholder="conv-123"
             />
-          </div>
+          </FormField>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 px-4 bg-background-surface text-text-secondary rounded-lg font-medium hover:bg-background-surface/80 transition-colors"
+              className="flex-1 px-4 py-2 bg-background-surface text-text-secondary rounded-lg font-medium hover:bg-background-surface/80 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 px-4 bg-accent-primary text-white rounded-lg font-medium hover:bg-accent-primary/90 transition-colors"
+              className="flex-1 px-4 py-2 bg-accent-primary text-white rounded-lg font-medium hover:bg-accent-primary/90 transition-colors"
             >
               {memory ? 'Save Changes' : 'Create Memory'}
             </button>

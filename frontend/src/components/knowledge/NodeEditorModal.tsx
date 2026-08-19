@@ -1,11 +1,22 @@
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import type { KnowledgeNode, NodeType } from '../../stores/knowledgeGraphStore';
 import { X } from 'lucide-react';
+import { FormField } from '../ui/FormField';
 
 interface NodeEditorModalProps {
   node?: KnowledgeNode | null;
   onSave: (node: KnowledgeNode) => void;
   onClose: () => void;
+}
+
+interface NodeFormData {
+  label: string;
+  type: NodeType;
+  description: string;
+  importance: number;
+  tagsInput: string;
+  sourceUrl: string;
+  conversationId: string;
 }
 
 const nodeTypes: { value: NodeType; label: string }[] = [
@@ -17,35 +28,41 @@ const nodeTypes: { value: NodeType; label: string }[] = [
 ];
 
 export function NodeEditorModal({ node, onSave, onClose }: NodeEditorModalProps) {
-  const [label, setLabel] = useState(node?.label || '');
-  const [type, setType] = useState<NodeType>(node?.type || 'concept');
-  const [description, setDescription] = useState(node?.description || '');
-  const [importance, setImportance] = useState(node?.metadata.importance || 5);
-  const [tagsInput, setTagsInput] = useState(node?.metadata.tags.join(', ') || '');
-  const [sourceUrl, setSourceUrl] = useState(node?.metadata.sourceUrl || '');
-  const [conversationId, setConversationId] = useState(node?.metadata.conversationId || '');
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<NodeFormData>({
+    defaultValues: {
+      label: node?.label || '',
+      type: node?.type || 'concept',
+      description: node?.description || '',
+      importance: node?.metadata.importance || 5,
+      tagsInput: node?.metadata.tags.join(', ') || '',
+      sourceUrl: node?.metadata.sourceUrl || '',
+      conversationId: node?.metadata.conversationId || '',
+    },
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const onSubmit = (data: NodeFormData) => {
     const now = new Date().toISOString();
-    const tags = tagsInput
+    const tags = data.tagsInput
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
 
     const newNode: KnowledgeNode = {
       id: node?.id || `node-${Date.now()}`,
-      type,
-      label,
-      description: description || undefined,
+      type: data.type,
+      label: data.label,
+      description: data.description || undefined,
       metadata: {
         createdAt: node?.metadata.createdAt || now,
         updatedAt: now,
-        importance,
+        importance: data.importance,
         tags,
-        sourceUrl: sourceUrl || undefined,
-        conversationId: conversationId || undefined,
+        sourceUrl: data.sourceUrl || undefined,
+        conversationId: data.conversationId || undefined,
       },
     };
 
@@ -67,30 +84,26 @@ export function NodeEditorModal({ node, onSave, onClose }: NodeEditorModalProps)
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-4 space-y-4">
           {/* Label */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Label *
-            </label>
+          <FormField label="Label" required error={errors.label}>
             <input
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              required
-              className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
+              {...register('label', {
+                required: 'Label is required',
+                minLength: { value: 2, message: 'Label must be at least 2 characters' },
+                maxLength: { value: 100, message: 'Label must be less than 100 characters' },
+              })}
+              className={`w-full px-3 py-2 bg-background-surface border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary ${
+                errors.label ? 'border-accent-error' : 'border-border'
+              }`}
               placeholder="Node label"
             />
-          </div>
+          </FormField>
 
           {/* Type */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Type
-            </label>
+          <FormField label="Type">
             <select
-              value={type}
-              onChange={(e) => setType(e.target.value as NodeType)}
+              {...register('type')}
               className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
             >
               {nodeTypes.map((nt) => (
@@ -99,91 +112,88 @@ export function NodeEditorModal({ node, onSave, onClose }: NodeEditorModalProps)
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
           {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Description
-            </label>
+          <FormField label="Description" helpText="Optional description of the node">
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              {...register('description', {
+                maxLength: { value: 500, message: 'Description must be less than 500 characters' },
+              })}
               rows={3}
               className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary resize-none"
               placeholder="Describe this node..."
             />
-          </div>
+          </FormField>
 
           {/* Importance */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Importance: {importance}/10
-            </label>
+          <FormField label={`Importance: ${5}`} helpText="Rate the importance of this node (1-10)">
             <input
               type="range"
               min={1}
               max={10}
-              value={importance}
-              onChange={(e) => setImportance(Number(e.target.value))}
+              {...register('importance', { valueAsNumber: true })}
               className="w-full"
             />
-          </div>
+          </FormField>
 
           {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Tags (comma-separated)
-            </label>
+          <FormField label="Tags" helpText="Comma-separated tags">
             <input
               type="text"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
+              {...register('tagsInput')}
               className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
               placeholder="tag1, tag2, tag3"
             />
-          </div>
+          </FormField>
 
           {/* Source URL */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Source URL
-            </label>
+          <FormField label="Source URL" helpText="Optional URL source">
             <input
               type="url"
-              value={sourceUrl}
-              onChange={(e) => setSourceUrl(e.target.value)}
-              className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
-              placeholder="https://..."
+              {...register('sourceUrl', {
+                validate: (value) => {
+                  if (!value) return true;
+                  try {
+                    new URL(value);
+                    return true;
+                  } catch {
+                    return 'Please enter a valid URL';
+                  }
+                },
+              })}
+              className={`w-full px-3 py-2 bg-background-surface border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary ${
+                errors.sourceUrl ? 'border-accent-error' : 'border-border'
+              }`}
+              placeholder="https://example.com"
             />
-          </div>
+            {errors.sourceUrl && (
+              <p className="mt-1 text-sm text-accent-error">{errors.sourceUrl.message}</p>
+            )}
+          </FormField>
 
           {/* Conversation ID */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Linked Conversation ID
-            </label>
+          <FormField label="Conversation ID" helpText="Optional conversation ID to link">
             <input
               type="text"
-              value={conversationId}
-              onChange={(e) => setConversationId(e.target.value)}
+              {...register('conversationId')}
               className="w-full px-3 py-2 bg-background-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary text-text-primary"
-              placeholder="conv-..."
+              placeholder="conv-123"
             />
-          </div>
+          </FormField>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 px-4 bg-background-surface text-text-secondary rounded-lg font-medium hover:bg-background-surface/80 transition-colors"
+              className="flex-1 px-4 py-2 bg-background-surface text-text-secondary rounded-lg font-medium hover:bg-background-surface/80 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 px-4 bg-accent-primary text-white rounded-lg font-medium hover:bg-accent-primary/90 transition-colors"
+              className="flex-1 px-4 py-2 bg-accent-primary text-white rounded-lg font-medium hover:bg-accent-primary/90 transition-colors"
             >
               {node ? 'Save Changes' : 'Create Node'}
             </button>
