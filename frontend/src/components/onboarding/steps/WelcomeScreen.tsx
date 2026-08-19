@@ -9,10 +9,10 @@ interface WelcomeScreenProps {
 export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-      {/* Logo/Icon */}
+      {/* Logo/Icon with gradient background */}
       <div className="mb-8">
-        <div className="inline-flex items-center justify-center w-24 h-24 bg-accent-primary/10 rounded-full mb-6">
-          <Sparkles className="w-12 h-12 text-accent-primary" />
+        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full mb-6 shadow-lg shadow-accent-primary/30">
+          <Sparkles className="w-12 h-12 text-white" />
         </div>
       </div>
 
@@ -29,9 +29,9 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
 
       {/* Features list */}
       <div className="grid gap-4 mb-12 text-left">
-        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg">
-          <div className="flex-shrink-0 w-8 h-8 bg-accent-primary/10 rounded-full flex items-center justify-center">
-            <span className="text-accent-primary font-bold">1</span>
+        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-background-surface/50 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+            <span className="text-white font-bold text-sm">1</span>
           </div>
           <div>
             <h3 className="font-semibold text-text-primary mb-1">Voice Interaction</h3>
@@ -41,9 +41,9 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
           </div>
         </div>
 
-        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg">
-          <div className="flex-shrink-0 w-8 h-8 bg-accent-primary/10 rounded-full flex items-center justify-center">
-            <span className="text-accent-primary font-bold">2</span>
+        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-background-surface/50 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+            <span className="text-white font-bold text-sm">2</span>
           </div>
           <div>
             <h3 className="font-semibold text-text-primary mb-1">Knowledge Management</h3>
@@ -53,9 +53,9 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
           </div>
         </div>
 
-        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg">
-          <div className="flex-shrink-0 w-8 h-8 bg-accent-primary/10 rounded-full flex items-center justify-center">
-            <span className="text-accent-primary font-bold">3</span>
+        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-background-surface/50 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+            <span className="text-white font-bold text-sm">3</span>
           </div>
           <div>
             <h3 className="font-semibold text-text-primary mb-1">Powerful Tools</h3>
@@ -68,7 +68,7 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
 
       {/* Actions */}
       <div className="flex flex-col gap-3">
-        <Button onClick={onNext} size="lg" className="w-full">
+        <Button onClick={onNext} size="lg" className="w-full shadow-lg shadow-accent-primary/30">
           Get Started
           <ArrowRight className="w-5 h-5 ml-2" />
         </Button>
