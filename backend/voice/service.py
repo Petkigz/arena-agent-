@@ -126,6 +126,14 @@ class VoiceService:
             command = self._parse_voice_command(transcript)
 
             if command:
+                # Provide feedback for recognized commands
+                if command == "help":
+                    await self._speak_feedback(
+                        "You can ask me to create tasks, search files, check system status, or just chat."
+                    )
+                elif command == "cancel":
+                    await self._speak_feedback("Okay, cancelled.")
+                
                 # Send as user message to cognitive runtime
                 if message_router:
                     await message_router.handle_message(None, {
@@ -187,14 +195,10 @@ class VoiceService:
 
         # Help command
         if any(word in text for word in ["help", "what can you do", "commands"]):
-            asyncio.create_task(self._speak_feedback(
-                "You can ask me to create tasks, search files, check system status, or just chat."
-            ))
             return "help"
 
         # Stop/cancel command
         if any(word in text for word in ["stop", "cancel", "nevermind", "forget it"]):
-            asyncio.create_task(self._speak_feedback("Okay, cancelled."))
             return "cancel"
 
         # Default: treat as regular query

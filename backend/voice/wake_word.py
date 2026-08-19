@@ -23,6 +23,12 @@ class WakeWordDetector:
         sensitivity: float = 0.5,
         sample_rate: int = 16000,
     ):
+        # Map wake word names to available models
+        available_models = ["hey_jarvis", "hey_mycroft", "alexa", "timer", "weather"]
+        if wake_word not in available_models:
+            # Default to hey_jarvis if requested wake word not available
+            wake_word = "hey_jarvis"
+        
         self.wake_word = wake_word
         self.sensitivity = sensitivity
         self.sample_rate = sample_rate

@@ -30,7 +30,7 @@ class TestVoicePipeline:
     def pipeline(self):
         """Create a voice pipeline instance."""
         return VoicePipeline(
-            wake_word_model="hey_jarvis",
+            wake_word="hey_jarvis",
             wake_word_sensitivity=0.5,
             vad_threshold=0.5,
         )

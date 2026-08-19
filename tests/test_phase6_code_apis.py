@@ -17,13 +17,15 @@ class TestCodeExecutionAPI:
     """Test /api/code/execute endpoint."""
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_python_code(self, mock_sandbox, client):
+    def test_execute_python_code(self, mock_sandbox, client, tmp_path):
         """Execute Python code successfully."""
-        # Mock sandbox
+        # Mock sandbox with cross-platform temp directory
+        sandbox_dir = tmp_path / "sandbox-123"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-123',
-            'sandbox_dir': '/tmp/sandbox-123',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': True,
@@ -50,12 +52,14 @@ class TestCodeExecutionAPI:
         assert 'timestamp' in data
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_javascript_code(self, mock_sandbox, client):
+    def test_execute_javascript_code(self, mock_sandbox, client, tmp_path):
         """Execute JavaScript code successfully."""
+        sandbox_dir = tmp_path / "sandbox-456"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-456',
-            'sandbox_dir': '/tmp/sandbox-456',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': True,
@@ -77,12 +81,14 @@ class TestCodeExecutionAPI:
         assert '42' in data['output']
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_code_with_error(self, mock_sandbox, client):
+    def test_execute_code_with_error(self, mock_sandbox, client, tmp_path):
         """Execute code that produces an error."""
+        sandbox_dir = tmp_path / "sandbox-789"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-789',
-            'sandbox_dir': '/tmp/sandbox-789',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': False,
@@ -106,12 +112,14 @@ class TestCodeExecutionAPI:
         assert 'NameError' in data['error']
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_code_with_custom_timeout(self, mock_sandbox, client):
+    def test_execute_code_with_custom_timeout(self, mock_sandbox, client, tmp_path):
         """Execute code with custom timeout."""
+        sandbox_dir = tmp_path / "sandbox-timeout"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-timeout',
-            'sandbox_dir': '/tmp/sandbox-timeout',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': True,
@@ -152,12 +160,14 @@ class TestCodeExecutionAPI:
         assert 'Failed to create sandbox' in response.json()['detail']
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_code_cleans_up_sandbox(self, mock_sandbox, client):
+    def test_execute_code_cleans_up_sandbox(self, mock_sandbox, client, tmp_path):
         """Verify sandbox is cleaned up after execution."""
+        sandbox_dir = tmp_path / "sandbox-cleanup"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-cleanup',
-            'sandbox_dir': '/tmp/sandbox-cleanup',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': True,
@@ -201,12 +211,14 @@ class TestCodeExecutionLanguages:
     """Test execution of different programming languages."""
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_bash(self, mock_sandbox, client):
+    def test_execute_bash(self, mock_sandbox, client, tmp_path):
         """Execute Bash script."""
+        sandbox_dir = tmp_path / "sandbox-bash"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-bash',
-            'sandbox_dir': '/tmp/sandbox-bash',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': True,
@@ -228,12 +240,14 @@ class TestCodeExecutionLanguages:
         assert 'Hello from Bash' in data['output']
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
-    def test_execute_typescript(self, mock_sandbox, client):
+    def test_execute_typescript(self, mock_sandbox, client, tmp_path):
         """Execute TypeScript code."""
+        sandbox_dir = tmp_path / "sandbox-ts"
+        sandbox_dir.mkdir()
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-ts',
-            'sandbox_dir': '/tmp/sandbox-ts',
+            'sandbox_dir': str(sandbox_dir),
         }
         mock_sandbox.execute_in_sandbox.return_value = {
             'success': True,

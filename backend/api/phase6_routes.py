@@ -93,7 +93,9 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
         b'\x1F\x8B': ('application/gzip', 'archive', '.gz'),
         b'7z\xBC\xAF\x27\x1C': ('application/x-7z-compressed', 'archive', '.7z'),
         
-        # Code/Text
+        # Code/Text - check for Python shebang first
+        b'#!/usr/bin/env python': ('text/x-python', 'code', '.py'),
+        b'#!/usr/bin/python': ('text/x-python', 'code', '.py'),
         b'#!/': ('text/x-shellscript', 'code', '.sh'),
         b'<?php': ('text/x-php', 'code', '.php'),
     }
@@ -136,10 +138,10 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
             '.ts': ('text/typescript', 'code'),
             '.html': ('text/html', 'code'),
             '.css': ('text/css', 'code'),
-            '.json': ('application/json', 'data'),
-            '.xml': ('application/xml', 'data'),
-            '.yaml': ('text/yaml', 'data'),
-            '.yml': ('text/yaml', 'data'),
+            '.json': ('application/json', 'document'),
+            '.xml': ('application/xml', 'document'),
+            '.yaml': ('text/yaml', 'document'),
+            '.yml': ('text/yaml', 'document'),
             '.mp4': ('video/mp4', 'video'),
             '.webm': ('video/webm', 'video'),
             '.mov': ('video/quicktime', 'video'),
