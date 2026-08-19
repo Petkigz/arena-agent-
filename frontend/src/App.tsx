@@ -32,7 +32,11 @@ const AccessibilitySettingsPage = lazy(() => import('./app/routes/AccessibilityS
 const ProjectDetailPage = lazy(() => import('./app/routes/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
 const NotFoundPage = lazy(() => import('./app/routes/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
-function App() {
+/**
+ * Inner app component that runs inside the Router context.
+ * All hooks that use useNavigate/useLocation must be here.
+ */
+function AppContent() {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const { shortcuts, showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts();
   const { completed: onboardingCompleted } = useOnboardingStore();
@@ -73,7 +77,6 @@ function App() {
   // Show tutorial on first visit after onboarding
   useEffect(() => {
     if (onboardingCompleted && !localStorage.getItem('arena-tutorial-completed')) {
-      // Delay showing tutorial to let the app render
       setTimeout(() => {
         setShowHelpCenter(true);
       }, 1000);
@@ -83,64 +86,70 @@ function App() {
   // Show onboarding flow if not completed
   if (!onboardingCompleted) {
     return (
-      <ErrorBoundary>
-        <BrowserRouter>
-          <OnboardingFlow onComplete={() => {
-            // Onboarding completed, app will re-render with main interface
-          }} />
-        </BrowserRouter>
-      </ErrorBoundary>
+      <>
+        <OnboardingFlow onComplete={() => {
+          // Onboarding completed, app will re-render with main interface
+        }} />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: 'var(--color-background-secondary)',
+              color: 'var(--color-text-primary)',
+              border: '1px solid var(--color-background-surface)',
+            },
+          }}
+        />
+      </>
     );
   }
 
   return (
-    <ErrorBoundary>
+    <>
       {/* Configure Framer Motion to respect reduced motion preferences */}
       <MotionConfig reducedMotion={prefersReducedMotion || !showAnimations ? 'always' : 'never'}>
       {/* Skip to content link for screen readers */}
       <SkipLink />
       
-      <BrowserRouter>
-        <Suspense fallback={<LoadingFallback message="Loading Arena..." />}>
-          <Routes>
-          {/* Mobile routes */}
-          {isMobile ? (
-            <Route element={<MobileLayout />}>
-              <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
-              <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
-              <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
-              <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
-              <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
-              <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
-              <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          ) : (
-            /* Desktop routes */
-            <Route element={<DesktopLayout />}>
-              <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
-              <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
-              <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
-              <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
-              <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
-              <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
-              <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
-              <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          )}
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+      <Suspense fallback={<LoadingFallback message="Loading Arena..." />}>
+        <Routes>
+        {/* Mobile routes */}
+        {isMobile ? (
+          <Route element={<MobileLayout />}>
+            <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
+            <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
+            <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
+            <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
+            <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
+            <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
+            <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        ) : (
+          /* Desktop routes */
+          <Route element={<DesktopLayout />}>
+            <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
+            <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
+            <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
+            <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
+            <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
+            <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
+            <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        )}
+        </Routes>
+      </Suspense>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -161,6 +170,21 @@ function App() {
         onClose={() => setShowHelpCenter(false)}
       />
       </MotionConfig>
+    </>
+  );
+}
+
+/**
+ * Root App component.
+ * BrowserRouter is at the top level so ALL hooks (including useNavigate)
+ * have access to the Router context regardless of which screen is shown.
+ */
+function App() {
+  return (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }
