@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { CodeEditor } from '../../components/ui/CodeEditor';
 import { ExecutionResults } from '../../components/ui/ExecutionResults';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { SkeletonList } from '../../components/ui/SkeletonCard';
 import { useCodeStore } from '../../stores/codeStore';
 
 export function CodeExecutionPage() {
