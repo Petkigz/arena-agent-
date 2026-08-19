@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Card } from '../../components/ui';
+import { Card, EmptyState } from '../../components/ui';
 import { useMemoryBrowserStore, type Memory, type MemoryCategory } from '../../stores';
 import { Database, Search, Calendar, Star, Trash2, Plus, Download, Upload, Clock, List, Edit, MessageCircle, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -236,30 +236,26 @@ export function MemoryBrowser() {
         ) : (
           <div className="space-y-3">
             {filteredMemories.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <Card className="max-w-md">
-                  <div className="text-center">
-                    <Database className="w-16 h-16 text-text-muted mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-text-primary mb-2">
-                      No Memories Found
-                    </h3>
-                    <p className="text-text-secondary mb-4">
-                      {searchQuery
-                        ? 'No memories match your search query.'
-                        : 'No memories in this category yet.'}
-                    </p>
-                    {!searchQuery && !selectedCategory && (
-                      <button
-                        onClick={() => { setEditingMemory(null); setShowEditor(true); }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent-primary text-white rounded-lg font-medium hover:bg-accent-primary/90 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Create First Memory
-                      </button>
-                    )}
-                  </div>
-                </Card>
-              </div>
+              <EmptyState
+                icon={<Database className="w-16 h-16" />}
+                title="No Memories Found"
+                description={
+                  searchQuery
+                    ? 'No memories match your search query.'
+                    : 'No memories in this category yet.'
+                }
+                action={
+                  !searchQuery && !selectedCategory ? (
+                    <button
+                      onClick={() => { setEditingMemory(null); setShowEditor(true); }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-accent-primary text-white rounded-lg font-medium hover:bg-accent-primary/90 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create First Memory
+                    </button>
+                  ) : undefined
+                }
+              />
             ) : (
               filteredMemories.map((memory) => (
                 <MemoryCard
