@@ -4,495 +4,595 @@ Tests for Phase 18: Metacognitive Monitoring
 
 import pytest
 import tempfile
-import time
+import os
 from app.cognition.metacognitive_monitor import (
     MetacognitiveMonitor,
     CognitiveProcess,
-    CognitiveProcessType,
-    CognitiveState,
-    ErrorType,
-    OptimizationStrategy,
-    CognitiveInsight,
-    CognitiveStrategy
+    ReasoningStrategy,
+    CognitiveBias,
+    CognitiveLoad,
+    CognitiveProcessRecord,
+    CognitiveProfile,
+    CognitiveOptimization
 )
 
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database file."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-    yield db_path
-    import os
-    if os.path.exists(db_path):
-        os.unlink(db_path)
+    """Create a temporary database for testing."""
+    fd, path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)
+    yield path
+    if os.path.exists(path):
+        os.unlink(path)
 
 
 @pytest.fixture
 def monitor(temp_db):
-    """Create a MetacognitiveMonitor instance."""
+    """Create a metacognitive monitor with temp database."""
     return MetacognitiveMonitor(db_path=temp_db)
 
 
 class TestMetacognitiveMonitor:
-    """Test suite for MetacognitiveMonitor."""
+    """Test suite for metacognitive monitoring functionality."""
     
-    def test_initialization(self, monitor):
-        """Test monitor initialization."""
-        assert monitor is not None
-        assert len(monitor.strategies) > 0  # Should have default strategies
+    def test_record_process(self, monitor):
+        """Test recording a cognitive process."""
+        record = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={"premises": ["All humans are mortal", "Socrates is human"]},
+            output_data={"conclusion": "Socrates is mortal"},
+            execution_time_ms=150.5,
+            confidence=0.95,
+            success=True
+        )
+        
+        assert record.record_id is not None
+        assert record.process_type == CognitiveProcess.REASONING
+        assert record.strategy == ReasoningStrategy.DEDUCTIVE
+        assert record.execution_time_ms == 150.5
+        assert record.confidence == 0.95
+        assert record.success is True
+        assert len(record.lessons_learned) > 0
     
-    def test_start_process(self, monitor):
-        """Test starting a cognitive process."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.REASONING,
-            description="Test reasoning process",
-            total_steps=5
+    def test_record_process_with_errors(self, monitor):
+        """Test recording a process with errors."""
+        record = monitor.record_process(
+            process_type=CognitiveProcess.PROBLEM_SOLVING,
+            strategy=ReasoningStrategy.HEURISTIC,
+            input_data={"problem": "Complex optimization"},
+            output_data={"solution": None},
+            execution_time_ms=2500.0,
+            confidence=0.3,
+            success=False,
+            errors=["Timeout", "Insufficient data"]
         )
         
-        assert process_id is not None
-        assert process_id in monitor.processes
-        
-        process = monitor.get_process(process_id)
-        assert process is not None
-        assert process.process_type == CognitiveProcessType.REASONING
-        assert process.description == "Test reasoning process"
-        assert process.total_steps == 5
-        assert process.state == CognitiveState.RUNNING
-        assert process.steps_completed == 0
+        assert record.success is False
+        assert len(record.errors) == 2
+        assert "Timeout" in record.errors
+        assert record.cognitive_load in [CognitiveLoad.HIGH, CognitiveLoad.OVERLOAD]
     
-    def test_update_process(self, monitor):
-        """Test updating a cognitive process."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.PLANNING,
-            description="Test planning",
-            total_steps=10
+    def test_detect_overconfidence_bias(self, monitor):
+        """Test detection of overconfidence bias."""
+        record = monitor.record_process(
+            process_type=CognitiveProcess.DECISION_MAKING,
+            strategy=ReasoningStrategy.HEURISTIC,
+            input_data={"options": ["A", "B", "C"]},
+            output_data={"decision": "A"},
+            execution_time_ms=100.0,
+            confidence=0.98,  # Very high confidence
+            success=True
         )
         
-        # Update process
-        monitor.update_process(
-            process_id=process_id,
-            steps_completed=5,
-            confidence_level=0.7,
-            resource_usage={"cpu": 0.5, "memory": 0.3},
-            intermediate_result="Step 5 result"
-        )
-        
-        process = monitor.get_process(process_id)
-        assert process.steps_completed == 5
-        assert process.confidence_level == 0.7
-        assert process.resource_usage["cpu"] == 0.5
-        assert len(process.intermediate_results) == 1
-        assert process.intermediate_results[0] == "Step 5 result"
+        assert CognitiveBias.OVERCONFIDENCE in record.biases_detected
     
-    def test_complete_process(self, monitor):
-        """Test completing a cognitive process."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.PROBLEM_SOLVING,
-            description="Test problem solving"
+    def test_detect_confirmation_bias(self, monitor):
+        """Test detection of confirmation bias."""
+        # All evidence supports the same conclusion
+        evidence = [
+            {"supports": True, "data": "Evidence 1"},
+            {"supports": True, "data": "Evidence 2"},
+            {"supports": True, "data": "Evidence 3"},
+            {"supports": True, "data": "Evidence 4"}
+        ]
+        
+        record = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.INDUCTIVE,
+            input_data={"evidence": evidence},
+            output_data={"conclusion": "Hypothesis confirmed"},
+            execution_time_ms=200.0,
+            confidence=0.85,
+            success=True
         )
         
-        monitor.update_process(process_id, steps_completed=3, confidence_level=0.8)
-        monitor.complete_process(process_id, state=CognitiveState.COMPLETED)
-        
-        process = monitor.get_process(process_id)
-        assert process.state == CognitiveState.COMPLETED
-        assert process.end_time is not None
-        assert process.duration > 0
+        assert CognitiveBias.CONFIRMATION_BIAS in record.biases_detected
     
-    def test_process_duration(self, monitor):
-        """Test process duration calculation."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.REASONING,
-            description="Test duration"
+    def test_detect_anchoring_bias(self, monitor):
+        """Test detection of anchoring bias."""
+        record = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.HEURISTIC,
+            input_data={"initial_estimate": 100},
+            output_data={"final_estimate": 105},  # Very close to initial
+            execution_time_ms=150.0,
+            confidence=0.75,
+            success=True
         )
         
-        time.sleep(0.1)  # Small delay
-        
-        process = monitor.get_process(process_id)
-        assert process.duration >= 0.1
-        
-        monitor.complete_process(process_id)
-        
-        process = monitor.get_process(process_id)
-        assert process.duration >= 0.1
+        assert CognitiveBias.ANCHORING_BIAS in record.biases_detected
     
-    def test_process_progress(self, monitor):
-        """Test process progress calculation."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.PLANNING,
-            description="Test progress",
-            total_steps=10
+    def test_assess_cognitive_load(self, monitor):
+        """Test cognitive load assessment."""
+        # Low load
+        record1 = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=500.0,
+            confidence=0.9,
+            success=True
         )
+        assert record1.cognitive_load == CognitiveLoad.LOW
         
-        process = monitor.get_process(process_id)
-        assert process.progress == 0.0
+        # Moderate load
+        record2 = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=1500.0,
+            confidence=0.9,
+            success=True
+        )
+        assert record2.cognitive_load == CognitiveLoad.MODERATE
         
-        monitor.update_process(process_id, steps_completed=5)
-        process = monitor.get_process(process_id)
-        assert process.progress == 0.5
+        # High load
+        record3 = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=2500.0,
+            confidence=0.9,
+            success=True
+        )
+        assert record3.cognitive_load == CognitiveLoad.HIGH
         
-        monitor.update_process(process_id, steps_completed=10)
-        process = monitor.get_process(process_id)
-        assert process.progress == 1.0
+        # Overload
+        record4 = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=6000.0,
+            confidence=0.9,
+            success=True
+        )
+        assert record4.cognitive_load == CognitiveLoad.OVERLOAD
     
-    def test_process_efficiency_score(self, monitor):
-        """Test process efficiency score calculation."""
-        # High efficiency process
-        process_id1 = monitor.start_process(
-            process_type=CognitiveProcessType.REASONING,
-            description="High efficiency"
+    def test_generate_lessons(self, monitor):
+        """Test lesson generation."""
+        # Successful process
+        record1 = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=100.0,
+            confidence=0.9,
+            success=True
         )
-        monitor.update_process(process_id1, confidence_level=0.9, steps_completed=5)
-        monitor.complete_process(process_id1)
+        assert any("worked well" in lesson for lesson in record1.lessons_learned)
         
-        process1 = monitor.get_process(process_id1)
-        assert process1.efficiency_score > 0.7
-        
-        # Low efficiency process
-        process_id2 = monitor.start_process(
-            process_type=CognitiveProcessType.REASONING,
-            description="Low efficiency"
+        # Failed process
+        record2 = monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=100.0,
+            confidence=0.9,
+            success=False,
+            errors=["Test error"]
         )
-        monitor.update_process(process_id2, confidence_level=0.3, steps_completed=1)
-        monitor.detect_error(process_id2, ErrorType.LOGICAL_FALLACY, "Test error")
-        monitor.complete_process(process_id2)
+        assert any("failed" in lesson for lesson in record2.lessons_learned)
         
-        process2 = monitor.get_process(process_id2)
-        assert process2.efficiency_score < process1.efficiency_score
+        # Process with biases
+        record3 = monitor.record_process(
+            process_type=CognitiveProcess.DECISION_MAKING,
+            strategy=ReasoningStrategy.HEURISTIC,
+            input_data={},
+            output_data={},
+            execution_time_ms=100.0,
+            confidence=0.98,
+            success=True
+        )
+        assert any("bias" in lesson.lower() for lesson in record3.lessons_learned)
     
-    def test_detect_error(self, monitor):
-        """Test error detection."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.REASONING,
-            description="Test error detection"
-        )
+    def test_update_profile(self, monitor):
+        """Test cognitive profile updates."""
+        # Record multiple processes
+        for i in range(5):
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.DEDUCTIVE if i < 3 else ReasoningStrategy.INDUCTIVE,
+                input_data={},
+                output_data={},
+                execution_time_ms=100.0 + i * 50,
+                confidence=0.8 + i * 0.02,
+                success=True if i < 4 else False
+            )
         
-        monitor.detect_error(
-            process_id=process_id,
-            error_type=ErrorType.BIAS,
-            description="Confirmation bias detected"
-        )
+        # Get profile
+        profile = monitor.get_profile(CognitiveProcess.REASONING)
         
-        process = monitor.get_process(process_id)
-        assert ErrorType.BIAS in process.errors_detected
-        
-        # Check that an insight was generated
-        assert len(monitor.insights) > 0
-        insight = monitor.insights[-1]
-        assert insight.insight_type == "error"
-        assert "bias" in insight.description.lower()
-        assert insight.actionable
-        assert len(insight.recommended_actions) > 0
+        assert profile is not None
+        assert profile.process_type == CognitiveProcess.REASONING
+        assert profile.total_executions == 5
+        assert profile.average_execution_time_ms > 0
+        assert profile.average_confidence > 0
+        assert profile.success_rate == 0.8  # 4 out of 5 succeeded
+        assert "deductive" in profile.strategy_preferences
+        assert "inductive" in profile.strategy_preferences
     
-    def test_suggest_optimization(self, monitor):
-        """Test optimization suggestions."""
-        process_id = monitor.start_process(
-            process_type=CognitiveProcessType.PROBLEM_SOLVING,
-            description="Test optimization"
+    def test_get_profile(self, monitor):
+        """Test getting cognitive profile."""
+        # Initially no profile
+        profile = monitor.get_profile(CognitiveProcess.REASONING)
+        assert profile is None
+        
+        # Record a process
+        monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=100.0,
+            confidence=0.9,
+            success=True
         )
         
-        monitor.suggest_optimization(
-            process_id=process_id,
-            strategy=OptimizationStrategy.DECOMPOSE,
-            reason="Problem is too complex"
-        )
-        
-        process = monitor.get_process(process_id)
-        assert OptimizationStrategy.DECOMPOSE in process.optimization_suggestions
-        
-        # Check that an insight was generated
-        assert len(monitor.insights) > 0
-        insight = monitor.insights[-1]
-        assert insight.insight_type == "optimization"
-        assert "decompose" in insight.description.lower()
+        # Now profile exists
+        profile = monitor.get_profile(CognitiveProcess.REASONING)
+        assert profile is not None
+        assert profile.total_executions == 1
     
-    def test_get_active_processes(self, monitor):
-        """Test getting active processes."""
-        # Start multiple processes
-        id1 = monitor.start_process(CognitiveProcessType.REASONING, "Process 1")
-        id2 = monitor.start_process(CognitiveProcessType.PLANNING, "Process 2")
-        id3 = monitor.start_process(CognitiveProcessType.LEARNING, "Process 3")
+    def test_get_all_profiles(self, monitor):
+        """Test getting all cognitive profiles."""
+        # Record processes for different types
+        monitor.record_process(
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={},
+            output_data={},
+            execution_time_ms=100.0,
+            confidence=0.9,
+            success=True
+        )
         
-        # Complete one
-        monitor.complete_process(id2)
+        monitor.record_process(
+            process_type=CognitiveProcess.PLANNING,
+            strategy=ReasoningStrategy.HEURISTIC,
+            input_data={},
+            output_data={},
+            execution_time_ms=200.0,
+            confidence=0.8,
+            success=True
+        )
         
-        # Get active processes
-        active = monitor.get_active_processes()
-        assert len(active) == 2
+        profiles = monitor.get_all_profiles()
         
-        active_ids = [p.process_id for p in active]
-        assert id1 in active_ids
-        assert id3 in active_ids
-        assert id2 not in active_ids
+        assert len(profiles) == 2
+        process_types = {p.process_type for p in profiles}
+        assert CognitiveProcess.REASONING in process_types
+        assert CognitiveProcess.PLANNING in process_types
     
     def test_get_process_history(self, monitor):
         """Test getting process history."""
-        # Create several processes
+        # Record multiple processes
         for i in range(5):
-            process_id = monitor.start_process(
-                CognitiveProcessType.REASONING,
-                f"Process {i}"
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.DEDUCTIVE,
+                input_data={"iteration": i},
+                output_data={},
+                execution_time_ms=100.0,
+                confidence=0.9,
+                success=True
             )
-            monitor.complete_process(process_id)
         
         # Get history
-        history = monitor.get_process_history(limit=3)
-        assert len(history) == 3
+        history = monitor.get_process_history(CognitiveProcess.REASONING, limit=10)
         
-        # Check that they're in reverse chronological order
-        assert history[0].start_time >= history[1].start_time
-        assert history[1].start_time >= history[2].start_time
-        
-        # Filter by type
-        monitor.start_process(CognitiveProcessType.PLANNING, "Planning process")
-        history = monitor.get_process_history(
-            process_type=CognitiveProcessType.REASONING,
-            limit=10
-        )
-        assert all(p.process_type == CognitiveProcessType.REASONING for p in history)
+        assert len(history) == 5
+        # Should be in reverse chronological order
+        assert history[0].input_data["iteration"] == 4
+        assert history[4].input_data["iteration"] == 0
     
-    def test_get_insights(self, monitor):
-        """Test getting insights."""
-        # Create a process with errors
-        process_id = monitor.start_process(
-            CognitiveProcessType.REASONING,
-            "Test process"
-        )
-        monitor.detect_error(process_id, ErrorType.BIAS, "Test bias")
-        monitor.detect_error(process_id, ErrorType.INCONSISTENCY, "Test inconsistency")
-        monitor.complete_process(process_id)
-        
-        # Get insights
-        insights = monitor.get_insights(limit=10)
-        assert len(insights) >= 2  # At least the error insights
-        
-        # Filter by type
-        error_insights = monitor.get_insights(insight_type="error", limit=10)
-        assert all(i.insight_type == "error" for i in error_insights)
-        
-        # Filter by process type
-        reasoning_insights = monitor.get_insights(
-            process_type=CognitiveProcessType.REASONING,
-            limit=10
-        )
-        assert all(i.process_type == CognitiveProcessType.REASONING for i in reasoning_insights)
-    
-    def test_recommend_strategy(self, monitor):
-        """Test strategy recommendation."""
-        # Recommend strategy for problem solving
-        strategy = monitor.recommend_strategy(
-            process_type=CognitiveProcessType.PROBLEM_SOLVING,
-            context={}
-        )
-        
-        assert strategy is not None
-        assert CognitiveProcessType.PROBLEM_SOLVING in strategy.applicable_to
-        
-        # Recommend strategy for creativity
-        strategy = monitor.recommend_strategy(
-            process_type=CognitiveProcessType.CREATIVITY,
-            context={}
-        )
-        
-        assert strategy is not None
-        assert CognitiveProcessType.CREATIVITY in strategy.applicable_to
-    
-    def test_record_strategy_use(self, monitor):
-        """Test recording strategy use."""
-        # Get a strategy
-        strategy = list(monitor.strategies.values())[0]
-        strategy_id = strategy.strategy_id
-        
-        initial_times_used = strategy.times_used
-        initial_success_rate = strategy.success_rate
-        
-        # Record successful use
-        monitor.record_strategy_use(
-            strategy_id=strategy_id,
-            success=True,
-            efficiency=0.8
-        )
-        
-        strategy = monitor.strategies[strategy_id]
-        assert strategy.times_used == initial_times_used + 1
-        assert strategy.last_used is not None
-        assert strategy.success_rate > initial_success_rate  # Should increase
-        
-        # Record unsuccessful use
-        monitor.record_strategy_use(
-            strategy_id=strategy_id,
-            success=False,
-            efficiency=0.3
-        )
-        
-        strategy = monitor.strategies[strategy_id]
-        assert strategy.times_used == initial_times_used + 2
-    
-    def test_get_cognitive_profile(self, monitor):
-        """Test getting cognitive profile."""
-        # Create some processes
-        for i in range(5):
-            process_id = monitor.start_process(
-                CognitiveProcessType.REASONING,
-                f"Process {i}"
+    def test_analyze_patterns(self, monitor):
+        """Test pattern analysis."""
+        # Record multiple processes with different strategies
+        for i in range(10):
+            strategy = ReasoningStrategy.DEDUCTIVE if i < 6 else ReasoningStrategy.INDUCTIVE
+            success = i < 8  # 8 out of 10 succeed
+            
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=strategy,
+                input_data={},
+                output_data={},
+                execution_time_ms=100.0,
+                confidence=0.9,
+                success=success
             )
-            monitor.update_process(process_id, confidence_level=0.7)
-            if i % 2 == 0:
-                monitor.detect_error(process_id, ErrorType.BIAS, "Test error")
-            monitor.complete_process(process_id)
         
-        # Get profile
-        profile = monitor.get_cognitive_profile()
+        # Analyze patterns
+        patterns = monitor.analyze_patterns(CognitiveProcess.REASONING, time_window_hours=24)
         
-        assert profile["total_processes"] == 5
-        assert 0.0 <= profile["average_efficiency"] <= 1.0
-        assert 0.0 <= profile["error_rate"] <= 1.0
-        assert 0.0 <= profile["average_confidence"] <= 1.0
-        assert isinstance(profile["most_common_errors"], list)
-        assert isinstance(profile["best_strategies"], list)
+        assert patterns["process_type"] == "reasoning"
+        assert patterns["total_executions"] == 10
+        assert patterns["most_common_strategy"] == "deductive"
+        assert "deductive" in patterns["strategy_usage"]
+        assert "inductive" in patterns["strategy_usage"]
+        assert patterns["strategy_usage"]["deductive"] == 6
+        assert patterns["strategy_usage"]["inductive"] == 4
     
-    def test_process_serialization(self, monitor):
-        """Test process serialization."""
-        process_id = monitor.start_process(
-            CognitiveProcessType.REASONING,
-            "Test serialization"
-        )
-        monitor.update_process(process_id, confidence_level=0.8, steps_completed=3)
-        monitor.detect_error(process_id, ErrorType.BIAS, "Test error")
+    def test_generate_optimizations(self, monitor):
+        """Test optimization generation."""
+        # Create a profile with low success rate
+        for i in range(15):
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.DEDUCTIVE,
+                input_data={},
+                output_data={},
+                execution_time_ms=100.0,
+                confidence=0.9,
+                success=i < 7  # Only 7 out of 15 succeed (< 60%)
+            )
         
-        process = monitor.get_process(process_id)
-        process_dict = process.to_dict()
+        # Generate optimizations
+        optimizations = monitor.generate_optimizations()
         
-        assert "process_id" in process_dict
-        assert "process_type" in process_dict
-        assert process_dict["process_type"] == "reasoning"
-        assert "confidence_level" in process_dict
-        assert process_dict["confidence_level"] == 0.8
-        assert "errors_detected" in process_dict
-        assert "bias" in process_dict["errors_detected"]
+        assert len(optimizations) > 0
+        assert any(opt.recommendation.startswith("Improve reasoning success rate") for opt in optimizations)
     
-    def test_insight_serialization(self):
-        """Test insight serialization."""
-        insight = CognitiveInsight(
-            process_type=CognitiveProcessType.REASONING,
-            insight_type="error",
-            description="Test insight",
-            evidence=["Evidence 1", "Evidence 2"],
-            confidence=0.9,
-            actionable=True,
-            recommended_actions=["Action 1", "Action 2"]
-        )
+    def test_generate_optimizations_for_biases(self, monitor):
+        """Test optimization generation for biases."""
+        # Create processes with multiple biases for the same process type
+        # Overconfidence bias (high confidence in decision making)
+        for i in range(8):
+            monitor.record_process(
+                process_type=CognitiveProcess.DECISION_MAKING,
+                strategy=ReasoningStrategy.HEURISTIC,
+                input_data={},
+                output_data={},
+                execution_time_ms=100.0,
+                confidence=0.98,  # Triggers overconfidence
+                success=True
+            )
         
-        insight_dict = insight.to_dict()
+        # Anchoring bias (final estimate close to initial)
+        for i in range(8):
+            monitor.record_process(
+                process_type=CognitiveProcess.DECISION_MAKING,
+                strategy=ReasoningStrategy.HEURISTIC,
+                input_data={"initial_estimate": 100},
+                output_data={"final_estimate": 105},  # Triggers anchoring
+                execution_time_ms=150.0,
+                confidence=0.75,
+                success=True
+            )
         
-        assert "insight_id" in insight_dict
-        assert "process_type" in insight_dict
-        assert insight_dict["process_type"] == "reasoning"
-        assert "insight_type" in insight_dict
-        assert insight_dict["insight_type"] == "error"
-        assert "evidence" in insight_dict
-        assert len(insight_dict["evidence"]) == 2
-        assert "actionable" in insight_dict
-        assert insight_dict["actionable"] is True
+        # Generate optimizations
+        optimizations = monitor.generate_optimizations()
+        
+        # Should have at least one optimization for biases
+        assert len(optimizations) > 0
+        # At least one should mention bias
+        assert any("bias" in opt.recommendation.lower() for opt in optimizations)
     
-    def test_strategy_serialization(self):
-        """Test strategy serialization."""
-        strategy = CognitiveStrategy(
-            name="Test Strategy",
-            description="Test description",
-            applicable_to=[CognitiveProcessType.REASONING, CognitiveProcessType.PLANNING],
-            success_rate=0.8,
-            average_efficiency=0.75,
-            times_used=10
-        )
+    def test_generate_optimizations_for_performance(self, monitor):
+        """Test optimization generation for slow performance."""
+        # Create slow processes
+        for i in range(15):
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.DEDUCTIVE,
+                input_data={},
+                output_data={},
+                execution_time_ms=4000.0,  # Slow (> 3s)
+                confidence=0.9,
+                success=True
+            )
         
-        strategy_dict = strategy.to_dict()
+        # Generate optimizations
+        optimizations = monitor.generate_optimizations()
         
-        assert "strategy_id" in strategy_dict
-        assert "name" in strategy_dict
-        assert strategy_dict["name"] == "Test Strategy"
-        assert "applicable_to" in strategy_dict
-        assert "reasoning" in strategy_dict["applicable_to"]
-        assert "success_rate" in strategy_dict
-        assert strategy_dict["success_rate"] == 0.8
+        assert len(optimizations) > 0
+        assert any("performance" in opt.recommendation.lower() or "optimize" in opt.recommendation.lower() for opt in optimizations)
     
-    def test_database_persistence(self, temp_db):
-        """Test that processes are saved to database."""
-        # Create monitor and add process
-        monitor1 = MetacognitiveMonitor(db_path=temp_db)
-        process_id = monitor1.start_process(
-            CognitiveProcessType.REASONING,
-            "Test persistence"
-        )
-        monitor1.update_process(process_id, confidence_level=0.8)
-        monitor1.complete_process(process_id)
+    def test_get_optimizations(self, monitor):
+        """Test getting optimizations."""
+        # First, create processes that will trigger optimizations
+        # Create processes with low success rate
+        for i in range(15):
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.DEDUCTIVE,
+                input_data={},
+                output_data={},
+                execution_time_ms=100.0,
+                confidence=0.9,
+                success=i < 7  # Only 7 out of 15 succeed (< 60%)
+            )
         
-        # Create new monitor with same database
-        monitor2 = MetacognitiveMonitor(db_path=temp_db)
+        # Generate optimizations
+        monitor.generate_optimizations()
         
-        # Should be able to retrieve the process
-        history = monitor2.get_process_history(limit=10)
-        assert len(history) > 0
+        # Get all optimizations
+        optimizations = monitor.get_optimizations()
+        assert len(optimizations) > 0
         
-        process_ids = [p.process_id for p in history]
-        assert process_id in process_ids
+        # Get pending optimizations
+        pending = monitor.get_optimizations(implemented=False)
+        assert len(pending) == len(optimizations)
+        
+        # Get implemented optimizations (should be empty)
+        implemented = monitor.get_optimizations(implemented=True)
+        assert len(implemented) == 0
     
-    def test_multiple_error_types(self, monitor):
-        """Test detecting multiple error types."""
-        process_id = monitor.start_process(
-            CognitiveProcessType.REASONING,
-            "Test multiple errors"
-        )
+    def test_mark_optimization_implemented(self, monitor):
+        """Test marking optimization as implemented."""
+        # Generate optimizations
+        optimizations = monitor.generate_optimizations()
         
-        monitor.detect_error(process_id, ErrorType.BIAS, "Bias error")
-        monitor.detect_error(process_id, ErrorType.LOGICAL_FALLACY, "Logic error")
-        monitor.detect_error(process_id, ErrorType.INCONSISTENCY, "Inconsistency")
-        
-        process = monitor.get_process(process_id)
-        assert len(process.errors_detected) == 3
-        assert ErrorType.BIAS in process.errors_detected
-        assert ErrorType.LOGICAL_FALLACY in process.errors_detected
-        assert ErrorType.INCONSISTENCY in process.errors_detected
+        if len(optimizations) > 0:
+            opt_id = optimizations[0].optimization_id
+            
+            # Mark as implemented
+            updated = monitor.mark_optimization_implemented(opt_id)
+            
+            assert updated is not None
+            assert updated.implemented is True
+            assert updated.implemented_at is not None
+            
+            # Verify it's now in implemented list
+            implemented = monitor.get_optimizations(implemented=True)
+            assert len(implemented) == 1
+            assert implemented[0].optimization_id == opt_id
     
-    def test_low_confidence_insight(self, monitor):
-        """Test that low confidence generates insight."""
-        process_id = monitor.start_process(
-            CognitiveProcessType.REASONING,
-            "Test low confidence"
-        )
-        
-        monitor.update_process(process_id, confidence_level=0.3)
-        monitor.complete_process(process_id)
-        
-        # Should generate low confidence insight
-        insights = monitor.get_insights(insight_type="low_confidence", limit=10)
-        assert len(insights) > 0
-        
-        insight = insights[0]
-        assert "confidence" in insight.description.lower()
-        assert insight.actionable
-    
-    def test_inefficiency_insight(self, monitor):
-        """Test that inefficiency generates insight."""
-        process_id = monitor.start_process(
-            CognitiveProcessType.REASONING,
-            "Test inefficiency"
-        )
-        
-        # Make it inefficient - add many errors and low confidence
-        monitor.update_process(process_id, confidence_level=0.2)
+    def test_get_cognitive_summary(self, monitor):
+        """Test getting cognitive summary."""
+        # Record some processes
         for i in range(5):
-            monitor.detect_error(process_id, ErrorType.BIAS, f"Error {i}")
-        monitor.complete_process(process_id)
+            monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.DEDUCTIVE,
+                input_data={},
+                output_data={},
+                execution_time_ms=100.0,
+                confidence=0.9,
+                success=True
+            )
         
-        process = monitor.get_process(process_id)
-        # With 5 errors (0.5 penalty) and low confidence (0.16 penalty), score should be low
-        assert process.efficiency_score < 0.5
+        for i in range(3):
+            monitor.record_process(
+                process_type=CognitiveProcess.PLANNING,
+                strategy=ReasoningStrategy.HEURISTIC,
+                input_data={},
+                output_data={},
+                execution_time_ms=200.0,
+                confidence=0.8,
+                success=True
+            )
         
-        # Should generate inefficiency insight
-        insights = monitor.get_insights(insight_type="inefficiency", limit=10)
-        assert len(insights) > 0
+        # Get summary
+        summary = monitor.get_cognitive_summary()
+        
+        assert summary["total_processes"] == 8
+        assert summary["process_types"] == 2
+        assert summary["average_success_rate"] == 1.0
+        assert "reasoning" in summary["profiles"]
+        assert "planning" in summary["profiles"]
+        assert summary["profiles"]["reasoning"]["executions"] == 5
+        assert summary["profiles"]["planning"]["executions"] == 3
+    
+    def test_process_record_serialization(self):
+        """Test process record serialization."""
+        record = CognitiveProcessRecord(
+            record_id="test123",
+            process_type=CognitiveProcess.REASONING,
+            strategy=ReasoningStrategy.DEDUCTIVE,
+            input_data={"test": "data"},
+            output_data={"result": "success"},
+            execution_time_ms=150.5,
+            confidence=0.95,
+            cognitive_load=CognitiveLoad.MODERATE,
+            biases_detected=[CognitiveBias.OVERCONFIDENCE],
+            errors=["Error 1"],
+            success=True,
+            lessons_learned=["Lesson 1", "Lesson 2"]
+        )
+        
+        # Serialize
+        record_dict = record.to_dict()
+        
+        # Deserialize
+        restored = CognitiveProcessRecord.from_dict(record_dict)
+        
+        assert restored.record_id == record.record_id
+        assert restored.process_type == record.process_type
+        assert restored.strategy == record.strategy
+        assert restored.execution_time_ms == record.execution_time_ms
+        assert restored.confidence == record.confidence
+        assert restored.cognitive_load == record.cognitive_load
+        assert restored.biases_detected == record.biases_detected
+        assert restored.errors == record.errors
+        assert restored.success == record.success
+        assert restored.lessons_learned == record.lessons_learned
+    
+    def test_profile_serialization(self):
+        """Test profile serialization."""
+        profile = CognitiveProfile(
+            profile_id="profile123",
+            process_type=CognitiveProcess.REASONING,
+            strategy_preferences={"deductive": 0.8, "inductive": 0.6},
+            average_execution_time_ms=150.5,
+            average_confidence=0.85,
+            success_rate=0.9,
+            common_biases=[CognitiveBias.OVERCONFIDENCE, CognitiveBias.CONFIRMATION_BIAS],
+            strengths=["Fast execution", "High confidence"],
+            weaknesses=["Occasional bias"],
+            total_executions=100
+        )
+        
+        # Serialize
+        profile_dict = profile.to_dict()
+        
+        # Deserialize
+        restored = CognitiveProfile.from_dict(profile_dict)
+        
+        assert restored.profile_id == profile.profile_id
+        assert restored.process_type == profile.process_type
+        assert restored.strategy_preferences == profile.strategy_preferences
+        assert restored.average_execution_time_ms == profile.average_execution_time_ms
+        assert restored.average_confidence == profile.average_confidence
+        assert restored.success_rate == profile.success_rate
+        assert restored.common_biases == profile.common_biases
+        assert restored.strengths == profile.strengths
+        assert restored.weaknesses == profile.weaknesses
+        assert restored.total_executions == profile.total_executions
+    
+    def test_optimization_serialization(self):
+        """Test optimization serialization."""
+        optimization = CognitiveOptimization(
+            optimization_id="opt123",
+            process_type=CognitiveProcess.REASONING,
+            recommendation="Improve success rate",
+            rationale="Current rate is below threshold",
+            expected_improvement=0.2,
+            priority=1,
+            implemented=False
+        )
+        
+        # Serialize
+        opt_dict = optimization.to_dict()
+        
+        # Deserialize
+        restored = CognitiveOptimization.from_dict(opt_dict)
+        
+        assert restored.optimization_id == optimization.optimization_id
+        assert restored.process_type == optimization.process_type
+        assert restored.recommendation == optimization.recommendation
+        assert restored.rationale == optimization.rationale
+        assert restored.expected_improvement == optimization.expected_improvement
+        assert restored.priority == optimization.priority
+        assert restored.implemented == optimization.implemented
 
 
 if __name__ == "__main__":
