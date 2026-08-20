@@ -63,43 +63,33 @@ const defaultConfidenceThresholds: ConfidenceThresholds = {
   entityMinConfidence: 0.65,
 };
 
-// Default model configurations
+// Default model configurations.
+// These must match app/config.py (FAST_MODEL / MAIN_MODEL) — the models actually
+// loaded in LM Studio on the i9-14900K + RX 580 machine (CPU inference).
 const defaultLLMModels: ModelConfig[] = [
   {
-    id: 'qwen2.5-7b',
-    name: 'Qwen 2.5 7B',
-    description: 'Fast and efficient for most tasks',
-    size: '7B parameters',
+    id: 'qwen2.5-3b-instruct',
+    name: 'Qwen 2.5 3B (Fast)',
+    description: 'Fast model for quick responses and simple tasks',
+    size: '3B parameters',
     performance: {
-      speed: 8,
-      quality: 7,
-      memoryUsage: '8GB VRAM',
+      speed: 9,
+      quality: 6,
+      memoryUsage: '~3GB RAM (CPU)',
     },
     enabled: true,
   },
   {
-    id: 'qwen2.5-14b',
-    name: 'Qwen 2.5 14B',
-    description: 'Balanced performance and quality',
-    size: '14B parameters',
+    id: 'qwen2.5-9b-instruct',
+    name: 'Qwen 2.5 9B (Reasoning)',
+    description: 'Reasoning model for complex analysis and planning',
+    size: '9B parameters',
     performance: {
-      speed: 6,
+      speed: 5,
       quality: 8,
-      memoryUsage: '12GB VRAM',
+      memoryUsage: '~8GB RAM (CPU)',
     },
     enabled: true,
-  },
-  {
-    id: 'qwen2.5-32b',
-    name: 'Qwen 2.5 32B',
-    description: 'Highest quality for complex reasoning',
-    size: '32B parameters',
-    performance: {
-      speed: 4,
-      quality: 10,
-      memoryUsage: '20GB VRAM',
-    },
-    enabled: false,
   },
 ];
 
@@ -197,7 +187,7 @@ export const useModelSettingsStore = create<ModelSettingsState>()(
   persist(
     (set, get) => ({
       llmModels: defaultLLMModels,
-      selectedLLM: 'qwen2.5-7b',
+      selectedLLM: 'qwen2.5-3b-instruct',
 
       sttModels: defaultSTTModels,
       selectedSTT: 'whisper-base',

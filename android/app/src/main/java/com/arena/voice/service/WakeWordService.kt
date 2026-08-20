@@ -3,6 +3,7 @@ package com.arena.voice.service
 import android.app.Notification
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -149,11 +150,18 @@ class WakeWordService : Service() {
         // Notify WebSocket client
         webSocketClient.onWakeWordDetected()
 
-        // Start voice recording service
+        // Start voice recording service.
+        // VoiceRecordingService calls startForeground(), so on Android 8+ it MUST
+        // be started with startForegroundService() (plain startService throws
+        // IllegalStateException when the service promotes itself to foreground).
         val recordingIntent = Intent(this, VoiceRecordingService::class.java).apply {
             action = VoiceRecordingService.ACTION_START
         }
-        startService(recordingIntent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(recordingIntent)
+        } else {
+            startService(recordingIntent)
+        }
     }
 
     private fun createNotification(): Notification {

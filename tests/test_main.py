@@ -127,14 +127,14 @@ def test_models_endpoints():
     assert "configured_fast_model" in data
     assert "configured_main_model" in data
 
-    # POST config models
+    # POST config models (use the models actually run on the target machine)
     post_resp = client.post("/models/config", json={
         "fast_model": "qwen2.5-3b-instruct",
-        "main_model": "qwen2.5-coder-7b-instruct"
+        "main_model": "qwen2.5-9b-instruct"
     })
     assert post_resp.status_code == 200
     assert post_resp.json()["configured_fast_model"] == "qwen2.5-3b-instruct"
-    assert post_resp.json()["configured_main_model"] == "qwen2.5-coder-7b-instruct"
+    assert post_resp.json()["configured_main_model"] == "qwen2.5-9b-instruct"
 
 def test_daily_briefing_api():
     resp = client.post("/tools/daily-briefing", json={"generate_audio": False})

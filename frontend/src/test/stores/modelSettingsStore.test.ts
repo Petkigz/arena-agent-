@@ -4,7 +4,7 @@ import { useModelSettingsStore } from '../../stores/modelSettingsStore';
 describe('modelSettingsStore', () => {
   beforeEach(() => {
     useModelSettingsStore.setState({
-      selectedLLM: 'qwen2.5-7b',
+      selectedLLM: 'qwen2.5-3b-instruct',
       selectedSTT: 'whisper-base',
       selectedTTS: 'piper-en-us-lessac-medium',
       confidenceThresholds: {
@@ -18,14 +18,14 @@ describe('modelSettingsStore', () => {
   describe('model selection', () => {
     it('has default model selections', () => {
       const state = useModelSettingsStore.getState();
-      expect(state.selectedLLM).toBe('qwen2.5-7b');
+      expect(state.selectedLLM).toBe('qwen2.5-3b-instruct');
       expect(state.selectedSTT).toBe('whisper-base');
       expect(state.selectedTTS).toBe('piper-en-us-lessac-medium');
     });
 
     it('changes selected LLM', () => {
-      useModelSettingsStore.getState().setSelectedLLM('qwen2.5-14b');
-      expect(useModelSettingsStore.getState().selectedLLM).toBe('qwen2.5-14b');
+      useModelSettingsStore.getState().setSelectedLLM('qwen2.5-9b-instruct');
+      expect(useModelSettingsStore.getState().selectedLLM).toBe('qwen2.5-9b-instruct');
     });
 
     it('changes selected STT', () => {
@@ -41,12 +41,12 @@ describe('modelSettingsStore', () => {
 
   describe('model toggling', () => {
     it('toggles LLM model enabled state', () => {
-      const before = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-7b');
+      const before = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-3b-instruct');
       expect(before?.enabled).toBe(true);
 
-      useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-7b');
+      useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-3b-instruct');
 
-      const after = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-7b');
+      const after = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-3b-instruct');
       expect(after?.enabled).toBe(false);
     });
 
@@ -105,32 +105,32 @@ describe('modelSettingsStore', () => {
   describe('model validation', () => {
     it('validates existing enabled model', () => {
       // Ensure model is enabled first
-      const model = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-7b');
+      const model = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-3b-instruct');
       if (!model?.enabled) {
-        useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-7b');
+        useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-3b-instruct');
       }
 
-      const result = useModelSettingsStore.getState().validateModelConfig('llm', 'qwen2.5-7b');
+      const result = useModelSettingsStore.getState().validateModelConfig('llm', 'qwen2.5-3b-instruct');
       expect(result.valid).toBe(true);
-      expect(result.modelName).toBe('Qwen 2.5 7B');
+      expect(result.modelName).toBe('Qwen 2.5 3B (Fast)');
       expect(result.checks.length).toBeGreaterThan(0);
     });
 
     it('validates disabled model shows disabled check', () => {
       // Ensure model is enabled first, then disable it
-      const model = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-14b');
+      const model = useModelSettingsStore.getState().llmModels.find((m) => m.id === 'qwen2.5-9b-instruct');
       if (!model?.enabled) {
-        useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-14b');
+        useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-9b-instruct');
       }
       // Now disable it
-      useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-14b');
+      useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-9b-instruct');
 
-      const result = useModelSettingsStore.getState().validateModelConfig('llm', 'qwen2.5-14b');
+      const result = useModelSettingsStore.getState().validateModelConfig('llm', 'qwen2.5-9b-instruct');
       const enabledCheck = result.checks.find((c) => c.name === 'Model enabled');
       expect(enabledCheck?.passed).toBe(false);
 
       // Re-enable for other tests
-      useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-14b');
+      useModelSettingsStore.getState().toggleModel('llm', 'qwen2.5-9b-instruct');
     });
 
     it('returns invalid for non-existent model', () => {

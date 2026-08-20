@@ -16,4 +16,4 @@ Provide:
 4. **SEO Hashtags & Keywords**: Top 8 relevant tags.
 "
 
-Target LLM brain (qwen2.5-coder-7b-instruct) is not loaded. Please ensure LM Studio or Ollama is running on http://localhost:1234/v1.
+Target LLM brain (qwen2.5-9b-instruct) is not loaded. Please ensure LM Studio or Ollama is running on http://localhost:1234/v1.

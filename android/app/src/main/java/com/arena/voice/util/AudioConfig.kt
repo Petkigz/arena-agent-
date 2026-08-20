@@ -15,9 +15,10 @@ object AudioConfig {
     // Wake word configuration
     const val WAKE_WORD = "hey_arena"
     const val WAKE_WORD_SENSITIVITY = 0.5f
-    
-    // Network configuration
-    const val DEFAULT_SERVER_URL = "ws://192.168.1.100:8000/ws/voice"
+
+    // Network configuration: the server URL lives in
+    // VoiceWebSocketClient.DEFAULT_SERVER_URL (ws://10.0.2.2:8000/ws for the
+    // emulator; override with your PC's LAN IP on a physical device).
     
     // Audio playback
     const val PLAYBACK_SAMPLE_RATE = 16000
