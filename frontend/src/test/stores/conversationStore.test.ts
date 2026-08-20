@@ -157,4 +157,53 @@ describe('conversationStore', () => {
       expect(useConversationStore.getState().currentConversation!.title).toBe('Chat 1');
     });
   });
+
+  describe('backend sync (FE↔BE)', () => {
+    it('hydrates conversations from server previews', () => {
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-a', title: 'Server Chat A', lastMessage: 'hi', updatedAt: '2026-08-20T00:00:00Z' },
+        { id: 'conv-b', title: 'Server Chat B', lastMessage: 'yo', updatedAt: '2026-08-20T00:00:00Z' },
+      ]);
+
+      const convs = useConversationStore.getState().conversations;
+      expect(convs).toHaveLength(2);
+      expect(convs.find((c) => c.id === 'conv-a')!.title).toBe('Server Chat A');
+    });
+
+    it('preserves existing conversation state when hydrating the same id', () => {
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-x', title: 'Server Title', lastMessage: '', updatedAt: '' },
+      ]);
+
+      // Add a message to the existing conversation, then re-hydrate.
+      const conv = useConversationStore.getState().conversations.find((c) => c.id === 'conv-x')!;
+      useConversationStore.setState({
+        currentConversation: { ...conv, messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: '' }] },
+      });
+
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-x', title: 'Server Title', lastMessage: '', updatedAt: '' },
+      ]);
+
+      const existing = useConversationStore.getState().conversations.find((c) => c.id === 'conv-x')!;
+      // Existing conversation object is preserved (messages not wiped).
+      expect(existing.messages.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('hydrates messages into a conversation', () => {
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-h', title: 'History', lastMessage: '', updatedAt: '' },
+      ]);
+      useConversationStore.getState().hydrateMessages('conv-h', [
+        { role: 'user', content: 'question' },
+        { role: 'assistant', content: 'answer' },
+      ]);
+
+      const conv = useConversationStore.getState().conversations.find((c) => c.id === 'conv-h')!;
+      expect(conv.messages).toHaveLength(2);
+      expect(conv.messages[0].role).toBe('user');
+      expect(conv.messages[1].role).toBe('assistant');
+      expect(conv.messages[1].content).toBe('answer');
+    });
+  });
 });

@@ -17,11 +17,14 @@ A **local-first, full-capability private secretary / coworker** with a closed-lo
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Tests passing | **1076** | `python -m pytest tests/ -q` → `1076 passed` |
+| Backend tests passing | **1077** | `python -m pytest tests/ -q` → `1077 passed` |
+| Frontend tests passing | **162** | `cd frontend && npm test -- --run` → `162 passed` |
+| Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~55,800 lines | `find app backend -name '*.py' -exec cat {} + | wc -l` |
 | Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |
 | Chat path uses cognitive runtime | ✅ | `tests/test_message_router_cognitive.py` (regression guard) |
 | Chat history persists across restart | ✅ | `tests/test_conversation_persistence.py` (SQLite-backed) |
+| Conversation list syncs FE↔BE | ✅ | `db.get_conversation_previews()` + `useConversationSync` hook + store tests |
 | Hardware self-awareness | ✅ | `tests/test_hardware_self_awareness.py` |
 | Thread-safe singleton | ✅ | `tests/test_phase14_22_wiring.py::test_get_instance_is_thread_safe` |
 | Memory consolidation | ✅ | `tests/test_phase4_autonomy.py` |
@@ -61,6 +64,10 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 
 - **tri_state_verification** — no fabricated success; UNKNOWN stays UNKNOWN
 - **verification_honesty** — a no-evidence environmental condition resolves to UNKNOWN (behavioral probe)
+- **belief_evidence_discipline** — probe evidence → belief; self-reported claim → hypothesis only
+- **memory_retrieval** — semantic memory add + search round-trip
+- **causal_reasoning** — causal edge → root_cause_analysis recovers it
+- **goal_verification_behavioral** — a delivered reply resolves SATISFIED
 - **approval_gate** — Level 3 actions require owner approval
 - **module_wiring** — all 15 modules instantiated (no orphans)
 - **hardware_self_awareness** — self-model of CPU/RAM/GPU present
@@ -80,10 +87,11 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ Conversation history persists to SQLite (`conversations` table + router wiring).
 - ✅ Autonomous cycle scheduled hourly via `ProactiveScheduler` in the backend lifespan.
 - ✅ End-to-end chat → runtime test.
-- ✅ Behavioral scorecard check (`verification_honesty`).
+- ✅ Behavioral scorecard checks (verification honesty, belief discipline, memory retrieval, causal reasoning, goal verification).
+- ✅ FE↔BE conversation sync: backend lists SQLite-persisted conversations; frontend hydrates via `useConversationSync` + store actions (`hydrateFromServer`, `hydrateMessages`) and requests history on open.
 
 Still open (future):
 
-1. Persist conversation state across *multiple browser sessions* end-to-end (the frontend stores conversations in Zustand/localStorage; backend persistence is now in place but the FE↔BE sync path is not fully wired).
+1. Complete the Android Gradle wrapper (`gradlew` script + `gradle-wrapper.jar` binary — needs the Gradle distribution).
 2. Continue extending the scorecard with behavioral (not just presence) checks across more domains.
-3. Complete the Android Gradle setup (no wrapper — can't build as-is).
+3. Full end-to-end browser test of the conversation round-trip (backend list → frontend hydrate → history on open) against a live server.

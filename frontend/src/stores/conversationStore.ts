@@ -22,6 +22,10 @@ interface ConversationState {
   removeConversation: (id: string) => void;
   exportConversation: (id: string) => Conversation | null;
   exportConversationAsMarkdown: (id: string) => string | null;
+  hydrateFromServer: (
+    previews: Array<{ id: string; title: string; lastMessage: string; updatedAt: string }>
+  ) => void;
+  hydrateMessages: (conversationId: string, messages: Array<{ role: string; content: string }>) => void;
 }
 
 export const useConversationStore = create<ConversationState>()(
@@ -34,7 +38,14 @@ export const useConversationStore = create<ConversationState>()(
 
       setConversations: (conversations) => set({ conversations }),
 
-      setCurrentConversation: (conversation) => set({ currentConversation: conversation }),
+      setCurrentConversation: (conversation) => {
+        set({ currentConversation: conversation });
+        // Hydrate history from the backend when opening a conversation that has
+        // not yet loaded its messages (persisted conversations start empty).
+        if (conversation && conversation.messages.length === 0) {
+          webSocketService.requestConversationHistory(conversation.id);
+        }
+      },
 
       addMessage: (message) =>
         set((state) => {
@@ -143,6 +154,46 @@ export const useConversationStore = create<ConversationState>()(
         const state = get();
         return state.conversations.find((c) => c.id === id) || null;
       },
+
+      hydrateFromServer: (previews) =>
+        set((state) => {
+          const existingById = new Map(state.conversations.map((c) => [c.id, c]));
+          const conversations: Conversation[] = previews.map((p) => {
+            const existing = existingById.get(p.id);
+            return existing
+              ? existing
+              : {
+                  id: p.id,
+                  title: p.title || 'New Conversation',
+                  messages: [],
+                  createdAt: p.updatedAt || new Date().toISOString(),
+                  updatedAt: p.updatedAt || new Date().toISOString(),
+                };
+          });
+          return { conversations };
+        }),
+
+      hydrateMessages: (conversationId, messages) =>
+        set((state) => {
+          const mapped: Message[] = messages.map((m, i) => ({
+            id: `hist-${conversationId}-${i}`,
+            conversationId,
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.content,
+            timestamp: new Date().toISOString(),
+            status: 'complete' as const,
+          }));
+          const updateConv = (c: Conversation): Conversation =>
+            c.id === conversationId
+              ? { ...c, messages: mapped, updatedAt: new Date().toISOString() }
+              : c;
+          return {
+            conversations: state.conversations.map(updateConv),
+            currentConversation: state.currentConversation
+              ? updateConv(state.currentConversation)
+              : state.currentConversation,
+          };
+        }),
 
       exportConversationAsMarkdown: (id) => {
         const state = get();

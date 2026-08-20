@@ -336,11 +336,31 @@ class MessageRouter:
         })
 
     async def _handle_list_conversations(self, websocket, message: Dict[str, Any]):
-        """Handle listing active conversations."""
-        conversations = ws_manager.get_active_conversations()
+        """Handle listing conversations (SQLite-persisted, merged with active connections)."""
+        # Load persisted conversations from SQLite so history survives restarts.
+        try:
+            previews = db.get_conversation_previews(limit=50)
+        except Exception as e:
+            app_logger.warning(f"Could not load persisted conversations: {e}")
+            previews = []
+
+        # Merge in any active WebSocket conversations not yet persisted.
+        try:
+            active_ids = set(ws_manager.get_active_conversations())
+            known_ids = {p["id"] for p in previews}
+            for cid in active_ids - known_ids:
+                previews.append({
+                    "id": cid,
+                    "title": "New Conversation",
+                    "lastMessage": "",
+                    "updatedAt": "",
+                })
+        except Exception as e:
+            app_logger.warning(f"Could not merge active conversations: {e}")
+
         await ws_manager.send_to_connection(websocket, {
             "type": "conversation_list",
-            "conversations": conversations
+            "conversations": previews
         })
 
     async def _handle_delete_message(self, websocket, message: Dict[str, Any]):

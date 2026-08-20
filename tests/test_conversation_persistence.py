@@ -82,3 +82,18 @@ def test_end_to_end_chat_flows_through_runtime(tmp_path):
         reply = asyncio.run(router._call_cognitive_runtime("what time is it?"))
 
     assert reply == "the runtime answered"
+
+
+def test_conversation_previews_and_ids(clean_db):
+    clean_db.add_conversation_message("conv_a", "user", "hello there")
+    clean_db.add_conversation_message("conv_a", "assistant", "hi")
+    clean_db.add_conversation_message("conv_b", "user", "second chat")
+
+    ids = clean_db.get_conversation_ids()
+    assert "conv_a" in ids and "conv_b" in ids
+
+    previews = clean_db.get_conversation_previews()
+    by_id = {p["id"]: p for p in previews}
+    assert by_id["conv_a"]["title"].startswith("hello there")
+    assert by_id["conv_a"]["lastMessage"] == "hi"
+    assert by_id["conv_b"]["title"].startswith("second chat")

@@ -12,6 +12,7 @@ import { useMediaQuery } from './hooks/useMediaQuery';
 import { useThemeApplication } from './utils/themeApplication';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAccessibility, useSkipToContent } from './hooks/useAccessibility';
+import { useConversationSync } from './hooks/useConversationSync';
 import { useOnboardingStore } from './stores/onboardingStore';
 import { useAppearanceSettingsStore } from './stores/appearanceSettingsStore';
 import { webSocketService } from './services/websocket';
@@ -52,6 +53,9 @@ function AppContent() {
   
   // Enable skip to content link
   useSkipToContent();
+
+  // Sync conversations with the backend (SQLite-persisted history)
+  useConversationSync();
 
   // Connect WebSocket on app startup (URL resolved from env or hostname)
   useEffect(() => {

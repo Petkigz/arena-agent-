@@ -251,4 +251,46 @@ class DatabaseManager:
             # Return the most recent `limit` messages, preserving order.
             return [{"role": r["role"], "content": r["content"]} for r in rows[-limit:]]
 
+    def get_conversation_ids(self) -> List[str]:
+        """Distinct conversation IDs, most recently active first."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT conversation_id, MAX(id) AS last_id FROM conversations "
+                "GROUP BY conversation_id ORDER BY last_id DESC"
+            )
+            return [row["conversation_id"] for row in cursor.fetchall()]
+
+    def get_conversation_previews(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """One preview row per conversation: id, title (first user message), lastMessage, updatedAt."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT conversation_id FROM conversations GROUP BY conversation_id ORDER BY MAX(id) DESC LIMIT ?",
+                (limit,),
+            )
+            conv_ids = [row["conversation_id"] for row in cursor.fetchall()]
+
+        previews = []
+        for cid in conv_ids:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT role, content, created_at FROM conversations "
+                    "WHERE conversation_id = ? ORDER BY id ASC",
+                    (cid,),
+                )
+                rows = cursor.fetchall()
+            if not rows:
+                continue
+            first_user = next((r["content"] for r in rows if r["role"] == "user"), None)
+            last = rows[-1]
+            previews.append({
+                "id": cid,
+                "title": (first_user[:40] + ("…" if len(first_user) > 40 else "")) if first_user else "New Conversation",
+                "lastMessage": last["content"][:80],
+                "updatedAt": last["created_at"],
+            })
+        return previews
+
 db = DatabaseManager()
