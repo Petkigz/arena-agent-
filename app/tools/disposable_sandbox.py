@@ -19,6 +19,10 @@ class DisposableSandbox:
 
     SUPPORTED_GUEST_OS = ["auto", "linux", "windows", "macos", "android"]
 
+    # SECURITY: hard bounds so a malformed/large command can't be abused.
+    MAX_COMMAND_LENGTH = 10_000
+    MAX_TIMEOUT_SECONDS = 300
+
     @staticmethod
     def create_sandbox(
         sandbox_name: Optional[str] = None,
@@ -75,6 +79,13 @@ class DisposableSandbox:
         sandbox_dir = settings.DATA_DIR / "sandboxes" / sandbox_id
         if not sandbox_dir.exists():
             return {"success": False, "error": f"Sandbox '{sandbox_id}' not found."}
+
+        # SECURITY: validate command input before any execution.
+        if not isinstance(command, str) or not command.strip():
+            return {"success": False, "error": "Command must be a non-empty string."}
+        if len(command) > DisposableSandbox.MAX_COMMAND_LENGTH:
+            return {"success": False, "error": f"Command exceeds maximum length ({DisposableSandbox.MAX_COMMAND_LENGTH} chars)."}
+        timeout_seconds = max(1, min(int(timeout_seconds), DisposableSandbox.MAX_TIMEOUT_SECONDS))
 
         host_os = platform.system().lower()
         guest_os = target_guest_os.lower() if target_guest_os.lower() in DisposableSandbox.SUPPORTED_GUEST_OS else "auto"
@@ -158,7 +169,11 @@ class DisposableSandbox:
         except Exception as e:
             app_logger.warning(f"Primary execution wrapper failed: {e}. Attempting native sandbox fallback...")
 
-        # Fallback to direct native isolated subprocess in sandbox directory
+        # Fallback to direct native isolated subprocess in sandbox directory.
+        # NOTE: shell=True is intentional here — this is the arbitrary-code-execution
+        # sandbox. It is confined to sandbox_dir, bounded by timeout_seconds, and the
+        # public entry points (code-exec endpoint) are rate-limited, size-capped, and
+        # API-key gated when ARENA_API_KEY is set.
         try:
             native_cmd = command if host_os != "windows" else f"cmd.exe /c {command}"
             fallback_res = subprocess.run(

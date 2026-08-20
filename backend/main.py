@@ -108,14 +108,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register API routes (with optional API key auth)
-app.include_router(phase6_router)
-app.include_router(screenshot_router)
-app.include_router(wakeword_router)
-app.include_router(language_router)
-app.include_router(device_router)
-app.include_router(theme_router)
-app.include_router(speaker_router)
+# Register API routes.
+#
+# SECURITY: every router is gated behind verify_api_key. When ARENA_API_KEY is
+# unset the dependency is a no-op (local-only use stays frictionless); when it is
+# set, ALL API routes — including code execution and file upload — require the
+# X-API-Key header. Previously the dependency existed but was never applied.
+_auth_deps = [Depends(verify_api_key)]
+app.include_router(phase6_router, dependencies=_auth_deps)
+app.include_router(screenshot_router, dependencies=_auth_deps)
+app.include_router(wakeword_router, dependencies=_auth_deps)
+app.include_router(language_router, dependencies=_auth_deps)
+app.include_router(device_router, dependencies=_auth_deps)
+app.include_router(theme_router, dependencies=_auth_deps)
+app.include_router(speaker_router, dependencies=_auth_deps)
 
 
 # ============================================================================

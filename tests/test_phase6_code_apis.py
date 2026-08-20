@@ -25,9 +25,9 @@ class TestCodeExecutionAPI:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-123',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': True,
             'stdout': 'Hello, World!\n',
             'stderr': '',
@@ -59,9 +59,9 @@ class TestCodeExecutionAPI:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-456',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': True,
             'stdout': '42\n',
             'stderr': '',
@@ -88,9 +88,9 @@ class TestCodeExecutionAPI:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-789',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': False,
             'stdout': '',
             'stderr': 'NameError: name "undefined_var" is not defined',
@@ -119,9 +119,9 @@ class TestCodeExecutionAPI:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-timeout',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': True,
             'stdout': 'Done\n',
             'stderr': '',
@@ -138,8 +138,8 @@ class TestCodeExecutionAPI:
         assert response.status_code == 200
         
         # Verify timeout was passed correctly
-        call_args = mock_sandbox.execute_in_sandbox.call_args
-        assert call_args[1]['timeout'] == 10
+        call_args = mock_sandbox.run_in_sandbox.call_args
+        assert call_args[1]['timeout_seconds'] == 10
     
     @patch('backend.api.phase6_routes.DisposableSandbox')
     def test_execute_code_sandbox_creation_fails(self, mock_sandbox, client):
@@ -167,9 +167,9 @@ class TestCodeExecutionAPI:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-cleanup',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': True,
             'stdout': 'Done\n',
             'stderr': '',
@@ -218,9 +218,9 @@ class TestCodeExecutionLanguages:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-bash',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': True,
             'stdout': 'Hello from Bash\n',
             'stderr': '',
@@ -247,9 +247,9 @@ class TestCodeExecutionLanguages:
         mock_sandbox.create_sandbox.return_value = {
             'success': True,
             'sandbox_id': 'sandbox-ts',
-            'sandbox_dir': str(sandbox_dir),
+            'sandbox_path': str(sandbox_dir),
         }
-        mock_sandbox.execute_in_sandbox.return_value = {
+        mock_sandbox.run_in_sandbox.return_value = {
             'success': True,
             'stdout': 'Hello TypeScript\n',
             'stderr': '',

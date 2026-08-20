@@ -446,7 +446,7 @@ async def delete_file(file_id: str):
 class CodeExecutionRequest(BaseModel):
     code: str
     language: str
-    timeout: int = 30  # seconds
+    timeout: int = 30  # seconds (hard-capped at MAX_CODE_TIMEOUT_SECONDS)
 
 
 class CodeExecutionResponse(BaseModel):
@@ -457,53 +457,78 @@ class CodeExecutionResponse(BaseModel):
     timestamp: str
 
 
+# SECURITY: hard caps for the code-execution feature.
+MAX_CODE_TIMEOUT_SECONDS = 60        # never let a request monopolize the sandbox
+MAX_CODE_LENGTH = 100_000            # bound the submitted source size
+
+
 @router.post("/code/execute", response_model=CodeExecutionResponse)
-async def execute_code(request: CodeExecutionRequest):
-    """Execute code in a disposable sandbox."""
-    app_logger.info(f"Executing {request.language} code (timeout: {request.timeout}s)")
-    
+async def execute_code(request: CodeExecutionRequest, req: Request):
+    """Execute code in a disposable sandbox (rate-limited, size/time-capped)."""
+    # Rate limit (same store as file uploads, per-IP).
+    client_ip = req.client.host if req.client else "unknown"
+    if not check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please slow down.")
+
+    # Strict language allowlist — reject unknown languages instead of falling back.
+    language = (request.language or "").strip().lower()
+    if language not in EXEC_LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"Unsupported language: {request.language}")
+
+    # Bound input size.
+    if len(request.code or "") > MAX_CODE_LENGTH:
+        raise HTTPException(status_code=400, detail="Code exceeds maximum allowed length.")
+
+    # Cap the timeout (client may only shorten, never extend).
+    timeout = max(1, min(request.timeout, MAX_CODE_TIMEOUT_SECONDS))
+
+    app_logger.info(f"Executing {language} code (timeout: {timeout}s)")
+
     try:
         # Create sandbox
         sandbox_result = DisposableSandbox.create_sandbox(
             sandbox_name=f"code_exec_{uuid.uuid4().hex[:8]}",
             target_guest_os="auto"
         )
-        
+
         if not sandbox_result.get("success"):
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to create sandbox: {sandbox_result.get('error')}"
             )
-        
+
         sandbox_id = sandbox_result["sandbox_id"]
-        sandbox_dir = Path(sandbox_result["sandbox_dir"])
-        
+        sandbox_dir = Path(sandbox_result["sandbox_path"])
+
         # Write code to file
-        code_file = sandbox_dir / f"main.{_get_extension(request.language)}"
+        code_file = sandbox_dir / f"main.{_get_extension(language)}"
         code_file.write_text(request.code)
-        
+
         # Execute code
         start_time = datetime.utcnow()
         exec_result = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: DisposableSandbox.execute_in_sandbox(
+            lambda: DisposableSandbox.run_in_sandbox(
                 sandbox_id=sandbox_id,
-                command=_get_command(request.language, code_file.name),
-                timeout=request.timeout
+                command=_get_command(language, code_file.name),
+                timeout_seconds=timeout
             )
         )
         end_time = datetime.utcnow()
-        
+
         execution_time = (end_time - start_time).total_seconds() * 1000
-        
-        # Cleanup sandbox
-        DisposableSandbox.destroy_sandbox(sandbox_id)
-        
+
+        # Cleanup sandbox (always, even on failure)
+        try:
+            DisposableSandbox.destroy_sandbox(sandbox_id)
+        except Exception as e:
+            app_logger.warning(f"Sandbox cleanup failed: {e}")
+
         # Parse result
         success = exec_result.get("success", False)
         output = exec_result.get("stdout", "")
         error = exec_result.get("stderr", "") if not success else None
-        
+
         return CodeExecutionResponse(
             success=success,
             output=output,
@@ -511,10 +536,16 @@ async def execute_code(request: CodeExecutionRequest):
             executionTime=execution_time,
             timestamp=end_time.isoformat()
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         app_logger.error(f"Code execution failed: {e}")
         raise HTTPException(status_code=500, detail=f"Code execution failed: {str(e)}")
+
+
+# SECURITY: explicit language allowlist for code execution.
+EXEC_LANGUAGES = {"python", "javascript", "typescript", "bash", "json", "yaml", "markdown", "text"}
 
 
 def _get_extension(language: str) -> str:
