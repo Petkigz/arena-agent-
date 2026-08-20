@@ -66,6 +66,19 @@ async def lifespan(app: FastAPI):
         message_router_module.message_router.set_voice_service(voice_service)
         app_logger.info("Voice service wired into message router")
 
+    # Schedule the autonomous cognitive cycle (observe → generate goals → execute
+    # → reflect → consolidate memory → proactive maintenance) on an hourly timer.
+    try:
+        from app.scheduler import ProactiveScheduler
+        ProactiveScheduler.schedule_recurring(
+            "autonomous_cycle",
+            runtime.run_autonomous_cycle,
+            interval_seconds=3600,
+        )
+        app_logger.info("Autonomous cognitive cycle scheduled (every 3600s).")
+    except Exception as e:
+        app_logger.warning(f"Could not schedule autonomous cycle: {e}")
+
     app_logger.info(f"Arena backend started (CORS: {CORS_ORIGINS}, Auth: {'enabled' if API_KEY_ENABLED else 'disabled'})")
 
     yield

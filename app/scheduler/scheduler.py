@@ -26,6 +26,30 @@ class ProactiveScheduler:
         return jobs
 
     @classmethod
+    def schedule_recurring(cls, job_id: str, func, interval_seconds: int) -> bool:
+        """
+        Register (or replace) a recurring background job.
+
+        Returns True if the job was scheduled successfully.
+        """
+        sched = cls.get_scheduler()
+        try:
+            sched.add_job(
+                func,
+                "interval",
+                seconds=interval_seconds,
+                id=job_id,
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
+            audit_logger.info(f"Scheduled recurring job '{job_id}' every {interval_seconds}s")
+            return True
+        except Exception as e:
+            app_logger.warning(f"Failed to schedule recurring job '{job_id}': {e}")
+            return False
+
+    @classmethod
     def remove_job(cls, job_id: str) -> bool:
         sched = cls.get_scheduler()
         try:

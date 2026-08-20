@@ -529,6 +529,26 @@ class CognitiveRuntime:
         _add("tri_state_verification", hasattr(GoalVerifier, "verify_goal_achievement"),
              "GoalVerifier exposes verify_goal_achievement (SATISFIED/FAILED/UNKNOWN)")
 
+        # 1b. Verification honesty (behavioral): with no evidence, the agent must
+        # report UNKNOWN for an environmental condition, not fabricate success.
+        try:
+            from app.cognition.goal_verifier import ConditionStatus
+            from types import SimpleNamespace
+            goal_rep = SimpleNamespace(primary_intent_type="launch_app", target_domain="desktop_os", entities=["chrome"])
+            status = GoalVerifier.evaluate_condition_status_against_world_model(
+                succ_cond="app_process_running=chrome",
+                goal_rep=goal_rep,
+                observations_map={},
+                verified_entity_states={},
+                executed_actions=[],
+                reply_clean="",
+                failed_conditions=[],
+            )
+            _add("verification_honesty", status == ConditionStatus.UNKNOWN,
+                 f"no-evidence environmental condition → {status.value} (not fabricated SATISFIED)")
+        except Exception as e:
+            _add("verification_honesty", False, f"verification-honesty probe failed: {e}")
+
         # 2. Owner-authority approval gate (Level 3 requires approval).
         try:
             allowed, _, level = __import__("app.policy", fromlist=["PolicyEvaluator"]).PolicyEvaluator.evaluate_action(

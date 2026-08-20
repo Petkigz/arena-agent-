@@ -64,7 +64,19 @@ class DatabaseManager:
                     level INTEGER DEFAULT 0
                 )
             """)
-            
+
+            # 4. Create Conversations Table (persistent chat history)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_conv ON conversations(conversation_id)")
+
             conn.commit()
             app_logger.info("SQLite database initialized successfully.")
 
@@ -214,5 +226,29 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,))
             return [dict(row) for row in cursor.fetchall()]
+
+    # Conversations (persistent chat history)
+    def add_conversation_message(self, conversation_id: str, role: str, content: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.utcnow().isoformat()
+            cursor.execute("""
+                INSERT INTO conversations (conversation_id, role, content, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (conversation_id, role, content, now))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_conversation_messages(self, conversation_id: str, limit: int = 50) -> List[Dict[str, str]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT role, content FROM conversations "
+                "WHERE conversation_id = ? ORDER BY id ASC",
+                (conversation_id,),
+            )
+            rows = cursor.fetchall()
+            # Return the most recent `limit` messages, preserving order.
+            return [{"role": r["role"], "content": r["content"]} for r in rows[-limit:]]
 
 db = DatabaseManager()

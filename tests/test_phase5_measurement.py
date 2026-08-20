@@ -35,6 +35,8 @@ def test_measure_capabilities_reports_full_wiring(tmp_path):
     assert by_name["hardware_self_awareness"]["status"] == "verified"
     assert by_name["autonomy_loop"]["status"] == "verified"
     assert by_name["approval_gate"]["status"] == "verified"
+    assert by_name["tri_state_verification"]["status"] == "verified"
+    assert by_name["verification_honesty"]["status"] == "verified"
 
 
 def test_measure_capabilities_detects_missing_module(tmp_path):

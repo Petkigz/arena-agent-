@@ -6,6 +6,7 @@ import uuid
 from typing import Dict, Any, Optional, List
 from app.utils.logger import app_logger
 from app.cognition.runtime import CognitiveRuntime
+from app.database import db
 from backend.websocket_server import ws_manager
 
 
@@ -27,26 +28,37 @@ You have access to tools and a cognitive architecture that includes:
 Respond naturally and helpfully. Use markdown formatting when appropriate."""
 
 
-# Conversation history storage (in-memory, keyed by conversation_id)
-# In production, this should be persisted to SQLite
+# Conversation history storage (in-memory cache, persisted to SQLite)
 _conversation_histories: Dict[str, List[Dict[str, str]]] = {}
 MAX_HISTORY_MESSAGES = 50  # Keep last 50 messages per conversation
 
 
 def get_conversation_history(conversation_id: str) -> List[Dict[str, str]]:
-    """Get conversation history for a given conversation."""
+    """Get conversation history for a given conversation (SQLite-backed)."""
     if conversation_id not in _conversation_histories:
-        _conversation_histories[conversation_id] = []
+        # Load from persistent storage so history survives restarts.
+        try:
+            _conversation_histories[conversation_id] = db.get_conversation_messages(
+                conversation_id, limit=MAX_HISTORY_MESSAGES
+            )
+        except Exception as e:
+            app_logger.warning(f"Could not load conversation history: {e}")
+            _conversation_histories[conversation_id] = []
     return _conversation_histories[conversation_id]
 
 
 def add_to_history(conversation_id: str, role: str, content: str):
-    """Add a message to conversation history."""
+    """Add a message to conversation history (in-memory cache + SQLite persistence)."""
     history = get_conversation_history(conversation_id)
     history.append({"role": role, "content": content})
     # Trim to max size
     if len(history) > MAX_HISTORY_MESSAGES:
         _conversation_histories[conversation_id] = history[-MAX_HISTORY_MESSAGES:]
+    # Persist to SQLite so the conversation survives restarts.
+    try:
+        db.add_conversation_message(conversation_id, role, content)
+    except Exception as e:
+        app_logger.warning(f"Could not persist conversation message: {e}")
 
 
 class MessageRouter:

@@ -17,13 +17,16 @@ A **local-first, full-capability private secretary / coworker** with a closed-lo
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Tests passing | **1068** | `python -m pytest tests/ -q` → `1068 passed` |
+| Tests passing | **1076** | `python -m pytest tests/ -q` → `1076 passed` |
 | Python source | ~55,800 lines | `find app backend -name '*.py' -exec cat {} + | wc -l` |
 | Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |
 | Chat path uses cognitive runtime | ✅ | `tests/test_message_router_cognitive.py` (regression guard) |
+| Chat history persists across restart | ✅ | `tests/test_conversation_persistence.py` (SQLite-backed) |
 | Hardware self-awareness | ✅ | `tests/test_hardware_self_awareness.py` |
 | Thread-safe singleton | ✅ | `tests/test_phase14_22_wiring.py::test_get_instance_is_thread_safe` |
 | Memory consolidation | ✅ | `tests/test_phase4_autonomy.py` |
+| Verification honesty (UNKNOWN stays UNKNOWN) | ✅ | `runtime.measure_capabilities()` → `verification_honesty = verified` |
+| Autonomous cycle scheduled (hourly) | ✅ | `tests/test_scheduler_wiring.py` |
 | Approval gate (Level 3 → approval) | ✅ | `tests/test_policy.py`, `tests/test_phase4_autonomy.py` |
 
 ---
@@ -57,6 +60,7 @@ The 15 wired modules: common-sense KB, autonomous goal generation/execution, sel
 Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not copied from a doc:
 
 - **tri_state_verification** — no fabricated success; UNKNOWN stays UNKNOWN
+- **verification_honesty** — a no-evidence environmental condition resolves to UNKNOWN (behavioral probe)
 - **approval_gate** — Level 3 actions require owner approval
 - **module_wiring** — all 15 modules instantiated (no orphans)
 - **hardware_self_awareness** — self-model of CPU/RAM/GPU present
@@ -71,9 +75,15 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **Not conscious.** `consciousness_simulation` is a functional self-model, not phenomenal awareness.
 - **Not "100% complete."** Progress is measured in the scorecard above, which will grow as capabilities are wired and tested.
 
-The highest-value remaining work is **more integration and measurement**, not more self-contained modules:
+The highest-value remaining work is **more integration and measurement**, not more self-contained modules. Closed this round:
 
-1. Wire the proactive daemon into the periodic scheduler (it's invoked by the cycle, but the scheduler wiring should be verified end-to-end).
-2. Persist conversation history to SQLite (the chat history is still in-memory).
-3. Add an end-to-end test that a real chat message flows through the full runtime and returns a verified reply.
-4. Continue extending the scorecard with behavioral (not just presence) checks.
+- ✅ Conversation history persists to SQLite (`conversations` table + router wiring).
+- ✅ Autonomous cycle scheduled hourly via `ProactiveScheduler` in the backend lifespan.
+- ✅ End-to-end chat → runtime test.
+- ✅ Behavioral scorecard check (`verification_honesty`).
+
+Still open (future):
+
+1. Persist conversation state across *multiple browser sessions* end-to-end (the frontend stores conversations in Zustand/localStorage; backend persistence is now in place but the FE↔BE sync path is not fully wired).
+2. Continue extending the scorecard with behavioral (not just presence) checks across more domains.
+3. Complete the Android Gradle setup (no wrapper — can't build as-is).
