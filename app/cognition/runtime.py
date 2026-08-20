@@ -116,6 +116,28 @@ class CognitiveRuntime:
             max_goals_per_cycle=3,
         )
         
+        # Phase 11-21: Higher-order cognition modules (wired into the cycle via
+        # _integrate_phase_modules). Previously these were orphaned — instantiated
+        # and tested but never called by the runtime.
+        from app.cognition.metacognitive_monitor import MetacognitiveMonitor
+        self.metacognitive_monitor = MetacognitiveMonitor(db_path=path)
+        from app.cognition.causal_inference import CausalInferenceEngine
+        self.causal_inference = CausalInferenceEngine(db_path=path)
+        from app.cognition.strategic_planning import StrategicPlanningEngine
+        self.strategic_planning = StrategicPlanningEngine(db_path=path)
+        from app.cognition.cross_domain_transfer import CrossDomainTransferEngine
+        self.cross_domain_transfer = CrossDomainTransferEngine(db_path=path)
+        from app.cognition.creative_generation import CreativeGenerationEngine
+        self.creative_generation = CreativeGenerationEngine(db_path=path)
+        from app.cognition.social_cognition import SocialCognitionEngine
+        self.social_cognition = SocialCognitionEngine(db_path=path)
+        from app.cognition.consciousness_simulation import ConsciousnessSimulator
+        self.consciousness = ConsciousnessSimulator(db_path=path)
+        from app.cognition.embodied_cognition import EmbodiedCognitionEngine
+        self.embodied_cognition = EmbodiedCognitionEngine(db_path=path)
+        from app.cognition.cultural_learning import CulturalLearningEngine
+        self.cultural_learning = CulturalLearningEngine(db_path=path)
+        
         self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
         # Wire complete reasoning loop with memory, world ingestor, and event bus
@@ -491,6 +513,152 @@ class CognitiveRuntime:
             "assistant_reply": assistant_reply
         }
 
+    def _integrate_phase_modules(
+        self,
+        user_text: str,
+        intent_type: str,
+        latency_ms: float,
+        reasoning_action: str,
+        success: bool,
+        goal_verified: bool,
+    ) -> None:
+        """
+        Wire the higher-order cognition modules (Phases 11-21) into the cognitive cycle.
+
+        Each module contributes a non-fatal, best-effort observation: failures are logged
+        but never interrupt the cycle. This is what turns the previously-orphaned modules
+        (causal inference, strategic planning, social/cultural cognition, metacognition,
+        consciousness, embodied cognition, cross-domain transfer, creative generation)
+        into live parts of the closed loop.
+
+        Write-path modules *learn* from this cycle; read-path modules expose self-knowledge
+        onto the blackboard so subsequent reasoning can consult the agent's own state.
+        """
+        try:
+            from app.cognition.metacognitive_monitor import CognitiveProcess, ReasoningStrategy
+            self.metacognitive_monitor.record_process(
+                process_type=CognitiveProcess.REASONING,
+                strategy=ReasoningStrategy.ABDUCTIVE,
+                input_data={"user_text": user_text[:200], "intent": intent_type},
+                output_data={"reasoning_action": reasoning_action, "success": success},
+                execution_time_ms=round(latency_ms, 2),
+                confidence=0.7,
+                success=success,
+                errors=[] if success else [f"Cycle ended in state '{reasoning_action}' without success"],
+            )
+        except Exception as e:
+            app_logger.warning(f"Metacognitive integration failed: {e}")
+
+        try:
+            from app.cognition.causal_inference import CausalRelationType
+            self.causal_inference.add_causal_relationship(
+                cause_name=f"intent:{intent_type}",
+                effect_name="goal_verified" if goal_verified else "goal_unverified",
+                relation_type=CausalRelationType.DIRECT_CAUSE,
+                strength=0.8 if goal_verified else 0.2,
+                confidence=0.6,
+                evidence=[user_text[:80]],
+                mechanism=f"Observed outcome of '{reasoning_action}' reasoning on '{intent_type}' tasks.",
+            )
+        except Exception as e:
+            app_logger.warning(f"Causal inference integration failed: {e}")
+
+        try:
+            self.blackboard.set(
+                "strategic_overview",
+                self.strategic_planning.get_strategic_overview(),
+                source="strategic_planning",
+            )
+        except Exception as e:
+            app_logger.warning(f"Strategic planning integration failed: {e}")
+
+        try:
+            self.blackboard.set(
+                "transfer_summary",
+                self.cross_domain_transfer.get_transfer_summary(),
+                source="cross_domain_transfer",
+            )
+        except Exception as e:
+            app_logger.warning(f"Cross-domain transfer integration failed: {e}")
+
+        try:
+            if goal_verified:
+                self.blackboard.set(
+                    "creativity_summary",
+                    self.creative_generation.get_creativity_summary(),
+                    source="creative_generation",
+                )
+            else:
+                # On failure, generate creative alternatives for subsequent replanning.
+                ideas = self.creative_generation.generate_ideas(
+                    problem=user_text,
+                    context={"intent": intent_type},
+                    num_ideas=3,
+                )
+                self.blackboard.set(
+                    "creative_alternatives",
+                    [i.description for i in ideas],
+                    source="creative_generation",
+                )
+        except Exception as e:
+            app_logger.warning(f"Creative generation integration failed: {e}")
+
+        try:
+            from app.cognition.social_cognition import MentalState, SocialNorm
+            self.social_cognition.infer_mental_state(
+                agent_id="owner",
+                state_type=MentalState.INTENTION,
+                content=user_text[:100],
+                evidence=[f"user message: {user_text[:80]}"],
+                confidence=0.6,
+            )
+            self.social_cognition.record_interaction(
+                participants=["owner", "arena"],
+                interaction_type="task",
+                context=user_text[:100],
+                norms_followed=[SocialNorm.COOPERATION],
+                norms_violated=[],
+                emotional_outcomes={},
+                outcome="positive" if goal_verified else "neutral",
+            )
+        except Exception as e:
+            app_logger.warning(f"Social cognition integration failed: {e}")
+
+        try:
+            from app.cognition.consciousness_simulation import QualiaType
+            self.consciousness.create_experience(
+                qualia_type=QualiaType.COGNITIVE,
+                content=f"Processed '{intent_type}' task ({reasoning_action})",
+                intensity=0.6,
+                valence=0.3 if goal_verified else -0.2,
+                arousal=0.5,
+                clarity=0.7,
+                duration_ms=latency_ms,
+                associated_thoughts=[f"intent={intent_type}", f"verified={goal_verified}"],
+            )
+        except Exception as e:
+            app_logger.warning(f"Consciousness integration failed: {e}")
+
+        try:
+            self.blackboard.set(
+                "embodied_summary",
+                self.embodied_cognition.get_embodied_summary(),
+                source="embodied_cognition",
+            )
+        except Exception as e:
+            app_logger.warning(f"Embodied cognition integration failed: {e}")
+
+        try:
+            self.cultural_learning.record_observed_behavior(
+                agent_id="owner",
+                behavior_type=intent_type,
+                description=user_text[:100],
+                context="cognitive_cycle",
+                outcome="success" if goal_verified else "failure",
+            )
+        except Exception as e:
+            app_logger.warning(f"Cultural learning integration failed: {e}")
+
     def process_cognitive_cycle(
         self,
         user_text: str,
@@ -627,6 +795,14 @@ class CognitiveRuntime:
                 gate_decision="passed",
                 goal_verified=verify_res.verified_success
             )
+            self._integrate_phase_modules(
+                user_text=user_text,
+                intent_type=query_pred,
+                latency_ms=latency,
+                reasoning_action="answer",
+                success=verify_res.verified_success,
+                goal_verified=verify_res.verified_success,
+            )
             return {
                 "request_success": True,
                 "execution_success": True,
@@ -686,6 +862,14 @@ class CognitiveRuntime:
                 gate_decision="passed",
                 goal_verified=verify_res.verified_success
             )
+            self._integrate_phase_modules(
+                user_text=user_text,
+                intent_type=query_pred,
+                latency_ms=latency,
+                reasoning_action="investigate",
+                success=verify_res.verified_success,
+                goal_verified=verify_res.verified_success,
+            )
             return {
                 "request_success": True,
                 "execution_success": True,
@@ -718,6 +902,14 @@ class CognitiveRuntime:
                 lesson="",
                 gate_decision="deferred",
                 goal_verified=False
+            )
+            self._integrate_phase_modules(
+                user_text=user_text,
+                intent_type=query_pred,
+                latency_ms=latency,
+                reasoning_action="defer",
+                success=False,
+                goal_verified=False,
             )
             return {
                 "request_success": True,
@@ -835,6 +1027,14 @@ class CognitiveRuntime:
                 lesson="",
                 gate_decision=gate_res.gate_name,
                 goal_verified=False
+            )
+            self._integrate_phase_modules(
+                user_text=user_text,
+                intent_type=query_pred,
+                latency_ms=latency,
+                reasoning_action="gate_blocked",
+                success=False,
+                goal_verified=False,
             )
             return {
                 "request_success": False,
@@ -1052,6 +1252,15 @@ class CognitiveRuntime:
                 )
         except Exception as e:
             app_logger.warning(f"Failed to record planning pattern: {e}")
+
+        self._integrate_phase_modules(
+            user_text=user_text,
+            intent_type=goal_rep.primary_intent_type if goal_rep else "unknown",
+            latency_ms=latency,
+            reasoning_action=reasoning_action.value if hasattr(reasoning_action, "value") else str(reasoning_action),
+            success=verify_res.verified_success,
+            goal_verified=verify_res.verified_success,
+        )
 
         return {
             "request_success": True,
