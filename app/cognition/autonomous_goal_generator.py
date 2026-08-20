@@ -182,7 +182,12 @@ class AutonomousGoalGenerator:
         """Initialize the autonomous goal generator."""
         self.db_path = db_path
         self._ensure_db()
-        app_logger.info("Autonomous Goal Generator initialized")
+        
+        # Initialize ethical reasoning system
+        from app.cognition.ethical_reasoning import EthicalReasoningSystem
+        self.ethical_system = EthicalReasoningSystem(db_path=db_path)
+        
+        app_logger.info("Autonomous Goal Generator initialized with ethical reasoning")
     
     def _ensure_db(self):
         """Ensure the database exists and has the right schema."""
@@ -479,11 +484,41 @@ class AutonomousGoalGenerator:
         if not goal:
             return False
         
+        # Check ethical assessment first
+        ethical_assessment = self.ethical_system.assess_goal(goal)
+        
+        # Reject if ethically problematic
+        from app.cognition.ethical_reasoning import EthicalVerdict
+        if ethical_assessment.verdict == EthicalVerdict.REJECTED:
+            app_logger.warning(
+                f"Goal rejected for ethical reasons: {goal.title} - {ethical_assessment.reasoning}"
+            )
+            goal.status = GoalStatus.REJECTED
+            self.update_goal(goal)
+            return False
+        
+        # Require human review for high-risk goals
+        if ethical_assessment.verdict == EthicalVerdict.REQUIRES_REVIEW:
+            app_logger.info(
+                f"Goal requires human review: {goal.title} - {ethical_assessment.reasoning}"
+            )
+            # Don't auto-approve, leave as EVALUATED
+            return False
+        
+        # Check overall score threshold
         if goal.overall_score >= auto_approve_threshold:
+            # For conditional approval, log the conditions
+            if ethical_assessment.verdict == EthicalVerdict.CONDITIONAL:
+                app_logger.info(
+                    f"Auto-approved goal with conditions: {goal.title} "
+                    f"(score: {goal.overall_score:.2f}, conditions: {ethical_assessment.conditions})"
+                )
+            else:
+                app_logger.info(f"Auto-approved goal: {goal.title} (score: {goal.overall_score:.2f})")
+            
             goal.status = GoalStatus.APPROVED
             goal.approved_at = _now()
             self.update_goal(goal)
-            app_logger.info(f"Auto-approved goal: {goal.title} (score: {goal.overall_score:.2f})")
             return True
         else:
             app_logger.info(f"Goal requires manual approval: {goal.title} (score: {goal.overall_score:.2f})")
