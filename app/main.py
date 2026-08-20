@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, status, Request, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Query, status, Request, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict
@@ -81,11 +81,10 @@ from app.tools.ast_janitor import ASTJanitor
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
 
-app = FastAPI(
-    title=settings.APP_NAME,
-    description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
-    version="0.1.0"
-)
+# The 127 core REST routes are registered on a router so the unified server
+# (app/server.py) can include them alongside the WebSocket/API/SPA routes.
+# A backward-compatible `app` is built at the bottom of this module.
+router = APIRouter()
 
 # Global System State
 SYSTEM_STATE = "active"  # "active" or "sleeping"
@@ -93,12 +92,12 @@ SYSTEM_STATE = "active"  # "active" or "sleeping"
 # Mount static files directory if it exists
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    router.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Mount audio static directory
 audio_dir = settings.DATA_DIR / "audio"
 audio_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
+router.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 
 # Models for the API
 class ChatRequest(BaseModel):
@@ -449,7 +448,7 @@ class SimulationRequest(BaseModel):
     candidate_actions: List[Dict[str, Any]]
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
-@app.get("/")
+@router.get("/")
 def get_root(request: Request):
     # Check if client explicitly requested JSON
     accept_header = request.headers.get("accept", "")
@@ -477,7 +476,7 @@ def get_root(request: Request):
         "database_connected": True
     }
 
-@app.get("/api/status")
+@router.get("/api/status")
 def get_api_status():
     lm_status = "offline"
     try:
@@ -524,7 +523,7 @@ def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dic
     return enriched
 
 # 2. Local Chat Completions Route
-@app.post("/chat")
+@router.post("/chat")
 def chat_with_local_brain(req: ChatRequest):
     global SYSTEM_STATE
     if SYSTEM_STATE == "sleeping":
@@ -557,7 +556,7 @@ def chat_with_local_brain(req: ChatRequest):
     }
 
 # 3. Tasks Endpoints
-@app.post("/tasks", response_model=Task, status_code=status.HTTP_201_CREATED)
+@router.post("/tasks", response_model=Task, status_code=status.HTTP_201_CREATED)
 def create_persistent_task(task_in: TaskCreate):
     try:
         return TaskManager.create_task(task_in)
@@ -565,48 +564,48 @@ def create_persistent_task(task_in: TaskCreate):
         app_logger.error(f"Error creating task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/tasks", response_model=List[Task])
+@router.get("/tasks", response_model=List[Task])
 def list_tasks(status: Optional[str] = Query(None, description="Filter tasks by status")):
     return TaskManager.get_all_tasks(status=status)
 
-@app.get("/tasks/{task_id}", response_model=Task)
+@router.get("/tasks/{task_id}", response_model=Task)
 def get_single_task(task_id: str):
     task = TaskManager.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
-@app.patch("/tasks/{task_id}", response_model=Task)
+@router.patch("/tasks/{task_id}", response_model=Task)
 def update_existing_task(task_id: str, updates: TaskUpdate):
     task = TaskManager.update_task(task_id, updates)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found or update failed")
     return task
 
-@app.delete("/tasks/{task_id}", status_code=status.HTTP_200_OK)
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_200_OK)
 def delete_task_by_id(task_id: str):
     if not TaskManager.delete_task(task_id):
         raise HTTPException(status_code=404, detail="Task not found or deletion failed")
     return {"message": f"Task {task_id} deleted successfully."}
 
-@app.post("/tasks/{task_id}/acquire-skill")
+@router.post("/tasks/{task_id}/acquire-skill")
 def acquire_skill_for_task_endpoint(task_id: str):
     res = TaskManager.acquire_skill_for_task(task_id)
     if not res.get("success"):
         raise HTTPException(status_code=404, detail=res.get("error", "Task not found"))
     return res
 
-@app.post("/tasks/resume-all")
+@router.post("/tasks/resume-all")
 def resume_all_tasks_endpoint():
     return TaskManager.resume_interrupted_tasks()
 
 # 4. Audit Log Endpoint
-@app.get("/audit-logs")
+@router.get("/audit-logs")
 def view_audit_logs(limit: int = Query(50, ge=1, le=500)):
     return db.get_audit_logs(limit=limit)
 
 # 5. Memories Endpoints
-@app.post("/memories", status_code=status.HTTP_201_CREATED)
+@router.post("/memories", status_code=status.HTTP_201_CREATED)
 def add_new_memory(mem: MemoryCreate):
     try:
         mem_id = db.create_memory({
@@ -620,18 +619,18 @@ def add_new_memory(mem: MemoryCreate):
         app_logger.error(f"Error saving memory: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/memories")
+@router.get("/memories")
 def list_memories(category: Optional[str] = Query(None, description="Filter memories by category")):
     return db.get_memories(category=category)
 
-@app.delete("/memories/{memory_id}")
+@router.delete("/memories/{memory_id}")
 def delete_memory_record(memory_id: int):
     if not db.delete_memory(memory_id):
         raise HTTPException(status_code=404, detail="Memory not found or deletion failed")
     return {"message": f"Memory {memory_id} deleted successfully."}
 
 # 6. Policy & Rules Evaluation Endpoint
-@app.post("/policies/evaluate")
+@router.post("/policies/evaluate")
 def evaluate_action_policy(req: ActionEvaluationRequest):
     allowed, reason, level = PolicyEvaluator.evaluate_action(req.action_type, req.details)
     return {
@@ -642,7 +641,7 @@ def evaluate_action_policy(req: ActionEvaluationRequest):
     }
 
 # 7. File Readers & Editors for Context Docs (Manual and Rules)
-@app.get("/manual")
+@router.get("/manual")
 def get_user_manual():
     try:
         with open(settings.USER_MANUAL_PATH, "r", encoding="utf-8") as f:
@@ -650,7 +649,7 @@ def get_user_manual():
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="User Operating Manual not found")
 
-@app.post("/manual")
+@router.post("/manual")
 def update_user_manual(doc: DocUpdate):
     try:
         os.makedirs(os.path.dirname(settings.USER_MANUAL_PATH), exist_ok=True)
@@ -662,7 +661,7 @@ def update_user_manual(doc: DocUpdate):
         app_logger.error(f"Error updating user manual: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/rules")
+@router.get("/rules")
 def get_rules():
     try:
         with open(settings.RULES_PATH, "r", encoding="utf-8") as f:
@@ -670,7 +669,7 @@ def get_rules():
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Rules and boundaries document not found")
 
-@app.post("/rules")
+@router.post("/rules")
 def update_rules(doc: DocUpdate):
     try:
         os.makedirs(os.path.dirname(settings.RULES_PATH), exist_ok=True)
@@ -683,7 +682,7 @@ def update_rules(doc: DocUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 # 8. Model Management & Real-time LM Studio Query Endpoints
-@app.get("/models")
+@router.get("/models")
 def get_local_models():
     lm_online = False
     loaded_models = []
@@ -705,7 +704,7 @@ def get_local_models():
         "configured_main_model": settings.MAIN_MODEL
     }
 
-@app.post("/models/config")
+@router.post("/models/config")
 def update_model_config(config: ModelConfigUpdate):
     if config.fast_model:
         settings.FAST_MODEL = config.fast_model.strip()
@@ -724,7 +723,7 @@ def update_model_config(config: ModelConfigUpdate):
         "lm_studio_url": settings.LM_STUDIO_URL
     }
 
-@app.post("/models/unload")
+@router.post("/models/unload")
 def unload_lm_studio_model(req: Optional[ModelUnloadRequest] = None):
     model_id = req.model_id if req else None
     results = []
@@ -744,7 +743,7 @@ def unload_lm_studio_model(req: Optional[ModelUnloadRequest] = None):
     }
 
 # 9. Phase 2 Tools: Web Scraper, YouTube Learner & All-Purpose Document Manager Endpoints
-@app.post("/tools/youtube-learn")
+@router.post("/tools/youtube-learn")
 def youtube_learn_endpoint(req: YouTubeLearnRequest):
     result = YouTubeLearner.learn_from_video(req.url, prompt_focus=req.prompt_focus)
     if result.get("success") and req.auto_save_memory:
@@ -752,7 +751,7 @@ def youtube_learn_endpoint(req: YouTubeLearnRequest):
         result["memory_id"] = mem_id
     return result
 
-@app.post("/tools/web-learn")
+@router.post("/tools/web-learn")
 def web_learn_endpoint(req: WebLearnRequest):
     result = WebResearcher.learn_from_article(req.url)
     if result.get("success") and req.auto_save_memory:
@@ -760,19 +759,19 @@ def web_learn_endpoint(req: WebLearnRequest):
         result["memory_id"] = mem_id
     return result
 
-@app.post("/tools/web-search")
+@router.post("/tools/web-search")
 def web_search_endpoint(req: WebSearchRequest):
     return WebResearcher.search_and_scrape(req.query, max_results=req.max_results)
 
-@app.get("/tools/approved-docs")
+@router.get("/tools/approved-docs")
 def list_approved_docs_endpoint():
     return DocumentManager.list_workspace_files()
 
-@app.get("/tools/workspace-files")
+@router.get("/tools/workspace-files")
 def list_workspace_files_endpoint():
     return DocumentManager.list_workspace_files()
 
-@app.post("/tools/read-doc")
+@router.post("/tools/read-doc")
 def read_doc_endpoint(req: DocReadRequest):
     result = DocumentManager.read_document(req.file_path)
     if result.get("success") and req.auto_save_memory:
@@ -791,11 +790,11 @@ def read_doc_endpoint(req: DocReadRequest):
             app_logger.error(f"Error summarizing document: {e}")
     return result
 
-@app.post("/tools/create-doc")
+@router.post("/tools/create-doc")
 def create_doc_endpoint(req: DocCreateRequest):
     return DocumentManager.create_document(req.file_path, req.content, overwrite=req.overwrite)
 
-@app.post("/tools/edit-doc")
+@router.post("/tools/edit-doc")
 def edit_doc_endpoint(req: DocEditRequest):
     return DocumentManager.edit_document(
         req.file_path,
@@ -806,7 +805,7 @@ def edit_doc_endpoint(req: DocEditRequest):
     )
 
 # 10. Phase 3 Perception: Local Speech-to-Text & Text-to-Speech Endpoints
-@app.post("/voice/transcribe")
+@router.post("/voice/transcribe")
 async def voice_transcribe_endpoint(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     temp_filename = f"recording_{file.filename or 'input.wav'}"
@@ -820,13 +819,13 @@ async def voice_transcribe_endpoint(file: UploadFile = File(...)):
     db.create_audit_log("voice_transcribe", "success", f"Transcribed {file.filename}: '{res.get('text', '')[:100]}'", level=0)
     return res
 
-@app.post("/voice/synthesize")
+@router.post("/voice/synthesize")
 def voice_synthesize_endpoint(req: TTSSynthesizeRequest):
     res = LocalTextToSpeech.synthesize_speech(req.text)
     db.create_audit_log("voice_synthesize", "success", f"Synthesized speech for text: '{req.text[:80]}'", level=0)
     return res
 
-@app.post("/voice/clone-reference")
+@router.post("/voice/clone-reference")
 async def upload_voice_clone_reference(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     ref_path = LocalTextToSpeech.set_custom_voice_reference(audio_bytes)
@@ -837,24 +836,24 @@ async def upload_voice_clone_reference(file: UploadFile = File(...)):
         "file_path": ref_path
     }
 
-@app.get("/voice/profiles")
+@router.get("/voice/profiles")
 def get_voice_profiles_endpoint():
     return LocalTextToSpeech.list_voice_profiles()
 
-@app.post("/voice/profiles/select")
+@router.post("/voice/profiles/select")
 def select_voice_profile_endpoint(req: VoiceProfileSelectRequest):
     success = LocalTextToSpeech.set_active_voice_profile(req.profile_name)
     db.create_audit_log("select_voice_profile", "success", f"Selected voice profile: '{req.profile_name}'", level=0)
     return {"success": success, "active_profile": req.profile_name}
 
-@app.post("/voice/profiles/record")
+@router.post("/voice/profiles/record")
 async def record_voice_profile_endpoint(file: UploadFile = File(...), profile_name: str = Query(...)):
     audio_bytes = await file.read()
     res = LocalTextToSpeech.save_voice_profile(profile_name, audio_bytes)
     db.create_audit_log("record_voice_profile", "success", f"Recorded custom voice profile: '{profile_name}'", level=0)
     return res
 
-@app.post("/voice/chat")
+@router.post("/voice/chat")
 async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Query("fast")):
     global SYSTEM_STATE
     if SYSTEM_STATE == "sleeping":
@@ -907,7 +906,7 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
     }
 
 # 11. Mobile Network & Remote Access Endpoints
-@app.get("/api/network-info")
+@router.get("/api/network-info")
 def get_network_info_endpoint():
     local_ips = []
     try:
@@ -931,7 +930,7 @@ def get_network_info_endpoint():
         "instructions": "Connect your Android or iPhone to the same home Wi-Fi and open any of the mobile URLs in Chrome/Safari!"
     }
 
-@app.post("/mobile/location")
+@router.post("/mobile/location")
 def update_mobile_location_endpoint(req: MobileLocationRequest):
     loc_str = f"Latitude: {req.latitude}, Longitude: {req.longitude}" + (f" ({req.city})" if req.city else "")
     db.create_memory({
@@ -943,7 +942,7 @@ def update_mobile_location_endpoint(req: MobileLocationRequest):
     db.create_audit_log("update_mobile_location", "success", loc_str, level=0)
     return {"success": True, "location": loc_str, "message": "Location context saved to memory."}
 
-@app.post("/mobile/camera")
+@router.post("/mobile/camera")
 async def upload_mobile_camera_photo(file: UploadFile = File(...)):
     photo_bytes = await file.read()
     filename = f"camera_{uuid.uuid4().hex[:8]}_{file.filename or 'photo.jpg'}"
@@ -963,17 +962,17 @@ async def upload_mobile_camera_photo(file: UploadFile = File(...)):
     }
 
 # 12. Phase 4 Vision & Desktop Sight Endpoints
-@app.post("/vision/capture")
+@router.post("/vision/capture")
 def capture_screen_endpoint():
     res = ScreenCaptureTool.capture_screen()
     db.create_audit_log("capture_screen", "success", f"Captured screen: {res.get('file_name')}", level=0)
     return res
 
-@app.post("/vision/ocr")
+@router.post("/vision/ocr")
 def vision_ocr_endpoint(req: VisionOCRRequest):
     return OCRReaderTool.extract_text_from_image(req.image_path)
 
-@app.post("/vision/analyze")
+@router.post("/vision/analyze")
 def vision_analyze_endpoint(req: VisionAnalyzeRequest):
     return VisionAnalyzerTool.analyze_screen_image(
         req.image_path, 
@@ -981,7 +980,7 @@ def vision_analyze_endpoint(req: VisionAnalyzeRequest):
         auto_save_memory=req.auto_save_memory
     )
 
-@app.post("/vision/capture-and-analyze")
+@router.post("/vision/capture-and-analyze")
 def capture_and_analyze_screen_endpoint(prompt_focus: Optional[str] = Query(None)):
     cap_res = ScreenCaptureTool.capture_screen()
     if not cap_res.get("success"):
@@ -996,7 +995,7 @@ def capture_and_analyze_screen_endpoint(prompt_focus: Optional[str] = Query(None
     return analysis_res
 
 # 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
-@app.post("/automation/browser/navigate")
+@router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):
     return BrowserAutomation.navigate_and_extract(
         req.url, 
@@ -1005,24 +1004,24 @@ def browser_navigate_endpoint(req: BrowserNavigateRequest):
         submit_form=req.submit_form
     )
 
-@app.get("/automation/desktop/apps")
+@router.get("/automation/desktop/apps")
 def list_approved_apps_endpoint():
     return {"approved_apps": DesktopControl.list_approved_apps()}
 
-@app.post("/automation/desktop/launch")
+@router.post("/automation/desktop/launch")
 def launch_app_endpoint(req: AppLaunchRequest):
     return DesktopControl.launch_application(req.app_name)
 
-@app.post("/automation/web-agent")
+@router.post("/automation/web-agent")
 def web_agent_endpoint(req: WebAgentRequest):
     return WebAgent.execute_web_workflow(req.objective, req.target_url, complexity=req.complexity)
 
 # 14. Phase 6 Domain Specialist Intelligence Endpoints
-@app.post("/specialists/security/scan")
+@router.post("/specialists/security/scan")
 def security_scan_endpoint(req: SecurityScanRequest):
     return SecurityLabTool.scan_lab_target(req.target)
 
-@app.post("/specialists/finance/risk-calc")
+@router.post("/specialists/finance/risk-calc")
 def finance_risk_calc_endpoint(req: PositionSizeRequest):
     return FinanceTraderTool.calculate_position_size(
         req.bankroll, 
@@ -1031,7 +1030,7 @@ def finance_risk_calc_endpoint(req: PositionSizeRequest):
         stop_loss_price=req.stop_loss_price
     )
 
-@app.post("/specialists/finance/ev-calc")
+@router.post("/specialists/finance/ev-calc")
 def finance_ev_calc_endpoint(req: EVCalcRequest):
     return FinanceTraderTool.calculate_expected_value(
         req.odds_decimal, 
@@ -1039,7 +1038,7 @@ def finance_ev_calc_endpoint(req: EVCalcRequest):
         req.stake
     )
 
-@app.post("/specialists/finance/paper-trade")
+@router.post("/specialists/finance/paper-trade")
 def finance_paper_trade_endpoint(req: PaperTradeRequest):
     return FinanceTraderTool.log_paper_trade(
         req.asset_or_event, 
@@ -1050,7 +1049,7 @@ def finance_paper_trade_endpoint(req: PaperTradeRequest):
         notes=req.notes or ""
     )
 
-@app.post("/specialists/music/vocal-guide")
+@router.post("/specialists/music/vocal-guide")
 def music_vocal_guide_endpoint(req: VocalGuideRequest):
     return MusicStudioTool.generate_vocal_chain_guide(
         genre=req.genre, 
@@ -1058,7 +1057,7 @@ def music_vocal_guide_endpoint(req: VocalGuideRequest):
         daw_name=req.daw_name
     )
 
-@app.post("/specialists/content/script")
+@router.post("/specialists/content/script")
 def content_script_endpoint(req: ContentScriptRequest):
     return ContentCreatorTool.generate_content_script(
         req.topic, 
@@ -1067,43 +1066,43 @@ def content_script_endpoint(req: ContentScriptRequest):
         auto_save_workspace=req.auto_save_workspace
     )
 
-@app.post("/specialists/security/parse-intent")
+@router.post("/specialists/security/parse-intent")
 def security_parse_intent_endpoint(req: SecurityNLURequest):
     return CybersecurityBrainTool.parse_natural_security_intent(req.prompt, target_scope=req.target_scope)
 
-@app.post("/specialists/security/generate-yara")
+@router.post("/specialists/security/generate-yara")
 def security_generate_yara_endpoint(req: YaraRuleRequest):
     return CybersecurityBrainTool.generate_yara_rule(req.rule_name, req.strings_list, meta_description=req.meta_description)
 
-@app.post("/specialists/security/generate-sigma")
+@router.post("/specialists/security/generate-sigma")
 def security_generate_sigma_endpoint(req: SigmaRuleRequest):
     return CybersecurityBrainTool.generate_sigma_rule(req.title, req.logsource_category, req.detection_selection)
 
-@app.post("/specialists/security/defensive-audit")
+@router.post("/specialists/security/defensive-audit")
 def security_defensive_audit_endpoint(req: DefensiveAuditRequest):
     return SecurityEducationTool.audit_code_defensively(req.code_snippet, language=req.language)
 
-@app.post("/specialists/coder/debug")
+@router.post("/specialists/coder/debug")
 def coder_debug_endpoint(req: CodeDebugRequest):
     return CoderBrainTool.explain_and_debug_code(req.code_snippet, language=req.language)
 
-@app.post("/specialists/coder/generate-tests")
+@router.post("/specialists/coder/generate-tests")
 def coder_generate_tests_endpoint(req: UnitTestsRequest):
     return CoderBrainTool.generate_unit_tests(req.code_snippet, language=req.language)
 
-@app.post("/specialists/media/generate-svg")
+@router.post("/specialists/media/generate-svg")
 def media_generate_svg_endpoint(req: SVGGenerateRequest):
     return MediaStudioTool.generate_svg_graphic(req.description)
 
-@app.post("/specialists/legal/consult")
+@router.post("/specialists/legal/consult")
 def legal_consult_endpoint(req: LegalConsultRequest):
     return KnowledgeDomainsTool.legal_compliance_consult(req.topic_or_question)
 
-@app.post("/specialists/counseling/reflect")
+@router.post("/specialists/counseling/reflect")
 def counseling_reflect_endpoint(req: CounselingRequest):
     return KnowledgeDomainsTool.psychological_counseling_partner(req.user_reflection)
 
-@app.post("/specialists/finance/pnl-calc")
+@router.post("/specialists/finance/pnl-calc")
 def finance_pnl_calc_endpoint(req: PnLCalcRequest):
     return KnowledgeDomainsTool.accounting_finance_calc(
         req.revenue, 
@@ -1111,40 +1110,40 @@ def finance_pnl_calc_endpoint(req: PnLCalcRequest):
         tax_rate_percent=req.tax_rate_percent
     )
 
-@app.post("/tools/daily-briefing")
+@router.post("/tools/daily-briefing")
 def daily_briefing_endpoint(req: BriefingRequest):
     return DailyBriefingEngine.generate_briefing(
         custom_topics=req.custom_topics,
         generate_audio=req.generate_audio
     )
 
-@app.post("/tools/workflow-execute")
+@router.post("/tools/workflow-execute")
 def workflow_execute_endpoint(req: WorkflowExecuteRequest):
     return WorkflowEngine.execute_workflow(req.workflow_name, req.steps)
 
-@app.post("/human/assimilate")
+@router.post("/human/assimilate")
 def human_assimilate_endpoint(req: HumanAssimilateRequest):
     return HumanNatureEngine.assimilate_human_experience(
         req.user_text, req.assistant_response, feedback=req.feedback
     )
 
-@app.post("/tools/universal-media-learn")
+@router.post("/tools/universal-media-learn")
 def universal_media_endpoint(req: UniversalMediaRequest):
     return UniversalMediaLearner.analyze_media_target(
         req.target_url_or_path, prompt_focus=req.prompt_focus
     )
 
-@app.post("/opsec/audit-footprint")
+@router.post("/opsec/audit-footprint")
 def opsec_audit_endpoint(req: OpSecAuditRequest):
     return OpSecManagerTool.audit_digital_footprint(req.query_identifier)
 
-@app.post("/opsec/generate-erasure")
+@router.post("/opsec/generate-erasure")
 def opsec_erasure_endpoint(req: OpSecErasureRequest):
     return OpSecManagerTool.generate_erasure_requests(
         req.target_service_name, req.user_identifier, jurisdiction=req.jurisdiction or "GDPR Article 17 / CCPA"
     )
 
-@app.post("/specialists/security/pentest-report")
+@router.post("/specialists/security/pentest-report")
 def pentest_report_endpoint(req: PentestReportRequest):
     return PentestCompanyAssistant.generate_pentest_report(
         req.client_company_name,
@@ -1153,7 +1152,7 @@ def pentest_report_endpoint(req: PentestReportRequest):
         vulnerabilities_found=req.vulnerabilities_found
     )
 
-@app.post("/specialists/security/draft-roe")
+@router.post("/specialists/security/draft-roe")
 def pentest_roe_endpoint(req: PentestRoERequest):
     return PentestCompanyAssistant.draft_rules_of_engagement(
         req.client_company_name,
@@ -1161,12 +1160,12 @@ def pentest_roe_endpoint(req: PentestRoERequest):
         testing_window=req.testing_window or "Monday - Friday, 09:00 - 17:00 EST"
     )
 
-@app.post("/sandbox/create")
+@router.post("/sandbox/create")
 def sandbox_create_endpoint(req: Optional[SandboxCreateRequest] = None):
     name = req.sandbox_name if req else None
     return DisposableSandbox.create_sandbox(sandbox_name=name)
 
-@app.post("/sandbox/run")
+@router.post("/sandbox/run")
 def sandbox_run_endpoint(req: SandboxRunRequest):
     return DisposableSandbox.run_in_sandbox(
         req.sandbox_id,
@@ -1175,11 +1174,11 @@ def sandbox_run_endpoint(req: SandboxRunRequest):
         timeout_seconds=req.timeout_seconds
     )
 
-@app.post("/sandbox/destroy")
+@router.post("/sandbox/destroy")
 def sandbox_destroy_endpoint(req: SandboxDestroyRequest):
     return DisposableSandbox.destroy_sandbox(req.sandbox_id)
 
-@app.post("/skills/teach")
+@router.post("/skills/teach")
 def skills_teach_endpoint(req: SkillTeachRequest):
     return SkillTeachingEngine.teach_skill(
         req.skill_name,
@@ -1190,11 +1189,11 @@ def skills_teach_endpoint(req: SkillTeachRequest):
         safety_rules=req.safety_rules or "Authorized testing scope only."
     )
 
-@app.get("/skills/list")
+@router.get("/skills/list")
 def skills_list_endpoint(category: Optional[str] = Query(None)):
     return {"skills": SkillTeachingEngine.list_taught_skills(category=category)}
 
-@app.post("/skills/execute")
+@router.post("/skills/execute")
 def skills_execute_endpoint(req: SkillExecuteRequest):
     return SkillTeachingEngine.execute_taught_skill(
         req.skill_name,
@@ -1202,63 +1201,63 @@ def skills_execute_endpoint(req: SkillExecuteRequest):
         run_in_sandbox=req.run_in_sandbox
     )
 
-@app.get("/system/apps")
+@router.get("/system/apps")
 def get_system_apps_endpoint():
     return SystemAppInventory.scan_installed_applications()
 
-@app.post("/system/apps/scan")
+@router.post("/system/apps/scan")
 def rescan_system_apps_endpoint():
     return SystemAppInventory.scan_installed_applications()
 
-@app.post("/system/apps/launch")
+@router.post("/system/apps/launch")
 def launch_system_app_endpoint(req: AppLaunchQueryRequest):
     return SystemAppInventory.launch_any_app(req.app_query)
 
-@app.post("/system/governor/p-cores")
+@router.post("/system/governor/p-cores")
 def set_p_cores_endpoint():
     return HardwareGovernor.set_thread_affinity(p_cores_only=True)
 
-@app.get("/system/governor/hardware-tier")
+@router.get("/system/governor/hardware-tier")
 def get_hardware_tier_endpoint():
     return HardwareGovernor.detect_hardware_tier()
 
-@app.post("/system/governor/purge-vram")
+@router.post("/system/governor/purge-vram")
 def purge_vram_endpoint():
     return HardwareGovernor.purge_vram_and_system_memory()
 
-@app.post("/opsec/spawn-canaries")
+@router.post("/opsec/spawn-canaries")
 def spawn_canaries_endpoint():
     return SecurityCanaryTrap.spawn_canary_honeypots()
 
-@app.post("/opsec/inspect-clipboard")
+@router.post("/opsec/inspect-clipboard")
 def inspect_clipboard_endpoint():
     return SecurityCanaryTrap.inspect_clipboard_entropy()
 
-@app.post("/tools/audit-subscriptions")
+@router.post("/tools/audit-subscriptions")
 def audit_subscriptions_endpoint(req: SubscriptionAuditRequest):
     return FinancialLegalWellnessSuite.audit_subscriptions_and_trials(req.subscriptions_list)
 
-@app.post("/tools/audit-tos")
+@router.post("/tools/audit-tos")
 def audit_tos_endpoint(req: ToSAuditRequest):
     return FinancialLegalWellnessSuite.audit_tos_and_privacy_policy(req.policy_text_or_url)
 
-@app.post("/tools/tone-critique")
+@router.post("/tools/tone-critique")
 def tone_critique_endpoint(req: ToneCritiqueRequest):
     return FinancialLegalWellnessSuite.socratic_tone_sounding_board(req.draft_message, recipient_context=req.recipient_context)
 
-@app.post("/tools/generate-anki")
+@router.post("/tools/generate-anki")
 def generate_anki_endpoint(req: AnkiExportRequest):
     return FinancialLegalWellnessSuite.generate_anki_flashcards(req.study_material, deck_name=req.deck_name or "Personal_AI_Knowledge")
 
-@app.post("/agent/self-evolve")
+@router.post("/agent/self-evolve")
 def self_evolve_endpoint(req: SelfEvolveRequest):
     return SelfEvolvingAgent.synthesize_and_hotload_tool(req.task_objective, tool_name_query=req.tool_name_query or "custom_tool")
 
-@app.post("/system/self-heal")
+@router.post("/system/self-heal")
 async def trigger_self_heal_endpoint():
     return await AutonomousSelfHealer.run_maintenance_cycle()
 
-@app.post("/cognition/experiment")
+@router.post("/cognition/experiment")
 def test_experiment_endpoint(req: ExperimentRequest):
     return ExperimentEngine.test_hypothesis_in_sandbox(
         req.hypothesis_name,
@@ -1266,7 +1265,7 @@ def test_experiment_endpoint(req: ExperimentRequest):
         target_guest_os=req.target_guest_os or "auto"
     )
 
-@app.post("/cognition/synthesize-capability")
+@router.post("/cognition/synthesize-capability")
 def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
     return CapabilityFactory.synthesize_capability(
         req.capability_name,
@@ -1274,26 +1273,26 @@ def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
         sample_params=req.sample_params
     )
 
-@app.post("/cognition/simulate-branches")
+@router.post("/cognition/simulate-branches")
 def simulate_branches_endpoint(req: SimulationRequest):
     return CounterfactualSimulator.simulate_competing_branches(
         req.target_goal,
         req.candidate_actions
     )
 
-@app.post("/cognition/self-play-explore")
+@router.post("/cognition/self-play-explore")
 def self_play_explore_endpoint():
     return ExperimentEngine.run_self_play_sandbox_exploration()
 
-@app.get("/agent/proactive-greeting")
+@router.get("/agent/proactive-greeting")
 def proactive_greeting_endpoint():
     return {"proactive_greeting": ProactiveCoworkerDaemon.get_proactive_greeting()}
 
-@app.get("/os/ghost-windows")
+@router.get("/os/ghost-windows")
 def list_ghost_windows_endpoint():
     return {"open_windows": Win32GhostOperator.list_open_windows()}
 
-@app.post("/os/ghost-send")
+@router.post("/os/ghost-send")
 def send_ghost_message_endpoint(req: GhostMessageRequest):
     return Win32GhostOperator.send_background_window_message(
         req.window_title_query,
@@ -1301,16 +1300,16 @@ def send_ghost_message_endpoint(req: GhostMessageRequest):
         text_payload=req.text_payload
     )
 
-@app.post("/coder/ast-audit")
+@router.post("/coder/ast-audit")
 def ast_audit_endpoint(req: ASTAuditRequest):
     return ASTJanitor.audit_and_refactor_code(req.file_path)
 
-@app.post("/coder/ast-generate-test")
+@router.post("/coder/ast-generate-test")
 def ast_generate_test_endpoint(module_query: str = Query(...)):
     return ASTJanitor.generate_pytest_contract(module_query)
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
-@app.post("/memory/rag-search")
+@router.post("/memory/rag-search")
 def rag_search_endpoint(req: RAGSearchRequest):
     results = SemanticRAGEngine.search_memories(req.query, limit=req.limit)
     context_str = SemanticRAGEngine.build_rag_context(req.query, limit=req.limit)
@@ -1321,7 +1320,7 @@ def rag_search_endpoint(req: RAGSearchRequest):
         "rag_prompt_context": context_str
     }
 
-@app.post("/memory/reflect")
+@router.post("/memory/reflect")
 def task_reflection_endpoint(req: ReflectionRequest):
     return ReflectionEngine.reflect_on_task_execution(
         req.task_title, 
@@ -1330,7 +1329,7 @@ def task_reflection_endpoint(req: ReflectionRequest):
         user_feedback=req.user_feedback
     )
 
-@app.get("/memory/constitution")
+@router.get("/memory/constitution")
 def get_constitution_endpoint():
     return {
         "constitution_summary": DecisionConstitution.get_constitution_summary(),
@@ -1338,89 +1337,89 @@ def get_constitution_endpoint():
     }
 
 # 16. Upgrades 1, 4, 5, 6: Hardware Monitor, Notifier, Scheduler & Multi-Agent Endpoints
-@app.get("/api/hardware-stats")
+@router.get("/api/hardware-stats")
 def get_hardware_stats_endpoint():
     return HardwareMonitor.get_hardware_stats()
 
-@app.post("/system/notify")
+@router.post("/system/notify")
 def send_notification_endpoint(req: NotificationRequest):
     return SystemNotifier.send_notification(req.title, req.message)
 
-@app.get("/scheduler/jobs")
+@router.get("/scheduler/jobs")
 def list_scheduler_jobs_endpoint():
     return {"jobs": ProactiveScheduler.list_jobs()}
 
-@app.delete("/scheduler/jobs/{job_id}")
+@router.delete("/scheduler/jobs/{job_id}")
 def remove_scheduler_job_endpoint(job_id: str):
     success = ProactiveScheduler.remove_job(job_id)
     return {"success": success, "job_id": job_id}
 
-@app.post("/agents/multi-agent-collaborate")
+@router.post("/agents/multi-agent-collaborate")
 def run_multi_agent_endpoint(req: MultiAgentRequest):
     return MultiAgentTeam.run_collaborative_workflow(req.objective, complexity=req.complexity)
 
 # 17. Deep OS, Android ADB, Universal Filesystem & Data Science Endpoints
-@app.post("/os/click")
+@router.post("/os/click")
 def os_mouse_click_endpoint(req: OSMouseClickRequest):
     return DeepOSController.mouse_click(req.x, req.y, double=req.double)
 
-@app.post("/os/type")
+@router.post("/os/type")
 def os_type_text_endpoint(req: OSTypeTextRequest):
     return DeepOSController.type_text(req.text)
 
-@app.post("/os/hotkey")
+@router.post("/os/hotkey")
 def os_press_hotkey_endpoint(req: OSHotkeyRequest):
     return DeepOSController.press_hotkey(req.keys)
 
-@app.post("/os/update-software")
+@router.post("/os/update-software")
 def os_update_software_endpoint(req: SoftwareUpdateRequest):
     return DeepOSController.check_and_update_software(req.package_name)
 
-@app.get("/android/devices")
+@router.get("/android/devices")
 def android_list_devices_endpoint():
     return AndroidADBController.list_connected_devices()
 
-@app.post("/android/tap")
+@router.post("/android/tap")
 def android_tap_endpoint(req: ADBTapRequest):
     return AndroidADBController.tap_screen(req.x, req.y, target_device=req.target_device)
 
-@app.post("/android/type")
+@router.post("/android/type")
 def android_type_endpoint(req: ADBTypeTextRequest):
     return AndroidADBController.type_text(req.text, target_device=req.target_device)
 
-@app.post("/android/screenshot")
+@router.post("/android/screenshot")
 def android_screenshot_endpoint(target_device: Optional[str] = Query(None)):
     return AndroidADBController.capture_phone_screenshot(target_device=target_device)
 
-@app.post("/android/launch-app")
+@router.post("/android/launch-app")
 def android_launch_app_endpoint(req: ADBLaunchAppRequest):
     return AndroidADBController.launch_android_app(req.package_name, target_device=req.target_device)
 
-@app.post("/filesystem/search")
+@router.post("/filesystem/search")
 def fs_search_endpoint(req: FileSearchRequest):
     return UniversalFilesystem.search_filesystem(req.query, root_dir=req.root_dir, max_results=req.max_results)
 
-@app.post("/filesystem/move")
+@router.post("/filesystem/move")
 def fs_move_endpoint(req: FileMoveRequest):
     return UniversalFilesystem.rename_or_move(req.source_path, req.destination_path)
 
-@app.post("/filesystem/compress")
+@router.post("/filesystem/compress")
 def fs_compress_endpoint(req: FileCompressRequest):
     return UniversalFilesystem.compress_zip(req.source_paths, req.output_zip_path)
 
-@app.post("/filesystem/resize-image")
+@router.post("/filesystem/resize-image")
 def fs_resize_image_endpoint(req: ImageResizeRequest):
     return UniversalFilesystem.resize_image(req.image_path, req.target_width, req.target_height)
 
-@app.post("/filesystem/play-media")
+@router.post("/filesystem/play-media")
 def fs_play_media_endpoint(req: MediaPlayRequest):
     return UniversalFilesystem.play_media_file(req.media_path)
 
-@app.post("/data/analyze")
+@router.post("/data/analyze")
 def data_analyze_endpoint(req: DataAnalyzeRequest):
     return DataAnalysisEngine.analyze_dataset(req.file_path)
 
-@app.post("/data/chart")
+@router.post("/data/chart")
 def data_chart_endpoint(req: DataChartRequest):
     return DataAnalysisEngine.generate_chart_visualization(
         req.file_path, 
@@ -1435,12 +1434,12 @@ def _perform_graceful_shutdown():
     app_logger.info("Executing graceful system shutdown...")
     db.create_audit_log("system_shutdown", "success", "System kill switch triggered. Server shutting down.", level=3)
 
-@app.get("/system/mode")
+@router.get("/system/mode")
 def get_system_mode_endpoint():
     global SYSTEM_STATE
     return {"system_mode": SYSTEM_STATE}
 
-@app.post("/system/sleep")
+@router.post("/system/sleep")
 def set_system_sleep_endpoint(req: SystemSleepRequest):
     global SYSTEM_STATE
     mode = req.mode.lower().strip()
@@ -1453,7 +1452,7 @@ def set_system_sleep_endpoint(req: SystemSleepRequest):
         db.create_audit_log("system_wake", "success", "System WOKEN UP. Resuming active operations.", level=1)
         return {"success": True, "system_mode": "active", "message": "Assistant is now ACTIVE and ready."}
 
-@app.post("/system/shutdown")
+@router.post("/system/shutdown")
 def trigger_system_shutdown(background_tasks: BackgroundTasks):
     global SYSTEM_STATE
     SYSTEM_STATE = "shutdown"
@@ -1469,3 +1468,15 @@ def trigger_system_shutdown(background_tasks: BackgroundTasks):
         "success": True,
         "message": "System shutdown initiated safely. Database connections closed and server process terminating."
     }
+
+
+# ── Backward-compatible application object ──────────────────────────────────
+# The core REST routes now live on `router` (above) so the unified server can
+# include them. This module-level `app` is kept so `from app.main import app`
+# continues to work for existing callers/tests — it exposes just the core routes.
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
+    version="0.1.0",
+)
+app.include_router(router)

@@ -154,9 +154,15 @@ Current baseline: **304 tests passing**
 
 ### Run Server
 
+A single unified entry point serves everything — the WebSocket chat, the 127 core
+REST routes, the `/api/*` routers (files/code/attachments), voice, and the SPA:
+
 ```bash
-PYTHONPATH=. .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+PYTHONPATH=. .venv/bin/uvicorn app.server:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+(`app.main:app` and `backend.main:app` are kept as backward-compatible aliases of
+the same unified server.)
 
 ---
 
