@@ -559,6 +559,71 @@ class CognitiveRuntime:
         except Exception as e:
             _add("approval_gate", False, f"policy probe failed: {e}")
 
+        # 2b. Belief evidence discipline (behavioral): admissible (probe) evidence
+        # creates an environmental belief; a self-reported claim does not.
+        try:
+            probe_subj = f"__scorecard_adm_{uuid.uuid4().hex[:6]}__"
+            adm = self.beliefs.ingest(
+                subject=probe_subj, predicate="status", value="running",
+                source="os_process_probe", observation_type="direct", confidence=1.0,
+            )
+            inadm_subj = f"__scorecard_inadm_{uuid.uuid4().hex[:6]}__"
+            inadm = self.beliefs.ingest(
+                subject=inadm_subj, predicate="status", value="running",
+                source="user_input", observation_type="self_reported", confidence=1.0,
+            )
+            _add("belief_evidence_discipline",
+                 bool(adm.has_belief) and not bool(inadm.has_belief),
+                 "probe evidence → belief; self-reported claim → hypothesis only")
+        except Exception as e:
+            _add("belief_evidence_discipline", False, f"belief probe failed: {e}")
+
+        # 2c. Memory retrieval (behavioral): add then retrieve a memory round-trip.
+        try:
+            probe_text = f"__scorecard_mem_{uuid.uuid4().hex[:6]}__"
+            rec = self.memory.add("semantic", probe_text, importance=1.0)
+            found = self.memory.search(probe_text, limit=1)
+            _add("memory_retrieval",
+                 bool(found) and found[0].memory_id == rec.memory_id,
+                 "semantic memory added and retrieved via search")
+        except Exception as e:
+            _add("memory_retrieval", False, f"memory probe failed: {e}")
+
+        # 2d. Causal reasoning (behavioral): add a cause→effect edge, then recover it.
+        try:
+            from app.cognition.causal_inference import CausalRelationType
+            cause = f"__probe_cause_{uuid.uuid4().hex[:6]}__"
+            effect = f"__probe_effect_{uuid.uuid4().hex[:6]}__"
+            self.causal_inference.add_causal_relationship(
+                cause_name=cause, effect_name=effect,
+                relation_type=CausalRelationType.DIRECT_CAUSE, strength=0.9, confidence=0.9,
+            )
+            causes = self.causal_inference.root_cause_analysis(effect, "present")
+            _add("causal_reasoning",
+                 any(c[0] == cause for c in causes),
+                 "causal edge added → root_cause_analysis recovers the cause")
+        except Exception as e:
+            _add("causal_reasoning", False, f"causal probe failed: {e}")
+
+        # 2e. Goal verification (behavioral): a delivered response resolves SATISFIED.
+        try:
+            from app.cognition.goal_verifier import ConditionStatus
+            from types import SimpleNamespace
+            goal_rep = SimpleNamespace(primary_intent_type="question", target_domain="general", entities=[])
+            status = GoalVerifier.evaluate_condition_status_against_world_model(
+                succ_cond="response_delivered",
+                goal_rep=goal_rep,
+                observations_map={},
+                verified_entity_states={},
+                executed_actions=[],
+                reply_clean="here is the answer",
+                failed_conditions=[],
+            )
+            _add("goal_verification_behavioral", status == ConditionStatus.SATISFIED,
+                 f"delivered reply → {status.value}")
+        except Exception as e:
+            _add("goal_verification_behavioral", False, f"goal-verification probe failed: {e}")
+
         # 3. Wiring completeness — every higher-order module is connected to the cycle.
         wired_modules = [
             ("common_sense", self.common_sense),
