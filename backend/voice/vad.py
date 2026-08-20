@@ -54,7 +54,10 @@ class VoiceActivityDetector:
         self._load_model()
         
     def _load_model(self):
-        """Load Silero VAD model."""
+        """Load Silero VAD model (gracefully skipped if torch is unavailable)."""
+        if torch is None:
+            app_logger.warning("Cannot load Silero VAD model: PyTorch not installed")
+            return
         try:
             # Load Silero VAD model
             self.model, utils = torch.hub.load(

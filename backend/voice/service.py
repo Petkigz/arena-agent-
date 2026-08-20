@@ -5,7 +5,7 @@ import time
 from typing import Optional
 from backend.voice.orchestrator import VoicePipeline, VoiceState
 from backend.websocket_server import ws_manager
-from backend.message_router import message_router
+import backend.message_router as message_router_module
 from app.utils.logger import app_logger
 
 
@@ -134,9 +134,14 @@ class VoiceService:
                 elif command == "cancel":
                     await self._speak_feedback("Okay, cancelled.")
                 
-                # Send as user message to cognitive runtime
-                if message_router:
-                    await message_router.handle_message(None, {
+                # Send as user message to cognitive runtime.
+                # Read the router from the module at call time — it is set by
+                # initialize_message_router() during startup, so an import-time
+                # `from backend.message_router import message_router` would
+                # capture the initial None and never see the real instance.
+                router = message_router_module.message_router
+                if router:
+                    await router.handle_message(None, {
                         "type": "user_message",
                         "conversation_id": self.current_conversation_id,
                         "content": transcript,

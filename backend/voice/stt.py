@@ -41,7 +41,11 @@ class SpeechToTextService:
         """Start STT service."""
         if self.is_running:
             return
-            
+
+        if WhisperModel is None:
+            app_logger.warning("Cannot start STT service: faster-whisper not installed")
+            return
+
         try:
             # Load faster-whisper model
             self.model = WhisperModel(
