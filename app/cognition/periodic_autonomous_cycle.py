@@ -266,6 +266,27 @@ class PeriodicAutonomousCycle:
             # Step 7: Adjust goal generation based on reflections
             self.reflection_engine.adjust_goal_generation(self.goal_generator)
             
+            # Step 8: Phase 4a — "sleep-like" memory consolidation (decay + prune + integrate).
+            if cognitive_runtime and hasattr(cognitive_runtime, "consolidate_memory"):
+                try:
+                    consolidation = cognitive_runtime.consolidate_memory()
+                    app_logger.info(
+                        f"Cycle {cycle.cycle_id}: memory consolidation "
+                        f"({consolidation.get('pruned_memories', 0)} pruned, "
+                        f"{consolidation.get('consolidated', 0)} consolidated)"
+                    )
+                except Exception as e:
+                    app_logger.warning(f"Cycle {cycle.cycle_id}: consolidation skipped: {e}")
+
+            # Step 9: Phase 4b — proactive coworker maintenance (workspace index, self-heal).
+            if cognitive_runtime and hasattr(cognitive_runtime, "run_proactive_maintenance"):
+                try:
+                    maintenance = cognitive_runtime.run_proactive_maintenance()
+                    if maintenance.get("success"):
+                        app_logger.info(f"Cycle {cycle.cycle_id}: proactive maintenance ran")
+                except Exception as e:
+                    app_logger.warning(f"Cycle {cycle.cycle_id}: maintenance skipped: {e}")
+
             # Generate summary
             cycle.summary = self._generate_summary(cycle)
             cycle.status = CycleStatus.COMPLETED
