@@ -1,7 +1,12 @@
 # Arena Agent — Measured Status
 
 **Updated:** 2026-08-20 · Branch `arena/01a01f89-arena-agent`
-**This document supersedes** the percentage-based status files (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`, `AGI_FINAL_SUMMARY.md`, `HUMAN_LEVEL_AGI_ACHIEVED.md`, `FINAL_AGI_STATUS.md`). Those used invented "% AGI" and test-count figures that did not match the code. This one is measured.
+**This is the canonical status document.** It supersedes the percentage-based status
+files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,
+`AGI_FINAL_SUMMARY.md`, `PHASES.md`, `PROJECT_REVIEW.md`, and the recovered branch's
+`HUMAN_LEVEL_AGI_ACHIEVED.md` / `FINAL_AGI_STATUS.md`). Those used invented "% AGI"
+and test-count figures that did not match the code; they are now archived under
+`docs/archive/`. This document is measured.
 
 ---
 
@@ -17,8 +22,8 @@ A **local-first, full-capability private secretary / coworker** with a closed-lo
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1077** | `python -m pytest tests/ -q` → `1077 passed` |
-| Frontend tests passing | **162** | `cd frontend && npm test -- --run` → `162 passed` |
+| Backend tests passing | **1088** | `python -m pytest tests/ -q` → `1088 passed` |
+| Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~55,800 lines | `find app backend -name '*.py' -exec cat {} + | wc -l` |
 | Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |

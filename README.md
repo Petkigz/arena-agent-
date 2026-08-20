@@ -2,7 +2,13 @@
 
 A **full-capability local-first private secretary** that perceives its environment, understands goals, reasons under uncertainty, plans and executes actions, observes what actually happened, verifies success, remembers lessons, and improves — while the owner retains control over sensitive actions through configurable approval gates.
 
-Runs **entirely locally** on Intel Core i9-14900K, RX 580 GPU (8 GB), and system RAM, connected to **LM Studio** for model inference (Qwen 3B/4B fast model + Qwen 9B reasoning model).
+Runs **entirely locally** on Intel Core i9-14900K, RX 580 GPU (8 GB), and system RAM, connected to **LM Studio** for model inference (Qwen 3B fast model + Qwen 9B reasoning model).
+
+> **📖 Documentation:** see [`AGI_MEASURED_STATUS.md`](AGI_MEASURED_STATUS.md) for the
+> authoritative, measured status (test counts, module wiring, capability scorecard)
+> and [`docs/README.md`](docs/README.md) for the full documentation index. Earlier
+> "X% AGI" status docs have been archived under `docs/archive/` and are not
+> authoritative.
 
 ---
 
@@ -121,7 +127,7 @@ arena-agent-/
 ├── memory/               # User rules & operating manual
 │   ├── rules.md          # Permission boundaries
 │   └── user_operating_manual.md
-├── tests/                # 304 tests (pytest)
+├── tests/                # pytest suite (1088 tests) + frontend vitest (184 tests)
 ├── requirements.txt
 └── README.md
 ```
@@ -150,7 +156,7 @@ source .venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-Current baseline: **304 tests passing**
+Current baseline: **1088 backend + 184 frontend tests passing**
 
 ### Run Server
 
