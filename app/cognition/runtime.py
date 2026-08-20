@@ -101,6 +101,21 @@ class CognitiveRuntime:
         from app.cognition.autonomous_goal_executor import AutonomousGoalExecutor
         self.goal_executor = AutonomousGoalExecutor(db_path=path)
         
+        # Phase 9: Self-Reflection Engine
+        from app.cognition.self_reflection_engine import SelfReflectionEngine
+        self.reflection_engine = SelfReflectionEngine(db_path=path)
+        
+        # Phase 10: Periodic Autonomous Cycle
+        from app.cognition.periodic_autonomous_cycle import PeriodicAutonomousCycle
+        self.autonomous_cycle = PeriodicAutonomousCycle(
+            goal_generator=self.goal_generator,
+            goal_executor=self.goal_executor,
+            reflection_engine=self.reflection_engine,
+            db_path=path,
+            interval_seconds=3600,  # 1 hour
+            max_goals_per_cycle=3,
+        )
+        
         self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
         # Wire complete reasoning loop with memory, world ingestor, and event bus
@@ -257,6 +272,66 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Failed to get execution plan: {e}")
             return None
+
+    def run_autonomous_cycle(self):
+        """
+        AGI Phase 10: Run a single autonomous cycle.
+        
+        This observes the environment, generates goals, executes them,
+        reflects on outcomes, and discovers patterns.
+        
+        Returns:
+            AutonomousCycle with results
+        """
+        try:
+            cycle = self.autonomous_cycle.run_cycle(cognitive_runtime=self)
+            app_logger.info(f"Autonomous cycle completed: {cycle.summary}")
+            return cycle
+        except Exception as e:
+            app_logger.warning(f"Failed to run autonomous cycle: {e}")
+            return None
+
+    def get_self_reflections(self, limit: int = 10):
+        """
+        AGI Phase 9: Get recent self-reflection insights.
+        
+        Args:
+            limit: Maximum number of reflections to return
+            
+        Returns:
+            List of SelfReflection objects
+        """
+        try:
+            return self.reflection_engine.list_reflections(limit=limit)
+        except Exception as e:
+            app_logger.warning(f"Failed to get self-reflections: {e}")
+            return []
+
+    def get_self_model(self):
+        """
+        AGI Phase 9: Get the agent's self-model of its capabilities.
+        
+        Returns:
+            SelfModel object
+        """
+        try:
+            return self.reflection_engine.get_self_model()
+        except Exception as e:
+            app_logger.warning(f"Failed to get self-model: {e}")
+            return None
+
+    def get_autonomous_recommendations(self):
+        """
+        AGI Phase 9: Get recommendations for improving autonomous behavior.
+        
+        Returns:
+            List of recommendation strings
+        """
+        try:
+            return self.reflection_engine.get_recommendations()
+        except Exception as e:
+            app_logger.warning(f"Failed to get recommendations: {e}")
+            return []
 
     def check_capability_availability(
         self,
