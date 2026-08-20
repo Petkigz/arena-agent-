@@ -9,10 +9,10 @@
 
 | Suite | Result |
 |---|---|
-| Backend (`pytest tests/`) | ✅ **1077 passed** (3 benign warnings) |
+| Backend (`pytest tests/`) | ✅ **1084 passed** (3 benign warnings) |
 | Frontend (`vitest`) | ✅ **162 passed** (13 files) |
 | Frontend build (`tsc -b && vite build`) | ✅ clean |
-| **Total** | **1239 tests passing** |
+| **Total** | **1246 tests passing** |
 
 ---
 
@@ -46,16 +46,19 @@
 | → `tools/deep_os_controller.py:80` uses `shell=True` | 🔴 HIGH | shell-injection surface if inputs are ever user-controlled; acceptable for a local personal assistant, but add input allow-listing if you expose it |
 | → `backend/api/phase6_routes.py:788` executes user-submitted code | 🔴 HIGH | the "code execution" feature — documented risk; ensure `ARENA_API_KEY` is set if you ever expose this beyond localhost |
 
-## 5. Security posture
+## 5. Security posture (hardened 2026-08-20)
 
 | Area | Status |
 |---|---|
-| Auth | Optional API key via `ARENA_API_KEY` env; **disabled by default** (correct for local-only use) |
+| API-key auth | ✅ **Now enforced** — `verify_api_key` applied to all 7 API routers via `dependencies=[Depends(verify_api_key)]`. No-op when `ARENA_API_KEY` unset (local-only), enforced when set. (Was previously defined but never applied.) |
+| Shell injection (`check_and_update_software`) | ✅ **Fixed** — package name validated against identifier regex + argument-list form (no `shell=True`) |
+| Code-exec endpoint | ✅ **Hardened** — per-IP rate limit, strict language allowlist, 100KB code cap, 60s timeout cap |
+| DisposableSandbox | ✅ **Bounded** — rejects empty/oversized commands, timeout cap |
+| App launch | ✅ argv form (`cmd.exe /c start`) instead of `shell=True` |
 | CORS | Restricted to `localhost:5173/3000/8080/127.0.0.1` (overridable via `ARENA_CORS_ORIGINS`) |
-| Rate limiting | In-memory per-conversation limit (30 msgs/min) in the message router |
 | Audit trail | All actions logged to `data/` SQLite + `audit_logs` |
 
-**Recommendation:** the moment you bind to anything other than `localhost` (e.g. the Android app over LAN), set `ARENA_API_KEY` and restrict `ARENA_CORS_ORIGINS`.
+**Recommendation (unchanged):** the moment you bind to anything other than `localhost` (e.g. the Android app over LAN), set `ARENA_API_KEY` and restrict `ARENA_CORS_ORIGINS` — the auth gate is now actually wired, so setting the env var is all that's needed.
 
 ## 6. CI
 
