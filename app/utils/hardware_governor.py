@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
+from app.utils.hardware_monitor import HardwareMonitor
 
 class HardwareGovernor:
     """
@@ -100,6 +101,121 @@ class HardwareGovernor:
         except Exception as e:
             app_logger.warning(f"Cpu affinity setting error: {e}")
             return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def _detect_gpu_model() -> str:
+        """Best-effort GPU model string (NVIDIA via torch, otherwise lspci/wmic)."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return torch.cuda.get_device_name(0)
+        except Exception:
+            pass
+        try:
+            if platform.system() == "Linux":
+                out = subprocess.run(
+                    ["lspci"], capture_output=True, text=True, timeout=5
+                ).stdout
+                for line in out.splitlines():
+                    if "VGA" in line or "3D controller" in line or "Display controller" in line:
+                        return line.split(": ", 1)[-1].strip()
+            elif platform.system() == "Windows":
+                out = subprocess.run(
+                    ["wmic", "path", "win32_VideoController", "get", "name"],
+                    capture_output=True, text=True, timeout=5,
+                ).stdout
+                lines = [l.strip() for l in out.splitlines() if l.strip() and "Name" not in l]
+                if lines:
+                    return lines[0]
+        except Exception:
+            pass
+        return "Unknown GPU"
+
+    @staticmethod
+    def _detect_cpu_model() -> str:
+        """Best-effort CPU model string."""
+        try:
+            proc = platform.processor()
+            if proc and proc.strip():
+                return proc.strip()
+        except Exception:
+            pass
+        try:
+            if platform.system() == "Linux":
+                with open("/proc/cpuinfo") as f:
+                    for line in f:
+                        if line.lower().startswith("model name"):
+                            return line.split(":", 1)[-1].strip()
+        except Exception:
+            pass
+        return platform.machine() or "Unknown CPU"
+
+    @classmethod
+    def build_self_model(cls) -> Dict[str, Any]:
+        """
+        Build a comprehensive hardware self-model the agent can reason about.
+
+        Combines static tier detection (P/E-core topology, RAM, GPU tier) with live
+        telemetry (CPU/RAM/disk load) plus an inference-capability assessment and
+        concrete operating recommendations. This is the "knows its own hardware"
+        substrate — the agent queries this rather than assuming a fixed profile.
+        """
+        tier = cls.detect_hardware_tier()
+        live = HardwareMonitor.get_hardware_stats()
+        cpu_model = cls._detect_cpu_model()
+        gpu_model = cls._detect_gpu_model()
+
+        logical_cpus = tier["cpu_threads"]
+        # Hybrid Intel (>=24 logical) implies P-cores + E-cores (e.g. i9-14900K: 8P+16E).
+        hybrid = logical_cpus >= 24
+        p_threads = min(16, logical_cpus) if hybrid else logical_cpus
+        e_threads = (logical_cpus - 16) if hybrid else 0
+
+        cuda_available = tier.get("gpu_available", False)
+        # RX 580 (Polaris) and similar are not practical CUDA/ROCm inference targets.
+        inference_accel = "cuda" if cuda_available else "cpu_only"
+
+        ram_total_gb = float(live.get("ram_total_gb") or tier.get("total_ram_gb") or 16.0)
+        ram_pressure = float(live.get("ram_percent", 0.0))
+        cpu_pressure = float(live.get("cpu_percent", 0.0))
+
+        # Model-fit recommendation based on RAM + acceleration.
+        if inference_accel == "cuda":
+            model_recommendation = "qwen2.5-9b-instruct (GPU-accelerated)"
+        elif ram_total_gb >= 24:
+            model_recommendation = "qwen2.5-9b-instruct (Q4_K_M, CPU)"
+        elif ram_total_gb >= 12:
+            model_recommendation = "qwen2.5-3b/7b-instruct (Q4_K_M, CPU)"
+        else:
+            model_recommendation = "qwen2.5-1.5b/3b-instruct (Q4_K_M, CPU)"
+
+        operating_mode = "high_performance" if not tier.get("ultra_lean_mode") else "ultra_lean"
+
+        return {
+            "cpu_model": cpu_model,
+            "cpu_logical_threads": logical_cpus,
+            "hybrid_architecture": hybrid,
+            "p_core_threads": p_threads,
+            "e_core_threads": e_threads,
+            "ram_total_gb": ram_total_gb,
+            "gpu_model": gpu_model,
+            "gpu_acceleration": inference_accel,
+            "disk_free_gb": live.get("disk_free_gb", 0.0),
+            "hardware_tier": tier["tier_name"],
+            "operating_mode": operating_mode,
+            "live": {
+                "cpu_percent": cpu_pressure,
+                "ram_percent": ram_pressure,
+                "disk_percent": live.get("disk_percent", 0.0),
+            },
+            "recommendation": {
+                "model": model_recommendation,
+                "p_cores_for_reasoning": hybrid,
+                "e_cores_for_background": hybrid,
+                "purge_memory_when_ram_above": 85.0,
+                "downgrade_to_fast_when_ram_above": 80.0,
+            },
+        }
 
     @staticmethod
     def purge_vram_and_system_memory() -> Dict[str, Any]:

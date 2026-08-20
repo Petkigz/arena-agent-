@@ -58,6 +58,12 @@ class CognitiveRuntime:
     def __init__(self, db_path: Optional[str] = None, max_steps: int = 3) -> None:
         path = db_path or str(settings.DB_PATH)
         self.state = CognitiveState()
+        # Phase 3: hardware self-awareness — the agent's model of its own machine.
+        try:
+            self.hardware_self_model = HardwareGovernor.build_self_model()
+        except Exception as e:
+            app_logger.warning(f"Could not build hardware self-model: {e}")
+            self.hardware_self_model = {}
         self.blackboard = Blackboard()
         self.events = EventBus()
         self.world = WorldModel(path)
@@ -150,6 +156,58 @@ class CognitiveRuntime:
             cognitive_state=self.state,
             max_steps=max_steps,
         )
+
+    def get_hardware_self_report(self) -> Dict[str, Any]:
+        """
+        Phase 3: Report the agent's hardware self-model plus a natural-language summary.
+
+        The agent can answer "what am I running on, and how am I using it?" from this.
+        Live telemetry is refreshed on every call so the report reflects current load.
+        """
+        try:
+            self.hardware_self_model = HardwareGovernor.build_self_model()
+        except Exception as e:
+            app_logger.warning(f"Could not refresh hardware self-model: {e}")
+
+        hw = self.hardware_self_model
+        live = hw.get("live", {})
+        summary = (
+            f"CPU: {hw.get('cpu_model', 'unknown')} "
+            f"({hw.get('cpu_logical_threads', 0)} threads, "
+            f"{'hybrid P/E-core' if hw.get('hybrid_architecture') else 'homogeneous'}). "
+            f"RAM: {hw.get('ram_total_gb', 0):.0f} GB ({live.get('ram_percent', 0):.0f}% used). "
+            f"GPU: {hw.get('gpu_model', 'unknown')} ({hw.get('gpu_acceleration', 'cpu_only')}). "
+            f"Tier: {hw.get('hardware_tier', 'unknown')}. "
+            f"Mode: {hw.get('operating_mode', 'unknown')}."
+        )
+        return {
+            "hardware_self_model": hw,
+            "summary": summary,
+        }
+
+    def _select_effective_complexity(self, requested: str) -> str:
+        """
+        Phase 3: Adapt the model route to live hardware load.
+
+        Under high memory pressure the agent downgrades to the fast model to stay
+        responsive; with ample headroom it may still honor the requested route.
+        Returns 'fast' or the requested complexity.
+        """
+        try:
+            live = self.hardware_self_model.get("live", {})
+            ram_pressure = float(live.get("ram_percent", 0.0))
+            threshold = float(
+                self.hardware_self_model.get("recommendation", {}).get("downgrade_to_fast_when_ram_above", 80.0)
+            )
+            if ram_pressure >= threshold and requested != "fast":
+                app_logger.info(
+                    f"Hardware-aware routing: RAM at {ram_pressure:.0f}% >= {threshold:.0f}% "
+                    f"→ downgrading '{requested}' to 'fast'."
+                )
+                return "fast"
+        except Exception as e:
+            app_logger.warning(f"Hardware-aware complexity selection failed: {e}")
+        return requested
 
     def session_start(self) -> Dict[str, Any]:
         """
@@ -681,6 +739,9 @@ class CognitiveRuntime:
         start_time = time.time()
         session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
 
+        # Phase 3: adapt model route to live hardware load.
+        complexity = self._select_effective_complexity(complexity)
+
         # Initialize Goal Lifecycle Tracker
         tracker = GoalTracker(user_query=user_text)
 
@@ -708,6 +769,8 @@ class CognitiveRuntime:
 
         # 3. Blackboard Ingestion & Context Slicing (Retrieves Past Learned Lessons)
         self.blackboard.set("current_user_query", user_text, source=SourceType.USER_INPUT, confidence=1.0)
+        # Phase 3: expose the hardware self-model so reasoning can consult the machine state.
+        self.blackboard.set("hardware_self_model", self.hardware_self_model, source="hardware_governor")
         try:
             sliced_ctx = PromptSlicerEngine.slice_context_for_task(user_text)
             self.blackboard.set("sliced_context", sliced_ctx.compact_prompt_str, source="prompt_slicer")
