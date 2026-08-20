@@ -49,9 +49,16 @@ def test_semantic_rag_uses_injected_world_model():
     Verify SemanticRAGEngine uses injected WorldModel instance.
     """
     mock_wm = MagicMock()
-    mock_wm.query_entities.return_value = [{"entity_type": "app", "name": "photoshop"}]
+
+    class _FakeEntity:
+        name = "photoshop"
+        entity_type = "app"
+
+    mock_wm.find_entities.return_value = [_FakeEntity()]
 
     ctx = SemanticRAGEngine.build_rag_context("photoshop", limit=1, world_model=mock_wm)
 
-    assert mock_wm.query_entities.call_count == 1
+    assert mock_wm.find_entities.call_count == 1
     assert "photoshop" in ctx.lower()
+    # The injected world model must be used (not a fresh WorldModel instantiation).
+    assert mock_wm.find_entities.call_args[1].get("name") == "photoshop"

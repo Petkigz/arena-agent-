@@ -1,5 +1,8 @@
 fastapi==0.112.0
 uvicorn==0.30.6
+# WebSocket support for uvicorn. uvicorn 0.30.6 uses the legacy websockets API,
+# which was removed in websockets>=14 — pin below 14 or the live chat silently breaks.
+websockets>=10.4,<14.0
 pydantic==2.8.2
 pydantic-settings==2.4.0
 httpx==0.27.0

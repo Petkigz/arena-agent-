@@ -1079,7 +1079,8 @@ class CognitiveRuntime:
                 predicate=query_pred,
                 value=user_text[:200],
                 source=SourceType.USER_INPUT,
-                task_id=session_id
+                task_id=session_id,
+                observation_type="self_reported",
             )
             # Use belief_confidence from authoritative belief, fall back to goal confidence
             trace.belief_confidence = float(

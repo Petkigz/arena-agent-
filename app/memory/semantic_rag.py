@@ -53,9 +53,13 @@ class SemanticRAGEngine:
             wm = world_model or WorldModel(str(settings.DB_PATH))
             words = [w for w in query.replace("?", "").replace("'", "").split() if len(w) > 3]
             search_key = words[0] if words else query
-            matched_nodes = wm.query_entities(query=search_key, limit=3)
+            # find_entities() returns Entity dataclasses (name/entity_type attrs);
+            # query_entities() does not exist on WorldModel.
+            matched_nodes = wm.find_entities(name=search_key)[:3]
             for node in matched_nodes:
-                graph_entities.append(f"• Entity [{node.get('entity_type', 'node')}]: '{node.get('name')}'")
+                node_type = getattr(node, "entity_type", "node")
+                node_name = getattr(node, "name", "?")
+                graph_entities.append(f"• Entity [{node_type}]: '{node_name}'")
         except Exception as e:
             app_logger.warning(f"Knowledge Graph RAG fusion notice: {e}")
 
