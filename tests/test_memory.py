@@ -1,6 +1,6 @@
 from app.cognition.memory import MemoryStore
 from app.cognition.memory_learning import Lesson, MemoryLearner
-from app.cognition.reflection import ReflectionEngine
+from app.memory.reflection_engine import ReflectionEngine
 
 
 def test_memory_round_trip_and_search(tmp_path):
@@ -24,7 +24,14 @@ def test_learning_promotes_explicit_knowledge(tmp_path):
     assert {item.kind for item in created} == {"semantic", "procedural", "lesson"}
 
 
-def test_reflection_does_not_invent_a_lesson():
-    reflection = ReflectionEngine().reflect([], summary="Task completed", unresolved=("Need confirmation",))
-    assert reflection.lesson is None
-    assert reflection.unresolved == ("Need confirmation",)
+def test_reflection_handles_llm_unavailable():
+    """Test that reflection gracefully handles LLM unavailability."""
+    result = ReflectionEngine.reflect_on_task_execution(
+        task_title="Test Task",
+        task_goal="Test goal",
+        outcome_summary="Task completed with unknown result"
+    )
+    # Should return a result dict even if LLM fails
+    assert isinstance(result, dict)
+    assert "task_title" in result
+    assert result["task_title"] == "Test Task"

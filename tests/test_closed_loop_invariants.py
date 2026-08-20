@@ -153,8 +153,12 @@ def test_invariant_e_goal_actually_satisfied_results_in_achieved():
     executed_actions = ["Launched Photoshop executable"]
     reply = "Photoshop process is running active on screen."
     observed_state = {
-        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running"}],
-        "observations": {"photoshop.status": "running"}
+        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running",
+                       "source": "os_process_probe", "observation_type": "direct", "confidence": 1.0}],
+        "observations": {"photoshop.status": {
+            "value": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }}
     }
 
     res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply, observed_state=observed_state)

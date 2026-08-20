@@ -10,6 +10,7 @@ from .events import CognitiveEvent
 from .information_gain import InformationNeed
 from .reasoning_cycle import ReasoningAction, ReasoningCycle, ReasoningDecision
 from .world_ingest import WorldIngestor
+from .source_types import SourceType
 
 @dataclass
 class CycleTrace:
@@ -35,7 +36,8 @@ class CognitiveReasoningLoop:
         self.max_steps = max(1, min(max_steps, 20))
 
     def run(self, subject: str, predicate: str, *, value: Any = None, source: Optional[str] = None,
-            confidence: float = 1.0, information_needs: Optional[list[InformationNeed]] = None,
+            confidence: float = 1.0, observation_type: str = "self_reported",
+            information_needs: Optional[list[InformationNeed]] = None,
             task_id: Optional[str] = None, action_available: bool = True,
             proposed_action: Optional[Any] = None,
             available_capabilities: Optional[dict[str, bool]] = None) -> CycleTrace:
@@ -46,7 +48,9 @@ class CognitiveReasoningLoop:
             self.cognitive_state.reasoning["status"] = "observing"
             self.cognitive_state.touch()
         if source is not None:
-            self.engine.ingest(subject, predicate, value, source=source, confidence=confidence, task_id=task_id)
+            self.engine.ingest(subject, predicate, value, source=source,
+                             observation_type=observation_type,
+                             confidence=confidence, task_id=task_id)
         needs = list(information_needs or [])
         for _ in range(self.max_steps):
             decision = self.cycle.decide(
@@ -85,9 +89,11 @@ class CognitiveReasoningLoop:
                     self.cognitive_state.touch()
                 trace.finished = True; trace.reason = result.error or "Investigation failed."; return trace
             evidence_predicate = plan.predicate or decision.information_need.predicate or predicate
-            self.engine.ingest(subject, evidence_predicate, result.output, source=f"tool:{plan.tool}", task_id=task_id)
+            self.engine.ingest(subject, evidence_predicate, result.output,
+                             source=SourceType.TOOL_OUTPUT,
+                             observation_type="inferred", task_id=task_id)
             if self.world_ingestor is not None:
-                self.world_ingestor.ingest(subject, evidence_predicate, result.output, source=f"tool:{plan.tool}", task_id=task_id)
+                self.world_ingestor.ingest(subject, evidence_predicate, result.output, source=SourceType.TOOL_OUTPUT, task_id=task_id, observation_type="inferred")
             if self.cognitive_state is not None:
                 self.cognitive_state.execution.last_action = plan.tool
                 self.cognitive_state.execution.last_result = result.output

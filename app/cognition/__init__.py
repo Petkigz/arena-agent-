@@ -6,6 +6,13 @@ from .events import CognitiveEvent
 from .event_bus import EventBus
 from .checkpoint import CognitiveCheckpointStore
 from .session import CognitiveSession
+from .verified_reflection import (
+    VerifiedReflection,
+    VerifiedReflectionStore,
+    VerificationMethod,
+    VerificationRecord,
+)
+from .common_sense import CommonSenseKnowledgeBase, CommonSenseFact
 
 __all__ = [
     "CognitiveState",
@@ -14,4 +21,10 @@ __all__ = [
     "EventBus",
     "CognitiveCheckpointStore",
     "CognitiveSession",
+    "VerifiedReflection",
+    "VerifiedReflectionStore",
+    "VerificationMethod",
+    "VerificationRecord",
+    "CommonSenseKnowledgeBase",
+    "CommonSenseFact",
 ]

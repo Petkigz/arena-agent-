@@ -1,0 +1,13 @@
+{
+  "name": "Arena - Local AI Assistant",
+  "short_name": "Arena",
+  "description": "Fully offline AI assistant powered by local LLMs",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#3B82F6",
+  "orientation": "any",
+  "scope": "/",
+  "categories": ["productivity", "utilities"],
+  "prefer_related_applications": false
+}

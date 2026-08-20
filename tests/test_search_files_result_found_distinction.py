@@ -40,7 +40,10 @@ def test_search_files_distinguishes_execution_success_from_result_found(tmp_path
         goal_rep = SemanticGoalInterpreter.interpret_goal("find non_existent_file.xyz")
         obs_state = {
             "entities": [],
-            "observations": {"filesystem.file_path": "not_found"},
+            "observations": {"filesystem.file_path": {
+                "value": "not_found", "source": "filesystem_probe",
+                "confidence": 1.0, "observation_type": "direct"
+            }},
             "executed_actions": res["executed_actions"],
             "assistant_reply": res["assistant_reply"]
         }

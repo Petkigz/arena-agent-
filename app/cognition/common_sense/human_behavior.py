@@ -1,0 +1,123 @@
+"""
+Human Behavior Knowledge
+
+Facts about human behavior including:
+- Social norms and etiquette
+- Psychology and cognition
+- Emotions and feelings
+- Communication patterns
+- Daily routines and habits
+- Decision making
+"""
+
+HUMAN_BEHAVIOR_FACTS = [
+    # ── Social Norms ──
+    {"fact_id": "hum_001", "category": "human", "fact": "People greet each other when they meet", "confidence": 1.0},
+    {"fact_id": "hum_002", "category": "human", "fact": "People say thank you when someone helps them", "confidence": 1.0},
+    {"fact_id": "hum_003", "category": "human", "fact": "People say sorry when they make a mistake", "confidence": 1.0},
+    {"fact_id": "hum_004", "category": "human", "fact": "People shake hands as a greeting in many cultures", "confidence": 1.0},
+    {"fact_id": "hum_005", "category": "human", "fact": "People take turns in conversation", "confidence": 1.0},
+    {"fact_id": "hum_006", "category": "human", "fact": "People wait in line for their turn", "confidence": 1.0},
+    {"fact_id": "hum_007", "category": "human", "fact": "Cutting in line is considered rude", "confidence": 1.0},
+    {"fact_id": "hum_008", "category": "human", "fact": "People knock before entering a closed door", "confidence": 1.0},
+    {"fact_id": "hum_009", "category": "human", "fact": "People generally maintain eye contact during conversation", "confidence": 0.9},
+    {"fact_id": "hum_010", "category": "human", "fact": "Staring at strangers is considered rude", "confidence": 1.0},
+    {"fact_id": "hum_011", "category": "human", "fact": "People introduce themselves when meeting for the first time", "confidence": 1.0},
+    {"fact_id": "hum_012", "category": "human", "fact": "People ask permission before borrowing things", "confidence": 1.0},
+    {"fact_id": "hum_013", "category": "human", "fact": "People return borrowed items", "confidence": 0.9},
+    {"fact_id": "hum_014", "category": "human", "fact": "People tip service workers in some cultures", "confidence": 0.9},
+    {"fact_id": "hum_015", "category": "human", "fact": "People dress differently for different occasions", "confidence": 1.0},
+    {"fact_id": "hum_016", "category": "human", "fact": "People speak more quietly in libraries", "confidence": 1.0},
+    {"fact_id": "hum_017", "category": "human", "fact": "People remove shoes in some homes", "confidence": 0.9},
+    {"fact_id": "hum_018", "category": "human", "fact": "People cover their mouth when coughing or sneezing", "confidence": 1.0},
+    {"fact_id": "hum_019", "category": "human", "fact": "Interrupting someone while speaking is considered rude", "confidence": 1.0},
+    {"fact_id": "hum_020", "category": "human", "fact": "People hold doors open for others", "confidence": 0.9},
+
+    # ── Psychology and Cognition ──
+    {"fact_id": "hum_101", "category": "human", "fact": "Humans can hold about 7 items in working memory", "confidence": 0.9},
+    {"fact_id": "hum_102", "category": "human", "fact": "People remember unusual events better than routine ones", "confidence": 1.0},
+    {"fact_id": "hum_103", "category": "human", "fact": "People tend to forget things they don't use often", "confidence": 1.0},
+    {"fact_id": "hum_104", "category": "human", "fact": "Stress can impair decision making", "confidence": 1.0},
+    {"fact_id": "hum_105", "category": "human", "fact": "People make faster decisions under time pressure", "confidence": 0.9},
+    {"fact_id": "hum_106", "category": "human", "fact": "People tend to prefer familiar things over unfamiliar ones", "confidence": 0.9},
+    {"fact_id": "hum_107", "category": "human", "fact": "Confirmation bias makes people favor information that confirms their beliefs", "confidence": 1.0},
+    {"fact_id": "hum_108", "category": "human", "fact": "People are more likely to remember the first and last items in a list", "confidence": 1.0},
+    {"fact_id": "hum_109", "category": "human", "fact": "Multitasking usually reduces performance on each task", "confidence": 1.0},
+    {"fact_id": "hum_110", "category": "human", "fact": "People are more creative when they are relaxed", "confidence": 0.8},
+    {"fact_id": "hum_111", "category": "human", "fact": "Sleep deprivation impairs cognitive function", "confidence": 1.0},
+    {"fact_id": "hum_112", "category": "human", "fact": "People learn better with practice and repetition", "confidence": 1.0},
+    {"fact_id": "hum_113", "category": "human", "fact": "Motivation increases performance up to a point", "confidence": 0.9},
+    {"fact_id": "hum_114", "category": "human", "fact": "People are influenced by social proof - what others are doing", "confidence": 1.0},
+    {"fact_id": "hum_115", "category": "human", "fact": "Anchoring bias makes people rely too much on the first piece of information", "confidence": 1.0},
+    {"fact_id": "hum_116", "category": "human", "fact": "People overestimate how much others notice their mistakes", "confidence": 0.9},
+    {"fact_id": "hum_117", "category": "human", "fact": "Loss aversion makes losses feel worse than equivalent gains feel good", "confidence": 1.0},
+    {"fact_id": "hum_118", "category": "human", "fact": "People are more likely to help when they are the only witness", "confidence": 0.9},
+    {"fact_id": "hum_119", "category": "human", "fact": "Habits are automatic behaviors triggered by context", "confidence": 1.0},
+    {"fact_id": "hum_120", "category": "human", "fact": "People form first impressions within seconds", "confidence": 0.9},
+
+    # ── Emotions ──
+    {"fact_id": "hum_201", "category": "human", "fact": "Happiness is associated with smiling", "confidence": 1.0},
+    {"fact_id": "hum_202", "category": "human", "fact": "Sadness is associated with crying", "confidence": 1.0},
+    {"fact_id": "hum_203", "category": "human", "fact": "Anger is associated with raised voice", "confidence": 0.9},
+    {"fact_id": "hum_204", "category": "human", "fact": "Fear is associated with increased heart rate", "confidence": 1.0},
+    {"fact_id": "hum_205", "category": "human", "fact": "Surprise is associated with widened eyes", "confidence": 1.0},
+    {"fact_id": "hum_206", "category": "human", "fact": "Disgust is associated with wrinkled nose", "confidence": 1.0},
+    {"fact_id": "hum_207", "category": "human", "fact": "People feel happy when good things happen to them", "confidence": 1.0},
+    {"fact_id": "hum_208", "category": "human", "fact": "People feel sad when they lose something important", "confidence": 1.0},
+    {"fact_id": "hum_209", "category": "human", "fact": "People feel angry when they are treated unfairly", "confidence": 1.0},
+    {"fact_id": "hum_210", "category": "human", "fact": "People feel anxious before important events", "confidence": 0.9},
+    {"fact_id": "hum_211", "category": "human", "fact": "People feel proud when they accomplish something difficult", "confidence": 1.0},
+    {"fact_id": "hum_212", "category": "human", "fact": "People feel embarrassed when they make mistakes in public", "confidence": 1.0},
+    {"fact_id": "hum_213", "category": "human", "fact": "People feel grateful when someone helps them unexpectedly", "confidence": 1.0},
+    {"fact_id": "hum_214", "category": "human", "fact": "People feel jealous when someone has something they want", "confidence": 0.9},
+    {"fact_id": "hum_215", "category": "human", "fact": "People feel guilty when they do something wrong", "confidence": 0.9},
+    {"fact_id": "hum_216", "category": "human", "fact": "People feel lonely when they lack social connection", "confidence": 1.0},
+    {"fact_id": "hum_217", "category": "human", "fact": "People feel relieved when a worry turns out to be unfounded", "confidence": 1.0},
+    {"fact_id": "hum_218", "category": "human", "fact": "People feel bored when there is nothing interesting to do", "confidence": 1.0},
+    {"fact_id": "hum_219", "category": "human", "fact": "People feel excited when anticipating something positive", "confidence": 1.0},
+    {"fact_id": "hum_220", "category": "human", "fact": "People feel frustrated when they cannot achieve a goal", "confidence": 1.0},
+    {"fact_id": "hum_221", "category": "human", "fact": "Emotions influence decision making", "confidence": 1.0},
+    {"fact_id": "hum_222", "category": "human", "fact": "People can hide their emotions from others", "confidence": 0.9},
+    {"fact_id": "hum_223", "category": "human", "fact": "Stress can cause physical symptoms like headaches", "confidence": 1.0},
+    {"fact_id": "hum_224", "category": "human", "fact": "Exercise can improve mood", "confidence": 1.0},
+    {"fact_id": "hum_225", "category": "human", "fact": "Music can affect people's emotions", "confidence": 1.0},
+
+    # ── Communication ──
+    {"fact_id": "hum_301", "category": "human", "fact": "People use words to communicate ideas", "confidence": 1.0},
+    {"fact_id": "hum_302", "category": "human", "fact": "People use body language to communicate feelings", "confidence": 1.0},
+    {"fact_id": "hum_303", "category": "human", "fact": "Tone of voice conveys meaning beyond words", "confidence": 1.0},
+    {"fact_id": "hum_304", "category": "human", "fact": "People ask questions when they want information", "confidence": 1.0},
+    {"fact_id": "hum_305", "category": "human", "fact": "People give instructions when they want someone to do something", "confidence": 1.0},
+    {"fact_id": "hum_306", "category": "human", "fact": "Sarcasm means saying the opposite of what you mean", "confidence": 0.9},
+    {"fact_id": "hum_307", "category": "human", "fact": "Metaphors compare one thing to another", "confidence": 1.0},
+    {"fact_id": "hum_308", "category": "human", "fact": "People use humor to make others laugh", "confidence": 1.0},
+    {"fact_id": "hum_309", "category": "human", "fact": "Jokes often rely on surprise or unexpected twists", "confidence": 1.0},
+    {"fact_id": "hum_310", "category": "human", "fact": "People nod to show agreement", "confidence": 0.9},
+    {"fact_id": "hum_311", "category": "human", "fact": "People shake their head to show disagreement", "confidence": 0.9},
+    {"fact_id": "hum_312", "category": "human", "fact": "Crossed arms can indicate defensiveness", "confidence": 0.7},
+    {"fact_id": "hum_313", "category": "human", "fact": "Leaning forward shows interest", "confidence": 0.8},
+    {"fact_id": "hum_314", "category": "human", "fact": "Yawning can indicate tiredness or boredom", "confidence": 0.9},
+    {"fact_id": "hum_315", "category": "human", "fact": "People wave to say hello or goodbye", "confidence": 1.0},
+
+    # ── Daily Routines and Needs ──
+    {"fact_id": "hum_401", "category": "human", "fact": "Humans need to sleep about 7-9 hours per day", "confidence": 1.0},
+    {"fact_id": "hum_402", "category": "human", "fact": "Humans need to eat food to survive", "confidence": 1.0},
+    {"fact_id": "hum_403", "category": "human", "fact": "Humans need to drink water to survive", "confidence": 1.0},
+    {"fact_id": "hum_404", "category": "human", "fact": "People usually eat three meals a day", "confidence": 0.8},
+    {"fact_id": "hum_405", "category": "human", "fact": "People feel hungry when they haven't eaten", "confidence": 1.0},
+    {"fact_id": "hum_406", "category": "human", "fact": "People feel thirsty when they haven't had water", "confidence": 1.0},
+    {"fact_id": "hum_407", "category": "human", "fact": "People feel tired when they haven't slept enough", "confidence": 1.0},
+    {"fact_id": "hum_408", "category": "human", "fact": "People brush their teeth for dental hygiene", "confidence": 1.0},
+    {"fact_id": "hum_409", "category": "human", "fact": "People shower or bathe for cleanliness", "confidence": 1.0},
+    {"fact_id": "hum_410", "category": "human", "fact": "People wear clothes for warmth and modesty", "confidence": 1.0},
+    {"fact_id": "hum_411", "category": "human", "fact": "People go to work or school during the day", "confidence": 0.9},
+    {"fact_id": "hum_412", "category": "human", "fact": "People usually sleep at night", "confidence": 0.9},
+    {"fact_id": "hum_413", "category": "human", "fact": "People get cold when the temperature drops", "confidence": 1.0},
+    {"fact_id": "hum_414", "category": "human", "fact": "People get hot when the temperature rises", "confidence": 1.0},
+    {"fact_id": "hum_415", "category": "human", "fact": "People wear warmer clothes in cold weather", "confidence": 1.0},
+    {"fact_id": "hum_416", "category": "human", "fact": "People carry umbrellas when it rains", "confidence": 0.9},
+    {"fact_id": "hum_417", "category": "human", "fact": "Humans cannot survive without air", "confidence": 1.0},
+    {"fact_id": "hum_418", "category": "human", "fact": "Humans cannot hold their breath indefinitely", "confidence": 1.0},
+    {"fact_id": "hum_419", "category": "human", "fact": "Exercise makes people tired but is healthy", "confidence": 1.0},
+    {"fact_id": "hum_420", "category": "human", "fact": "Rest restores energy", "confidence": 1.0},
+]

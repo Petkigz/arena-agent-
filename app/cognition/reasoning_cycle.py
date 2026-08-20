@@ -54,7 +54,7 @@ class ReasoningCycle:
             if action_available:
                 return ReasoningDecision(
                     ReasoningAction.ACT,
-                    belief.confidence if belief else 0.9,
+                    belief.belief_confidence if belief and belief.has_belief else 0.9,
                     "Explicit action intent provided with verified available execution capabilities.",
                     belief=belief,
                     proposed_action=proposed_action
@@ -75,28 +75,28 @@ class ReasoningCycle:
             if need or predicate == "information_need":
                 return ReasoningDecision(
                     ReasoningAction.INVESTIGATE,
-                    belief.confidence if belief else 0.3,
+                    belief.belief_confidence if belief and belief.has_belief else 0.3,
                     "Information need or diagnostic query detected; running investigation probes.",
                     information_need=need,
                     belief=belief
                 )
 
         # 3. Knowledge Query: Direct answer or high confidence belief
-        if belief and belief.confidence >= self.answer_threshold:
-            return ReasoningDecision(ReasoningAction.ANSWER, belief.confidence, "Best hypothesis exceeds answer threshold.", belief=belief)
+        if belief and belief.has_belief and belief.belief_confidence >= self.answer_threshold:
+            return ReasoningDecision(ReasoningAction.ANSWER, belief.belief_confidence, "Best hypothesis exceeds answer threshold.", belief=belief)
 
         if predicate == "knowledge_query":
             return ReasoningDecision(ReasoningAction.ANSWER, 0.9, "Knowledge query provided; formulating direct conversational answer.", belief=belief)
 
         need = choose_information_need(information_needs or [])
         if need is not None:
-            return ReasoningDecision(ReasoningAction.INVESTIGATE, belief.confidence if belief else 0.4, "Uncertainty remains and useful information is available.", information_need=need, belief=belief)
+            return ReasoningDecision(ReasoningAction.INVESTIGATE, belief.belief_confidence if belief and belief.has_belief else 0.4, "Uncertainty remains and useful information is available.", information_need=need, belief=belief)
 
-        if action_available and belief and belief.confidence >= self.investigate_threshold:
-            return ReasoningDecision(ReasoningAction.ACT, belief.confidence, "Evidence is sufficient for a bounded action.", belief=belief, proposed_action=proposed_action)
+        if action_available and belief and belief.has_belief and belief.belief_confidence >= self.investigate_threshold:
+            return ReasoningDecision(ReasoningAction.ACT, belief.belief_confidence, "Evidence is sufficient for a bounded action.", belief=belief, proposed_action=proposed_action)
 
-        return ReasoningDecision(ReasoningAction.DEFER, belief.confidence if belief else 0.0, "Evidence is insufficient for a safe decision.", belief=belief)
+        return ReasoningDecision(ReasoningAction.DEFER, belief.belief_confidence if belief and belief.has_belief else 0.0, "Evidence is insufficient for a safe decision.", belief=belief)
 
-    def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False, proposed_action: Optional[Any] = None, available_capabilities: Optional[dict[str, bool]] = None) -> ReasoningDecision:
-        self.engine.ingest(subject, predicate, value, source=source, confidence=confidence, rationale=rationale)
+    def observe_and_decide(self, subject: str, predicate: str, value: Any, *, source: str, confidence: float = 1.0, rationale: str | None = None, information_needs: list[InformationNeed] | None = None, action_available: bool = False, proposed_action: Optional[Any] = None, available_capabilities: Optional[dict[str, bool]] = None, observation_type: str = "direct") -> ReasoningDecision:
+        self.engine.ingest(subject, predicate, value, source=source, confidence=confidence, rationale=rationale, observation_type=observation_type)
         return self.decide(subject, predicate, information_needs=information_needs, action_available=action_available, proposed_action=proposed_action, available_capabilities=available_capabilities)

@@ -453,7 +453,7 @@ class SemanticGoalInterpreter:
 
         # Deeper Semantic Interpretation Path:
         # Triggered when explicitly requested (complexity in ["main", "deep"]) OR when fast heuristics detect ambiguity/collisions (is_ambiguous)
-        if complexity in ["main", "deep"] or is_ambiguous:
+        if complexity in ["main", "deep"] or is_ambiguous_collision:
             try:
                 system_prompt = (
                     "You are a Goal Representation v2 Decomposition Engine. Parse user input into JSON with keys: "

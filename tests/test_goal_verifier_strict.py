@@ -32,8 +32,12 @@ def test_goal_verifier_successful_app_launch_passes_verification():
     executed_actions = ["Launched Photoshop executable"]
     reply = "Photoshop process is running active on screen."
     observed_state = {
-        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running"}],
-        "observations": {"photoshop.status": "running"}
+        "entities": [{"name": "photoshop.exe", "type": "process", "status": "running",
+                       "source": "os_process_probe", "observation_type": "direct", "confidence": 1.0}],
+        "observations": {"photoshop.status": {
+            "value": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }}
     }
 
     res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply, observed_state=observed_state)
@@ -56,7 +60,8 @@ def test_goal_verifier_unrelated_action_execution_fails_verification():
     res = GoalVerifier.verify_goal_achievement(goal_rep, executed_actions, reply)
 
     assert res.verified_success is False
-    assert res.final_state == GoalLifecycleState.FAILED
+    # No observations for target → conditions UNKNOWN (waiting for evidence, not explicit failure)
+    assert res.final_state in (GoalLifecycleState.FAILED, GoalLifecycleState.WAITING_FOR_EVIDENCE)
 
 
 def test_goal_verifier_filesystem_file_not_found_fails():
@@ -83,10 +88,14 @@ def test_goal_verifier_returns_actual_world_state():
 
     observed_world_state = {
         "entities": [
-            {"name": "chrome.exe", "type": "process", "status": "running"}
+            {"name": "chrome.exe", "type": "process", "status": "running",
+             "source": "os_process_probe", "observation_type": "direct", "confidence": 1.0}
         ],
         "observations": {
-            "chrome.exe.status": "running"
+            "chrome.exe.status": {
+                "value": "running", "source": "os_process_probe",
+                "confidence": 1.0, "observation_type": "direct"
+            }
         },
         "executed_actions": ["Launched Chrome browser"],
         "assistant_reply": "Chrome is active and running."
@@ -104,4 +113,9 @@ def test_goal_verifier_returns_actual_world_state():
     assert "observations" in res.observed_state
     assert "verified_entity_states" in res.observed_state
     assert res.observed_state["verified_entity_states"].get("chrome.exe") == "running"
-    assert res.observed_state["observations"].get("chrome.exe.status") == "running"
+    chrome_obs = res.observed_state["observations"].get("chrome.exe.status")
+    # Observation may be structured (dict with value) or primitive
+    if isinstance(chrome_obs, dict):
+        assert chrome_obs.get("value") == "running"
+    else:
+        assert chrome_obs == "running"

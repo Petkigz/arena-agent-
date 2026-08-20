@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Arena Voice</string>
+    <string name="wake_word_service_notification_title">Arena Voice</string>
+    <string name="wake_word_service_notification_text">Listening for wake word...</string>
+    <string name="recording_service_notification_title">Arena Voice</string>
+    <string name="recording_service_notification_text">Recording your voice...</string>
+</resources>

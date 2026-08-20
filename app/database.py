@@ -119,6 +119,13 @@ class DatabaseManager:
                 tasks.append(t)
             return tasks
 
+    # Allowed columns for task updates (whitelist to prevent SQL injection)
+    _TASK_UPDATE_COLUMNS = {
+        "title", "description", "status", "priority", "plan",
+        "checkpoint", "tags", "updated_at", "due_date", "assignee",
+        "current_step",
+    }
+
     def update_task(self, task_id: str, updates: Dict[str, Any]) -> bool:
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -127,13 +134,21 @@ class DatabaseManager:
             set_parts = []
             params = []
             for k, v in updates.items():
+                if k not in self._TASK_UPDATE_COLUMNS:
+                    continue  # Skip unknown columns to prevent SQL injection
                 if k == "plan":
                     set_parts.append("plan = ?")
                     params.append(json.dumps(v))
+                elif k == "tags":
+                    set_parts.append("tags = ?")
+                    params.append(json.dumps(v) if isinstance(v, list) else v)
                 else:
                     set_parts.append(f"{k} = ?")
                     params.append(v)
             
+            if not set_parts:
+                return False
+
             params.append(task_id)
             query = f"UPDATE tasks SET {', '.join(set_parts)} WHERE id = ?"
             cursor.execute(query, params)

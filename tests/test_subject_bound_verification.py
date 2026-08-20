@@ -70,10 +70,16 @@ def test_matching_subject_bound_observation_satisfies_condition():
     )
 
     matching_obs_map = {
-        "photoshop.status": "running"
+        "photoshop.status": {
+            "value": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }
     }
     matching_entity_states = {
-        "photoshop": "running"
+        "photoshop": {
+            "status": "running", "source": "os_process_probe",
+            "confidence": 1.0, "observation_type": "direct"
+        }
     }
 
     res = GoalVerifier.evaluate_condition_against_world_model(

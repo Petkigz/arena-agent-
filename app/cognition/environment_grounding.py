@@ -13,6 +13,8 @@ from app.database import db
 from app.utils.logger import app_logger, audit_logger
 from app.utils.hardware_monitor import HardwareMonitor
 from app.utils.hardware_governor import HardwareGovernor
+from app.cognition.world_model import Observation
+from app.cognition.source_types import SourceType
 from app.tools.app_inventory import SystemAppInventory
 from app.tools.win32_ghost_operator import Win32GhostOperator
 from app.cognition.world_model import WorldModel, Entity, Observation
@@ -74,7 +76,8 @@ class EnvironmentGroundingEngine:
                 subject="host_environment",
                 predicate="topology_update",
                 value=topology_snapshot,
-                source="environment_grounding_engine"
+                source=SourceType.ENVIRONMENT_GROUNDING_ENGINE,
+                observation_type="environmental",
             ))
         except Exception as e:
             app_logger.warning(f"WorldModel environment grounding notice: {e}")

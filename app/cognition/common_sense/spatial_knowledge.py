@@ -1,0 +1,117 @@
+"""
+Spatial Knowledge
+
+Facts about spatial relationships including:
+- Position and orientation
+- Containment and proximity
+- Size and scale
+- Navigation and direction
+- Spatial reasoning
+"""
+
+SPATIAL_KNOWLEDGE_FACTS = [
+    # ── Position and Orientation ──
+    {"fact_id": "spat_001", "category": "spatial", "fact": "The sky is above the ground", "confidence": 1.0},
+    {"fact_id": "spat_002", "category": "spatial", "fact": "The floor is below the ceiling", "confidence": 1.0},
+    {"fact_id": "spat_003", "category": "spatial", "fact": "Left and right are relative to the observer", "confidence": 1.0},
+    {"fact_id": "spat_004", "category": "spatial", "fact": "Up is the direction opposite to gravity", "confidence": 1.0},
+    {"fact_id": "spat_005", "category": "spatial", "fact": "Down is the direction of gravity", "confidence": 1.0},
+    {"fact_id": "spat_006", "category": "spatial", "fact": "A table top is above the table legs", "confidence": 1.0},
+    {"fact_id": "spat_007", "category": "spatial", "fact": "A roof is on top of a building", "confidence": 1.0},
+    {"fact_id": "spat_008", "category": "spatial", "fact": "A door is typically in a wall", "confidence": 1.0},
+    {"fact_id": "spat_009", "category": "spatial", "fact": "Windows are typically in walls", "confidence": 1.0},
+    {"fact_id": "spat_010", "category": "spatial", "fact": "A chair is placed on the floor", "confidence": 1.0},
+    {"fact_id": "spat_011", "category": "spatial", "fact": "Pictures hang on walls", "confidence": 1.0},
+    {"fact_id": "spat_012", "category": "spatial", "fact": "Light fixtures are typically on the ceiling", "confidence": 0.9},
+    {"fact_id": "spat_013", "category": "spatial", "fact": "Drawers are inside furniture", "confidence": 1.0},
+    {"fact_id": "spat_014", "category": "spatial", "fact": "Shelves are above the items placed on them", "confidence": 1.0},
+    {"fact_id": "spat_015", "category": "spatial", "fact": "The front of a building faces the street", "confidence": 0.9},
+    {"fact_id": "spat_016", "category": "spatial", "fact": "A basement is below ground level", "confidence": 1.0},
+    {"fact_id": "spat_017", "category": "spatial", "fact": "An attic is at the top of a building", "confidence": 1.0},
+    {"fact_id": "spat_018", "category": "spatial", "fact": "Stairs connect different levels of a building", "confidence": 1.0},
+    {"fact_id": "spat_019", "category": "spatial", "fact": "A handle is on the outside of a door", "confidence": 1.0},
+    {"fact_id": "spat_020", "category": "spatial", "fact": "The inside of a container holds things", "confidence": 1.0},
+
+    # ── Containment and Proximity ──
+    {"fact_id": "spat_101", "category": "spatial", "fact": "Water is inside a glass when poured", "confidence": 1.0},
+    {"fact_id": "spat_102", "category": "spatial", "fact": "Clothes are inside a closet when stored", "confidence": 1.0},
+    {"fact_id": "spat_103", "category": "spatial", "fact": "Food is inside a refrigerator when stored", "confidence": 1.0},
+    {"fact_id": "spat_104", "category": "spatial", "fact": "A car has seats inside it", "confidence": 1.0},
+    {"fact_id": "spat_105", "category": "spatial", "fact": "Books are on shelves in a library", "confidence": 1.0},
+    {"fact_id": "spat_106", "category": "spatial", "fact": "A key goes inside a lock", "confidence": 1.0},
+    {"fact_id": "spat_107", "category": "spatial", "fact": "A lid goes on top of a container", "confidence": 1.0},
+    {"fact_id": "spat_108", "category": "spatial", "fact": "A hat goes on top of the head", "confidence": 1.0},
+    {"fact_id": "spat_109", "category": "spatial", "fact": "Shoes go on feet", "confidence": 1.0},
+    {"fact_id": "spat_110", "category": "spatial", "fact": "Glasses go on the face", "confidence": 1.0},
+    {"fact_id": "spat_111", "category": "spatial", "fact": "Rings go on fingers", "confidence": 1.0},
+    {"fact_id": "spat_112", "category": "spatial", "fact": "A necklace goes around the neck", "confidence": 1.0},
+    {"fact_id": "spat_113", "category": "spatial", "fact": "A belt goes around the waist", "confidence": 1.0},
+    {"fact_id": "spat_114", "category": "spatial", "fact": "A watch goes on the wrist", "confidence": 1.0},
+    {"fact_id": "spat_115", "category": "spatial", "fact": "A backpack goes on the back", "confidence": 1.0},
+    {"fact_id": "spat_116", "category": "spatial", "fact": "Neighbors live close to each other", "confidence": 1.0},
+    {"fact_id": "spat_117", "category": "spatial", "fact": "A garden is typically next to or behind a house", "confidence": 0.9},
+    {"fact_id": "spat_118", "category": "spatial", "fact": "A sidewalk is next to a road", "confidence": 0.9},
+    {"fact_id": "spat_119", "category": "spatial", "fact": "A parking lot is near a building", "confidence": 0.9},
+    {"fact_id": "spat_120", "category": "spatial", "fact": "Rooms in a house are connected by doors or hallways", "confidence": 1.0},
+
+    # ── Size and Scale ──
+    {"fact_id": "spat_201", "category": "spatial", "fact": "A car is bigger than a bicycle", "confidence": 1.0},
+    {"fact_id": "spat_202", "category": "spatial", "fact": "A house is bigger than a car", "confidence": 1.0},
+    {"fact_id": "spat_203", "category": "spatial", "fact": "A building is bigger than a house", "confidence": 0.9},
+    {"fact_id": "spat_204", "category": "spatial", "fact": "A city is bigger than a town", "confidence": 1.0},
+    {"fact_id": "spat_205", "category": "spatial", "fact": "A country is bigger than a city", "confidence": 1.0},
+    {"fact_id": "spat_206", "category": "spatial", "fact": "A continent is bigger than a country", "confidence": 1.0},
+    {"fact_id": "spat_207", "category": "spatial", "fact": "The Earth is bigger than the Moon", "confidence": 1.0},
+    {"fact_id": "spat_208", "category": "spatial", "fact": "The Sun is bigger than the Earth", "confidence": 1.0},
+    {"fact_id": "spat_209", "category": "spatial", "fact": "An elephant is bigger than a dog", "confidence": 1.0},
+    {"fact_id": "spat_210", "category": "spatial", "fact": "A dog is bigger than a cat", "confidence": 0.9},
+    {"fact_id": "spat_211", "category": "spatial", "fact": "A cat is bigger than a mouse", "confidence": 1.0},
+    {"fact_id": "spat_212", "category": "spatial", "fact": "A mountain is taller than a hill", "confidence": 1.0},
+    {"fact_id": "spat_213", "category": "spatial", "fact": "An ocean is bigger than a lake", "confidence": 1.0},
+    {"fact_id": "spat_214", "category": "spatial", "fact": "A river is longer than a stream", "confidence": 1.0},
+    {"fact_id": "spat_215", "category": "spatial", "fact": "A tree is taller than a bush", "confidence": 0.9},
+    {"fact_id": "spat_216", "category": "spatial", "fact": "A basketball is bigger than a tennis ball", "confidence": 1.0},
+    {"fact_id": "spat_217", "category": "spatial", "fact": "A door is taller than a person", "confidence": 0.9},
+    {"fact_id": "spat_218", "category": "spatial", "fact": "A spoon is smaller than a fork", "confidence": 0.5},
+    {"fact_id": "spat_219", "category": "spatial", "fact": "A grain of sand is very small", "confidence": 1.0},
+    {"fact_id": "spat_220", "category": "spatial", "fact": "A stadium can hold thousands of people", "confidence": 1.0},
+
+    # ── Navigation and Direction ──
+    {"fact_id": "spat_301", "category": "spatial", "fact": "North is opposite to south", "confidence": 1.0},
+    {"fact_id": "spat_302", "category": "spatial", "fact": "East is opposite to west", "confidence": 1.0},
+    {"fact_id": "spat_303", "category": "spatial", "fact": "The sun rises in the east", "confidence": 1.0},
+    {"fact_id": "spat_304", "category": "spatial", "fact": "The sun sets in the west", "confidence": 1.0},
+    {"fact_id": "spat_305", "category": "spatial", "fact": "A straight line is the shortest distance between two points", "confidence": 1.0},
+    {"fact_id": "spat_306", "category": "spatial", "fact": "Going around an obstacle takes longer than going straight", "confidence": 1.0},
+    {"fact_id": "spat_307", "category": "spatial", "fact": "Turn left means to rotate 90 degrees counterclockwise", "confidence": 1.0},
+    {"fact_id": "spat_308", "category": "spatial", "fact": "Turn right means to rotate 90 degrees clockwise", "confidence": 1.0},
+    {"fact_id": "spat_309", "category": "spatial", "fact": "A U-turn reverses direction", "confidence": 1.0},
+    {"fact_id": "spat_310", "category": "spatial", "fact": "An intersection is where two roads cross", "confidence": 1.0},
+    {"fact_id": "spat_311", "category": "spatial", "fact": "A roundabout is a circular intersection", "confidence": 1.0},
+    {"fact_id": "spat_312", "category": "spatial", "fact": "A bridge goes over a river or road", "confidence": 1.0},
+    {"fact_id": "spat_313", "category": "spatial", "fact": "A tunnel goes through a mountain or under ground", "confidence": 1.0},
+    {"fact_id": "spat_314", "category": "spatial", "fact": "A map represents spatial relationships", "confidence": 1.0},
+    {"fact_id": "spat_315", "category": "spatial", "fact": "GPS uses satellites to determine position", "confidence": 1.0},
+
+    # ── Spatial Reasoning ──
+    {"fact_id": "spat_401", "category": "spatial", "fact": "Two objects cannot occupy the same space at the same time", "confidence": 1.0},
+    {"fact_id": "spat_402", "category": "spatial", "fact": "A small object can fit inside a larger container", "confidence": 1.0},
+    {"fact_id": "spat_403", "category": "spatial", "fact": "A large object cannot fit through a small opening", "confidence": 1.0},
+    {"fact_id": "spat_404", "category": "spatial", "fact": "If A is left of B and B is left of C, then A is left of C", "confidence": 1.0},
+    {"fact_id": "spat_405", "category": "spatial", "fact": "If A is above B and B is above C, then A is above C", "confidence": 1.0},
+    {"fact_id": "spat_406", "category": "spatial", "fact": "If A is inside B and B is inside C, then A is inside C", "confidence": 1.0},
+    {"fact_id": "spat_407", "category": "spatial", "fact": "Rotating an object does not change its size", "confidence": 1.0},
+    {"fact_id": "spat_408", "category": "spatial", "fact": "Moving closer to something makes it appear larger", "confidence": 1.0},
+    {"fact_id": "spat_409", "category": "spatial", "fact": "Moving farther from something makes it appear smaller", "confidence": 1.0},
+    {"fact_id": "spat_410", "category": "spatial", "fact": "Objects look smaller when they are far away", "confidence": 1.0},
+    {"fact_id": "spat_411", "category": "spatial", "fact": "Parallel lines never meet", "confidence": 1.0},
+    {"fact_id": "spat_412", "category": "spatial", "fact": "A circle has no corners", "confidence": 1.0},
+    {"fact_id": "spat_413", "category": "spatial", "fact": "A square has four equal sides and four corners", "confidence": 1.0},
+    {"fact_id": "spat_414", "category": "spatial", "fact": "A triangle has three sides and three corners", "confidence": 1.0},
+    {"fact_id": "spat_415", "category": "spatial", "fact": "A cube has six square faces", "confidence": 1.0},
+    {"fact_id": "spat_416", "category": "spatial", "fact": "A sphere is round in all directions", "confidence": 1.0},
+    {"fact_id": "spat_417", "category": "spatial", "fact": "Flat objects can stack on top of each other", "confidence": 1.0},
+    {"fact_id": "spat_418", "category": "spatial", "fact": "Round objects roll on flat surfaces", "confidence": 1.0},
+    {"fact_id": "spat_419", "category": "spatial", "fact": "Pointed objects can puncture soft materials", "confidence": 1.0},
+    {"fact_id": "spat_420", "category": "spatial", "fact": "Hollow objects can contain smaller objects", "confidence": 1.0},
+]
