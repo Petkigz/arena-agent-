@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 import uuid
 import time
+import threading
 from typing import Dict, Any, List, Optional
 
 from app.config import settings
@@ -48,11 +49,16 @@ class CognitiveRuntime:
     """
 
     _instance: Optional[CognitiveRuntime] = None
+    _instance_lock = threading.Lock()
 
     @classmethod
     def get_instance(cls, db_path: Optional[str] = None) -> CognitiveRuntime:
+        # Phase 0 fix: thread-safe singleton (double-checked locking). The prior
+        # check-then-set could race and construct multiple runtimes under concurrency.
         if cls._instance is None:
-            cls._instance = CognitiveRuntime(db_path=db_path)
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = CognitiveRuntime(db_path=db_path)
         return cls._instance
 
     def __init__(self, db_path: Optional[str] = None, max_steps: int = 3) -> None:
@@ -143,6 +149,13 @@ class CognitiveRuntime:
         self.embodied_cognition = EmbodiedCognitionEngine(db_path=path)
         from app.cognition.cultural_learning import CulturalLearningEngine
         self.cultural_learning = CulturalLearningEngine(db_path=path)
+        # Phase 14: Advanced Cognitive Capabilities (resource mgmt, multi-agent
+        # coordination, knowledge synthesis, uncertainty quantification).
+        from app.cognition.advanced_cognitive_capabilities import Phase14AdvancedCognitiveCapabilities
+        self.advanced_cognition = Phase14AdvancedCognitiveCapabilities(db_path=path)
+        # Phase 22: Language Grounding (symbol ↔ perception/action/meaning).
+        from app.cognition.language_grounding import LanguageGroundingEngine
+        self.language_grounding = LanguageGroundingEngine(db_path=path)
         
         self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
@@ -716,6 +729,28 @@ class CognitiveRuntime:
             )
         except Exception as e:
             app_logger.warning(f"Cultural learning integration failed: {e}")
+
+        try:
+            # Phase 14: resource/multi-agent/knowledge/uncertainty self-report.
+            self.blackboard.set(
+                "phase14_report",
+                self.advanced_cognition.get_phase14_report(),
+                source="advanced_cognition",
+            )
+            # Phase 14: calibrate confidence against the actual outcome (learning).
+            self.advanced_cognition.uncertainty_quantifier.calibrate_confidence(
+                predictions=[0.7],
+                actual=[1.0 if goal_verified else 0.0],
+            )
+        except Exception as e:
+            app_logger.warning(f"Advanced cognition integration failed: {e}")
+
+        try:
+            # Phase 22: ground the utterance to perception/action/meaning.
+            grounding = self.language_grounding.ground_utterance(user_text)
+            self.blackboard.set("utterance_grounding", grounding, source="language_grounding")
+        except Exception as e:
+            app_logger.warning(f"Language grounding integration failed: {e}")
 
     def process_cognitive_cycle(
         self,
