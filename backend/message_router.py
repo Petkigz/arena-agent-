@@ -5,7 +5,6 @@ import time
 import uuid
 from typing import Dict, Any, Optional, List
 from app.utils.logger import app_logger
-from app.llm import llm_client
 from app.cognition.runtime import CognitiveRuntime
 from backend.websocket_server import ws_manager
 
@@ -172,8 +171,9 @@ class MessageRouter:
             llm_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             llm_messages.extend(history)
 
-            # Call LLM (run synchronous httpx call in thread pool)
-            response_text = await self._call_llm(llm_messages)
+            # Route through the authoritative cognitive runtime (world model, beliefs,
+            # reasoning loop, goal verification, memory) rather than a raw LLM call.
+            response_text = await self._call_cognitive_runtime(content)
 
             # Stream response tokens to client
             tokens = self._tokenize_response(response_text)
@@ -202,27 +202,34 @@ class MessageRouter:
                 "message": f"Error processing message: {str(e)}"
             })
 
-    async def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """Call the LLM and return the response text. Runs in thread pool."""
+    async def _call_cognitive_runtime(self, content: str) -> str:
+        """Route the message through CognitiveRuntime (the authoritative cognitive path).
+
+        Runs the full closed-loop cycle (perceive → reason → plan → execute → verify →
+        replan → learn) in a worker thread, then returns the assistant reply for streaming.
+        """
         try:
             result = await asyncio.to_thread(
-                llm_client.generate_chat_completion,
-                messages=messages,
+                self.runtime.process_cognitive_cycle,
+                user_text=content,
                 complexity="main",
-                temperature=0.7,
-                max_tokens=2048,
             )
 
-            if result.get("choices") and len(result["choices"]) > 0:
-                return result["choices"][0]["message"]["content"]
-            else:
-                return "I apologize, but I couldn't generate a response. Please try again."
+            if not isinstance(result, dict):
+                return "I couldn't produce a response from my cognitive engine."
+
+            reply = result.get("assistant_reply") or result.get("reply") or ""
+            if reply:
+                return reply
+
+            # Cycle succeeded but produced no reply — surface the lifecycle state.
+            state = result.get("goal_lifecycle_state", "unknown")
+            return f"[cognitive cycle complete — goal state: {state}]"
 
         except Exception as e:
-            app_logger.error(f"LLM call failed: {e}", exc_info=True)
+            app_logger.error(f"Cognitive runtime processing failed: {e}", exc_info=True)
             return (
-                "I'm having trouble connecting to the language model. "
-                "Please ensure LM Studio or Ollama is running locally.\n\n"
+                "I'm having trouble processing that request through my cognitive engine.\n\n"
                 f"Error: {str(e)}"
             )
 
