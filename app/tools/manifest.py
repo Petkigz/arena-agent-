@@ -75,6 +75,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.fact_checker import FactChecker
     from app.tools.price_lookup import PriceLookup
     from app.tools.messaging import Messaging
+    from app.tools.recipes import Recipes
     from app.tools.pdf_toolkit import PdfToolkit
     from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
@@ -366,6 +367,14 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(Messaging.send_telegram, "message", "chat_id"))
     add("send_whatsapp", "messaging", 3, "Send a WhatsApp message (requires approval)",
         _wrap(Messaging.send_whatsapp, "message", "to"))
+
+    # ── Recipes (deterministic multi-step composition) ──────────────────────
+    add("portfolio_snapshot", "recipe", 0, "Value a portfolio of stocks/cryptos in one call",
+        _wrap(Recipes.portfolio_snapshot, "holdings"))
+    add("data_story", "recipe", 1, "Inspect a dataset and produce a chart in one call",
+        _wrap(Recipes.data_story, "file_path", "x_col", "y_col", "chart_type", "chart_title"))
+    add("research_digest", "recipe", 0, "Search the web and digest the top sources",
+        _wrap(Recipes.research_digest, "query", "max_results"))
     add("add_event", "productivity", 1, "Add a calendar event",
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",

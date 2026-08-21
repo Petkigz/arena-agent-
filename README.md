@@ -158,6 +158,11 @@ python -m pytest tests/ -q
 
 Current baseline: **1346 backend + 184 frontend tests passing**
 
+> **Live verification:** tools that hit external APIs (prices, RSS, search,
+> Telegram/WhatsApp) are unit-tested for degradation only in CI — run
+> `python scripts/live_check.py` on your machine to exercise them for real
+> (see [`LIVE_VERIFICATION.md`](LIVE_VERIFICATION.md)).
+
 ### Run Server
 
 A single unified entry point serves everything — the WebSocket chat, the 127 core

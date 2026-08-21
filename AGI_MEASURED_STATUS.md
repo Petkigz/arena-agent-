@@ -26,7 +26,8 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
-| Tools in the manifest | **118** | `len(get_tool_manifest())` |
+| Tools in the manifest | **121** | `len(get_tool_manifest())` (incl. 3 deterministic recipes) |
+| Live verification of external APIs | script | `scripts/live_check.py` + `LIVE_VERIFICATION.md` |
 | Deterministic Tier-1 tools | ✅ all present | `runtime.measure_capabilities()` → `tier1_tool_manifest = verified` |
 | Deterministic degradation | ✅ | `runtime.measure_capabilities()` → `deterministic_degradation = verified` |
 | Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |

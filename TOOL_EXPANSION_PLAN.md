@@ -74,3 +74,18 @@ tools that need real logic.
 
 All 16 Tier-1 tools are built and tested. Tier 2/3 remain available via the
 plugin system (`DATA_DIR/plugins`) or can be built on demand.
+
+## Recipes (deterministic multi-step composition)
+
+After Tier 1, the bottleneck is *composing* tools, not tool count. Three thin
+deterministic recipes (`app/tools/recipes.py`, registered as tools in the manifest):
+
+- `portfolio_snapshot` — many price lookups → one valuation.
+- `data_story` — dataset inspection + chart generation in one call.
+- `research_digest` — web search + source extraction + optional LLM digest.
+
+## Live verification
+
+External-API tools are unit-tested for degradation, not live success (sandbox has
+no network/credentials). `scripts/live_check.py` exercises them on the owner's
+machine — see `LIVE_VERIFICATION.md`.
