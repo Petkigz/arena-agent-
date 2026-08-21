@@ -23,6 +23,16 @@ def _wrap(fn: Callable[..., Any], *key_args: str) -> Callable[[Dict[str, Any]], 
     return handler
 
 
+def _ignore_payload(fn: Callable[[], Any]) -> Callable[[Dict[str, Any]], Any]:
+    """Adapt a zero-arg classmethod/staticmethod to a payload-dict handler.
+
+    ToolRegistry always calls handler(payload); zero-arg methods must drop it.
+    """
+    def handler(payload: Dict[str, Any]) -> Any:
+        return fn()
+    return handler
+
+
 def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     """Return the full action_type → tool mapping (lazy imports inside)."""
     from app.tools.android_adb_controller import AndroidADBController
@@ -88,7 +98,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("launch_app", "os_control", 2, "Launch an installed application",
         _wrap(SystemAppInventory.launch_any_app, "app_query", "app_name"))
     add("list_apps", "os_control", 0, "List installed applications",
-        SystemAppInventory.scan_installed_applications)
+        _ignore_payload(SystemAppInventory.scan_installed_applications))
     add("mouse_click", "os_control", 2, "Click at screen coordinates",
         _wrap(DeepOSController.mouse_click, "x", "y", "double"))
     add("type_text", "os_control", 2, "Type text into the active window",
@@ -114,13 +124,13 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("create_document", "filesystem", 1, "Create a document",
         _wrap(DocumentManager.create_document, "file_path", "content"))
     add("list_workspace", "filesystem", 0, "List workspace files",
-        DocumentManager.list_workspace_files)
+        _ignore_payload(DocumentManager.list_workspace_files))
 
     # ── Vision / media ──────────────────────────────────────────────────────
     add("screen_capture", "vision", 0, "Capture the screen",
-        ScreenCaptureTool.capture_screen_delta)
+        _ignore_payload(ScreenCaptureTool.capture_screen_delta))
     add("camera_photo", "vision", 0, "Capture a webcam photo",
-        CameraCaptureTool.capture_photo)
+        _ignore_payload(CameraCaptureTool.capture_photo))
     add("vision_analyze", "vision", 0, "Analyze an image",
         _wrap(VisionAnalyzerTool.analyze_screen_image, "image_path"))
     add("ocr_read", "vision", 0, "Extract text from an image",
@@ -128,7 +138,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
 
     # ── Location ────────────────────────────────────────────────────────────
     add("resolve_location", "location", 0, "Resolve geographic location",
-        LocationService.resolve_location)
+        _ignore_payload(LocationService.resolve_location))
 
     # ── Web / research ──────────────────────────────────────────────────────
     add("web_search", "web", 0, "Search the web",
@@ -160,7 +170,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("lab_scan", "security", 3, "Scan an authorized lab target",
         _wrap(SecurityLabTool.scan_lab_target, "target", "ports"))
     add("opsec_audit", "security", 1, "Audit digital footprint",
-        OpSecManagerTool.audit_digital_footprint)
+        _ignore_payload(OpSecManagerTool.audit_digital_footprint))
     add("yara_rule", "security", 1, "Generate a YARA rule",
         _wrap(CybersecurityBrainTool.generate_yara_rule, "description"))
     add("sigma_rule", "security", 1, "Generate a Sigma rule",
@@ -170,7 +180,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
 
     # ── Productivity / content ──────────────────────────────────────────────
     add("daily_briefing", "productivity", 0, "Generate a daily briefing",
-        DailyBriefingEngine.generate_briefing)
+        _ignore_payload(DailyBriefingEngine.generate_briefing))
     add("content_script", "productivity", 1, "Generate a content script",
         _wrap(ContentCreatorTool.generate_content_script, "topic", "platform", "audience"))
     add("business_opportunities", "productivity", 0, "Discover business opportunities",
@@ -194,7 +204,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("phone_call", "phone", 3, "Make a phone call",
         _wrap(AndroidADBController.make_phone_call, "phone_number"))
     add("phone_screenshot", "phone", 0, "Capture phone screenshot",
-        AndroidADBController.capture_phone_screenshot)
+        _ignore_payload(AndroidADBController.capture_phone_screenshot))
 
     # ── Knowledge / skill ───────────────────────────────────────────────────
     add("index_knowledge", "knowledge", 0, "Index knowledge from a source",
@@ -206,7 +216,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
 
     # ── Ghost operator / notifications ──────────────────────────────────────
     add("list_windows", "os_control", 0, "List open windows",
-        Win32GhostOperator.list_open_windows)
+        _ignore_payload(Win32GhostOperator.list_open_windows))
     add("trigger_webhook", "integration", 3, "Trigger a webhook",
         _wrap(ConnectorsTool.trigger_webhook, "url", "payload"))
 
@@ -215,7 +225,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("create_note", "productivity", 1, "Create a note",
         _wrap(NotesManager.create_note, "title", "content", "tags"))
     add("list_notes", "productivity", 0, "List notes",
-        NotesManager.list_notes)
+        _ignore_payload(NotesManager.list_notes))
     add("search_notes", "productivity", 0, "Search notes",
         _wrap(NotesManager.search_notes, "query"))
     add("read_note", "productivity", 0, "Read a note",
@@ -227,7 +237,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("send_email", "productivity", 3, "Send an email",
         _wrap(EmailService.send_email, "to", "subject", "body", "cc"))
     add("read_inbox", "productivity", 0, "Read email inbox",
-        EmailService.read_inbox)
+        _ignore_payload(EmailService.read_inbox))
     add("sql_query", "data", 0, "Read-only SQL query (SQLite)",
         _wrap(SQLQueryTool.query_sqlite, "db_path", "sql", "limit"))
     add("sql_query_csv", "data", 0, "Read-only SQL query (CSV)",
@@ -237,9 +247,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("add_reminder", "productivity", 1, "Add a reminder",
         _wrap(CalendarService.add_reminder, "title", "due", "note"))
     add("list_events", "productivity", 0, "List calendar events",
-        CalendarService.list_events)
+        _ignore_payload(CalendarService.list_events))
     add("due_reminders", "productivity", 0, "List due reminders",
-        CalendarService.due_reminders)
+        _ignore_payload(CalendarService.due_reminders))
     add("generate_document", "productivity", 1, "Generate a document from markdown",
         _wrap(DocumentGenerator.generate, "title", "markdown", "fmt"))
 

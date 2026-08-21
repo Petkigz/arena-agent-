@@ -1437,6 +1437,19 @@ class CognitiveRuntime:
         if not gate_res.allowed:
             if gate_res.requires_approval:
                 tracker.transition(GoalLifecycleState.WAITING_FOR_USER, f"Action requires 1-click UI approval: {gate_res.reason}")
+                # Record the pending approval so the owner can approve/deny via
+                # the `action_approval` WebSocket message.
+                try:
+                    from app.cognition.approval_store import approval_store
+                    req = approval_store.add(
+                        conversation_id=session_id,
+                        action_type=fine_action_type,
+                        payload=proposal.payload,
+                        reason=gate_res.reason,
+                    )
+                    app_logger.info(f"Pending approval recorded: action_id={req.action_id}")
+                except Exception as e:
+                    app_logger.warning(f"Could not record pending approval: {e}")
             else:
                 tracker.transition(GoalLifecycleState.BLOCKED, f"Action blocked by {gate_res.gate_name}: {gate_res.reason}")
 

@@ -91,6 +91,22 @@ class ActionGate:
     }
 
     @classmethod
+    def _manifest_safety_level(cls, action_type: str):
+        """Return the manifest-declared safety level for an action type, or None.
+
+        The tool manifest (app/tools/manifest.py) is the authoritative source of
+        truth for safety levels; this is consulted before the legacy policy list.
+        """
+        try:
+            from app.tools.manifest import get_tool_manifest
+            entry = get_tool_manifest().get(action_type)
+            if entry:
+                return int(entry.get("safety_level", 0))
+        except Exception:
+            pass
+        return None
+
+    @classmethod
     def evaluate_proposal(cls, proposal: ActionProposal) -> GateResult:
         # 1. Policy Gate (Evaluates underlying action list if present)
         actions_to_check = [proposal.action_type]
@@ -100,7 +116,30 @@ class ActionGate:
             actions_to_check.append(proposal.payload.get("underlying_action"))
 
         for act in actions_to_check:
-            action_name = cls.POLICY_ACTION_MAP.get(str(act).lower(), str(act))
+            act_key = str(act).lower().strip()
+
+            # ── Authoritative safety level: the unified tool manifest ──
+            # The manifest is the single source of truth for every tool's safety
+            # level. Consult it first so all 66 tools behave per their declared
+            # level (not the PolicyEvaluator's "unknown → Level 3" fallback).
+            manifest_level = cls._manifest_safety_level(act_key)
+
+            if manifest_level is not None:
+                proposal.safety_level = max(proposal.safety_level, manifest_level)
+                if manifest_level >= 3:
+                    reason = f"Action '{act}' is Level 3 (sensitive) and requires explicit owner approval."
+                    audit_logger.warning(f"ActionGate BLOCKED proposal '{act}' at Policy Gate (Level 3)")
+                    return GateResult(
+                        allowed=False,
+                        gate_name="policy_gate",
+                        reason=reason,
+                        requires_approval=True,
+                    )
+                # Level 0-2 manifest tools are allowed autonomously (audited).
+                continue
+
+            # ── Legacy fallback: PolicyEvaluator for non-manifest action names ──
+            action_name = cls.POLICY_ACTION_MAP.get(act_key, act_key)
             allowed, reason, level = PolicyEvaluator.evaluate_action(action_name, proposal.payload)
             proposal.safety_level = max(proposal.safety_level, level)
 

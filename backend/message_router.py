@@ -111,6 +111,7 @@ class MessageRouter:
             "voice_stop": self._handle_voice_stop,
             "voice_settings": self._handle_voice_settings,
             "wake_word_detected": self._handle_wake_word_detected,
+            "action_approval": self._handle_action_approval,
             "get_history": self._handle_get_history,
         }
 
@@ -432,6 +433,39 @@ class MessageRouter:
             await self.voice_service.notify_wake_word(conversation_id)
         else:
             app_logger.warning("Voice service not available; wake word ignored")
+
+    async def _handle_action_approval(self, websocket, message: Dict[str, Any]):
+        """Handle an owner's approve/deny of a pending Level-3 action."""
+        action_id = message.get("actionId") or message.get("action_id")
+        approved = bool(message.get("approved", False))
+        note = message.get("reason", "")
+
+        if not action_id:
+            app_logger.warning("action_approval without actionId")
+            return
+
+        from app.cognition.approval_store import approval_store
+        req = approval_store.decide(action_id, approved, note)
+
+        if req is None:
+            app_logger.warning(f"action_approval for unknown action_id '{action_id}'")
+            if websocket:
+                await ws_manager.send_to_connection(websocket, {
+                    "type": "approval_result",
+                    "action_id": action_id,
+                    "status": "not_found",
+                })
+            return
+
+        app_logger.info(
+            f"Owner {'approved' if approved else 'denied'} action '{req.action_type}' ({action_id})"
+        )
+        if websocket:
+            await ws_manager.send_to_connection(websocket, {
+                "type": "approval_result",
+                "action_id": action_id,
+                "status": "approved" if approved else "denied",
+            })
 
 
 # Global message router instance
