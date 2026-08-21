@@ -69,6 +69,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.local_executor import LocalExecutor
     from app.tools.contacts import ContactsTool
     from app.tools.spreadsheet import SpreadsheetTool
+    from app.agents.coding_agent import CodingAgent
     from app.tools.media_studio import MediaStudioTool
     from app.tools.music_studio import MusicStudioTool
     from app.tools.ocr_reader import OCRReaderTool
@@ -283,6 +284,17 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(SpreadsheetTool.write_rows, "file_path", "rows", "sheet_name", "overwrite"))
     add("aggregate_column", "data", 0, "Sum/avg/min/max/count a column",
         _wrap(SpreadsheetTool.aggregate_column, "file_path", "column", "operation", "sheet_name"))
+
+    # ── Agents (multi-step loops, Level 2 reversible via checkpoint) ────────
+    def _run_coding_agent(task, target_file=None, test_command=None, context_files=None):
+        return CodingAgent().run(
+            task=task,
+            target_file=target_file,
+            test_command=test_command,
+            context_files=context_files or [],
+        )
+    add("run_coding_agent", "agent", 2, "Plan→write→test→iterate on a coding task",
+        _wrap(_run_coding_agent, "task", "target_file", "test_command", "context_files"))
 
     # ── User plugins (auto-discovered from DATA_DIR/plugins) ────────────────
     try:
