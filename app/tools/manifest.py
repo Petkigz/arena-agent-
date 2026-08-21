@@ -72,6 +72,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.presentation_generator import PresentationGenerator
     from app.tools.package_installer import PackageInstaller
     from app.tools.rss_aggregator import RssAggregator
+    from app.tools.fact_checker import FactChecker
+    from app.tools.price_lookup import PriceLookup
+    from app.tools.messaging import Messaging
     from app.tools.pdf_toolkit import PdfToolkit
     from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
@@ -347,6 +350,22 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(RssAggregator.fetch_feed, "url", "limit", "timeout"))
     add("summarize_feed", "web", 0, "Fetch a feed and summarize its items",
         _wrap(RssAggregator.summarize_feed, "url", "limit"))
+
+    # ── Fact-check / citation ───────────────────────────────────────────────
+    add("fact_check", "web", 0, "Assess a claim against web sources with citations",
+        _wrap(FactChecker.fact_check, "claim", "max_results"))
+
+    # ── Price / portfolio lookup ────────────────────────────────────────────
+    add("crypto_price", "finance", 0, "Get a cryptocurrency price (CoinGecko)",
+        _wrap(PriceLookup.get_crypto_price, "coin_id", "currency"))
+    add("stock_price", "finance", 0, "Get a stock quote (Stooq)",
+        _wrap(PriceLookup.get_stock_price, "symbol"))
+
+    # ── Messaging ───────────────────────────────────────────────────────────
+    add("send_telegram", "messaging", 3, "Send a Telegram message (requires approval)",
+        _wrap(Messaging.send_telegram, "message", "chat_id"))
+    add("send_whatsapp", "messaging", 3, "Send a WhatsApp message (requires approval)",
+        _wrap(Messaging.send_whatsapp, "message", "to"))
     add("add_event", "productivity", 1, "Add a calendar event",
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",

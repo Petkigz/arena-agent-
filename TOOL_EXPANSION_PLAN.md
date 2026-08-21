@@ -66,4 +66,11 @@ tools that need real logic.
 - [x] Presentation generator (.pptx from outline)
 - [x] Package installer (pip/npm: list/check Level 0, install/uninstall Level 3)
 - [x] News/RSS aggregator (fetch/parse + optional summarize)
-- [ ] Remaining Tier 1: messaging, fact-check, price lookup
+- [x] Fact-check / citation (claim → verdict + real source links)
+- [x] Price/portfolio lookup (CoinGecko crypto + Stooq stock, keyless)
+- [x] Messaging (Telegram + WhatsApp via Twilio, Level 3)
+
+## Tier 1 — COMPLETE
+
+All 16 Tier-1 tools are built and tested. Tier 2/3 remain available via the
+plugin system (`DATA_DIR/plugins`) or can be built on demand.
