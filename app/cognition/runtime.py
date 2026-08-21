@@ -736,7 +736,8 @@ class CognitiveRuntime:
         NATIVE_CAPABILITIES = {
             "llm.generate", "os.launch_app", "filesystem.search", "filesystem.read",
             "browser.open", "web.search", "screen.capture", "vision.analyze",
-            "system.probe"
+            "system.probe", "camera.capture", "camera.photo", "location.resolve",
+            "location.geolocate", "microphone.capture", "microphone.record",
         }
 
         registered_tools = set(self.registry._registry.keys())
@@ -752,8 +753,11 @@ class CognitiveRuntime:
         for cap in required_capabilities:
             cap_clean = cap.lower().strip()
 
-            # 1. Device-specific probe check (e.g. ADB phone controller)
-            if any(k in cap_clean for k in ["phone", "adb"]):
+            # 1. Device-specific probe check (e.g. ADB phone controller).
+            #    Use token/prefix matching — a bare substring "phone" would wrongly
+            #    catch "microphone", "telephone", "headphones", etc.
+            if cap_clean.startswith("phone.") or cap_clean == "phone" or \
+               cap_clean.startswith("adb.") or cap_clean == "adb":
                 try:
                     from app.tools.android_adb_controller import AndroidADBController
                     cap_map[cap] = AndroidADBController.is_adb_available()

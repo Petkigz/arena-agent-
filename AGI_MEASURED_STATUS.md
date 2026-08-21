@@ -22,7 +22,7 @@ A **local-first, full-capability private secretary / coworker** with a closed-lo
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1088** | `python -m pytest tests/ -q` → `1088 passed` |
+| Backend tests passing | **1096** | `python -m pytest tests/ -q` → `1096 passed` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~55,800 lines | `find app backend -name '*.py' -exec cat {} + | wc -l` |

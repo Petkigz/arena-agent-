@@ -29,7 +29,7 @@ def start_server_subprocess():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     print("Launching Local Personal Assistant FastAPI server on http://0.0.0.0:8000 ...")
     
-    cmd = [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    cmd = [sys.executable, "-m", "uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8000"]
     SERVER_PROCESS = subprocess.Popen(cmd, cwd=base_dir)
 
     # Wait for server startup
