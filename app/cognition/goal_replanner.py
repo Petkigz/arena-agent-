@@ -91,7 +91,8 @@ class GoalReplanner:
         memory_store: Optional[Any] = None,
         world_model: Optional[Any] = None,
         tool_registry: Optional[Any] = None,
-        failed_payload: Optional[Dict[str, Any]] = None
+        failed_payload: Optional[Dict[str, Any]] = None,
+        lesson_store: Optional[Any] = None
     ) -> Optional[ActionProposal]:
         app_logger.info(f"GoalReplanner triggered for goal '{tracker.goal_id[:8]}': Reassessing & generating Plan B...")
 
@@ -105,7 +106,9 @@ class GoalReplanner:
                 {"name": "Diagnostic Re-observation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}}
             ]
             return ActionPlanner.plan_and_evaluate_action(
-                user_text, complexity=complexity, goal_rep=goal_rep, candidates=re_obs_candidates, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
+                user_text, complexity=complexity, goal_rep=goal_rep, candidates=re_obs_candidates,
+                memory_store=memory_store, world_model=world_model, tool_registry=tool_registry,
+                lesson_store=lesson_store
             )
 
         tracker.transition(GoalLifecycleState.REASSESSING, f"Reassessing failed conditions: {failed_result.failed_conditions}")
@@ -141,7 +144,9 @@ class GoalReplanner:
             ]
 
         replan_proposal = ActionPlanner.plan_and_evaluate_action(
-            user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
+            user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates,
+            memory_store=memory_store, world_model=world_model, tool_registry=tool_registry,
+            lesson_store=lesson_store
         )
         audit_logger.info(f"GoalReplanner evaluated {len(plan_b_candidates)} Plan B branches, generated proposal '{replan_proposal.action_type}'")
 

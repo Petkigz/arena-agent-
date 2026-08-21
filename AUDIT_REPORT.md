@@ -61,6 +61,7 @@
 | Measurement isolation | ✅ `measure_capabilities()` probes run against throwaway temp stores; no residue in beliefs/memory/causal/cross-domain/patterns |
 | Plan dependencies | ✅ explicit `depends_on`/`requires_evidence`/`produces_evidence` per step; `execute_plan` blocks steps whose prerequisite isn't COMPLETED; halts after UNVERIFIED/WAITING_APPROVAL |
 | UNVERIFIED recovery | ✅ `reconcile_plan` verifies (observe-only) before any re-execution; `resume_plan` re-attempts only owner-approved steps |
+| Learning loop closed | ✅ structured lessons flow through `GoalReplanner` → `ActionPlanner` → `CounterfactualSimulator`; past failures lower future strategy utility (read path now wired, not just write) |
 | Resumable approval | ✅ WAITING_APPROVAL is a resume point (`resume_plan`), not a deferral |
 | Autonomy policy | ✅ `AUTONOMY_MODE` (default `supervised`) governs the autonomous cycle; `off` disables it |
 | Provenance persistence | ✅ `observation_type` survives the SQLite round-trip; first belief insertion uses the same `revise()` path as subsequent evidence |

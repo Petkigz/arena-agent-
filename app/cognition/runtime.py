@@ -1616,7 +1616,9 @@ class CognitiveRuntime:
         # Reassessment & Replanning on Goal Verification Failure
         if not verify_res.verified_success:
             replan_proposal = GoalReplanner.execute_reassessment_and_replan(
-                user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory, world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload
+                user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory,
+                world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload,
+                lesson_store=self.lessons
             )
             if replan_proposal:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)
