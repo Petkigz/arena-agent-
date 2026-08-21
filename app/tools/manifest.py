@@ -68,6 +68,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.invoice_generator import InvoiceGenerator
     from app.tools.network_diagnostics import NetworkDiagnostics
     from app.tools.budget_tracker import BudgetTracker
+    from app.tools.backup_manager import BackupManager
+    from app.tools.presentation_generator import PresentationGenerator
     from app.tools.pdf_toolkit import PdfToolkit
     from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
@@ -311,6 +313,22 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(BudgetTracker.summary, "file_path", "month", "budgets"))
     add("list_transactions", "finance", 0, "List ledger transactions",
         _wrap(BudgetTracker.list_transactions, "file_path", "category", "month", "limit"))
+
+    # ── Backup & restore ────────────────────────────────────────────────────
+    add("create_backup", "system", 1, "Create a versioned backup snapshot",
+        _wrap(BackupManager.create_backup, "sources", "name"))
+    add("list_backups", "system", 0, "List backup snapshots",
+        _ignore_payload(BackupManager.list_backups))
+    add("verify_backup", "system", 0, "Verify a backup's integrity (SHA-256)",
+        _wrap(BackupManager.verify_backup, "backup_id"))
+    add("restore_backup", "system", 2, "Restore a backup to a directory",
+        _wrap(BackupManager.restore_backup, "backup_id", "dest_dir", "overwrite"))
+    add("delete_backup", "system", 3, "Delete a backup (irreversible)",
+        _wrap(BackupManager.delete_backup, "backup_id"))
+
+    # ── Presentation generator ──────────────────────────────────────────────
+    add("generate_presentation", "documents", 1, "Generate a .pptx from an outline",
+        _wrap(PresentationGenerator.generate_presentation, "title", "slides", "output_path", "subtitle", "author"))
     add("add_event", "productivity", 1, "Add a calendar event",
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",

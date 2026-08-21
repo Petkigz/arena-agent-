@@ -62,5 +62,7 @@ tools that need real logic.
 - [x] Invoice generator (PDF invoice/quote/receipt)
 - [x] Network diagnostics (DNS, port check, ping, traceroute, WHOIS)
 - [x] Budget tracker (CSV ledger, category totals, overspend)
-- [ ] Remaining Tier 1: messaging, presentation, backup, package installer,
-      news/RSS, fact-check, price lookup
+- [x] Backup & restore (versioned zip snapshots, SHA-256 integrity)
+- [x] Presentation generator (.pptx from outline)
+- [ ] Remaining Tier 1: messaging, package installer, news/RSS, fact-check,
+      price lookup
