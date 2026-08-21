@@ -64,6 +64,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.translator import TranslatorTool
     from app.tools.email_service import EmailService
     from app.tools.sql_query import SQLQueryTool
+    from app.tools.pdf_toolkit import PdfToolkit
+    from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
     from app.tools.document_generator import DocumentGenerator
     from app.tools.local_executor import LocalExecutor
@@ -132,6 +134,30 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DocumentManager.create_document, "file_path", "content"))
     add("list_workspace", "filesystem", 0, "List workspace files",
         _ignore_payload(DocumentManager.list_workspace_files))
+
+    # ── PDF toolkit ─────────────────────────────────────────────────────────
+    add("pdf_merge", "documents", 2, "Merge multiple PDFs into one",
+        _wrap(PdfToolkit.merge_pdfs, "input_paths", "output_path"))
+    add("pdf_split", "documents", 2, "Split a PDF into multiple PDFs",
+        _wrap(PdfToolkit.split_pdf, "file_path", "output_dir", "pages_per_split"))
+    add("pdf_extract_pages", "documents", 2, "Extract specific pages into a new PDF",
+        _wrap(PdfToolkit.extract_pages, "file_path", "pages", "output_path"))
+    add("pdf_fill_form", "documents", 2, "Fill PDF AcroForm fields",
+        _wrap(PdfToolkit.fill_form, "file_path", "field_values", "output_path"))
+    add("pdf_metadata", "documents", 0, "Read PDF page count and metadata",
+        _wrap(PdfToolkit.get_metadata, "file_path"))
+    add("pdf_extract_text", "documents", 0, "Extract text from a PDF",
+        _wrap(PdfToolkit.extract_text, "file_path", "page", "max_chars"))
+
+    # ── Process manager ─────────────────────────────────────────────────────
+    add("list_processes", "system", 0, "List local processes (CPU/RAM)",
+        _wrap(ProcessManager.list_processes, "filter", "limit", "sort_by"))
+    add("get_process", "system", 0, "Inspect a process by PID",
+        _wrap(ProcessManager.get_process, "pid"))
+    add("kill_process", "system", 3, "Terminate/force-kill a process (irreversible)",
+        _wrap(ProcessManager.kill_process, "pid", "force"))
+    add("restart_process", "system", 3, "Restart a process (irreversible)",
+        _wrap(ProcessManager.restart_process, "pid"))
 
     # ── Vision / media ──────────────────────────────────────────────────────
     add("screen_capture", "vision", 0, "Capture the screen",
