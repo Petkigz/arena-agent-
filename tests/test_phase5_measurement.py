@@ -41,6 +41,10 @@ def test_measure_capabilities_reports_full_wiring(tmp_path):
     assert by_name["memory_retrieval"]["status"] == "verified"
     assert by_name["causal_reasoning"]["status"] == "verified"
     assert by_name["goal_verification_behavioral"]["status"] == "verified"
+    assert by_name["cross_domain_transfer_behavioral"]["status"] == "verified"
+    assert by_name["skill_classification_behavioral"]["status"] == "verified"
+    assert by_name["planning_patterns_behavioral"]["status"] == "verified"
+    assert by_name["proactive_maintenance_behavioral"]["status"] == "verified"
 
 
 def test_measure_capabilities_detects_missing_module(tmp_path):

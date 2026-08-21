@@ -1,6 +1,7 @@
 package com.arena.voice.websocket
 
 import android.util.Log
+import kotlinx.coroutines.flow.first
 import okhttp3.*
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
@@ -8,19 +9,29 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.arena.voice.util.SettingsRepository
 
 @Singleton
-class VoiceWebSocketClient @Inject constructor() {
+class VoiceWebSocketClient @Inject constructor(
+    private val settings: SettingsRepository,
+) {
 
     private var webSocket: WebSocket? = null
     private var isConnected = false
     private var shouldReconnect = true
     private var reconnectAttempts = 0
-    private var currentServerUrl = DEFAULT_SERVER_URL
+    private var currentServerUrl = SettingsRepository.DEFAULT_SERVER_URL
 
     private val listeners = mutableListOf<VoiceWebSocketListener>()
 
-    fun connect(serverUrl: String = DEFAULT_SERVER_URL) {
+    /** Connect using the persisted server URL (DataStore), falling back to the default. */
+    suspend fun connectToSavedServer() {
+        val saved = settings.serverUrl.first()
+        connect(saved)
+    }
+
+    /** Connect to an explicit URL (used for emulator default and manual overrides). */
+    fun connect(serverUrl: String = SettingsRepository.DEFAULT_SERVER_URL) {
         if (isConnected) {
             Log.w(TAG, "Already connected")
             return
@@ -200,9 +211,8 @@ class VoiceWebSocketClient @Inject constructor() {
 
     companion object {
         private const val TAG = "VoiceWebSocketClient"
-        // Use /ws endpoint (same as frontend). Change IP to your PC's local IP.
-        private const val DEFAULT_SERVER_URL = "ws://10.0.2.2:8000/ws"
-        // 10.0.2.2 is the Android emulator's alias to the host machine's localhost
+        // The default server URL now lives in SettingsRepository.DEFAULT_SERVER_URL
+        // (editable at runtime via DataStore; see SettingsRepository).
         private const val MAX_RECONNECT_ATTEMPTS = 5
         private const val RECONNECT_DELAY_MS = 2000L
     }

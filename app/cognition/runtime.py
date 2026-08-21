@@ -659,6 +659,57 @@ class CognitiveRuntime:
              self.goal_generator is not None and self.goal_executor is not None and self.reflection_engine is not None,
              "goal_generator + goal_executor + reflection_engine wired")
 
+        # 7. Cross-domain transfer (behavioral): add two domains, discover a
+        # relationship, then attempt a transfer.
+        try:
+            from app.cognition.cross_domain_transfer import DomainType
+            src = self.cross_domain_transfer.add_domain_knowledge(
+                name=f"__probe_src_{uuid.uuid4().hex[:6]}__", domain_type=DomainType.TECHNICAL,
+                description="probe", concepts=["a"], skills=["s"], principles=["p"], patterns=["p"],
+            )
+            dst = self.cross_domain_transfer.add_domain_knowledge(
+                name=f"__probe_dst_{uuid.uuid4().hex[:6]}__", domain_type=DomainType.ANALYTICAL,
+                description="probe", concepts=["b"], skills=["t"], principles=["q"], patterns=["q"],
+            )
+            rels = self.cross_domain_transfer.discover_transfer_relationships(src.domain_id)
+            _add("cross_domain_transfer_behavioral",
+                 bool(rels) and rels[0].target_domain_id == dst.domain_id,
+                 "two domains added → transfer relationship discovered")
+        except Exception as e:
+            _add("cross_domain_transfer_behavioral", False, f"cross-domain probe failed: {e}")
+
+        # 8. Skill classification (behavioral): classify a known action and
+        # confirm siblings share a skill.
+        try:
+            skill = self.skills.classify("web_search")
+            siblings = self.skills.skill_siblings("web_search")
+            _add("skill_classification_behavioral",
+                 bool(skill) and isinstance(siblings, list),
+                 f"web_search → skill '{skill}' with {len(siblings)} sibling(s)")
+        except Exception as e:
+            _add("skill_classification_behavioral", False, f"skill probe failed: {e}")
+
+        # 9. Planning patterns (behavioral): record a sequence, then suggest it back.
+        try:
+            intent = f"__probe_intent_{uuid.uuid4().hex[:6]}__"
+            self.patterns.record_sequence(intent_type=intent, action_sequence=["search_files", "read_file"], success=True)
+            suggestions = self.patterns.suggest_patterns(intent_type=intent, limit=3)
+            _add("planning_patterns_behavioral",
+                 any(s.pattern.intent_type == intent for s in suggestions) if suggestions else False,
+                 f"recorded plan for '{intent}' → {len(suggestions)} suggestion(s)")
+        except Exception as e:
+            _add("planning_patterns_behavioral", False, f"planning probe failed: {e}")
+
+        # 10. Proactive maintenance (behavioral): invoke the daemon path and
+        # confirm it returns a result dict.
+        try:
+            maint = self.run_proactive_maintenance()
+            _add("proactive_maintenance_behavioral",
+                 isinstance(maint, dict) and "success" in maint,
+                 f"maintenance pass returned success={maint.get('success')}")
+        except Exception as e:
+            _add("proactive_maintenance_behavioral", False, f"maintenance probe failed: {e}")
+
         verified = [c for c in checks if c["status"] == "verified"]
         return {
             "checks": checks,

@@ -25,11 +25,14 @@ fun MainScreen(
     onStartListening: () -> Unit,
     onStopListening: () -> Unit,
     onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    serverUrl: String,
+    onSaveServerUrl: (String) -> Unit,
 ) {
     var isListening by remember { mutableStateOf(true) }
     var isConnected by remember { mutableStateOf(false) }
     var currentStatus by remember { mutableStateOf("Idle") }
+    var serverUrlInput by remember { mutableStateOf(serverUrl) }
     
     Scaffold(
         topBar = {
@@ -126,6 +129,23 @@ fun MainScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(bottom = 32.dp)
             ) {
+                // Server URL (persisted via DataStore — set to your PC's LAN IP
+                // when running on a physical device).
+                OutlinedTextField(
+                    value = serverUrlInput,
+                    onValueChange = { serverUrlInput = it },
+                    label = { Text("Server URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(0.85f)
+                )
+                TextButton(
+                    onClick = { onSaveServerUrl(serverUrlInput) },
+                ) {
+                    Text("Save & Connect")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Button(
                     onClick = {
                         if (isConnected) {

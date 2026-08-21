@@ -12,11 +12,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.arena.voice.service.WakeWordService
 import com.arena.voice.ui.ArenaVoiceTheme
 import com.arena.voice.ui.screens.MainScreen
+import com.arena.voice.util.SettingsRepository
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -26,6 +32,11 @@ class MainActivity : ComponentActivity() {
     
     @Inject
     lateinit var webSocketClient: VoiceWebSocketClient
+
+    @Inject
+    lateinit var settings: SettingsRepository
+
+    private var serverUrl by mutableStateOf(SettingsRepository.DEFAULT_SERVER_URL)
     
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -41,7 +52,14 @@ class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
+        // Load the persisted server URL so the UI can show/edit it.
+        lifecycleScope.launch {
+            settings.serverUrl.collect { url ->
+                serverUrl = url
+            }
+        }
+
         setContent {
             ArenaVoiceTheme {
                 Surface(
@@ -52,13 +70,25 @@ class MainActivity : ComponentActivity() {
                         onStartListening = { startWakeWordService() },
                         onStopListening = { stopWakeWordService() },
                         onConnect = { connectToServer() },
-                        onDisconnect = { disconnectFromServer() }
+                        onDisconnect = { disconnectFromServer() },
+                        serverUrl = serverUrl,
+                        onSaveServerUrl = { url -> saveServerUrl(url) },
                     )
                 }
             }
         }
         
         checkPermissions()
+    }
+
+    private fun saveServerUrl(url: String) {
+        lifecycleScope.launch {
+            settings.setServerUrl(url)
+            serverUrl = url
+            // Reconnect using the newly-saved URL.
+            disconnectFromServer()
+            connectToServer()
+        }
     }
     
     private fun checkPermissions() {
@@ -112,7 +142,10 @@ class MainActivity : ComponentActivity() {
     }
     
     private fun connectToServer() {
-        webSocketClient.connect()
+        // Read the persisted server URL (DataStore) and connect.
+        lifecycleScope.launch {
+            webSocketClient.connectToSavedServer()
+        }
     }
     
     private fun disconnectFromServer() {
