@@ -1,1 +1,1 @@
-export { BeanieModal } from './BeanieModal';
+export { BeanieOrbPanel } from './BeanieOrbPanel';

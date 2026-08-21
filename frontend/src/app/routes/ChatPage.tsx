@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
-import { BeanieModal } from '../../components/beanie';
+import { BeanieOrbPanel } from '../../components/beanie';
 import { EmptyState } from '../../components/ui';
 import { MessageCircle, Share2 } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
@@ -21,7 +21,7 @@ export function ChatPage() {
   } = useConversationStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const [showBeanie, setShowBeanie] = useState(false);
+  const [beanieActive, setBeanieActive] = useState(false);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -220,8 +220,12 @@ export function ChatPage() {
         </div>
       </div>
 
-      {/* Messages */}
-      {currentConversation.messages.length === 0 ? (
+      {/* Beanie orb (replaces the chat content when active) OR messages */}
+      {beanieActive ? (
+        <div className="flex-1 overflow-hidden">
+          <BeanieOrbPanel conversationId={currentConversation.id} />
+        </div>
+      ) : currentConversation.messages.length === 0 ? (
         <div className="flex-1 flex items-center justify-center px-6 py-4" role="region" aria-label="Messages">
           <EmptyState
             icon={<MessageCircle className="w-12 h-12" />}
@@ -258,14 +262,8 @@ export function ChatPage() {
           onSendMessage={handleSendMessage}
           onVoiceStart={handleVoiceStart}
           onVoiceStop={handleVoiceStop}
-          onOpenBeanie={() => setShowBeanie(true)}
+          onOpenBeanie={() => setBeanieActive((v) => !v)}
           disabled={!webSocketService.isConnected}
-        />
-
-        {/* Beanie floating orb panel (opened from the composer button) */}
-        <BeanieModal
-          isOpen={showBeanie}
-          onClose={() => setShowBeanie(false)}
         />
       </div>
 
