@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import com.arena.voice.service.WakeWordService
 import com.arena.voice.ui.ArenaVoiceTheme
 import com.arena.voice.ui.screens.MainScreen
+import com.arena.voice.ui.screens.PresenceStatus
 import com.arena.voice.util.SettingsRepository
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.AndroidEntryPoint
@@ -37,6 +38,8 @@ class MainActivity : ComponentActivity() {
     lateinit var settings: SettingsRepository
 
     private var serverUrl by mutableStateOf(SettingsRepository.DEFAULT_SERVER_URL)
+    private var isConnected by mutableStateOf(false)
+    private var isListening by mutableStateOf(false)
     
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -76,12 +79,35 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MainScreen(
-                        onStartListening = { startWakeWordService() },
-                        onStopListening = { stopWakeWordService() },
-                        onConnect = { connectToServer() },
-                        onDisconnect = { disconnectFromServer() },
+                        onStartListening = {
+                            isListening = true
+                            startWakeWordService()
+                        },
+                        onStopListening = {
+                            isListening = false
+                            stopWakeWordService()
+                        },
+                        onConnect = {
+                            isConnected = true
+                            connectToServer()
+                        },
+                        onDisconnect = {
+                            isConnected = false
+                            disconnectFromServer()
+                        },
                         serverUrl = serverUrl,
                         onSaveServerUrl = { url -> saveServerUrl(url) },
+                        presenceStatus = when {
+                            isListening -> PresenceStatus.LISTENING
+                            !isConnected -> PresenceStatus.OFFLINE
+                            else -> PresenceStatus.IDLE
+                        },
+                        statusMessage = when {
+                            isListening -> "Listening…"
+                            !isConnected -> "Offline — connect to your PC."
+                            else -> "I'm here."
+                        },
+                        onQuickAction = { action -> handleQuickAction(action) },
                     )
                 }
             }
@@ -200,6 +226,21 @@ class MainActivity : ComponentActivity() {
         // Read the persisted server URL (DataStore) and connect.
         lifecycleScope.launch {
             webSocketClient.connectToSavedServer()
+            isConnected = webSocketClient.isConnected()
+        }
+    }
+
+    /** Quick actions route a chat prompt to the backend (like the web/desktop). */
+    private fun handleQuickAction(action: String) {
+        val prompt = when (action) {
+            "continue_project" -> "What were we working on? Continue the project."
+            "whats_new" -> "What's new in my system?"
+            "research" -> "Research the latest on my current project."
+            "talk" -> null
+            else -> null
+        }
+        if (prompt != null) {
+            webSocketClient.sendUserMessage(webSocketClient.conversationId, prompt)
         }
     }
     

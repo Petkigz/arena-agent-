@@ -113,6 +113,18 @@ class VoiceWebSocketClient @Inject constructor(
         ))
     }
 
+    /** Public connection-state accessor (used by the UI to reflect the orb state). */
+    fun isConnected(): Boolean = isConnected
+
+    /** Send a text chat message through the backend (routes to the cognitive runtime). */
+    fun sendUserMessage(convId: String, content: String) {
+        sendJson(mapOf(
+            "type" to "user_message",
+            "conversation_id" to convId,
+            "content" to content,
+        ))
+    }
+
     private fun sendJson(data: Map<String, Any>) {
         if (!isConnected) {
             Log.w(TAG, "Cannot send message: not connected")

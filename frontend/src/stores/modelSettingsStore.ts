@@ -64,8 +64,9 @@ const defaultConfidenceThresholds: ConfidenceThresholds = {
 };
 
 // Default model configurations.
-// These must match app/config.py (FAST_MODEL / MAIN_MODEL) — the models actually
-// loaded in LM Studio on the i9-14900K + RX 580 machine (CPU inference).
+// The first two (3B/9B) match app/config.py (FAST_MODEL / MAIN_MODEL) and are the
+// models actually run on the current i9-14900K + RX 580 machine (CPU inference).
+// The larger models (7B/14B/32B) are kept as options for when RAM is upgraded.
 const defaultLLMModels: ModelConfig[] = [
   {
     id: 'qwen2.5-3b-instruct',
@@ -90,6 +91,42 @@ const defaultLLMModels: ModelConfig[] = [
       memoryUsage: '~8GB RAM (CPU)',
     },
     enabled: true,
+  },
+  {
+    id: 'qwen2.5-7b',
+    name: 'Qwen 2.5 7B',
+    description: 'Balanced performance and quality',
+    size: '7B parameters',
+    performance: {
+      speed: 7,
+      quality: 7,
+      memoryUsage: '8GB VRAM',
+    },
+    enabled: false,
+  },
+  {
+    id: 'qwen2.5-14b',
+    name: 'Qwen 2.5 14B',
+    description: 'Higher quality for complex reasoning',
+    size: '14B parameters',
+    performance: {
+      speed: 5,
+      quality: 9,
+      memoryUsage: '12GB VRAM',
+    },
+    enabled: false,
+  },
+  {
+    id: 'qwen2.5-32b',
+    name: 'Qwen 2.5 32B',
+    description: 'Highest quality for demanding tasks',
+    size: '32B parameters',
+    performance: {
+      speed: 3,
+      quality: 10,
+      memoryUsage: '20GB VRAM',
+    },
+    enabled: false,
   },
 ];
 
