@@ -67,6 +67,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.calendar_service import CalendarService
     from app.tools.document_generator import DocumentGenerator
     from app.tools.local_executor import LocalExecutor
+    from app.tools.contacts import ContactsTool
+    from app.tools.spreadsheet import SpreadsheetTool
     from app.tools.media_studio import MediaStudioTool
     from app.tools.music_studio import MusicStudioTool
     from app.tools.ocr_reader import OCRReaderTool
@@ -261,6 +263,26 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     # ── Generic local executor (the "escape hatch") ─────────────────────────
     add("local_execute", "integration", 3, "Run a local command/script/localhost request",
         _wrap(LocalExecutor.execute, "action", "command", "code", "url", "method", "body", "timeout_seconds"))
+
+    # ── Deterministic coworker tools (no LLM — exact results) ───────────────
+    add("add_contact", "productivity", 1, "Add/update a contact",
+        _wrap(ContactsTool.add_contact, "name", "phone", "email", "company", "notes"))
+    add("list_contacts", "productivity", 0, "List/search contacts",
+        _wrap(ContactsTool.list_contacts, "query"))
+    add("delete_contact", "productivity", 2, "Delete a contact",
+        _wrap(ContactsTool.delete_contact, "contact_id"))
+    add("import_contacts_csv", "productivity", 1, "Import contacts from CSV",
+        _wrap(ContactsTool.import_csv, "csv_path"))
+    add("export_contacts_csv", "productivity", 0, "Export contacts to CSV",
+        _wrap(ContactsTool.export_csv, "output_path"))
+    add("export_contacts_vcard", "productivity", 0, "Export contacts to vCard",
+        _wrap(ContactsTool.export_vcard, "output_path"))
+    add("read_spreadsheet", "data", 0, "Read an .xlsx sheet",
+        _wrap(SpreadsheetTool.read_sheet, "file_path", "sheet_name", "limit_rows"))
+    add("write_spreadsheet", "data", 1, "Write rows to an .xlsx sheet",
+        _wrap(SpreadsheetTool.write_rows, "file_path", "rows", "sheet_name", "overwrite"))
+    add("aggregate_column", "data", 0, "Sum/avg/min/max/count a column",
+        _wrap(SpreadsheetTool.aggregate_column, "file_path", "column", "operation", "sheet_name"))
 
     # ── User plugins (auto-discovered from DATA_DIR/plugins) ────────────────
     try:
