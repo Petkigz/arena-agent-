@@ -41,3 +41,6 @@ torchaudio>=2.0.0
 
 # Native webcam capture (optional — uncomment to enable desktop camera access)
 # opencv-python>=4.8.0
+
+# Native desktop window (optional — GUI client)
+# PySide6>=6.6.0
