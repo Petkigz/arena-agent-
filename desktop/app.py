@@ -26,7 +26,7 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap, QRadialGradient
+from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -35,15 +35,19 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QSystemTrayIcon,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
+from desktop.settings import DesktopSettings
+from desktop.voice_client import DesktopVoiceClient
 
 try:
     import cv2
@@ -575,8 +579,21 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Arena — Beanie")
         self.resize(520, 760)
 
+        self.settings = DesktopSettings()
+        # Persisted server URL overrides the CLI default when set.
+        saved_url = self.settings.get("server_url")
+        base_url = saved_url if saved_url and saved_url != "http://localhost:8000" else base_url
+
         self.client = ArenaBackendClient(base_url=base_url)
         self._chat_worker: Optional[ChatWorker] = None
+
+        # Voice (talk to Beanie) — streams mic PCM to the backend.
+        ws_url = base_url.replace("http://", "ws://").rstrip("/") + "/ws"
+        self.voice = DesktopVoiceClient(ws_url=ws_url, conversation_id="desktop-voice")
+        self.voice.on_reply = self._on_voice_reply
+        self.voice.on_transcript = self._on_voice_transcript
+        self.voice.on_error = self._on_voice_error
+        self._listening = False
 
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
@@ -618,7 +635,62 @@ class MainWindow(QMainWindow):
 
         # Dark theme
         self.setStyleSheet(f"QMainWindow {{ background: {BG_PRIMARY}; }}")
+        self._setup_tray()
         self._check_health()
+
+    # ── System tray ─────────────────────────────────────────────────────────
+    def _setup_tray(self) -> None:
+        self.tray = QSystemTrayIcon(self._tray_icon(), self)
+        self.tray.setToolTip("Arena — Beanie")
+
+        menu = QMenu()
+        show_action = QAction("Show / Hide", self)
+        show_action.triggered.connect(self._toggle_visible)
+        menu.addAction(show_action)
+
+        talk_action = QAction("Talk to Beanie", self)
+        talk_action.triggered.connect(self._toggle_talk)
+        menu.addAction(talk_action)
+
+        menu.addSeparator()
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(self._quit)
+        menu.addAction(quit_action)
+
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._on_tray_activated)
+        self.tray.show()
+
+    def _tray_icon(self) -> QIcon:
+        # Draw the presence orb as the tray icon.
+        pix = QPixmap(64, 64)
+        pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        center = QPointF(32, 32)
+        grad = QRadialGradient(QPointF(23, 23), 28)
+        grad.setColorAt(0.0, _lighten(ACCENT, 0.6))
+        grad.setColorAt(0.6, QColor(ACCENT))
+        grad.setColorAt(1.0, QColor(ACCENT).darker(160))
+        p.setBrush(grad)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(center, 26, 26)
+        p.end()
+        return QIcon(pix)
+
+    def _toggle_visible(self) -> None:
+        self.setVisible(not self.isVisible())
+
+    @Slot()
+    def _on_tray_activated(self, reason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._toggle_visible()
+
+    def _quit(self) -> None:
+        self._stop_voice()
+        self.tray.hide()
+        self.client.close()
+        QApplication.instance().quit()
 
     # ── Navigation ──
     def _nav_to(self, index: int) -> None:
@@ -685,12 +757,71 @@ class MainWindow(QMainWindow):
             self._send_message(prompt)
 
     def _toggle_talk(self) -> None:
-        # Voice is wired in Phase 3; for now route to chat.
-        self._nav_to(1)
+        if self._listening:
+            self._stop_voice()
+        else:
+            self._start_voice()
+
+    def _start_voice(self) -> None:
+        if self.voice.start():
+            self._listening = True
+            self.beanie.set_status("listening")
+            self.beanie.set_message("Listening…")
+            if self.settings.get("notifications_enabled"):
+                self.tray.showMessage("Arena", "Listening… say 'Hey Arena'.", QSystemTrayIcon.MessageIcon.Information, 2000)
+
+    def _stop_voice(self) -> None:
+        if self._listening:
+            self.voice.stop()
+            self._listening = False
+            self.beanie.set_status("idle")
+            self.beanie.set_message("I'm here.")
+
+    # ── Voice callbacks ─────────────────────────────────────────────────────
+    def _on_voice_transcript(self, text: str, is_final: bool) -> None:
+        if is_final and text.strip():
+            self.chat.append("You (voice)", text.strip())
+            self.beanie.set_status("working")
+            self.beanie.set_message("Working…")
+
+    def _on_voice_reply(self, text: str) -> None:
+        self.chat.append("Arena", text)
+        self.beanie.set_status("speaking")
+        self.beanie.set_message("Speaking…")
+        self._speak(text)
+        if self.settings.get("notifications_enabled") and not self.isVisible():
+            self.tray.showMessage("Arena", (text[:160] + "…") if len(text) > 160 else text, QSystemTrayIcon.MessageIcon.Information, 5000)
+        # Return to idle after a short speaking pause.
+        QThread.msleep(0)  # speaking state is cleared below by TTS completion
+
+    def _on_voice_error(self, err: str) -> None:
+        self.chat.append("System", f"⚠ {err}")
+        self._stop_voice()
+
+    def _speak(self, text: str) -> None:
+        """Local TTS via pyttsx3 (optional; silently skipped if absent)."""
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            engine.setProperty("rate", int(175 * self.settings.get("voice_speed")))
+            engine.say(text)
+            engine.runAndWait()
+        except Exception:
+            pass
+        self.beanie.set_status("idle")
+        self.beanie.set_message("I'm here.")
 
     def closeEvent(self, event) -> None:
+        self._stop_voice()
         self.tools._stop_camera()
         self.client.close()
+        # Minimize to tray instead of quitting (unless the user chose Quit).
+        if self.settings.get("minimize_to_tray") and self.tray.isVisible():
+            event.ignore()
+            self.hide()
+            if self.settings.get("notifications_enabled"):
+                self.tray.showMessage("Arena", "Still running in the tray.", QSystemTrayIcon.MessageIcon.Information, 2000)
+            return
         super().closeEvent(event)
 
 

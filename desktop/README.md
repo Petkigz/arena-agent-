@@ -34,12 +34,26 @@ PYTHONPATH=. python -m desktop.main
 ## Phase status
 
 - ✅ **Phase 1** — window shell, connection status, text chat.
-- ✅ **Phase 2** — native hardware (Tools tab):
-  - **Camera** — live webcam preview + still capture (uploads to the backend).
-    Requires `pip install opencv-python`; degrades gracefully without it.
-  - **Location** — resolve native location (phone GPS → IP fallback) off-thread.
-  - **Files** — search the filesystem via the backend's `/filesystem/search`.
-  - **Status** — live hardware telemetry (CPU/RAM/disk) + backend/LM Studio status.
-- ⏳ **Phase 3** — system tray, notifications, wake word, settings persistence.
+- ✅ **Phase 2** — native hardware (Tools tab): camera preview/capture, location,
+  filesystem search, hardware + backend status.
+- ✅ **Phase 3** — polish layer:
+  - **System tray** — minimize-to-tray, tray menu (Show/Hide, Talk to Beanie, Quit),
+    and the orb as the tray icon.
+  - **Native notifications** — desktop toasts when the agent replies while hidden.
+  - **Wake-word voice** — "🎙 Talk to Beanie" captures the mic (PyAudio) and
+    streams PCM to the backend (utterance detection → STT → cognitive runtime);
+    replies are spoken locally (pyttsx3, optional).
+  - **Settings persistence** — server URL, wake word, voice speed, minimize-to-tray,
+    and notifications, stored via QSettings (`desktop/settings.py`).
+
+## Optional dependencies
+
+- `PySide6` — required (the window itself).
+- `opencv-python` — camera tab.
+- `pyaudio` — voice ("Talk to Beanie").
+- `pyttsx3` — spoken replies.
+- `faster-whisper` (backend) — speech-to-text for voice input.
+
+All are optional and degrade gracefully when absent.
 
 See `../DESKTOP_APP_PLAN.md` for the full plan.
