@@ -64,6 +64,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.translator import TranslatorTool
     from app.tools.email_service import EmailService
     from app.tools.sql_query import SQLQueryTool
+    from app.tools.database_connector import DatabaseConnector
+    from app.tools.invoice_generator import InvoiceGenerator
     from app.tools.pdf_toolkit import PdfToolkit
     from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
@@ -277,6 +279,13 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(SQLQueryTool.query_sqlite, "db_path", "sql", "limit"))
     add("sql_query_csv", "data", 0, "Read-only SQL query (CSV)",
         _wrap(SQLQueryTool.query_csv, "csv_path", "sql", "limit"))
+    add("db_query", "data", 0, "Read-only SQL query (Postgres/MySQL/SQLite)",
+        _wrap(DatabaseConnector.query, "engine", "sql", "host", "port", "database", "user", "password", "limit"))
+    add("db_list_tables", "data", 0, "List tables in a database",
+        _wrap(DatabaseConnector.list_tables, "engine", "host", "port", "database", "user", "password"))
+    add("generate_invoice", "documents", 1, "Generate a PDF invoice/quote/receipt",
+        _wrap(InvoiceGenerator.generate_invoice, "to_name", "line_items", "from_name",
+              "invoice_number", "date", "currency", "tax_rate", "notes", "document_type", "output_path"))
     add("add_event", "productivity", 1, "Add a calendar event",
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",
