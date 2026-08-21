@@ -55,4 +55,10 @@ tools that need real logic.
 
 ## Done so far
 - [x] Two levers (executor + plugin registry)
-- [ ] Tier 1 subset
+- [x] Contacts, spreadsheet engine
+- [x] PDF toolkit (merge/split/extract/fill-form + metadata/text)
+- [x] Process manager (list/inspect/kill/restart, self-protection)
+- [x] Database connector (read-only SQLite/Postgres/MySQL)
+- [x] Invoice generator (PDF invoice/quote/receipt)
+- [ ] Remaining Tier 1: messaging, presentation, backup, network diagnostics,
+      package installer, news/RSS, fact-check, budget tracker, price lookup
