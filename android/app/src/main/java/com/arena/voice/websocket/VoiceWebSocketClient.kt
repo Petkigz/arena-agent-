@@ -22,6 +22,12 @@ class VoiceWebSocketClient @Inject constructor(
     private var reconnectAttempts = 0
     private var currentServerUrl = SettingsRepository.DEFAULT_SERVER_URL
 
+    /**
+     * The conversation this device participates in. The Android app is a voice
+     * companion to the main system, so it binds to a single default conversation.
+     */
+    var conversationId: String = DEFAULT_CONVERSATION_ID
+
     private val listeners = mutableListOf<VoiceWebSocketListener>()
 
     /** Connect using the persisted server URL (DataStore), falling back to the default. */
@@ -93,7 +99,18 @@ class VoiceWebSocketClient @Inject constructor(
 
     fun onWakeWordDetected() {
         Log.i(TAG, "Wake word detected, notifying backend")
-        sendJson(mapOf("type" to "wake_word_detected"))
+        sendJson(mapOf(
+            "type" to "wake_word_detected",
+            "conversation_id" to conversationId
+        ))
+    }
+
+    /** Bind this device to its conversation (called once the socket is open). */
+    fun joinConversation() {
+        sendJson(mapOf(
+            "type" to "join_conversation",
+            "conversation_id" to conversationId
+        ))
     }
 
     private fun sendJson(data: Map<String, Any>) {
@@ -140,6 +157,9 @@ class VoiceWebSocketClient @Inject constructor(
             Log.i(TAG, "WebSocket connected")
             isConnected = true
             reconnectAttempts = 0
+            // Bind to the default conversation so voice events are associated
+            // with a conversation the backend recognizes.
+            joinConversation()
             listeners.forEach { it.onConnected() }
         }
 
@@ -213,6 +233,7 @@ class VoiceWebSocketClient @Inject constructor(
         private const val TAG = "VoiceWebSocketClient"
         // The default server URL now lives in SettingsRepository.DEFAULT_SERVER_URL
         // (editable at runtime via DataStore; see SettingsRepository).
+        private const val DEFAULT_CONVERSATION_ID = "android-voice"
         private const val MAX_RECONNECT_ATTEMPTS = 5
         private const val RECONNECT_DELAY_MS = 2000L
     }

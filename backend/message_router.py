@@ -110,6 +110,7 @@ class MessageRouter:
             "voice_start": self._handle_voice_start,
             "voice_stop": self._handle_voice_stop,
             "voice_settings": self._handle_voice_settings,
+            "wake_word_detected": self._handle_wake_word_detected,
             "get_history": self._handle_get_history,
         }
 
@@ -419,6 +420,18 @@ class MessageRouter:
         app_logger.info(f"Voice settings update: {list(settings.keys())}")
         if self.voice_service:
             await self.voice_service.update_settings(settings)
+
+    async def _handle_wake_word_detected(self, websocket, message: Dict[str, Any]):
+        """Handle a wake word detected on a remote device (Android on-device wake word)."""
+        conversation_id = message.get("conversation_id")
+        if not conversation_id:
+            app_logger.warning("wake_word_detected without conversation_id")
+            return
+
+        if self.voice_service:
+            await self.voice_service.notify_wake_word(conversation_id)
+        else:
+            app_logger.warning("Voice service not available; wake word ignored")
 
 
 # Global message router instance

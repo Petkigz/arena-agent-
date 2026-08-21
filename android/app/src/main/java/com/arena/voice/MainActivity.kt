@@ -41,12 +41,21 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.all { it.value }
-        if (allGranted) {
-            Log.i(TAG, "All permissions granted")
+        val denied = permissions.filterValues { !it }.keys
+        if (denied.isNotEmpty()) {
+            Log.w(TAG, "Some permissions denied: $denied")
+        }
+        // Start services as long as the mic permission is granted — the other
+        // permissions (camera, location, SMS, …) are optional sensors and should
+        // not block the core voice assistant.
+        val micGranted = permissions[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        if (micGranted) {
             startServices()
         } else {
-            Log.e(TAG, "Permissions denied")
+            Log.e(TAG, "Microphone permission denied — voice assistant cannot start.")
         }
     }
     
@@ -91,25 +100,71 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * Request every dangerous permission the app can use, grouped by API level.
+     * Normal permissions (INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, etc.) are
+     * auto-granted at install and are NOT requested here.
+     */
     private fun checkPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.INTERNET
-        )
-        
+        val permissions = mutableListOf<String>()
+
+        // Always-required
+        permissions.add(Manifest.permission.RECORD_AUDIO)
+        permissions.add(Manifest.permission.CAMERA)
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        permissions.add(Manifest.permission.READ_CONTACTS)
+        permissions.add(Manifest.permission.WRITE_CONTACTS)
+        permissions.add(Manifest.permission.READ_PHONE_STATE)
+        permissions.add(Manifest.permission.READ_SMS)
+        permissions.add(Manifest.permission.SEND_SMS)
+        permissions.add(Manifest.permission.RECEIVE_SMS)
+        permissions.add(Manifest.permission.BODY_SENSORS)
+
+        // Activity recognition (API 29+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            permissions.add(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
+
+        // Photo location metadata (API 29+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            permissions.add(Manifest.permission.ACCESS_MEDIA_LOCATION)
+        }
+
+        // Bluetooth runtime permissions (API 31+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+        }
+
+        // Scoped storage: READ_MEDIA_* on 13+, legacy external storage on 12 and below
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
+            permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
+            permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
-        
-        val allGranted = permissions.all {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+
+        // Nearby Wi-Fi devices (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
-        
-        if (allGranted) {
+
+        // Only request what's not already granted.
+        val notGranted = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (notGranted.isEmpty()) {
             Log.i(TAG, "All permissions already granted")
             startServices()
         } else {
-            requestPermissionLauncher.launch(permissions.toTypedArray())
+            Log.i(TAG, "Requesting ${notGranted.size} permission(s)...")
+            requestPermissionLauncher.launch(notGranted.toTypedArray())
         }
     }
     

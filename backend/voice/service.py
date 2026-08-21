@@ -98,8 +98,30 @@ class VoiceService:
             self.pipeline.wake_word.sensitivity = sensitivity
             app_logger.info(f"Updated wake word sensitivity to {sensitivity}")
 
+    async def notify_wake_word(self, conversation_id: str):
+        """
+        Handle a wake word detected on a REMOTE device (e.g. the Android app's
+        on-device WakeWordService), as opposed to the PC-side pipeline.
+
+        Updates the conversation, broadcasts the LISTENING state so every client
+        reflects it, and speaks feedback if the PC pipeline is active.
+        """
+        if not self.current_conversation_id:
+            self.current_conversation_id = conversation_id
+
+        app_logger.info(f"Wake word detected on remote device for conversation {conversation_id}")
+
+        await ws_manager.broadcast_to_conversation(conversation_id, {
+            "type": "voice_state",
+            "state": VoiceState.LISTENING.value,
+        })
+
+        # Speak "Yes?" if the PC voice pipeline is running.
+        if self._enabled:
+            await self._speak_feedback("Yes?")
+
     def _handle_wake_word(self):
-        """Handle wake word detection."""
+        """Handle wake word detection (PC-side pipeline)."""
         if not self.current_conversation_id:
             return
 
