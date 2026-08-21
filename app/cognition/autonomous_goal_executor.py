@@ -59,7 +59,17 @@ class TaskType(str, Enum):
 
 @dataclass
 class ExecutionStep:
-    """A single step in goal execution."""
+    """A single step in goal execution.
+
+    Dependency semantics (P1 fix): a step declares what it depends on and what
+    it produces, so execution is a real data-flow graph rather than an implicit
+    ordering of a list:
+
+    - `depends_on`: step_ids that must be COMPLETED before this step may run.
+    - `requires_evidence`: named evidence this step consumes as a precondition.
+    - `produces_evidence`: named evidence this step emits on completion.
+    - `success_criteria` / `failure_conditions`: explicit verifiable postconditions.
+    """
     step_id: str = field(default_factory=lambda: f"step_{uuid4().hex[:8]}")
     goal_id: str = ""
     description: str = ""
@@ -70,6 +80,11 @@ class ExecutionStep:
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     confidence: float = 0.0
+    depends_on: List[str] = field(default_factory=list)
+    requires_evidence: List[str] = field(default_factory=list)
+    produces_evidence: List[str] = field(default_factory=list)
+    success_criteria: List[str] = field(default_factory=list)
+    failure_conditions: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -83,6 +98,11 @@ class ExecutionStep:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "confidence": self.confidence,
+            "depends_on": self.depends_on,
+            "requires_evidence": self.requires_evidence,
+            "produces_evidence": self.produces_evidence,
+            "success_criteria": self.success_criteria,
+            "failure_conditions": self.failure_conditions,
         }
     
     @classmethod
@@ -98,6 +118,11 @@ class ExecutionStep:
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
             confidence=data.get("confidence", 0.0),
+            depends_on=data.get("depends_on", []),
+            requires_evidence=data.get("requires_evidence", []),
+            produces_evidence=data.get("produces_evidence", []),
+            success_criteria=data.get("success_criteria", []),
+            failure_conditions=data.get("failure_conditions", []),
         )
 
 
@@ -217,6 +242,7 @@ class AutonomousGoalExecutor:
             goal_id=goal.goal_id,
             description=f"Analyze current state: {goal.current_state}",
             task_type=TaskType.ANALYSIS,
+            produces_evidence=["current_state"],
         ))
         
         # Goal-specific steps
@@ -340,17 +366,43 @@ class AutonomousGoalExecutor:
             goal_id=goal.goal_id,
             description=f"Verify success criteria: {', '.join(goal.success_criteria[:2])}",
             task_type=TaskType.ANALYSIS,
+            success_criteria=list(goal.success_criteria[:2]),
         ))
         
-        return steps
+        # Link the steps into an explicit dependency chain: step i depends on
+        # step i-1 (its verified precondition). This turns the implicit list
+        # ordering into an enforceable data-flow graph.
+        return self._link_chain(steps)
     
-    def execute_step(self, step: ExecutionStep, cognitive_runtime=None) -> ExecutionStep:
+    @staticmethod
+    def _link_chain(steps: List[ExecutionStep]) -> List[ExecutionStep]:
+        """Give each step an explicit depends_on edge to its predecessor."""
+        for i in range(1, len(steps)):
+            if steps[i - 1].step_id not in steps[i].depends_on:
+                steps[i].depends_on.append(steps[i - 1].step_id)
+        return steps
+
+    @staticmethod
+    def _blocked_dependency(step: ExecutionStep, plan: ExecutionPlan) -> List[str]:
+        """Return the step_ids of declared prerequisites that are not COMPLETED."""
+        by_id = {s.step_id: s for s in plan.steps}
+        blocked = []
+        for dep_id in step.depends_on:
+            dep = by_id.get(dep_id)
+            if dep is None or dep.status != ExecutionStatus.COMPLETED:
+                blocked.append(dep_id)
+        return blocked
+    
+    def execute_step(self, step: ExecutionStep, cognitive_runtime=None, verify_only: bool = False) -> ExecutionStep:
         """
         Execute a single step.
         
         Args:
             step: The step to execute
             cognitive_runtime: Optional CognitiveRuntime instance for execution
+            verify_only: If True, frame the step as observation/verification of an
+                already-attempted action (UNVERIFIED reconciliation) rather than a
+                fresh execution. Prevents blind re-execution of unverified actions.
             
         Returns:
             The updated step with results
@@ -361,8 +413,14 @@ class AutonomousGoalExecutor:
         try:
             # Use cognitive pipeline to execute the step
             if cognitive_runtime:
+                user_text = step.description
+                if verify_only:
+                    user_text = (
+                        f"Verify whether the following was achieved, by observing the "
+                        f"environment only (do not re-execute the action): {step.description}"
+                    )
                 result = cognitive_runtime.process_cognitive_cycle(
-                    user_text=step.description,
+                    user_text=user_text,
                     complexity="deep" if step.task_type == TaskType.ANALYSIS else "fast"
                 )
                 step.result = result.get("assistant_reply", "Completed")
@@ -430,7 +488,22 @@ class AutonomousGoalExecutor:
         
         for step in plan.steps:
             if step.status == ExecutionStatus.PENDING:
-                self.execute_step(step, cognitive_runtime)
+                # Enforce explicit dependencies: only execute if every declared
+                # prerequisite step is COMPLETED (verified). A prerequisite that
+                # is UNVERIFIED / WAITING_APPROVAL / FAILED halts the chain here.
+                blocked_by = self._blocked_dependency(step, plan)
+                if blocked_by:
+                    step.status = ExecutionStatus.UNVERIFIED
+                    step.error = (
+                        f"Prerequisite step(s) not verified: {', '.join(blocked_by)}"
+                    )
+                    step.completed_at = _now()
+                    app_logger.info(
+                        f"Step '{step.description[:40]}' blocked: prerequisites "
+                        f"{', '.join(blocked_by)} not verified."
+                    )
+                else:
+                    self.execute_step(step, cognitive_runtime)
             # Update progress as steps are processed (any terminal status counts).
             done = sum(
                 1 for s in plan.steps
@@ -489,11 +562,15 @@ class AutonomousGoalExecutor:
         return plan
     
     def resume_plan(self, plan: ExecutionPlan, cognitive_runtime=None) -> ExecutionPlan:
-        """Resume a plan that halted on WAITING_APPROVAL (or UNVERIFIED).
+        """Resume a plan that halted on WAITING_APPROVAL.
 
-        Reset approval-pending steps back to PENDING so they are re-attempted, then
-        re-run the normal execute_plan loop. Already-verified steps are left intact
-        (they are skipped), so resuming is cheap and idempotent.
+        ONLY approval-pending steps are re-attempted — the owner has now approved
+        the Level-3 action, so re-executing it is correct. UNVERIFIED steps are
+        deliberately NOT reset here: re-running an unverified action without new
+        evidence can be unnecessary or harmful. Use `reconcile_plan` for those.
+
+        Already-verified steps are left intact (skipped), so resuming is cheap and
+        idempotent.
 
         NOTE: the owner's approval decision is recorded in the approval store; the
         hook that maps "approval granted" → resume_plan() lives in the message
@@ -501,10 +578,29 @@ class AutonomousGoalExecutor:
         resumable-approval contract.
         """
         for s in plan.steps:
-            if s.status in (ExecutionStatus.WAITING_APPROVAL, ExecutionStatus.UNVERIFIED):
+            if s.status == ExecutionStatus.WAITING_APPROVAL:
                 s.status = ExecutionStatus.PENDING
                 s.error = None
                 s.confidence = 0.0
+        return self.execute_plan(plan, cognitive_runtime)
+
+    def reconcile_plan(self, plan: ExecutionPlan, cognitive_runtime=None) -> ExecutionPlan:
+        """Reconcile a plan that halted on UNVERIFIED steps.
+
+        UNVERIFIED ≠ "failed to execute" — it means "we don't know whether the
+        condition was achieved". Blindly re-running the same action can be harmful
+        (e.g. re-installing a package). Instead, re-run each UNVERIFIED step in
+        VERIFY-ONLY mode: observe the environment, confirm the result, and only
+        fall through to execution if verification still can't resolve it.
+        """
+        for s in plan.steps:
+            if s.status == ExecutionStatus.UNVERIFIED:
+                s.status = ExecutionStatus.PENDING
+                s.error = None
+                s.confidence = 0.0
+                # verify_only=True → investigate/observe rather than re-execute.
+                self.execute_step(s, cognitive_runtime, verify_only=True)
+        # Re-run the plan loop for any remaining pending steps.
         return self.execute_plan(plan, cognitive_runtime)
 
     def _extract_lessons(self, plan: ExecutionPlan) -> List[str]:

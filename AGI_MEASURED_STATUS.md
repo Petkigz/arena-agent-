@@ -22,7 +22,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1384** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1384 passed, 4 deselected` |
+| Backend tests passing | **1389** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1389 passed, 4 deselected` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
@@ -115,6 +115,8 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ **Plan dependencies (P1)**: `execute_plan` now halts after an `UNVERIFIED` or `WAITING_APPROVAL` step instead of blindly continuing — later steps that depend on an unverified precondition are not executed.
 - ✅ **Resumable approval (P1)**: `WAITING_APPROVAL` plans map the goal to a distinct `WAITING_APPROVAL` state (not `DEFERRED`), and `resume_plan()` re-attempts the gated step once the owner approves.
 - ✅ **Explicit autonomy mode**: `AUTONOMY_MODE` (default `supervised`) governs whether the hourly autonomous cycle is scheduled; `off` disables it.
+- ✅ **Explicit step dependencies (P1)**: `ExecutionStep` now declares `depends_on` / `requires_evidence` / `produces_evidence` / `success_criteria` / `failure_conditions`; generated plans are linked into an explicit chain, and `execute_plan` blocks any step whose declared prerequisite isn't `COMPLETED`.
+- ✅ **Split UNVERIFIED vs WAITING_APPROVAL recovery (P1)**: `resume_plan` re-attempts only owner-approved (WAITING_APPROVAL) steps; `reconcile_plan` re-runs UNVERIFIED steps in verify-only (observe, don't re-execute) mode — no blind re-execution of unconfirmed actions.
 
 Still open (future):
 
