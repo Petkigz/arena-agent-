@@ -67,7 +67,12 @@ def test_code_exec_language_allowlist():
 
 
 def test_api_routers_have_auth_dependency():
-    """Every API router must be registered with the verify_api_key dependency."""
+    """Every API router — AND the core router — must carry the auth dependency.
+
+    P0 fix: previously the 127-route core router (chat, tools, tasks, models)
+    was registered WITHOUT verify_api_key, leaving a large capability surface
+    unauthenticated even when ARENA_API_KEY was set. Now it is gated too.
+    """
     import backend.main as bm
     assert hasattr(bm, "verify_api_key")
 
@@ -79,4 +84,5 @@ def test_api_routers_have_auth_dependency():
         deps = getattr(ctx, "dependencies", None) or []
         if deps:
             gated += 1
-    assert gated == 7, f"Expected all 7 API routers gated, found {gated}"
+    # 7 /api/* routers + the core router = 8 gated include-contexts.
+    assert gated == 8, f"Expected 8 routers gated (7 API + core), found {gated}"

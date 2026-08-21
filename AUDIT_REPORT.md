@@ -53,7 +53,11 @@
 
 | Area | Status |
 |---|---|
-| API-key auth | ✅ **Now enforced** — `verify_api_key` applied to all 7 API routers via `dependencies=[Depends(verify_api_key)]`. No-op when `ARENA_API_KEY` unset (local-only), enforced when set. (Was previously defined but never applied.) |
+| API-key auth | ✅ **Now enforced** — `verify_api_key` applied to all 7 API routers **AND the 127-route core router** via `dependencies=[Depends(verify_api_key)]`. No-op when `ARENA_API_KEY` unset (local-only), enforced when set. (Was previously defined but never applied; the core router gap was a P0 closed 2026-08-21.) |
+| Default binding | ✅ **localhost-only** — docs/README default to `--host 127.0.0.1`; unauthenticated instances reject non-loopback clients (insecure-LAN guard) unless `ARENA_ALLOW_INSECURE_LAN=1` |
+| Fail-closed option | ✅ `ARENA_ENFORCE_AUTH=1` rejects requests when `ARENA_API_KEY` is not configured (catches misconfigured LAN deployments) |
+| Autonomous execution | ✅ **P0 fixed** — goal executor consumes the GoalVerifier verdict; steps are never `COMPLETED` without environmental verification, and Level-3 actions record `WAITING_APPROVAL` |
+| Provenance persistence | ✅ `observation_type` survives the SQLite round-trip; first belief insertion uses the same `revise()` path as subsequent evidence |
 | Shell injection (`check_and_update_software`) | ✅ **Fixed** — package name validated against identifier regex + argument-list form (no `shell=True`) |
 | Code-exec endpoint | ✅ **Hardened** — per-IP rate limit, strict language allowlist, 100KB code cap, 60s timeout cap |
 | DisposableSandbox | ✅ **Bounded** — rejects empty/oversized commands, timeout cap |

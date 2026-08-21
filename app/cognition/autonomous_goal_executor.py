@@ -27,12 +27,23 @@ def _now() -> str:
 
 
 class ExecutionStatus(str, Enum):
-    """Goal execution status."""
+    """Goal execution status.
+
+    Tri-state semantics (mirrors the evidence invariant — execution success is
+    NOT the same as goal achievement):
+
+    - COMPLETED        — the cognitive cycle's GoalVerifier confirmed the goal.
+    - FAILED           — verification definitively failed, or the action was blocked.
+    - UNVERIFIED       — the cycle ran but the environment was not verified (UNKNOWN).
+    - WAITING_APPROVAL — the action requires owner approval (Level 3 gate); NOT done.
+    """
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
     PARTIAL = "partial"
+    UNVERIFIED = "unverified"
+    WAITING_APPROVAL = "waiting_approval"
     CANCELLED = "cancelled"
 
 
@@ -355,16 +366,45 @@ class AutonomousGoalExecutor:
                     complexity="deep" if step.task_type == TaskType.ANALYSIS else "fast"
                 )
                 step.result = result.get("assistant_reply", "Completed")
-                step.confidence = result.get("belief_confidence", 0.8)
+                # P0 fix: the cycle's GoalVerifier verdict is authoritative, NOT
+                # "the cycle returned a reply". A step is COMPLETED only when the
+                # environment was actually verified to reach the goal.
+                verified = result.get("goal_verified")
+                requires_approval = bool(result.get("requires_approval"))
+                gate_blocked = result.get("gate_blocked")
+                lifecycle = result.get("goal_lifecycle_state", "")
+
+                if requires_approval or gate_blocked:
+                    # Level-3 action: the owner must approve. Never "completed".
+                    step.status = ExecutionStatus.WAITING_APPROVAL
+                    step.confidence = 0.0
+                    step.error = (
+                        f"Action requires owner approval"
+                        + (f" ({gate_blocked})" if gate_blocked else "")
+                    )
+                elif verified is True:
+                    step.status = ExecutionStatus.COMPLETED
+                    step.confidence = 1.0
+                elif verified is False and lifecycle in ("failed", "blocked", "deferred"):
+                    step.status = ExecutionStatus.FAILED
+                    step.confidence = 0.0
+                    step.error = step.result or "Goal verification failed"
+                else:
+                    # verified False/None but not provably failed → UNKNOWN.
+                    step.status = ExecutionStatus.UNVERIFIED
+                    step.confidence = 0.5
+                    step.error = "Goal could not be verified (no environmental evidence)"
             else:
-                # Simulate execution without runtime
+                # No runtime: execution is simulated, so nothing can be verified.
                 step.result = f"Simulated execution: {step.description}"
-                step.confidence = 0.7
+                step.status = ExecutionStatus.UNVERIFIED
+                step.confidence = 0.0
             
-            step.status = ExecutionStatus.COMPLETED
             step.completed_at = _now()
             
-            app_logger.info(f"Step completed: {step.description[:50]} (confidence: {step.confidence:.2f})")
+            app_logger.info(
+                f"Step {step.status.value}: {step.description[:50]} (confidence: {step.confidence:.2f})"
+            )
             
         except Exception as e:
             step.status = ExecutionStatus.FAILED
@@ -388,32 +428,38 @@ class AutonomousGoalExecutor:
         plan.status = ExecutionStatus.IN_PROGRESS
         plan.started_at = _now()
         
-        completed_steps = 0
-        failed_steps = 0
-        
         for step in plan.steps:
             if step.status == ExecutionStatus.PENDING:
                 self.execute_step(step, cognitive_runtime)
-                
-                if step.status == ExecutionStatus.COMPLETED:
-                    completed_steps += 1
-                elif step.status == ExecutionStatus.FAILED:
-                    failed_steps += 1
-                
-                # Update progress
-                plan.progress = (completed_steps + failed_steps) / len(plan.steps)
-                self.save_plan(plan)
+            # Update progress as steps are processed (any terminal status counts).
+            done = sum(
+                1 for s in plan.steps
+                if s.status not in (ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS)
+            )
+            plan.progress = done / len(plan.steps)
+            self.save_plan(plan)
         
-        # Determine final status
-        if failed_steps == 0:
+        # Determine final status from the tri-state tally. A plan is COMPLETED
+        # only when EVERY step was verified (never on unverified/awaiting steps).
+        completed = sum(1 for s in plan.steps if s.status == ExecutionStatus.COMPLETED)
+        failed = sum(1 for s in plan.steps if s.status == ExecutionStatus.FAILED)
+        unverified = sum(1 for s in plan.steps if s.status == ExecutionStatus.UNVERIFIED)
+        waiting = sum(1 for s in plan.steps if s.status == ExecutionStatus.WAITING_APPROVAL)
+        
+        if completed == len(plan.steps):
             plan.status = ExecutionStatus.COMPLETED
-            plan.outcome_summary = f"All {completed_steps} steps completed successfully"
-        elif completed_steps > failed_steps:
-            plan.status = ExecutionStatus.PARTIAL
-            plan.outcome_summary = f"{completed_steps} steps completed, {failed_steps} failed"
-        else:
+            plan.outcome_summary = f"All {completed} steps verified complete"
+        elif waiting > 0:
+            plan.status = ExecutionStatus.WAITING_APPROVAL
+            plan.outcome_summary = f"{waiting} step(s) awaiting owner approval"
+        elif failed > 0 and completed == 0:
             plan.status = ExecutionStatus.FAILED
-            plan.outcome_summary = f"{failed_steps} steps failed out of {len(plan.steps)}"
+            plan.outcome_summary = f"{failed} steps failed out of {len(plan.steps)}"
+        else:
+            plan.status = ExecutionStatus.PARTIAL
+            plan.outcome_summary = (
+                f"{completed} verified, {failed} failed, {unverified} unverified, {waiting} awaiting approval"
+            )
         
         plan.completed_at = _now()
         
@@ -422,7 +468,7 @@ class AutonomousGoalExecutor:
         
         self.save_plan(plan)
         
-        app_logger.info(f"Plan completed: {plan.goal_title} - {plan.status.value}")
+        app_logger.info(f"Plan {plan.status.value}: {plan.goal_title} - {plan.outcome_summary}")
         return plan
     
     def _extract_lessons(self, plan: ExecutionPlan) -> List[str]:
@@ -433,6 +479,21 @@ class AutonomousGoalExecutor:
         failed_steps = [s for s in plan.steps if s.status == ExecutionStatus.FAILED]
         if failed_steps:
             lessons.append(f"Failed steps indicate need for better planning: {[s.description[:30] for s in failed_steps[:2]]}")
+        
+        # Analyze unverified steps (goal couldn't be confirmed in the environment)
+        unverified_steps = [s for s in plan.steps if s.status == ExecutionStatus.UNVERIFIED]
+        if unverified_steps:
+            lessons.append(
+                f"{len(unverified_steps)} step(s) could not be verified against the "
+                "environment — needs a concrete postcondition probe"
+            )
+        
+        # Analyze steps waiting on owner approval (Level-3 gate)
+        waiting_steps = [s for s in plan.steps if s.status == ExecutionStatus.WAITING_APPROVAL]
+        if waiting_steps:
+            lessons.append(
+                f"{len(waiting_steps)} step(s) required owner approval and were not auto-completed"
+            )
         
         # Analyze low-confidence steps
         low_conf_steps = [s for s in plan.steps if s.confidence < 0.6 and s.status == ExecutionStatus.COMPLETED]

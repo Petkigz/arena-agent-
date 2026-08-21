@@ -166,11 +166,25 @@ Current baseline: **1346 backend + 184 frontend tests passing**
 ### Run Server
 
 A single unified entry point serves everything — the WebSocket chat, the 127 core
-REST routes, the `/api/*` routers (files/code/attachments), voice, and the SPA:
+REST routes, the `/api/*` routers (files/code/attachments), voice, and the SPA.
+
+**Localhost-only by default** (secure — no API key needed):
 
 ```bash
-PYTHONPATH=. .venv/bin/uvicorn app.server:app --host 0.0.0.0 --port 8000 --reload
+PYTHONPATH=. .venv/bin/uvicorn app.server:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+To expose beyond localhost (LAN / Android over the network), authentication is
+**required** — set a strong key and it is enforced on *every* route and the
+WebSocket:
+
+```bash
+export ARENA_API_KEY=<a strong random key>
+PYTHONPATH=. .venv/bin/uvicorn app.server:app --host 0.0.0.0 --port 8000
+```
+
+Binding `0.0.0.0` with no `ARENA_API_KEY` is refused unless you explicitly set
+`ARENA_ALLOW_INSECURE_LAN=1` (not recommended).
 
 (`app.main:app` and `backend.main:app` are kept as backward-compatible aliases of
 the same unified server.)

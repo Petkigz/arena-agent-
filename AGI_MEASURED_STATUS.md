@@ -22,7 +22,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1346** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1346 passed, 4 deselected` |
+| Backend tests passing | **1374** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1374 passed, 4 deselected` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
@@ -106,6 +106,10 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ **Agent invariants codified** (`AGENT_INVARIANTS.md`): one brain, thin agents, one loaded model, strong-tools-thin-model, deterministic verification.
 - ✅ **Two thin agents** (`app/agents/`): coding agent + data-analysis agent (read-only), both sharing the ONE `CognitiveRuntime` + `llm_client`.
 - ✅ **Capability matcher fixed** to match on token boundaries (no more "port"→"teleportation" bare-substring false positives).
+- ✅ **Autonomous execution integrity (P0)**: the goal executor now consumes the cycle's `goal_verified` verdict — steps are `COMPLETED` only when the environment was verified, `FAILED` on definitive failure, `UNVERIFIED` when there's no evidence, and `WAITING_APPROVAL` when a Level-3 action is gated. A plan is `COMPLETED` only when every step is verified.
+- ✅ **Goal-approval ≠ action-approval (P0)**: documented + enforced — auto-approving a goal never authorizes its actions; every action still passes `ActionGate`, and gated actions are recorded as `WAITING_APPROVAL`, never completed.
+- ✅ **Server hardened (P0)**: the 127-route core router is now gated by the same `verify_api_key` as the `/api/*` routers (so a set `ARENA_API_KEY` protects everything, not just newer routes); unauthenticated instances reject non-loopback clients by default (localhost-only), with `ARENA_ALLOW_INSECURE_LAN=1` as an explicit opt-out and `ARENA_ENFORCE_AUTH=1` as fail-closed mode.
+- ✅ **Provenance persistence (P1)**: `observation_type` now survives the SQLite save/load round-trip; first belief insertion goes through the same `revise()` path as subsequent observations (one- and two-observation semantics are identical).
 
 Still open (future):
 

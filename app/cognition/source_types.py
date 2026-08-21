@@ -107,8 +107,9 @@ class SourceType(str, Enum):
             if member.value == source_lower:
                 return member
         
-        # Fallback: check if any known source is a substring
-        # (conservative: if it contains an inadmissible source name, mark as unknown)
+        # No exact match → UNKNOWN. (Deliberately NO substring matching: a source
+        # that merely *contains* a known source name is not that source, and
+        # substring fallback would silently misclassify provenance.)
         return cls.UNKNOWN
 
 

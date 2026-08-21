@@ -473,6 +473,18 @@ class AutonomousGoalGenerator:
         """
         Approve a goal for execution.
         
+        INVARIANT (P0): approving a *goal* only authorizes *goal selection* — it
+        does NOT authorize the actions the goal will eventually take. Every action
+        produced during execution still passes through ActionGate → PolicyEvaluator
+        inside `CognitiveRuntime.process_cognitive_cycle()`:
+
+            Goal approved  ≠  Actions approved
+
+        Level 0/1/2 actions may run autonomously; Level 3 actions (delete, shell,
+        messaging, trades, installs) still require explicit owner approval, and the
+        autonomous executor records those steps as WAITING_APPROVAL — never COMPLETED
+        — so a goal can't silently authorize a sensitive action by proxy.
+        
         Args:
             goal_id: The goal ID to approve
             auto_approve_threshold: Minimum overall score for auto-approval

@@ -112,7 +112,11 @@ class TestAutonomousGoalExecutor:
         assert TaskType.MAINTENANCE in task_types
 
     def test_execute_step(self, executor, sample_goal):
-        """Test executing a single step."""
+        """Test executing a single step (no runtime → simulated → UNVERIFIED).
+
+        P0 fix: without a runtime the environment is never verified, so the step
+        must NOT be marked COMPLETED — it's UNVERIFIED.
+        """
         step = ExecutionStep(
             goal_id=sample_goal.goal_id,
             description="Analyze current state",
@@ -121,11 +125,10 @@ class TestAutonomousGoalExecutor:
         
         result = executor.execute_step(step)
         
-        assert result.status == ExecutionStatus.COMPLETED
+        assert result.status == ExecutionStatus.UNVERIFIED
         assert result.started_at is not None
         assert result.completed_at is not None
         assert result.result is not None
-        assert result.confidence > 0
 
     def test_execute_step_failure(self, executor, sample_goal, monkeypatch):
         """Test step execution with failure."""
@@ -165,12 +168,17 @@ class TestAutonomousGoalExecutor:
         
         result = executor.execute_plan(plan)
         
-        # Progress should be 1.0 (100%) after all steps
+        # Progress should be 1.0 (100%) after all steps are processed.
         assert result.progress == 1.0
         
-        # All steps should be completed or failed
+        # All steps should have reached a terminal state.
         for step in result.steps:
-            assert step.status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]
+            assert step.status in [
+                ExecutionStatus.COMPLETED,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.UNVERIFIED,
+                ExecutionStatus.WAITING_APPROVAL,
+            ]
 
     def test_extract_lessons(self, executor, sample_goal):
         """Test lesson extraction from plan execution."""

@@ -181,6 +181,10 @@ class BeliefStore:
                             observed_at=item.get("observed_at", updated),
                             evidence_id=item.get("evidence_id", uuid4().hex),
                             observation_id=item.get("observation_id"),
+                            # P1 fix: restore the full provenance record, not just
+                            # the source/value/confidence — observation_type was
+                            # previously dropped on persistence.
+                            observation_type=item.get("observation_type"),
                         ))
                 except Exception:
                     pass
@@ -203,6 +207,7 @@ class BeliefStore:
                 "observed_at": e.observed_at,
                 "evidence_id": e.evidence_id,
                 "observation_id": e.observation_id,
+                "observation_type": e.observation_type,
             } for e in belief.evidence
         ])
         cursor.execute("""
@@ -238,17 +243,19 @@ class BeliefStore:
         current = self._beliefs.get(key)
         
         if current is None:
-            # First evidence: create belief with initial value
-            belief = Belief(subject, predicate, evidence.value, evidence.confidence, [evidence])
-            self._beliefs[key] = belief
-            self._save_to_db(belief)
-            return belief
+            # First evidence: create the belief shell, then fall through to the
+            # SAME revise() path below so one observation and two observations
+            # have identical confidence semantics (P1 fix — previously the first
+            # observation used raw evidence confidence, a divergent code path).
+            current = Belief(subject, predicate, evidence.value, evidence.confidence)
+            self._beliefs[key] = current
         
         # Append admissible evidence
         current.evidence.append(evidence)
         current.updated_at = _now()
         
-        # Recompute belief via revise() — authoritative calculation
+        # Recompute belief via revise() — authoritative calculation (always used,
+        # including for the first observation, so semantics never diverge).
         revised = self.revise(subject, predicate)
         return revised if revised else current
 
@@ -353,8 +360,10 @@ class BeliefStore:
             return True
 
         reference = now or datetime.now(timezone.utc)
-        newest_age = min(ev.age_hours(reference) for ev in belief.evidence)
-        return newest_age > max_age_hours
+        # A belief is stale when even its *most recent* evidence is old, i.e. the
+        # minimum evidence age (age of the youngest evidence) exceeds the threshold.
+        age_of_newest_evidence = min(ev.age_hours(reference) for ev in belief.evidence)
+        return age_of_newest_evidence > max_age_hours
 
     def stale_beliefs(self, max_age_hours: float = DECAY_HALF_LIFE_HOURS * 2,
                       subject: Optional[str] = None,

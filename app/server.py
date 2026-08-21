@@ -5,7 +5,16 @@ Combines everything that was previously split across two FastAPI apps:
 - `app/main.py`  (127 core REST routes: /chat, /tasks, /models, /tools/*, …)
 - `backend/main.py` (WebSocket chat, /api/* routers, /health, SPA serving, voice, scheduler)
 
-Run:  PYTHONPATH=. uvicorn app.server:app --host 0.0.0.0 --port 8000
+Run (localhost-only by default):
+    PYTHONPATH=. uvicorn app.server:app --host 127.0.0.1 --port 8000
+
+To expose beyond localhost (LAN / Android over network), you MUST opt in:
+
+    export ARENA_API_KEY=<a strong random key>   # enables auth on ALL routes + WS
+    PYTHONPATH=. uvicorn app.server:app --host 0.0.0.0 --port 8000
+
+Binding to 0.0.0.0 with no ARENA_API_KEY is an insecure default and is refused
+unless you explicitly set ARENA_ALLOW_INSECURE_LAN=1.
 """
 
 import os
@@ -49,12 +58,48 @@ CORS_ORIGINS = os.getenv(
 
 API_KEY = os.getenv("ARENA_API_KEY", "")
 API_KEY_ENABLED = bool(API_KEY)
+# Fail-closed mode: when the owner sets ARENA_ENFORCE_AUTH=1, requests are
+# rejected (rather than allowed) if ARENA_API_KEY is not configured — useful for
+# catching a misconfigured LAN deployment instead of silently running open.
+API_KEY_ENFORCED = os.getenv("ARENA_ENFORCE_AUTH", "").strip().lower() in ("1", "true", "yes")
+# Explicit opt-in for an insecure LAN binding (no API key, non-localhost). The
+# default refuses this; set ARENA_ALLOW_INSECURE_LAN=1 only if you understand
+# the risk and accept it.
+INSECURE_LAN_ALLOWED = os.getenv("ARENA_ALLOW_INSECURE_LAN", "").strip().lower() in ("1", "true", "yes")
+
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+# Client addresses that count as "local" for the insecure-LAN guard. `testclient`
+# is what starlette's TestClient reports, so it's treated as local in tests.
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+def _client_is_local(client_host: str) -> bool:
+    return (client_host or "").strip().lower() in _LOOPBACK_HOSTS
+
+
+def _insecure_lan_error() -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": "This server is unauthenticated and must only be reached "
+                      "from localhost. Set ARENA_API_KEY to allow LAN access, or "
+                      "ARENA_ALLOW_INSECURE_LAN=1 to accept the risk.",
+        },
+    )
+
+
 async def verify_api_key(request: Request, api_key: str = Depends(api_key_header)):
-    """Verify API key if authentication is enabled."""
+    """Verify API key if authentication is enabled.
+
+    - No API key set and not enforced → allow (localhost-only operation).
+    - Enforced but no key configured → fail closed (misconfiguration).
+    - Key set → require the correct X-API-Key header on every request.
+    """
     if not API_KEY_ENABLED:
+        if API_KEY_ENFORCED:
+            raise HTTPException(status_code=503, detail="Authentication required but ARENA_API_KEY is not set")
         return  # Auth disabled, allow all
     if api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
@@ -90,9 +135,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app_logger.warning(f"Could not schedule autonomous cycle: {e}")
 
-    app_logger.info(
-        f"Arena started (CORS: {CORS_ORIGINS}, Auth: {'enabled' if API_KEY_ENABLED else 'disabled'})"
-    )
+    if API_KEY_ENABLED:
+        app_logger.info(
+            f"Arena started (CORS: {CORS_ORIGINS}, Auth: ENABLED — all routes + WS require X-API-Key)"
+        )
+    else:
+        app_logger.warning(
+            "Arena started with authentication DISABLED. This instance exposes "
+            "filesystem, application, communications, and Level-3 tools over HTTP. "
+            "It must only be bound to localhost (--host 127.0.0.1). To allow LAN "
+            "access, set ARENA_API_KEY (all routes + WS will then require it)."
+        )
 
     yield
 
@@ -138,6 +191,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # ── Insecure-LAN guard: unauthenticated instances are localhost-only ──
+    # When ARENA_API_KEY is unset (auth off), reject requests from non-loopback
+    # clients unless the owner explicitly opted into an insecure LAN binding.
+    @app.middleware("http")
+    async def _enforce_local_binding(request: Request, call_next):
+        if not API_KEY_ENABLED and not INSECURE_LAN_ALLOWED:
+            client_host = request.client.host if request.client else ""
+            if not _client_is_local(client_host):
+                return _insecure_lan_error()
+        return await call_next(request)
+
     # ── Root: React SPA for browsers, JSON status for API clients ──
     # Registered FIRST so it wins over the core router's legacy `/` handler.
     @app.get("/")
@@ -155,11 +219,15 @@ def create_app() -> FastAPI:
         }
 
     # ── Core REST routes (127) ──
-    app.include_router(core_router)
+    # SECURITY (P0 fix): the core router carries the powerful capability routes
+    # (chat, tools execution, tasks, models, …). Gate it behind verify_api_key
+    # exactly like the /api/* routers, so that when ARENA_API_KEY is set, EVERY
+    # route is protected — not just the newer ones. (verify_api_key is a no-op
+    # when the key is unset, preserving localhost-only operation.)
+    _auth_deps = [Depends(verify_api_key)]
+    app.include_router(core_router, dependencies=_auth_deps)
 
     # ── API routers (file upload, code exec, multi-modal, screenshot, …) ──
-    # SECURITY: gated behind verify_api_key (no-op when ARENA_API_KEY is unset).
-    _auth_deps = [Depends(verify_api_key)]
     app.include_router(phase6_router, dependencies=_auth_deps)
     app.include_router(screenshot_router, dependencies=_auth_deps)
     app.include_router(wakeword_router, dependencies=_auth_deps)
@@ -191,6 +259,12 @@ def create_app() -> FastAPI:
             ws_api_key = websocket.query_params.get("api_key", "")
             if ws_api_key != API_KEY:
                 await websocket.close(code=4003, reason="Invalid API key")
+                return
+        elif not INSECURE_LAN_ALLOWED:
+            # Unauthenticated instance → reject non-loopback WS clients, same as HTTP.
+            client_host = websocket.client.host if websocket.client else ""
+            if not _client_is_local(client_host):
+                await websocket.close(code=4003, reason="LAN access requires ARENA_API_KEY")
                 return
 
         await ws_manager.connect(websocket)

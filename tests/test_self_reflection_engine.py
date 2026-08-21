@@ -25,6 +25,25 @@ from app.cognition.autonomous_goal_executor import (
 )
 
 
+def _mark_completed(goal_executor, plan):
+    """Explicitly mark a plan (and its steps) as VERIFIED complete.
+
+    This replaces the old pattern of relying on `execute_plan(plan)` with no
+    runtime — which used to (incorrectly) mark simulated steps COMPLETED. After
+    the P0 fix, no-runtime steps are UNVERIFIED, so tests that need a
+    "successful" plan must construct one explicitly.
+    """
+    for s in plan.steps:
+        s.status = ExecutionStatus.COMPLETED
+        s.confidence = 0.9
+        s.result = "verified"
+    plan.status = ExecutionStatus.COMPLETED
+    plan.progress = 1.0
+    plan.outcome_summary = "All steps verified complete"
+    goal_executor.save_plan(plan)
+    return plan
+
+
 class TestSelfReflectionEngine:
     """Test Self-Reflection Engine functionality."""
 
@@ -48,7 +67,7 @@ class TestSelfReflectionEngine:
 
     @pytest.fixture
     def sample_plan(self, goal_executor):
-        """Create a sample completed execution plan."""
+        """Create a sample completed (verified) execution plan."""
         goal = AutonomousGoal(
             title="Optimize system performance",
             description="Address slow response times",
@@ -56,7 +75,7 @@ class TestSelfReflectionEngine:
             status=GoalStatus.APPROVED,
         )
         plan = goal_executor.create_execution_plan(goal)
-        plan = goal_executor.execute_plan(plan)
+        plan = _mark_completed(goal_executor, plan)
         return plan, goal
 
     @pytest.fixture
@@ -142,7 +161,7 @@ class TestSelfReflectionEngine:
             plan = goal_executor.create_execution_plan(goal)
             
             if i < 2:
-                plan = goal_executor.execute_plan(plan)
+                plan = _mark_completed(goal_executor, plan)
             else:
                 plan.status = ExecutionStatus.FAILED
                 goal_executor.save_plan(plan)
@@ -164,7 +183,7 @@ class TestSelfReflectionEngine:
                 status=GoalStatus.APPROVED,
             )
             plan = goal_executor.create_execution_plan(goal)
-            plan = goal_executor.execute_plan(plan)
+            plan = _mark_completed(goal_executor, plan)
             plans.append(plan)
         
         # Discover patterns
@@ -187,7 +206,7 @@ class TestSelfReflectionEngine:
                 status=GoalStatus.APPROVED,
             )
             plan = goal_executor.create_execution_plan(goal)
-            plan = goal_executor.execute_plan(plan)
+            plan = _mark_completed(goal_executor, plan)
             plans.append(plan)
         
         patterns = reflection_engine.discover_patterns(plans)
