@@ -22,7 +22,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1392** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1392 passed, 4 deselected` |
+| Backend tests passing | **1404** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1404 passed, 4 deselected` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
@@ -118,6 +118,8 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ **Explicit step dependencies (P1)**: `ExecutionStep` now declares `depends_on` / `requires_evidence` / `produces_evidence` / `success_criteria` / `failure_conditions`; generated plans are linked into an explicit chain, and `execute_plan` blocks any step whose declared prerequisite isn't `COMPLETED`.
 - ✅ **Split UNVERIFIED vs WAITING_APPROVAL recovery (P1)**: `resume_plan` re-attempts only owner-approved (WAITING_APPROVAL) steps; `reconcile_plan` re-runs UNVERIFIED steps in verify-only (observe, don't re-execute) mode — no blind re-execution of unconfirmed actions.
 - ✅ **Lessons now influence replanning (closed the learning loop)**: `GoalReplanner.execute_reassessment_and_replan` forwards `lesson_store` into `ActionPlanner` → `CounterfactualSimulator`, so a recorded past failure lowers the utility of that same action in future Plan-B selection (previously lessons were written but never read back).
+- ✅ **Evidence-driven goal generation**: `generate_goals_from_signals` produces goals from structured signals (resource pressure, stale beliefs, failed actions, prediction error, low success rate) with threshold gates — not string keyword matching. Wired into the autonomous cycle ahead of the keyword fallback.
+- ✅ **Outcome-calibrated goal scoring**: `evaluate_goal` blends each goal source's historical success rate into feasibility once ≥3 outcomes exist, closing "predicted value → actual utility → prediction error → calibration → better future decisions."
 
 Still open (future):
 

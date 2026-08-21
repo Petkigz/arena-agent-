@@ -339,6 +339,89 @@ class AutonomousGoalGenerator:
         
         return generated_goals
     
+    def generate_goals_from_signals(self, signals: Dict[str, Any]) -> List[AutonomousGoal]:
+        """
+        Generate goals from STRUCTURED cognitive signals instead of string keyword
+        matching. This is the evidence-driven path: signals come straight from the
+        WorldModel / beliefs / outcomes / hardware telemetry, so a goal is produced
+        because a measured condition crossed a threshold — not because a string
+        happened to contain the word "slow".
+
+        Recognized signals (all optional; each is deterministic and threshold-gated):
+
+        - resource_pressure: {"ram_percent": float, "cpu_percent": float,
+                              "disk_percent": float}  → optimization goal
+        - stale_beliefs: [subject, ...]                → information-gap (re-verify) goals
+        - failed_actions: [action_type, ...]           → optimization/investigation goals
+        - prediction_error: float (surprisal)          → investigation goal (if high)
+        - low_success_rate: float (0-1)                → optimization goal (if < threshold)
+
+        The keyword path (generate_goals_from_observation) remains as a fallback
+        for free-text observations that carry no structured payload.
+        """
+        generated: List[AutonomousGoal] = []
+        signals = signals or {}
+
+        # 1. Resource pressure → optimization.
+        resource = signals.get("resource_pressure") or {}
+        if isinstance(resource, dict):
+            ram = float(resource.get("ram_percent", 0) or 0)
+            cpu = float(resource.get("cpu_percent", 0) or 0)
+            disk = float(resource.get("disk_percent", 0) or 0)
+            if ram > 85 or cpu > 80 or disk > 90:
+                evidence = (
+                    f"measured resource pressure: RAM {ram:.0f}%, CPU {cpu:.0f}%, disk {disk:.0f}%"
+                )
+                goal = self._create_optimization_goal(evidence, {"signal": "resource_pressure"})
+                generated.append(goal)
+
+        # 2. Stale beliefs → re-verify (information gap).
+        stale = signals.get("stale_beliefs") or []
+        if isinstance(stale, list):
+            for subject in stale[:3]:
+                goal = self._create_information_gap_goal(
+                    f"stale belief needs re-verification: {subject}",
+                    {"signal": "stale_belief"},
+                )
+                generated.append(goal)
+
+        # 3. Recent action failures → optimization/investigation.
+        failed = signals.get("failed_actions") or []
+        if isinstance(failed, list) and failed:
+            evidence = f"recent action failures: {', '.join(str(a) for a in failed[:3])}"
+            goal = self._create_optimization_goal(evidence, {"signal": "failed_actions"})
+            generated.append(goal)
+
+        # 4. Prediction error (surprisal) → investigation.
+        try:
+            surprisal = float(signals.get("prediction_error", 0) or 0)
+        except (TypeError, ValueError):
+            surprisal = 0.0
+        if surprisal >= 0.5:
+            goal = self._create_curiosity_goal(
+                f"high prediction error (surprisal {surprisal:.2f}) — investigate mismatch",
+                {"signal": "prediction_error"},
+            )
+            generated.append(goal)
+
+        # 5. Low overall success rate → optimization.
+        try:
+            success_rate = float(signals.get("low_success_rate", 1.0) or 1.0)
+        except (TypeError, ValueError):
+            success_rate = 1.0
+        if success_rate < 0.6:
+            goal = self._create_optimization_goal(
+                f"low success rate ({success_rate:.0%}) — investigate root cause",
+                {"signal": "low_success_rate"},
+            )
+            generated.append(goal)
+
+        for goal in generated:
+            self.add_goal(goal)
+            app_logger.info(f"Generated goal from signals: {goal.title} (source: {goal.source.value})")
+
+        return generated
+
     def _create_information_gap_goal(self, observation: str, context: Dict[str, Any]) -> Optional[AutonomousGoal]:
         """Create a goal to fill an information gap."""
         return AutonomousGoal(
@@ -512,6 +595,22 @@ class AutonomousGoalGenerator:
         
         goal.evaluated_at = _now()
         goal.status = GoalStatus.EVALUATED
+
+        # Outcome calibration (P1 fix): the heuristic feasibility above is a
+        # *prediction*; the goal's own past outcomes are the *ground truth*. Blend
+        # observed success rate into feasibility, weighting observed data more
+        # heavily as the sample grows. This closes "predicted value → actual
+        # utility → prediction error → calibration → better future decisions".
+        stats = self._goal_outcome_stats(goal.source)
+        if stats is not None:
+            success_rate, attempts = stats
+            if attempts >= self.MIN_OUTCOME_SAMPLES:
+                observed_weight = min(0.7, attempts / (attempts + 3.0))
+                calibrated = round(
+                    goal.feasibility_score * (1.0 - observed_weight) + success_rate * observed_weight,
+                    4,
+                )
+                goal.feasibility_score = max(0.0, min(1.0, calibrated))
         
         # Update in database
         self.update_goal(goal)
@@ -729,6 +828,24 @@ class AutonomousGoalGenerator:
             else:
                 cursor = conn.execute("SELECT COUNT(*) FROM autonomous_goals")
             return cursor.fetchone()[0]
+
+    # Minimum past outcomes before historical calibration kicks in (avoids
+    # over-reacting to a single goal's success/failure).
+    MIN_OUTCOME_SAMPLES = 3
+
+    def _goal_outcome_stats(self, source: GoalSource):
+        """Return (success_rate, attempt_count) for past COMPLETED/FAILED goals of
+        this source, or None if no outcomes have been recorded yet."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT status FROM autonomous_goals WHERE source = ? AND status IN (?, ?)",
+                (source.value, GoalStatus.COMPLETED.value, GoalStatus.FAILED.value),
+            )
+            rows = [r[0] for r in cursor.fetchall()]
+        if not rows:
+            return None
+        completed = rows.count(GoalStatus.COMPLETED.value)
+        return (completed / len(rows), len(rows))
     
     def _row_to_goal(self, row) -> AutonomousGoal:
         """Convert a database row (sqlite3.Row, name-accessible) to an AutonomousGoal."""

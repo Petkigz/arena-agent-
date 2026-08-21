@@ -209,8 +209,17 @@ class PeriodicAutonomousCycle:
             
             app_logger.info(f"Cycle {cycle.cycle_id}: {len(observations)} observation(s)")
             
-            # Step 2: Generate goals from observations
+            # Step 2: Generate goals — evidence-driven (structured signals) first,
+            # then keyword fallback for any free-text observations.
             all_goals = []
+            try:
+                signals = self._observe_signals(cognitive_runtime)
+                signal_goals = self.goal_generator.generate_goals_from_signals(signals)
+                all_goals.extend(signal_goals)
+                cycle.goals_generated += len(signal_goals)
+            except Exception as e:
+                app_logger.warning(f"Signal-driven goal generation failed (falling back): {e}")
+
             for observation in observations[:5]:  # Limit to top 5 observations
                 goals = self.goal_generator.generate_goals_from_observation(observation)
                 all_goals.extend(goals)
@@ -312,7 +321,7 @@ class PeriodicAutonomousCycle:
     def _observe_environment(self, cognitive_runtime=None) -> List[str]:
         """
         Observe the environment and generate observations.
-        
+
         Returns:
             List of observation strings
         """
@@ -356,6 +365,33 @@ class PeriodicAutonomousCycle:
             observations.append("System operating normally - explore optimization opportunities")
         
         return observations
+    
+    def _observe_signals(self, cognitive_runtime=None) -> Dict[str, Any]:
+        """
+        Observe the environment as STRUCTURED signals (not flattened strings), so
+        goal generation can use the evidence-driven path (generate_goals_from_signals)
+        instead of keyword matching. Reads the same sources as _observe_environment
+        but returns raw values keyed by signal name.
+        """
+        signals: Dict[str, Any] = {}
+        try:
+            import psutil
+            signals["resource_pressure"] = {
+                "cpu_percent": psutil.cpu_percent(interval=1),
+                "ram_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage('/').percent,
+            }
+        except Exception as e:
+            app_logger.warning(f"Signal observation (psutil) failed: {e}")
+
+        try:
+            signals["low_success_rate"] = self.reflection_engine.self_model.average_success_rate
+            if self.reflection_engine.self_model.weak_areas:
+                signals["stale_beliefs"] = list(self.reflection_engine.self_model.weak_areas[:3])
+        except Exception as e:
+            app_logger.warning(f"Signal observation (self-model) failed: {e}")
+
+        return signals
     
     def _generate_summary(self, cycle: AutonomousCycle) -> str:
         """Generate a human-readable summary of the cycle."""
