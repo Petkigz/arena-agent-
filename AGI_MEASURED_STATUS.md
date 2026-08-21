@@ -22,7 +22,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1404** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1404 passed, 4 deselected` |
+| Backend tests passing | **1414** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1414 passed, 4 deselected` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
@@ -125,6 +125,8 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ **Lessons now influence replanning (closed the learning loop)**: `GoalReplanner.execute_reassessment_and_replan` forwards `lesson_store` into `ActionPlanner` → `CounterfactualSimulator`, so a recorded past failure lowers the utility of that same action in future Plan-B selection (previously lessons were written but never read back).
 - ✅ **Evidence-driven goal generation**: `generate_goals_from_signals` produces goals from structured signals (resource pressure, stale beliefs, failed actions, prediction error, low success rate) with threshold gates — not string keyword matching. Wired into the autonomous cycle ahead of the keyword fallback.
 - ✅ **Outcome-calibrated goal scoring**: `evaluate_goal` blends each goal source's historical success rate into feasibility once ≥3 outcomes exist, closing "predicted value → actual utility → prediction error → calibration → better future decisions."
+- ✅ **StepVerifier separates step from goal verification (P0)**: a new `StepVerifier` evaluates each step's OWN success/failure criteria and evidence contract; a step declaring evidence is `UNVERIFIED` (not `COMPLETED`) when the cycle only produced a conversational ANSWER. Confidence is now evidence-derived (0.9 observed / 0.7 conversational / 0.5 unverified / 0.0 failed), never a hard-coded 1.0 on success.
+- ✅ **Evidence as real data-flow**: generated plans populate `requires_evidence`/`produces_evidence` (current_state → root_cause → optimization_plan → change_applied → …), and `execute_plan` blocks any step whose required evidence was never produced by a COMPLETED step — not just its `depends_on` order.
 
 Still open (future):
 

@@ -252,16 +252,22 @@ class AutonomousGoalExecutor:
                     goal_id=goal.goal_id,
                     description="Gather information from available sources",
                     task_type=TaskType.INFORMATION_GATHERING,
+                    requires_evidence=["current_state"],
+                    produces_evidence=["information"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Verify and validate gathered information",
                     task_type=TaskType.ANALYSIS,
+                    requires_evidence=["information"],
+                    produces_evidence=["validated_information"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Integrate new knowledge into belief system",
                     task_type=TaskType.ANALYSIS,
+                    requires_evidence=["validated_information"],
+                    produces_evidence=["integrated_knowledge"],
                 ),
             ])
         
@@ -271,21 +277,29 @@ class AutonomousGoalExecutor:
                     goal_id=goal.goal_id,
                     description="Identify root cause of performance issue",
                     task_type=TaskType.ANALYSIS,
+                    requires_evidence=["current_state"],
+                    produces_evidence=["root_cause"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Design optimization strategy",
                     task_type=TaskType.OPTIMIZATION,
+                    requires_evidence=["root_cause"],
+                    produces_evidence=["optimization_plan"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Implement optimization",
                     task_type=TaskType.OPTIMIZATION,
+                    requires_evidence=["optimization_plan"],
+                    produces_evidence=["change_applied"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Verify performance improvement",
                     task_type=TaskType.ANALYSIS,
+                    requires_evidence=["change_applied"],
+                    produces_evidence=["performance_measurement"],
                 ),
             ])
         
@@ -295,16 +309,22 @@ class AutonomousGoalExecutor:
                     goal_id=goal.goal_id,
                     description="Identify items requiring maintenance",
                     task_type=TaskType.ANALYSIS,
+                    requires_evidence=["current_state"],
+                    produces_evidence=["maintenance_items"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Perform maintenance actions",
                     task_type=TaskType.MAINTENANCE,
+                    requires_evidence=["maintenance_items"],
+                    produces_evidence=["maintenance_applied"],
                 ),
                 ExecutionStep(
                     goal_id=goal.goal_id,
                     description="Verify maintenance completed successfully",
                     task_type=TaskType.ANALYSIS,
+                    requires_evidence=["maintenance_applied"],
+                    produces_evidence=["maintenance_verified"],
                 ),
             ])
         
@@ -392,6 +412,38 @@ class AutonomousGoalExecutor:
             if dep is None or dep.status != ExecutionStatus.COMPLETED:
                 blocked.append(dep_id)
         return blocked
+
+    @staticmethod
+    def _available_evidence(plan: ExecutionPlan) -> set:
+        """The set of evidence names produced by COMPLETED steps in this plan.
+
+        Evidence is the actual data-flow mechanism: a step's `produces_evidence`
+        names become available to downstream steps' `requires_evidence` only once
+        that step is verified COMPLETED. Derived deterministically from plan state.
+        """
+        available = set()
+        for s in plan.steps:
+            if s.status == ExecutionStatus.COMPLETED:
+                available.update(s.produces_evidence or [])
+        return available
+
+    @classmethod
+    def _blocked_step(cls, step: ExecutionStep, plan: ExecutionPlan):
+        """Return (kind, names) if the step cannot run, else None.
+
+        kind is "dependency" (a depends_on prerequisite isn't COMPLETED) or
+        "evidence" (a requires_evidence name wasn't produced by any COMPLETED step).
+        """
+        blocked_deps = cls._blocked_dependency(step, plan)
+        if blocked_deps:
+            return ("dependency", blocked_deps)
+        missing_evidence = [
+            e for e in (step.requires_evidence or [])
+            if e not in cls._available_evidence(plan)
+        ]
+        if missing_evidence:
+            return ("evidence", missing_evidence)
+        return None
     
     def execute_step(self, step: ExecutionStep, cognitive_runtime=None, verify_only: bool = False) -> ExecutionStep:
         """
@@ -424,34 +476,35 @@ class AutonomousGoalExecutor:
                     complexity="deep" if step.task_type == TaskType.ANALYSIS else "fast"
                 )
                 step.result = result.get("assistant_reply", "Completed")
-                # P0 fix: the cycle's GoalVerifier verdict is authoritative, NOT
-                # "the cycle returned a reply". A step is COMPLETED only when the
-                # environment was actually verified to reach the goal.
-                verified = result.get("goal_verified")
+                # Gate first: a Level-3 action requires owner approval regardless
+                # of any verdict.
                 requires_approval = bool(result.get("requires_approval"))
                 gate_blocked = result.get("gate_blocked")
-                lifecycle = result.get("goal_lifecycle_state", "")
-
                 if requires_approval or gate_blocked:
-                    # Level-3 action: the owner must approve. Never "completed".
                     step.status = ExecutionStatus.WAITING_APPROVAL
                     step.confidence = 0.0
                     step.error = (
                         f"Action requires owner approval"
                         + (f" ({gate_blocked})" if gate_blocked else "")
                     )
-                elif verified is True:
-                    step.status = ExecutionStatus.COMPLETED
-                    step.confidence = 1.0
-                elif verified is False and lifecycle in ("failed", "blocked", "deferred"):
-                    step.status = ExecutionStatus.FAILED
-                    step.confidence = 0.0
-                    step.error = step.result or "Goal verification failed"
                 else:
-                    # verified False/None but not provably failed → UNKNOWN.
-                    step.status = ExecutionStatus.UNVERIFIED
-                    step.confidence = 0.5
-                    step.error = "Goal could not be verified (no environmental evidence)"
+                    # StepVerifier (NOT the cycle's GoalVerifier) decides the step
+                    # outcome: it evaluates the step's OWN success/failure criteria
+                    # and evidence contract, and refuses to mark a step COMPLETED
+                    # when the cycle only produced a conversational reply.
+                    from app.cognition.step_verifier import StepVerifier
+                    # Evidence availability is already enforced at the plan level
+                    # (_blocked_step), so StepVerifier is called with no evidence
+                    # set here — it verifies the step's own outcome contract.
+                    verdict = StepVerifier.verify_step(step, result, available_evidence=None)
+                    step.confidence = verdict.confidence
+                    step.error = verdict.explanation if verdict.status != "verified" else None
+                    if verdict.status == "verified":
+                        step.status = ExecutionStatus.COMPLETED
+                    elif verdict.status == "failed":
+                        step.status = ExecutionStatus.FAILED
+                    else:
+                        step.status = ExecutionStatus.UNVERIFIED
             else:
                 # No runtime: execution is simulated, so nothing can be verified.
                 step.result = f"Simulated execution: {step.description}"
@@ -488,19 +541,20 @@ class AutonomousGoalExecutor:
         
         for step in plan.steps:
             if step.status == ExecutionStatus.PENDING:
-                # Enforce explicit dependencies: only execute if every declared
-                # prerequisite step is COMPLETED (verified). A prerequisite that
-                # is UNVERIFIED / WAITING_APPROVAL / FAILED halts the chain here.
-                blocked_by = self._blocked_dependency(step, plan)
-                if blocked_by:
+                # Enforce the data-flow graph: a step runs only if (a) every
+                # declared depends_on prerequisite is COMPLETED AND (b) every
+                # requires_evidence name was produced by a COMPLETED step.
+                blocked = self._blocked_step(step, plan)
+                if blocked:
+                    kind, names = blocked
                     step.status = ExecutionStatus.UNVERIFIED
                     step.error = (
-                        f"Prerequisite step(s) not verified: {', '.join(blocked_by)}"
+                        f"{'Prerequisite step(s) not verified' if kind == 'dependency' else 'Required evidence not produced'}: "
+                        f"{', '.join(names)}"
                     )
                     step.completed_at = _now()
                     app_logger.info(
-                        f"Step '{step.description[:40]}' blocked: prerequisites "
-                        f"{', '.join(blocked_by)} not verified."
+                        f"Step '{step.description[:40]}' blocked ({kind}): {', '.join(names)}"
                     )
                 else:
                     self.execute_step(step, cognitive_runtime)

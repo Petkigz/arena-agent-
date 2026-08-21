@@ -31,7 +31,10 @@ def test_step_completed_only_when_goal_verified(tmp_path):
     rt = _Runtime({"goal_verified": True, "assistant_reply": "optimized", "goal_lifecycle_state": "achieved"})
     step = ex.execute_step(_make_step(), cognitive_runtime=rt)
     assert step.status == ExecutionStatus.COMPLETED
-    assert step.confidence == 1.0
+    # Confidence is evidence-derived, NOT a hard-coded 1.0: this mock has no
+    # environmental observation (no executed_actions/reasoning_action), so it's a
+    # conversational verification → 0.7.
+    assert step.confidence == 0.7
 
 
 def test_step_failed_when_verification_fails(tmp_path):

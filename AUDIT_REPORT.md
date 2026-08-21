@@ -65,6 +65,8 @@
 | Evidence-driven goals | ✅ `generate_goals_from_signals` maps structured signals (resource/belief/failure/prediction-error/success-rate) to goals via thresholds, wired ahead of the keyword fallback |
 | Outcome-calibrated scoring | ✅ `evaluate_goal` blends each source's historical success rate into feasibility (≥3 samples), not just hand-coded constants |
 | Benchmark taxonomy | ✅ scorecard checks tagged across 7 evidence categories (structural/integration/behavioral/robustness/transfer/generalization/longitudinal) with a per-category summary; 21/21 verified |
+| Step vs goal verification | ✅ **P0 fixed** — `StepVerifier` evaluates each step's own criteria/evidence; a step declaring evidence is `UNVERIFIED` (not `COMPLETED`) on a conversational ANSWER; confidence is evidence-derived, not a hard 1.0 |
+| Evidence data-flow | ✅ `requires_evidence`/`produces_evidence` populated on generated plans and enforced at plan level (blocks steps whose required evidence was never produced) |
 | Resumable approval | ✅ WAITING_APPROVAL is a resume point (`resume_plan`), not a deferral |
 | Autonomy policy | ✅ `AUTONOMY_MODE` (default `supervised`) governs the autonomous cycle; `off` disables it |
 | Provenance persistence | ✅ `observation_type` survives the SQLite round-trip; first belief insertion uses the same `revise()` path as subsequent evidence |
