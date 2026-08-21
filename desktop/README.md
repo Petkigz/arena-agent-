@@ -5,6 +5,19 @@ no browser, no HTML, no permission prompts. The backend (`app.server:app`) owns
 all native hardware access (mic, camera, screen, location, filesystem); this
 client is the window.
 
+## Design
+
+Matches the existing web UI's **"Beanie"** design language:
+
+- A **floating, breathing presence orb** — color + pulse reflect the agent's
+  state (idle=blue / working=amber / listening=green / speaking=purple /
+  offline=gray), painted with a 3D radial gradient + soft glow.
+- **"BEANIE" / "Personal AI"** branding with a status message.
+- **Quick actions** ("Continue project", "What's new?", "Research", "Talk to me")
+  and a **"🎙 Talk to Beanie"** button.
+- **Bottom navigation** (Beanie / Chat / Tools) on the Arena dark theme
+  (#0F172A background, #1E293B surface).
+
 ## Run
 
 ```bash
@@ -21,7 +34,7 @@ PYTHONPATH=. python -m desktop.main
 ## Phase status
 
 - ✅ **Phase 1** — window shell, connection status, text chat.
-- ✅ **Phase 2** — native hardware tabs:
+- ✅ **Phase 2** — native hardware (Tools tab):
   - **Camera** — live webcam preview + still capture (uploads to the backend).
     Requires `pip install opencv-python`; degrades gracefully without it.
   - **Location** — resolve native location (phone GPS → IP fallback) off-thread.
