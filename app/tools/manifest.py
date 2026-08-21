@@ -287,7 +287,14 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
 
     # ── Agents (multi-step loops, Level 2 reversible via checkpoint) ────────
     def _run_coding_agent(task, target_file=None, test_command=None, context_files=None):
-        return CodingAgent().run(
+        # Inject the ONE brain so the agent records outcomes into it (never a
+        # second runtime/model).
+        try:
+            from app.cognition.runtime import CognitiveRuntime
+            runtime = CognitiveRuntime.get_instance()
+        except Exception:
+            runtime = None
+        return CodingAgent(runtime=runtime).run(
             task=task,
             target_file=target_file,
             test_command=test_command,

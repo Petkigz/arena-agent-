@@ -170,6 +170,11 @@ class CognitiveRuntime:
             max_steps=max_steps,
         )
 
+        # One brain: register this runtime as the process-wide singleton so
+        # get_instance() returns the SAME instance the server (or any caller)
+        # constructed — instead of spawning a second, divergent brain.
+        type(self)._instance = self
+
     def get_hardware_self_report(self) -> Dict[str, Any]:
         """
         Phase 3: Report the agent's hardware self-model plus a natural-language summary.

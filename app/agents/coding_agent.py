@@ -15,7 +15,7 @@ Design (honest, testable):
 
 from __future__ import annotations
 
-import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -27,7 +27,14 @@ from app.utils.logger import app_logger, audit_logger
 
 
 class CodingAgent:
-    """Plan → write → verify → branch → rollback loop for code tasks."""
+    """Plan → write → verify → branch → rollback loop for code tasks.
+
+    Thin by design: it shares the ONE brain (CognitiveRuntime) and the ONE model
+    (llm_client). It does NOT reimplement cognition — it only adds the
+    code-specific loop. When a runtime is injected, outcomes are recorded back
+    into the runtime's memory / outcome store / lesson store so the brain learns
+    from coding work too.
+    """
 
     def __init__(
         self,
@@ -35,11 +42,13 @@ class CodingAgent:
         max_attempts: int = 3,
         checkpoint_enabled: bool = True,
         llm=None,
+        runtime=None,
     ) -> None:
         self.workdir = Path(workdir) if workdir else Path(settings.BASE_DIR)
         self.max_attempts = max(1, min(int(max_attempts), 5))
         self.checkpoint_enabled = checkpoint_enabled
         self._llm = llm or llm_client
+        self.runtime = runtime  # optional — the one brain to record into
 
     # ── main loop ───────────────────────────────────────────────────────────
     def run(
@@ -53,6 +62,7 @@ class CodingAgent:
         if not task or not task.strip():
             return {"success": False, "error": "A task description is required."}
 
+        start = time.time()
         context = self._read_context(context_files or [])
         attempts: List[Dict[str, Any]] = []
         checkpoint_hash: Optional[str] = None
@@ -78,6 +88,7 @@ class CodingAgent:
                 attempts[-1]["verify"] = verify
                 if verify.get("success"):
                     audit_logger.info(f"CodingAgent succeeded on attempt {attempt}")
+                    self._record(task, success=True, latency_ms=(time.time() - start) * 1000, attempts=attempts)
                     return self._success_result(task, target_file, attempts, checkpoint_hash)
                 # Failure → feed the error back and branch to the next attempt.
                 app_logger.warning(f"Attempt {attempt} failed tests: {verify.get('stderr', '')[:200]}")
@@ -87,14 +98,78 @@ class CodingAgent:
 
             # No test command: treat as "wrote code" success (best-effort).
             audit_logger.info(f"CodingAgent wrote code for '{task}' (no test command)")
+            self._record(task, success=True, latency_ms=(time.time() - start) * 1000, attempts=attempts)
             return self._success_result(task, target_file, attempts, checkpoint_hash)
 
+        self._record(task, success=False, latency_ms=(time.time() - start) * 1000, attempts=attempts)
         return {
             "success": False,
             "task": task,
             "attempts": attempts,
             "message": f"Failed after {self.max_attempts} attempts.",
         }
+
+    # ── brain integration (the "one brain" principle) ───────────────────────
+    def _select_complexity(self) -> str:
+        """Choose the model route, deferring to the runtime's hardware-aware logic."""
+        if self.runtime is not None:
+            try:
+                return self.runtime._select_effective_complexity("main")
+            except Exception:
+                pass
+        return "main"
+
+    def _record(self, task: str, success: bool, latency_ms: float, attempts: List[Dict[str, Any]]) -> None:
+        """Record the coding outcome back into the brain (memory + outcomes + lessons).
+
+        Best-effort: a failure to record never fails the coding task. This is what
+        makes the agent a *thin* skill — it feeds the one brain rather than
+        keeping its own memory.
+        """
+        if self.runtime is None:
+            return
+        try:
+            self.runtime.memory.add(
+                "episodic",
+                f"coding task: {task}",
+                source="coding_agent",
+                outcome="success" if success else "failed",
+                success=success,
+                importance=0.7,
+            )
+        except Exception as e:
+            app_logger.warning(f"CodingAgent memory record failed: {e}")
+
+        try:
+            self.runtime.outcomes.record_outcome(
+                goal_type="coding",
+                action_type="run_coding_agent",
+                success=success,
+                latency_ms=round(latency_ms, 2),
+                surprisal=0.0 if success else 1.0,
+                goal_text=task,
+            )
+        except Exception as e:
+            app_logger.warning(f"CodingAgent outcome record failed: {e}")
+
+        try:
+            failed = [
+                a.get("verify", {}).get("stderr", "")[:200]
+                for a in attempts if a.get("verify") and not a["verify"].get("success")
+            ]
+            self.runtime.lessons.extract_lesson(
+                task_type="coding",
+                action_type="run_coding_agent",
+                final_state="achieved" if success else "failed",
+                verified_success=success,
+                failed_conditions=failed,
+                reply_text=f"coding agent {'succeeded' if success else 'failed'} after {len(attempts)} attempt(s)",
+                goal_text=task,
+                latency_ms=round(latency_ms, 2),
+                surprisal=0.0 if success else 1.0,
+            )
+        except Exception as e:
+            app_logger.warning(f"CodingAgent lesson record failed: {e}")
 
     # ── deterministic helpers (testable) ────────────────────────────────────
     def _read_context(self, files: List[str]) -> str:
@@ -164,7 +239,7 @@ class CodingAgent:
         user = f"Task: {task}\n\nExisting context:\n{context}\n\nPrior test failures:\n{failures or '(none)'}"
         return extract_reply(self._llm.generate_chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            complexity="main", max_tokens=600,
+            complexity=self._select_complexity(), max_tokens=600,
         ), fallback="Implement the task directly.")
 
     def _generate_code(self, task: str, plan: str, context: str, attempts: List[Dict[str, Any]]) -> str:
@@ -182,7 +257,7 @@ class CodingAgent:
         )
         code = extract_reply(self._llm.generate_chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            complexity="main", max_tokens=2000,
+            complexity=self._select_complexity(), max_tokens=2000,
         ), fallback="")
         # Strip markdown fences if the model wrapped the code anyway.
         return self._strip_fences(code)
