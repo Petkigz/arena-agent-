@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 from app.tools.ocr_reader import OCRReaderTool
 from app.tools.screen_capture import ScreenCaptureTool
 from app.tools.knowledge_indexer import KnowledgeIndexer
@@ -74,9 +74,7 @@ Please provide:
                 max_tokens=600
             )
 
-            ai_analysis = "No visual analysis generated."
-            if llm_res.get("choices") and len(llm_res["choices"]) > 0:
-                ai_analysis = llm_res["choices"][0]["message"]["content"]
+            ai_analysis = extract_reply(llm_res, fallback="No visual analysis generated.")
 
             res = {
                 "success": True,

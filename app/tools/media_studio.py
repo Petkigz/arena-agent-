@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 from app.utils.logger import app_logger, audit_logger
 
 class MediaStudioTool:
@@ -43,7 +43,7 @@ class MediaStudioTool:
                 max_tokens=1000
             )
 
-            raw_svg = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else ""
+            raw_svg = extract_reply(llm_res, fallback="")
             clean_svg = raw_svg.replace("```xml", "").replace("```svg", "").replace("```", "").strip()
 
             if "<svg" not in clean_svg:

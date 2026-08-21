@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 from app.tools.doc_manager import DocumentManager
 from app.utils.logger import app_logger, audit_logger
 
@@ -45,7 +45,7 @@ Provide:
                 max_tokens=1000
             )
 
-            refactored_code = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Code refactored."
+            refactored_code = extract_reply(llm_res, fallback="Code refactored.")
 
             return {
                 "success": True,
@@ -89,7 +89,7 @@ Generate a complete, executable unit test file for this code.
                 max_tokens=900
             )
 
-            test_code = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Unit tests generated."
+            test_code = extract_reply(llm_res, fallback="Unit tests generated.")
 
             # Save test file draft
             ext = ".py" if language.lower() == "python" else ".js" if language.lower() in ["javascript", "typescript"] else ".txt"

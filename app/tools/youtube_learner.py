@@ -1,7 +1,7 @@
 import re
 from typing import Dict, Any, List, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 from app.utils.logger import app_logger
 
 class YouTubeLearner:
@@ -130,9 +130,7 @@ Please extract and structure the knowledge as follows:
                 max_tokens=1024
             )
             
-            ai_summary = "No summary generated."
-            if llm_res.get("choices") and len(llm_res["choices"]) > 0:
-                ai_summary = llm_res["choices"][0]["message"]["content"]
+            ai_summary = extract_reply(llm_res, fallback="No summary generated.")
 
             return {
                 "success": True,

@@ -6,7 +6,7 @@ from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
 from app.tools.disposable_sandbox import DisposableSandbox
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 
 class SkillTeachingEngine:
     """
@@ -164,7 +164,7 @@ class SkillTeachingEngine:
             complexity="main",
             max_tokens=600
         )
-        ai_synthesis = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Skill playbook executed."
+        ai_synthesis = extract_reply(llm_res, fallback="Skill playbook executed.")
 
         db.create_audit_log("execute_taught_skill", "success", f"Executed taught skill '{skill_name}'", level=1)
 

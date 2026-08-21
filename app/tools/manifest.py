@@ -182,7 +182,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("daily_briefing", "productivity", 0, "Generate a daily briefing",
         _ignore_payload(DailyBriefingEngine.generate_briefing))
     add("content_script", "productivity", 1, "Generate a content script",
-        _wrap(ContentCreatorTool.generate_content_script, "topic", "platform", "audience"))
+        _wrap(ContentCreatorTool.generate_content_script, "topic", "platform", "target_audience"))
+    add("generate_content", "productivity", 1, "Generate content (any supported type)",
+        _wrap(ContentCreatorTool.generate_content, "topic", "content_type", "target_audience", "tone", "auto_save"))
     add("business_opportunities", "productivity", 0, "Discover business opportunities",
         _wrap(BusinessGrowthEngine.discover_opportunities, "niche"))
     add("workflow_execute", "productivity", 2, "Execute a multi-step workflow",

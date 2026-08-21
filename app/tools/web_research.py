@@ -4,7 +4,7 @@ import random
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, quote_plus
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 from app.utils.logger import app_logger
 
 USER_AGENTS = [
@@ -370,9 +370,7 @@ Please extract:
                 max_tokens=1000
             )
 
-            ai_summary = "No summary generated."
-            if llm_res.get("choices") and len(llm_res["choices"]) > 0:
-                ai_summary = llm_res["choices"][0]["message"]["content"]
+            ai_summary = extract_reply(llm_res, fallback="No summary generated.")
 
             return {
                 "success": True,

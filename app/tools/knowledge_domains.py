@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
 
@@ -23,7 +23,7 @@ class KnowledgeDomainsTool:
 
         try:
             res = llm_client.generate_chat_completion(messages=messages, complexity="main", max_tokens=800)
-            analysis = res["choices"][0]["message"]["content"] if res.get("choices") else "Legal analysis completed."
+            analysis = extract_reply(res, fallback="Legal analysis completed.")
             return {"success": True, "topic": topic_or_question, "analysis": analysis}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -47,7 +47,7 @@ class KnowledgeDomainsTool:
 
         try:
             res = llm_client.generate_chat_completion(messages=messages, complexity="main", max_tokens=600)
-            response = res["choices"][0]["message"]["content"] if res.get("choices") else "Reflection completed."
+            response = extract_reply(res, fallback="Reflection completed.")
             return {"success": True, "counseling_reflection": response}
         except Exception as e:
             return {"success": False, "error": str(e)}

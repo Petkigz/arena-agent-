@@ -8,7 +8,7 @@ from app.database import db
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger
 from app.tools.web_research import WebResearcher
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 
 class OpSecManagerTool:
     """
@@ -103,7 +103,7 @@ class OpSecManagerTool:
             complexity="main",
             max_tokens=600
         )
-        erasure_letter = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Erasure request drafted."
+        erasure_letter = extract_reply(llm_res, fallback="Erasure request drafted.")
 
         # Safety Policy Check for Level 3 submission approval
         allowed, reason, level = PolicyEvaluator.evaluate_action(

@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 
 class FinancialLegalWellnessSuite:
     """
@@ -80,7 +80,7 @@ class FinancialLegalWellnessSuite:
             complexity="main",
             max_tokens=600
         )
-        audit_summary = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "ToS audit completed."
+        audit_summary = extract_reply(llm_res, fallback="ToS audit completed.")
 
         db.create_audit_log("audit_tos_and_privacy_policy", "success", "Audited Terms of Service / Privacy Policy text", level=0)
 
@@ -112,7 +112,7 @@ class FinancialLegalWellnessSuite:
             complexity="main",
             max_tokens=500
         )
-        critique = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Tone critique generated."
+        critique = extract_reply(llm_res, fallback="Tone critique generated.")
 
         return {
             "success": True,
@@ -141,7 +141,7 @@ class FinancialLegalWellnessSuite:
             complexity="fast",
             max_tokens=500
         )
-        raw_qa = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Question\tAnswer"
+        raw_qa = extract_reply(llm_res, fallback="Question\tAnswer")
 
         export_dir = settings.DATA_DIR / "workspace" / "anki_decks"
         export_dir.mkdir(parents=True, exist_ok=True)

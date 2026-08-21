@@ -10,7 +10,7 @@ from app.utils.logger import app_logger
 from app.perception.speech_to_text import LocalSpeechToText
 from app.tools.ocr_reader import OCRReaderTool
 from app.tools.youtube_learner import YouTubeLearner
-from app.llm import llm_client
+from app.llm import llm_client, extract_reply
 
 class UniversalMediaLearner:
     """
@@ -102,7 +102,7 @@ class UniversalMediaLearner:
                 complexity="main",
                 max_tokens=600
             )
-            analysis = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Media transcript analyzed."
+            analysis = extract_reply(llm_res, fallback="Media transcript analyzed.")
 
             db.create_audit_log("analyze_media_target", "success", f"Analyzed local media file: {os.path.basename(target)}", level=0)
 
@@ -136,7 +136,7 @@ class UniversalMediaLearner:
             complexity="main",
             max_tokens=700
         )
-        ai_summary = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Web media analyzed."
+        ai_summary = extract_reply(llm_res, fallback="Web media analyzed.")
 
         db.create_memory({
             "content": f"Universal Media Analysis ({web_media.get('title')}): {ai_summary[:300]}",

@@ -78,4 +78,49 @@ class LocalLLMClient:
     def close(self):
         self.client.close()
 
+    def generate_text(
+        self,
+        messages: List[Dict[str, str]],
+        complexity: str = "fast",
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+    ) -> str:
+        """
+        Convenience wrapper that returns just the assistant reply text.
+
+        Robustly extracts the content from the completion response, returning an
+        empty string (never raising) if the provider returns an unexpected shape.
+        """
+        result = self.generate_chat_completion(
+            messages=messages,
+            complexity=complexity,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return extract_reply(result)
+
+
+def extract_reply(result: Any, fallback: str = "") -> str:
+    """Safely extract assistant text from an OpenAI-style completion dict.
+
+    Never raises: returns `fallback` (default "") for None, missing keys, empty
+    choices, or non-dict payloads. Replaces the fragile, repeated
+    `result["choices"][0]["message"]["content"]` accessor used across tools.
+    """
+    try:
+        choices = result.get("choices") if isinstance(result, dict) else None
+        if not choices:
+            return fallback
+        first = choices[0]
+        if not isinstance(first, dict):
+            return fallback
+        message = first.get("message")
+        if not isinstance(message, dict):
+            return fallback
+        content = message.get("content")
+        return content if isinstance(content, str) else fallback
+    except Exception:
+        return fallback
+
+
 llm_client = LocalLLMClient()
