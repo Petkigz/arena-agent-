@@ -16,6 +16,9 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
     """
     Test A: Verify that the candidate strategy selected as counterfactual winner
     is the exact ActionProposal passed to MasterAgentOrchestrator.execute_proposal.
+
+    The reasoning decision is forced to ACT with an explicit proposal so the test
+    deterministically exercises the ACT branch (independent of live-LLM routing).
     """
     runtime = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
 
@@ -34,7 +37,13 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
             "model_used": "fast"
         }
 
-    with patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal):
+    mock_trace = CycleTrace(decisions=[ReasoningDecision(
+        action=ReasoningAction.ACT, confidence=0.9, reason="Action required",
+        proposed_action=ActionProposal(action_type="search_files", payload={"query": "report.pdf"}),
+    )])
+
+    with patch.object(runtime.loop, "run", return_value=mock_trace), \
+         patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal):
         res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         assert res["success"] is True
@@ -71,7 +80,22 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
                 "model_used": "fast"
             }
 
-    with patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal):
+    plan_b_proposal = ActionProposal(action_type="web_search", payload={"query": "report.pdf"})
+    mock_trace = CycleTrace(decisions=[ReasoningDecision(
+        action=ReasoningAction.ACT, confidence=0.9, reason="Action required",
+        proposed_action=ActionProposal(action_type="search_files", payload={"query": "report.pdf"}),
+    )])
+
+    def mock_replan(user_text, goal_rep, failed_result, tracker, **kwargs):
+        # Mirror the real GoalReplanner's lifecycle transitions so Plan-B execution
+        # follows the legal FAILED → REASSESSING → REPLAN → EXECUTING path.
+        tracker.transition(GoalLifecycleState.REASSESSING, "reassessing for test")
+        tracker.transition(GoalLifecycleState.REPLAN, "replan for test")
+        return plan_b_proposal
+
+    with patch.object(runtime.loop, "run", return_value=mock_trace), \
+         patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal), \
+         patch("app.cognition.goal_replanner.GoalReplanner.execute_reassessment_and_replan", side_effect=mock_replan):
         res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         # Plan A executed, failed, Plan B executed

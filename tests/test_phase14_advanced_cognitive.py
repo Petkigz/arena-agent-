@@ -30,27 +30,14 @@ from app.cognition.advanced_cognitive_capabilities import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create temporary database files."""
-    fd1, path1 = tempfile.mkstemp(suffix='_resources.db')
-    fd2, path2 = tempfile.mkstemp(suffix='_coordination.db')
-    fd3, path3 = tempfile.mkstemp(suffix='_knowledge.db')
-    fd4, path4 = tempfile.mkstemp(suffix='_uncertainty.db')
-    os.close(fd1)
-    os.close(fd2)
-    os.close(fd3)
-    os.close(fd4)
-    
+def temp_db(tmp_path):
+    """Create temporary database files (isolated via tmp_path)."""
     yield {
-        'resources': path1,
-        'coordination': path2,
-        'knowledge': path3,
-        'uncertainty': path4
+        'resources': str(tmp_path / 'resources.db'),
+        'coordination': str(tmp_path / 'coordination.db'),
+        'knowledge': str(tmp_path / 'knowledge.db'),
+        'uncertainty': str(tmp_path / 'uncertainty.db'),
     }
-    
-    for path in [path1, path2, path3, path4]:
-        if os.path.exists(path):
-            os.unlink(path)
 
 
 @pytest.fixture

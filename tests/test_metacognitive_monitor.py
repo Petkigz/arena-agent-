@@ -18,13 +18,9 @@ from app.cognition.metacognitive_monitor import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    fd, path = tempfile.mkstemp(suffix='.db')
-    os.close(fd)
-    yield path
-    if os.path.exists(path):
-        os.unlink(path)
+def temp_db(tmp_path):
+    """Create a temporary database for testing (isolated via tmp_path)."""
+    yield str(tmp_path / "test.db")
 
 
 @pytest.fixture

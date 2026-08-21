@@ -80,8 +80,13 @@ def test_ambiguous_collision_verb_triggers_semantic_interpretation():
 def test_ambiguous_collision_verb_fallback_when_offline():
     """
     When local LLM is offline/unreachable, ambiguous collision verbs fallback cleanly to ambiguous_keyword_collision.
+
+    The LLM is explicitly made unreachable here (raise) so this test deterministically
+    exercises the offline fallback it describes, rather than depending on whether a
+    live LM Studio server happens to be running.
     """
-    goal_rep = SemanticGoalInterpreter.interpret_goal("find document contract.pdf", complexity="fast")
-    assert goal_rep.confidence == 0.60
-    assert goal_rep.provenance_source == "ambiguous_keyword_collision"
+    with patch("app.llm.llm_client.generate_chat_completion", side_effect=ConnectionError("offline")):
+        goal_rep = SemanticGoalInterpreter.interpret_goal("find document contract.pdf", complexity="fast")
+        assert goal_rep.confidence == 0.60
+        assert goal_rep.provenance_source == "ambiguous_keyword_collision"
 
