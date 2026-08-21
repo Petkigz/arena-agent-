@@ -64,5 +64,6 @@ tools that need real logic.
 - [x] Budget tracker (CSV ledger, category totals, overspend)
 - [x] Backup & restore (versioned zip snapshots, SHA-256 integrity)
 - [x] Presentation generator (.pptx from outline)
-- [ ] Remaining Tier 1: messaging, package installer, news/RSS, fact-check,
-      price lookup
+- [x] Package installer (pip/npm: list/check Level 0, install/uninstall Level 3)
+- [x] News/RSS aggregator (fetch/parse + optional summarize)
+- [ ] Remaining Tier 1: messaging, fact-check, price lookup

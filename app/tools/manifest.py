@@ -70,6 +70,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.budget_tracker import BudgetTracker
     from app.tools.backup_manager import BackupManager
     from app.tools.presentation_generator import PresentationGenerator
+    from app.tools.package_installer import PackageInstaller
+    from app.tools.rss_aggregator import RssAggregator
     from app.tools.pdf_toolkit import PdfToolkit
     from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
@@ -329,6 +331,22 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     # ── Presentation generator ──────────────────────────────────────────────
     add("generate_presentation", "documents", 1, "Generate a .pptx from an outline",
         _wrap(PresentationGenerator.generate_presentation, "title", "slides", "output_path", "subtitle", "author"))
+
+    # ── Package installer ───────────────────────────────────────────────────
+    add("list_packages", "system", 0, "List installed pip/npm packages",
+        _wrap(PackageInstaller.list_packages, "manager"))
+    add("check_package", "system", 0, "Check if a package is installed",
+        _wrap(PackageInstaller.check_package, "package", "manager"))
+    add("install_package", "system", 3, "Install a package (irreversible; requires approval)",
+        _wrap(PackageInstaller.install_package, "package", "manager", "upgrade"))
+    add("uninstall_package", "system", 3, "Uninstall a package (irreversible; requires approval)",
+        _wrap(PackageInstaller.uninstall_package, "package", "manager"))
+
+    # ── News/RSS aggregator ─────────────────────────────────────────────────
+    add("fetch_feed", "web", 0, "Fetch and parse an RSS/Atom feed",
+        _wrap(RssAggregator.fetch_feed, "url", "limit", "timeout"))
+    add("summarize_feed", "web", 0, "Fetch a feed and summarize its items",
+        _wrap(RssAggregator.summarize_feed, "url", "limit"))
     add("add_event", "productivity", 1, "Add a calendar event",
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",
