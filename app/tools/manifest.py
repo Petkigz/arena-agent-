@@ -70,6 +70,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.contacts import ContactsTool
     from app.tools.spreadsheet import SpreadsheetTool
     from app.agents.coding_agent import CodingAgent
+    from app.agents.data_analysis_agent import DataAnalysisAgent
     from app.tools.media_studio import MediaStudioTool
     from app.tools.music_studio import MusicStudioTool
     from app.tools.ocr_reader import OCRReaderTool
@@ -302,6 +303,21 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         )
     add("run_coding_agent", "agent", 2, "Plan→write→test→iterate on a coding task",
         _wrap(_run_coding_agent, "task", "target_file", "test_command", "context_files"))
+
+    def _run_data_analysis_agent(dataset_path, question=None):
+        # Read-only by construction; shares the ONE brain + ONE model (no second
+        # runtime/model), mirroring the coding agent's wiring.
+        try:
+            from app.cognition.runtime import CognitiveRuntime
+            runtime = CognitiveRuntime.get_instance()
+        except Exception:
+            runtime = None
+        return DataAnalysisAgent(runtime=runtime).run(
+            dataset_path=dataset_path,
+            question=question or "",
+        )
+    add("run_data_analysis", "agent", 0, "Read-only dataset analysis (inspect→query→answer)",
+        _wrap(_run_data_analysis_agent, "dataset_path", "question"))
 
     # ── User plugins (auto-discovered from DATA_DIR/plugins) ────────────────
     try:
