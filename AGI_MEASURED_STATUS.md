@@ -31,7 +31,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 | Deterministic Tier-1 tools | ✅ all present | `runtime.measure_capabilities()` → `tier1_tool_manifest = verified` |
 | Deterministic degradation | ✅ | `runtime.measure_capabilities()` → `deterministic_degradation = verified` |
 | Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |
-| Capability scorecard | **18/18 verified** | `runtime.measure_capabilities()` → `verified_count == total_count` |
+| Capability scorecard | **21/21 verified** across 7 evidence categories | `runtime.measure_capabilities()` → `verified_count == total_count`, per-category summary |
 | Chat path uses cognitive runtime | ✅ | `tests/test_message_router_cognitive.py` (regression guard) |
 | Chat history persists across restart | ✅ | `tests/test_conversation_persistence.py` (SQLite-backed) |
 | Conversation list syncs FE↔BE | ✅ | `db.get_conversation_previews()` + `useConversationSync` hook + store tests |
@@ -86,6 +86,11 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **tools_wired** — 118 tools registered in the capability registry (from the manifest)
 - **tier1_tool_manifest** — all expected deterministic tools present (data, PDF, process, backup, finance, network, messaging, agents)
 - **deterministic_degradation** — invalid inputs to deterministic tools return typed `{success: False}` results, never raise
+- **persistence_roundtrip** — a structured lesson survives a SQLite save/reload (robustness)
+- **capability_generalization** — the capability matcher behaves correctly on unseen/adversarial inputs (no "port"→"teleportation" false positive)
+- **learning_changes_behavior** — repeated failures lower an action's future utility weight (longitudinal calibration)
+
+Each check is tagged with one of seven evidence categories — structural / integration / behavioral / robustness / transfer / generalization / longitudinal — and the report returns a per-category summary so "the module exists" is never conflated with "it performs, transfers, or improves."
 
 ---
 

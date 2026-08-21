@@ -64,6 +64,7 @@
 | Learning loop closed | ✅ structured lessons flow through `GoalReplanner` → `ActionPlanner` → `CounterfactualSimulator`; past failures lower future strategy utility (read path now wired, not just write) |
 | Evidence-driven goals | ✅ `generate_goals_from_signals` maps structured signals (resource/belief/failure/prediction-error/success-rate) to goals via thresholds, wired ahead of the keyword fallback |
 | Outcome-calibrated scoring | ✅ `evaluate_goal` blends each source's historical success rate into feasibility (≥3 samples), not just hand-coded constants |
+| Benchmark taxonomy | ✅ scorecard checks tagged across 7 evidence categories (structural/integration/behavioral/robustness/transfer/generalization/longitudinal) with a per-category summary; 21/21 verified |
 | Resumable approval | ✅ WAITING_APPROVAL is a resume point (`resume_plan`), not a deferral |
 | Autonomy policy | ✅ `AUTONOMY_MODE` (default `supervised`) governs the autonomous cycle; `off` disables it |
 | Provenance persistence | ✅ `observation_type` survives the SQLite round-trip; first belief insertion uses the same `revise()` path as subsequent evidence |

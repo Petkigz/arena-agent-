@@ -516,20 +516,32 @@ class CognitiveRuntime:
 
     def measure_capabilities(self) -> Dict[str, Any]:
         """
-        Phase 5: measured capability scorecard.
+        Phase 5: measured capability scorecard, with an explicit evidence taxonomy.
 
         Replaces percentage-based "AGI progress" claims with evidence-backed
-        capability checks. Each capability is probed at runtime (not asserted from
-        a doc) and tagged implemented / wired / verified. Returns a report plus a
-        summary count of "verified" capabilities.
+        capability checks. Each check is probed at runtime (not asserted from a
+        doc) and tagged with one of seven evidence categories so the report is
+        honest about WHAT KIND of evidence it carries — presence is not
+        performance, and a wiring check is not an intelligence check:
+
+        - STRUCTURAL     — is the module/capability present?
+        - INTEGRATION    — does it participate in the cognitive cycle / registry?
+        - BEHAVIORAL     — does it actually perform the capability (runtime probe)?
+        - ROBUSTNESS     — does it survive perturbation (bad input, persistence)?
+        - TRANSFER       — does knowledge/utility transfer across domains or actions?
+        - GENERALIZATION — does it behave correctly on unseen/adversarial inputs?
+        - LONGITUDINAL   — does internal state change (calibrate) with experience?
+
+        Returns the checks plus a per-category summary and a total verified count.
         """
         checks: List[Dict[str, Any]] = []
 
-        def _add(name: str, probe: bool, evidence: str) -> None:
+        def _add(name: str, probe: bool, evidence: str, category: str) -> None:
             checks.append({
                 "capability": name,
                 "status": "verified" if probe else "missing",
                 "evidence": evidence,
+                "category": category,
             })
 
         # ── Isolation: behavioral probes must never mutate the real cognitive DB ──
@@ -558,7 +570,7 @@ class CognitiveRuntime:
         # 1. Evidence discipline (tri-state verification — no fabricated success).
         from app.cognition.goal_verifier import GoalVerifier
         _add("tri_state_verification", hasattr(GoalVerifier, "verify_goal_achievement"),
-             "GoalVerifier exposes verify_goal_achievement (SATISFIED/FAILED/UNKNOWN)")
+             "GoalVerifier exposes verify_goal_achievement (SATISFIED/FAILED/UNKNOWN)", "structural")
 
         # 1b. Verification honesty (behavioral): with no evidence, the agent must
         # report UNKNOWN for an environmental condition, not fabricate success.
@@ -576,7 +588,7 @@ class CognitiveRuntime:
                 failed_conditions=[],
             )
             _add("verification_honesty", status == ConditionStatus.UNKNOWN,
-                 f"no-evidence environmental condition → {status.value} (not fabricated SATISFIED)")
+                 f"no-evidence environmental condition → {status.value} (not fabricated SATISFIED)", "behavioral")
         except Exception as e:
             _add("verification_honesty", False, f"verification-honesty probe failed: {e}")
 
@@ -586,7 +598,7 @@ class CognitiveRuntime:
                 "send_email", {"to": "a@b.com"}
             )
             _add("approval_gate", (not allowed and level == 3),
-                 "send_email requires explicit approval (Level 3)")
+                 "send_email requires explicit approval (Level 3)", "behavioral")
         except Exception as e:
             _add("approval_gate", False, f"policy probe failed: {e}")
 
@@ -605,7 +617,7 @@ class CognitiveRuntime:
             )
             _add("belief_evidence_discipline",
                  bool(adm.has_belief) and not bool(inadm.has_belief),
-                 "probe evidence → belief; self-reported claim → hypothesis only")
+                 "probe evidence → belief; self-reported claim → hypothesis only", "behavioral")
         except Exception as e:
             _add("belief_evidence_discipline", False, f"belief probe failed: {e}")
 
@@ -616,7 +628,7 @@ class CognitiveRuntime:
             found = _iso_memory.search(probe_text, limit=1)
             _add("memory_retrieval",
                  bool(found) and found[0].memory_id == rec.memory_id,
-                 "semantic memory added and retrieved via search")
+                 "semantic memory added and retrieved via search", "behavioral")
         except Exception as e:
             _add("memory_retrieval", False, f"memory probe failed: {e}")
 
@@ -632,7 +644,7 @@ class CognitiveRuntime:
             causes = _iso_causal.root_cause_analysis(effect, "present")
             _add("causal_reasoning",
                  any(c[0] == cause for c in causes),
-                 "causal edge added → root_cause_analysis recovers the cause")
+                 "causal edge added → root_cause_analysis recovers the cause", "behavioral")
         except Exception as e:
             _add("causal_reasoning", False, f"causal probe failed: {e}")
 
@@ -651,7 +663,7 @@ class CognitiveRuntime:
                 failed_conditions=[],
             )
             _add("goal_verification_behavioral", status == ConditionStatus.SATISFIED,
-                 f"delivered reply → {status.value}")
+                 f"delivered reply → {status.value}", "behavioral")
         except Exception as e:
             _add("goal_verification_behavioral", False, f"goal-verification probe failed: {e}")
 
@@ -674,21 +686,21 @@ class CognitiveRuntime:
             ("language_grounding", self.language_grounding),
         ]
         _add("module_wiring", all(obj is not None for _, obj in wired_modules),
-             f"{len(wired_modules)} cognition modules instantiated in the runtime")
+             f"{len(wired_modules)} cognition modules instantiated in the runtime", "integration")
 
         # 4. Hardware self-awareness.
         hw_ok = bool(self.hardware_self_model) and "cpu_model" in self.hardware_self_model
         _add("hardware_self_awareness", hw_ok,
-             f"hardware self-model present ({self.hardware_self_model.get('cpu_model', 'unknown')})")
+             f"hardware self-model present ({self.hardware_self_model.get('cpu_model', 'unknown')})", "structural")
 
         # 5. Memory continuity / consolidation.
         _add("memory_consolidation", hasattr(self, "consolidate_memory"),
-             "consolidate_memory() available (decay + prune + episodic integration)")
+             "consolidate_memory() available (decay + prune + episodic integration)", "structural")
 
         # 6. Autonomy loop (goal generation → execution → reflection).
         _add("autonomy_loop",
              self.goal_generator is not None and self.goal_executor is not None and self.reflection_engine is not None,
-             "goal_generator + goal_executor + reflection_engine wired")
+             "goal_generator + goal_executor + reflection_engine wired", "integration")
 
         # 7. Cross-domain transfer (behavioral): add two domains, discover a
         # relationship, then attempt a transfer.
@@ -705,7 +717,7 @@ class CognitiveRuntime:
             rels = _iso_cross.discover_transfer_relationships(src.domain_id)
             _add("cross_domain_transfer_behavioral",
                  bool(rels) and rels[0].target_domain_id == dst.domain_id,
-                 "two domains added → transfer relationship discovered")
+                 "two domains added → transfer relationship discovered", "transfer")
         except Exception as e:
             _add("cross_domain_transfer_behavioral", False, f"cross-domain probe failed: {e}")
 
@@ -716,7 +728,7 @@ class CognitiveRuntime:
             siblings = self.skills.skill_siblings("web_search")
             _add("skill_classification_behavioral",
                  bool(skill) and isinstance(siblings, list),
-                 f"web_search → skill '{skill}' with {len(siblings)} sibling(s)")
+                 f"web_search → skill '{skill}' with {len(siblings)} sibling(s)", "transfer")
         except Exception as e:
             _add("skill_classification_behavioral", False, f"skill probe failed: {e}")
 
@@ -727,7 +739,7 @@ class CognitiveRuntime:
             suggestions = _iso_patterns.suggest_patterns(intent_type=intent, limit=3)
             _add("planning_patterns_behavioral",
                  any(s.pattern.intent_type == intent for s in suggestions) if suggestions else False,
-                 f"recorded plan for '{intent}' → {len(suggestions)} suggestion(s)")
+                 f"recorded plan for '{intent}' → {len(suggestions)} suggestion(s)", "behavioral")
         except Exception as e:
             _add("planning_patterns_behavioral", False, f"planning probe failed: {e}")
 
@@ -738,7 +750,7 @@ class CognitiveRuntime:
         try:
             _add("proactive_maintenance_behavioral",
                  hasattr(self, "run_proactive_maintenance") and hasattr(self, "consolidate_memory"),
-                 "run_proactive_maintenance() + consolidate_memory() available (delegate to daemon)")
+                 "run_proactive_maintenance() + consolidate_memory() available (delegate to daemon)", "structural")
         except Exception as e:
             _add("proactive_maintenance_behavioral", False, f"maintenance probe failed: {e}")
 
@@ -747,7 +759,7 @@ class CognitiveRuntime:
         try:
             n_tools = len(self.registry._registry)
             _add("tools_wired", n_tools >= 100,
-                 f"{n_tools} tools registered in the capability registry")
+                 f"{n_tools} tools registered in the capability registry", "integration")
         except Exception as e:
             _add("tools_wired", False, f"tool-wiring probe failed: {e}")
 
@@ -767,7 +779,7 @@ class CognitiveRuntime:
             missing = [k for k in expected if k not in manifest]
             _add("tier1_tool_manifest", not missing,
                  f"{len(manifest)} tools in manifest; all expected Tier-1 action types present"
-                 + (f" (missing: {missing})" if missing else ""))
+                 + (f" (missing: {missing})" if missing else ""), "structural")
         except Exception as e:
             _add("tier1_tool_manifest", False, f"tier1-manifest probe failed: {e}")
 
@@ -786,11 +798,69 @@ class CognitiveRuntime:
             ]
             _add("deterministic_degradation",
                  all(isinstance(p, dict) and p.get("success") is False for p in probes),
-                 "invalid inputs → typed {success: False} results (no exceptions)")
+                 "invalid inputs → typed {success: False} results (no exceptions)", "robustness")
         except Exception as e:
             _add("deterministic_degradation", False, f"degradation probe failed: {e}")
 
+        # 14. Robustness — persistence: a structured lesson survives a save/reload
+        # round-trip (the system survives the "restart" perturbation).
+        try:
+            from app.cognition.structured_lessons import LessonStore as _LessonStore
+            _ls = _LessonStore(db_path=str(_Path(_tmpdir) / "lessons.db"))
+            _ls.extract_lesson(
+                task_type="__probe_task__", action_type="__probe_action__",
+                final_state="failed", verified_success=False,
+                failed_conditions=["probe"], reply_text="probe failure",
+            )
+            _ls2 = _LessonStore(db_path=str(_Path(_tmpdir) / "lessons.db"))
+            _add("persistence_roundtrip", _ls2.total_lessons() >= 1,
+                 "structured lesson survives a SQLite save/reload round-trip", "robustness")
+        except Exception as e:
+            _add("persistence_roundtrip", False, f"persistence probe failed: {e}", "robustness")
+
+        # 15. Generalization — capability matching on unseen/adversarial inputs:
+        # the token-boundary matcher must NOT let a short stem ("port") leak into
+        # an unrelated capability ("quantum_teleportation"), while still resolving
+        # the intended dotted forms.
+        try:
+            tool_norms = {"check_port", "search_files", "web_search", "port", "search", "web"}
+            false_positive = self._tool_capability_match("quantum_teleportation", tool_norms)
+            true_positive = self._tool_capability_match("filesystem.search", tool_norms)
+            _add("capability_generalization",
+                 (not false_positive) and true_positive,
+                 "matcher: 'quantum_teleportation' → no match; 'filesystem.search' → match "
+                 "(correct on unseen inputs)", "generalization")
+        except Exception as e:
+            _add("capability_generalization", False, f"generalization probe failed: {e}", "generalization")
+
+        # 16. Longitudinal — learning changes behavior: after recording repeated
+        # failures for an action, the outcome store must lower that action's
+        # future utility weight (the system's internal state changes with
+        # experience). This is a minimal probe, not a full longitudinal study.
+        try:
+            from app.cognition.strategy_outcomes import StrategyOutcomeStore as _OutcomeStore
+            _os = _OutcomeStore(db_path=str(_Path(_tmpdir) / "outcomes.db"))
+            for _ in range(3):
+                _os.record_outcome("__probe_goal__", "__probe_action__", success=False)
+            _add("learning_changes_behavior",
+                 _os.adjustment_factor("__probe_goal__", "__probe_action__") < 1.0,
+                 "repeated failures lower the action's future utility weight "
+                 "(state calibrated by experience)", "longitudinal")
+        except Exception as e:
+            _add("learning_changes_behavior", False, f"longitudinal probe failed: {e}", "longitudinal")
+
         verified = [c for c in checks if c["status"] == "verified"]
+
+        # Per-category summary: how many checks (and verified checks) in each of
+        # the seven evidence categories. This is what lets the report honestly
+        # distinguish "the module exists" from "it performs / transfers / improves".
+        categories: Dict[str, Dict[str, int]] = {}
+        for c in checks:
+            cat = c.get("category", "unclassified")
+            bucket = categories.setdefault(cat, {"verified": 0, "total": 0})
+            bucket["total"] += 1
+            if c["status"] == "verified":
+                bucket["verified"] += 1
 
         # Discard the isolated probe stores so measurement leaves no residue.
         _shutil.rmtree(_tmpdir, ignore_errors=True)
@@ -799,6 +869,7 @@ class CognitiveRuntime:
             "checks": checks,
             "verified_count": len(verified),
             "total_count": len(checks),
+            "categories": categories,
             "not_claimed": (
                 "This scorecard measures implemented, wired, and behaviorally-verified "
                 "capabilities. It makes no claim of 'human-level AGI', consciousness, or "
