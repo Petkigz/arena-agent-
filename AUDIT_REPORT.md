@@ -9,7 +9,7 @@
 
 | Suite | Result |
 |---|---|
-| Backend (`pytest tests/`) | ✅ **1346 passed**, 4 deselected (3 benign warnings) |
+| Backend (`pytest tests/`) | ✅ **1414 passed**, 4 deselected (3 benign warnings) |
 | Frontend (`vitest`) | ✅ **184 passed** |
 | Frontend build (`tsc -b && vite build`) | ✅ clean |
 | **Total** | **1530 tests passing** |

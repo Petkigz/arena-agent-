@@ -127,7 +127,7 @@ arena-agent-/
 ├── memory/               # User rules & operating manual
 │   ├── rules.md          # Permission boundaries
 │   └── user_operating_manual.md
-├── tests/                # pytest suite (1346 tests) + frontend vitest (184 tests)
+├── tests/                # pytest suite (1414 tests) + frontend vitest (184 tests)
 ├── requirements.txt
 └── README.md
 ```
@@ -156,7 +156,7 @@ source .venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-Current baseline: **1346 backend + 184 frontend tests passing**
+Current baseline: **1414 backend + 184 frontend tests passing**
 
 > **Live verification:** tools that hit external APIs (prices, RSS, search,
 > Telegram/WhatsApp) are unit-tested for degradation only in CI — run
