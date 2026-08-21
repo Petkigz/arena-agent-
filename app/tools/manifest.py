@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
+from app.utils.logger import app_logger
+
 
 def _wrap(fn: Callable[..., Any], *key_args: str) -> Callable[[Dict[str, Any]], Any]:
     """Adapt a keyword-arg method to a payload-dict handler."""
@@ -64,6 +66,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.sql_query import SQLQueryTool
     from app.tools.calendar_service import CalendarService
     from app.tools.document_generator import DocumentGenerator
+    from app.tools.local_executor import LocalExecutor
     from app.tools.media_studio import MediaStudioTool
     from app.tools.music_studio import MusicStudioTool
     from app.tools.ocr_reader import OCRReaderTool
@@ -254,6 +257,19 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _ignore_payload(CalendarService.due_reminders))
     add("generate_document", "productivity", 1, "Generate a document from markdown",
         _wrap(DocumentGenerator.generate, "title", "markdown", "fmt"))
+
+    # ── Generic local executor (the "escape hatch") ─────────────────────────
+    add("local_execute", "integration", 3, "Run a local command/script/localhost request",
+        _wrap(LocalExecutor.execute, "action", "command", "code", "url", "method", "body", "timeout_seconds"))
+
+    # ── User plugins (auto-discovered from DATA_DIR/plugins) ────────────────
+    try:
+        from app.tools.plugin_registry import PluginRegistry
+        for pname, pentry in PluginRegistry.discover_plugins().items():
+            manifest[pname] = pentry
+    except Exception as e:
+        # Plugin discovery is best-effort; a failure must not break the manifest.
+        app_logger.warning(f"Plugin discovery failed (continuing without plugins): {e}")
 
     return manifest
 
