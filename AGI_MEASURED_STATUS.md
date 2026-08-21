@@ -1,6 +1,6 @@
 # Arena Agent — Measured Status
 
-**Updated:** 2026-08-20 · Branch `arena/01a01f89-arena-agent`
+**Updated:** 2026-08-21 · Branch `arena/01a01f89-arena-agent`
 **This is the canonical status document.** It supersedes the percentage-based status
 files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,
 `AGI_FINAL_SUMMARY.md`, `PHASES.md`, `PROJECT_REVIEW.md`, and the recovered branch's
@@ -12,7 +12,7 @@ and test-count figures that did not match the code; they are now archived under
 
 ## What this system is
 
-A **local-first, full-capability private secretary / coworker** with a closed-loop cognitive architecture. Owner-defined approval gates, not a restricted demo: nothing is off-limits, but sensitive/irreversible actions require explicit owner approval (Level 3).
+A **local-first, full-capability coworker / friend** with a closed-loop cognitive architecture. Owner-defined approval gates, not a restricted demo: nothing is off-limits, but sensitive/irreversible actions require explicit owner approval (Level 3).
 
 **Hardware:** Intel Core i9-14900K · RX 580 8 GB (CPU inference) · 16 GB DDR5 · LM Studio · Qwen 3B fast + 9B reasoning.
 
@@ -22,11 +22,15 @@ A **local-first, full-capability private secretary / coworker** with a closed-lo
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1096** | `python -m pytest tests/ -q` → `1096 passed` |
+| Backend tests passing | **1346** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1346 passed, 4 deselected` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
-| Python source | ~55,800 lines | `find app backend -name '*.py' -exec cat {} + | wc -l` |
+| Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
+| Tools in the manifest | **118** | `len(get_tool_manifest())` |
+| Deterministic Tier-1 tools | ✅ all present | `runtime.measure_capabilities()` → `tier1_tool_manifest = verified` |
+| Deterministic degradation | ✅ | `runtime.measure_capabilities()` → `deterministic_degradation = verified` |
 | Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |
+| Capability scorecard | **18/18 verified** | `runtime.measure_capabilities()` → `verified_count == total_count` |
 | Chat path uses cognitive runtime | ✅ | `tests/test_message_router_cognitive.py` (regression guard) |
 | Chat history persists across restart | ✅ | `tests/test_conversation_persistence.py` (SQLite-backed) |
 | Conversation list syncs FE↔BE | ✅ | `db.get_conversation_previews()` + `useConversationSync` hook + store tests |
@@ -78,6 +82,9 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **hardware_self_awareness** — self-model of CPU/RAM/GPU present
 - **memory_consolidation** — decay + prune + episodic integration
 - **autonomy_loop** — generate → execute → reflect wired
+- **tools_wired** — 118 tools registered in the capability registry (from the manifest)
+- **tier1_tool_manifest** — all expected deterministic tools present (data, PDF, process, backup, finance, network, messaging, agents)
+- **deterministic_degradation** — invalid inputs to deterministic tools return typed `{success: False}` results, never raise
 
 ---
 
@@ -94,9 +101,15 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ End-to-end chat → runtime test.
 - ✅ Behavioral scorecard checks (verification honesty, belief discipline, memory retrieval, causal reasoning, goal verification).
 - ✅ FE↔BE conversation sync: backend lists SQLite-persisted conversations; frontend hydrates via `useConversationSync` + store actions (`hydrateFromServer`, `hydrateMessages`) and requests history on open.
+- ✅ **Tier-1 tool expansion complete** (see `TOOL_EXPANSION_PLAN.md`): the two levers (local executor + plugin registry) plus 14 hand-built deterministic tools — contacts, spreadsheet, PDF toolkit, process manager, database connector (read + gated write), invoice generator, network diagnostics, budget tracker, backup & restore, presentation generator, package installer, RSS aggregator, fact-check, price lookup, messaging. Tool count grew 67 → 118.
+- ✅ **Agent invariants codified** (`AGENT_INVARIANTS.md`): one brain, thin agents, one loaded model, strong-tools-thin-model, deterministic verification.
+- ✅ **Two thin agents** (`app/agents/`): coding agent + data-analysis agent (read-only), both sharing the ONE `CognitiveRuntime` + `llm_client`.
+- ✅ **Capability matcher fixed** to match on token boundaries (no more "port"→"teleportation" bare-substring false positives).
 
 Still open (future):
 
 1. Complete the Android Gradle wrapper (`gradlew` script + `gradle-wrapper.jar` binary — needs the Gradle distribution).
-2. Continue extending the scorecard with behavioral (not just presence) checks across more domains.
-3. Full end-to-end browser test of the conversation round-trip (backend list → frontend hydrate → history on open) against a live server.
+2. Deliver the held `.github/workflows/{tests,android}.yml` files — blocked on the GitHub App's `workflows` permission.
+3. Continue extending the scorecard with behavioral (not just presence) checks across more domains.
+4. Full end-to-end browser test of the conversation round-trip (backend list → frontend hydrate → history on open) against a live server.
+5. Exercise the external-API tools (CoinGecko/Stooq/Telegram/Twilio/search) against live endpoints on the owner's machine — sandbox network is restricted, so those paths are verified for parsing/validation/degradation only.

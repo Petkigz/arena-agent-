@@ -719,10 +719,49 @@ class CognitiveRuntime:
         # (previously only 3 tools were registered; now the whole manifest is).
         try:
             n_tools = len(self.registry._registry)
-            _add("tools_wired", n_tools >= 40,
+            _add("tools_wired", n_tools >= 100,
                  f"{n_tools} tools registered in the capability registry")
         except Exception as e:
             _add("tools_wired", False, f"tool-wiring probe failed: {e}")
+
+        # 12. Tier-1 deterministic tool suite: the manifest must expose the full
+        # built toolset (read-only data, PDF, process, backup, finance, network,
+        # messaging, agents). Presence check — not claimed from a doc.
+        try:
+            from app.tools.manifest import get_tool_manifest
+            manifest = get_tool_manifest()
+            expected = [
+                "run_data_analysis", "db_query", "db_execute", "pdf_merge",
+                "list_processes", "kill_process", "create_backup", "restore_backup",
+                "generate_invoice", "generate_presentation", "add_transaction",
+                "check_port", "crypto_price", "stock_price", "fact_check",
+                "send_telegram", "install_package", "fetch_feed",
+            ]
+            missing = [k for k in expected if k not in manifest]
+            _add("tier1_tool_manifest", not missing,
+                 f"{len(manifest)} tools in manifest; all expected Tier-1 action types present"
+                 + (f" (missing: {missing})" if missing else ""))
+        except Exception as e:
+            _add("tier1_tool_manifest", False, f"tier1-manifest probe failed: {e}")
+
+        # 13. Deterministic degradation (behavioral): deterministic tools must
+        # return typed {success: False} results on invalid input, never raise.
+        try:
+            from app.tools.price_lookup import PriceLookup
+            from app.tools.pdf_toolkit import PdfToolkit
+            from app.tools.database_connector import DatabaseConnector
+            from app.tools.backup_manager import BackupManager
+            probes = [
+                PriceLookup.get_stock_price(""),
+                PdfToolkit.get_metadata(""),
+                DatabaseConnector.query("oracle", "SELECT 1"),
+                BackupManager.create_backup([]),
+            ]
+            _add("deterministic_degradation",
+                 all(isinstance(p, dict) and p.get("success") is False for p in probes),
+                 "invalid inputs → typed {success: False} results (no exceptions)")
+        except Exception as e:
+            _add("deterministic_degradation", False, f"degradation probe failed: {e}")
 
         verified = [c for c in checks if c["status"] == "verified"]
         return {

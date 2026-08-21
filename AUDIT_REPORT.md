@@ -1,7 +1,7 @@
 # Arena Agent — Full System Audit
 
-**Date:** 2026-08-20 · **Branch:** `arena/01a01f89-arena-agent` (HEAD `d02456a`)
-**Scope:** 178 Python files (~39,600 lines), 158 frontend TS/TSX files, 161 test files, backend + frontend + Android skeleton.
+**Date:** 2026-08-21 · **Branch:** `arena/01a01f89-arena-agent`
+**Scope:** 209 Python files (~45,000 lines), 158 frontend TS/TSX files, 194 test files, backend + frontend + Android skeleton. 118 tools in the manifest.
 
 ---
 
@@ -9,10 +9,10 @@
 
 | Suite | Result |
 |---|---|
-| Backend (`pytest tests/`) | ✅ **1084 passed** (3 benign warnings) |
-| Frontend (`vitest`) | ✅ **162 passed** (13 files) |
+| Backend (`pytest tests/`) | ✅ **1346 passed**, 4 deselected (3 benign warnings) |
+| Frontend (`vitest`) | ✅ **184 passed** |
 | Frontend build (`tsc -b && vite build`) | ✅ clean |
-| **Total** | **1246 tests passing** |
+| **Total** | **1530 tests passing** |
 
 ---
 
@@ -28,6 +28,9 @@
 | Autonomous cycle scheduling | ✅ hourly via `ProactiveScheduler` |
 | Thread-safe singleton | ✅ double-checked locking |
 | Approval gate (Level 3) | ✅ owner-approval enforced |
+| Tool manifest | ✅ 118 tools (up from 67); Tier-1 deterministic suite complete |
+| Thin agents (one brain) | ✅ coding + data-analysis agents share the single `CognitiveRuntime`/`llm_client` |
+| Deterministic tool degradation | ✅ invalid input → typed `{success: False}`, never raises (scorecard probe) |
 
 ## 3. Import health
 
@@ -55,6 +58,9 @@
 | Code-exec endpoint | ✅ **Hardened** — per-IP rate limit, strict language allowlist, 100KB code cap, 60s timeout cap |
 | DisposableSandbox | ✅ **Bounded** — rejects empty/oversized commands, timeout cap |
 | App launch | ✅ argv form (`cmd.exe /c start`) instead of `shell=True` |
+| Package installer | ✅ arg-list subprocess (no `shell=True`) + package-name whitelist + leading-dash check |
+| DB writes | ✅ gated Level 3; `DROP DATABASE/SCHEMA` needs `allow_destructive`, unfiltered `DELETE/UPDATE` needs `allow_unfiltered` |
+| Process kill | ✅ refuses to kill PID 0/1 or the Arena process itself |
 | CORS | Restricted to `localhost:5173/3000/8080/127.0.0.1` (overridable via `ARENA_CORS_ORIGINS`) |
 | Audit trail | All actions logged to `data/` SQLite + `audit_logs` |
 
@@ -68,6 +74,6 @@
 
 ## 7. Honest bottom line
 
-The system is **integration-complete and production-grade for a local personal assistant**: one authoritative cognitive path, 15 wired cognition modules, persistent memory + conversations, hardware awareness, hourly autonomy, and a measured capability scorecard (11/11 verified). **1239 tests green.**
+The system is **integration-complete and production-grade for a local personal assistant**: one authoritative cognitive path, 15 wired cognition modules, 118 tools (Tier-1 deterministic suite complete), persistent memory + conversations, hardware awareness, hourly autonomy, and a measured capability scorecard (**18/18 verified**). **1530 tests green.**
 
 It is **not** "human-level AGI" — no system is — and the docs now say so plainly. The remaining work is optional hardening (sandbox the two `shell=True` surfaces, add the Android Gradle wrapper, optional voice-pipeline install), not core capability gaps.

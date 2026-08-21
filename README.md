@@ -101,7 +101,7 @@ Actions without reliable postcondition sensors (SMS, screen taps, camera) remain
 ```
 arena-agent-/
 ├── app/
-│   ├── agents/           # MasterAgentOrchestrator (capability execution)
+│   ├── agents/           # Thin agent loops (coding, data analysis) sharing the one brain
 │   ├── cognition/        # Cognitive pipeline (reasoning, goals, verification)
 │   │   ├── runtime.py           # CognitiveRuntime (main orchestration loop)
 │   │   ├── goal_interpreter.py  # Semantic goal parsing
@@ -117,7 +117,7 @@ arena-agent-/
 │   ├── runtime/          # Runtime state management
 │   ├── scheduler/        # Task scheduling
 │   ├── static/           # Dashboard UI (HTML/JS PWA)
-│   ├── tools/            # 40+ capability modules
+│   ├── tools/            # 115+ capability tools (118 in the manifest)
 │   ├── utils/            # Logging, helpers
 │   ├── main.py           # FastAPI application (134 routes)
 │   ├── llm.py            # LM Studio client & model router
@@ -127,7 +127,7 @@ arena-agent-/
 ├── memory/               # User rules & operating manual
 │   ├── rules.md          # Permission boundaries
 │   └── user_operating_manual.md
-├── tests/                # pytest suite (1088 tests) + frontend vitest (184 tests)
+├── tests/                # pytest suite (1346 tests) + frontend vitest (184 tests)
 ├── requirements.txt
 └── README.md
 ```
@@ -156,7 +156,7 @@ source .venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-Current baseline: **1088 backend + 184 frontend tests passing**
+Current baseline: **1346 backend + 184 frontend tests passing**
 
 ### Run Server
 
