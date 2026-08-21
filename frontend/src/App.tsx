@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { MotionConfig } from 'framer-motion';
@@ -120,7 +120,6 @@ function AppContent() {
         {/* Mobile routes */}
         {isMobile ? (
           <Route element={<MobileLayout />}>
-            <Route path="/" element={<Navigate to="/beanie" replace />} />
             <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
             <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
             <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
@@ -138,7 +137,6 @@ function AppContent() {
         ) : (
           /* Desktop routes */
           <Route element={<DesktopLayout />}>
-            <Route path="/" element={<Navigate to="/beanie" replace />} />
             <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
             <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
             <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />

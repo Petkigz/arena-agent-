@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { MessageCircle, Brain, Settings, Plus, File, Code, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { MessageCircle, Brain, Settings, Plus, File, Code, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/Button';
@@ -57,7 +57,6 @@ export function Sidebar() {
   }, [removeConversation]);
 
   const links = useMemo(() => [
-    { to: '/beanie', icon: User, label: 'Beanie' },
     { to: '/chat', icon: MessageCircle, label: 'Chats' },
     { to: '/pansophy', icon: Brain, label: 'Pansophy' },
     { to: '/files', icon: File, label: 'Files' },
@@ -88,7 +87,7 @@ export function Sidebar() {
           />
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-text-primary">Beanie</h2>
+              <h2 className="font-semibold text-text-primary">Arena</h2>
               <div className="flex items-center gap-1.5" role="status" aria-live="polite" aria-atomic="true">
                 <span className={`w-2 h-2 rounded-full ${status.color}`} aria-hidden="true" />
                 <p className="text-xs text-text-muted">{status.label}</p>
