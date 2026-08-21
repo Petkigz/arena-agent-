@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Load the custom theme (colors, presence palette, animations) from the legacy
+   v3-style config. Tailwind v4 does NOT auto-load tailwind.config.js — this
+   @config directive is required, otherwise every custom utility (bg-presence-*,
+   bg-accent-*, text-text-*, animate-pulse-*) is silently missing from the build,
+   leaving the UI unstyled (no orb, plain page). */
+@config "../tailwind.config.js";
+
 /* Theme CSS Variables */
 :root {
   --arena-font-size: 14px;
