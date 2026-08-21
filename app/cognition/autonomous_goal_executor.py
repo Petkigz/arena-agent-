@@ -438,6 +438,17 @@ class AutonomousGoalExecutor:
             )
             plan.progress = done / len(plan.steps)
             self.save_plan(plan)
+            # 🟠 fix: do not blindly continue past an unverified or approval-
+            # pending step. Later steps may depend on this step's verified
+            # precondition, so executing them would act on an unconfirmed state.
+            # Halt and surface PARTIAL / WAITING_APPROVAL (remaining steps stay
+            # PENDING for a resume path).
+            if step.status in (ExecutionStatus.UNVERIFIED, ExecutionStatus.WAITING_APPROVAL):
+                app_logger.info(
+                    f"Halting plan '{plan.goal_title}' after {step.status.value} step: "
+                    f"{step.description[:40]}"
+                )
+                break
         
         # Determine final status from the tri-state tally. A plan is COMPLETED
         # only when EVERY step was verified (never on unverified/awaiting steps).
@@ -445,20 +456,26 @@ class AutonomousGoalExecutor:
         failed = sum(1 for s in plan.steps if s.status == ExecutionStatus.FAILED)
         unverified = sum(1 for s in plan.steps if s.status == ExecutionStatus.UNVERIFIED)
         waiting = sum(1 for s in plan.steps if s.status == ExecutionStatus.WAITING_APPROVAL)
+        pending = sum(1 for s in plan.steps if s.status == ExecutionStatus.PENDING)
         
         if completed == len(plan.steps):
             plan.status = ExecutionStatus.COMPLETED
             plan.outcome_summary = f"All {completed} steps verified complete"
         elif waiting > 0:
             plan.status = ExecutionStatus.WAITING_APPROVAL
-            plan.outcome_summary = f"{waiting} step(s) awaiting owner approval"
+            plan.outcome_summary = (
+                f"{waiting} step(s) awaiting owner approval"
+                + (f", {pending} not started (halted)" if pending else "")
+            )
         elif failed > 0 and completed == 0:
             plan.status = ExecutionStatus.FAILED
             plan.outcome_summary = f"{failed} steps failed out of {len(plan.steps)}"
         else:
             plan.status = ExecutionStatus.PARTIAL
             plan.outcome_summary = (
-                f"{completed} verified, {failed} failed, {unverified} unverified, {waiting} awaiting approval"
+                f"{completed} verified, {failed} failed, {unverified} unverified, "
+                f"{waiting} awaiting approval"
+                + (f", {pending} not started (halted)" if pending else "")
             )
         
         plan.completed_at = _now()
@@ -471,6 +488,25 @@ class AutonomousGoalExecutor:
         app_logger.info(f"Plan {plan.status.value}: {plan.goal_title} - {plan.outcome_summary}")
         return plan
     
+    def resume_plan(self, plan: ExecutionPlan, cognitive_runtime=None) -> ExecutionPlan:
+        """Resume a plan that halted on WAITING_APPROVAL (or UNVERIFIED).
+
+        Reset approval-pending steps back to PENDING so they are re-attempted, then
+        re-run the normal execute_plan loop. Already-verified steps are left intact
+        (they are skipped), so resuming is cheap and idempotent.
+
+        NOTE: the owner's approval decision is recorded in the approval store; the
+        hook that maps "approval granted" → resume_plan() lives in the message
+        router's action_approval handler. This method is the execution half of that
+        resumable-approval contract.
+        """
+        for s in plan.steps:
+            if s.status in (ExecutionStatus.WAITING_APPROVAL, ExecutionStatus.UNVERIFIED):
+                s.status = ExecutionStatus.PENDING
+                s.error = None
+                s.confidence = 0.0
+        return self.execute_plan(plan, cognitive_runtime)
+
     def _extract_lessons(self, plan: ExecutionPlan) -> List[str]:
         """Extract lessons learned from plan execution."""
         lessons = []
@@ -533,12 +569,18 @@ class AutonomousGoalExecutor:
         plan = self.create_execution_plan(goal)
         plan = self.execute_plan(plan, cognitive_runtime)
         
-        # Update goal status based on plan outcome
+        # Update goal status based on plan outcome.
         if plan.status == ExecutionStatus.COMPLETED:
             goal.status = GoalStatus.COMPLETED
             goal.completed_at = _now()
         elif plan.status == ExecutionStatus.FAILED:
             goal.status = GoalStatus.FAILED
+        elif plan.status == ExecutionStatus.WAITING_APPROVAL:
+            # 🟠 fix: a Level-3 action needs owner approval. This is NOT a deferral
+            # — keep the goal in a distinct WAITING_APPROVAL state so it can be
+            # resumed from the exact step once the owner approves, rather than
+            # being silently treated as "postponed".
+            goal.status = GoalStatus.WAITING_APPROVAL
         else:
             goal.status = GoalStatus.DEFERRED
         

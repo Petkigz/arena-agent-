@@ -57,6 +57,11 @@
 | Default binding | ✅ **localhost-only** — docs/README default to `--host 127.0.0.1`; unauthenticated instances reject non-loopback clients (insecure-LAN guard) unless `ARENA_ALLOW_INSECURE_LAN=1` |
 | Fail-closed option | ✅ `ARENA_ENFORCE_AUTH=1` rejects requests when `ARENA_API_KEY` is not configured (catches misconfigured LAN deployments) |
 | Autonomous execution | ✅ **P0 fixed** — goal executor consumes the GoalVerifier verdict; steps are never `COMPLETED` without environmental verification, and Level-3 actions record `WAITING_APPROVAL` |
+| Goal vs action authorization | ✅ **P0 fixed** — `GoalApproval` (max_action_level default 2) makes the planning/execution boundary explicit and persistent; goal approval never authorizes Level-3 actions |
+| Measurement isolation | ✅ `measure_capabilities()` probes run against throwaway temp stores; no residue in beliefs/memory/causal/cross-domain/patterns |
+| Plan dependencies | ✅ `execute_plan` halts after UNVERIFIED/WAITING_APPROVAL steps (no blind continuation) |
+| Resumable approval | ✅ WAITING_APPROVAL is a resume point (`resume_plan`), not a deferral |
+| Autonomy policy | ✅ `AUTONOMY_MODE` (default `supervised`) governs the autonomous cycle; `off` disables it |
 | Provenance persistence | ✅ `observation_type` survives the SQLite round-trip; first belief insertion uses the same `revise()` path as subsequent evidence |
 | Shell injection (`check_and_update_software`) | ✅ **Fixed** — package name validated against identifier regex + argument-list form (no `shell=True`) |
 | Code-exec endpoint | ✅ **Hardened** — per-IP rate limit, strict language allowlist, 100KB code cap, 60s timeout cap |

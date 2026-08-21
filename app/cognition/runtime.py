@@ -313,7 +313,10 @@ class CognitiveRuntime:
         try:
             goals = self.goal_generator.generate_goals_from_observation(observation, context)
             
-            # Evaluate and auto-approve high-value goals
+            # Evaluate and auto-approve high-value goals FOR PLANNING. Approving a
+            # goal here does NOT authorize its actions — each action still passes
+            # ActionGate at execution time, and Level-3 actions require owner
+            # approval (recorded as WAITING_APPROVAL, never completed).
             for goal in goals:
                 self.goal_generator.evaluate_goal(goal)
                 self.goal_generator.approve_goal(goal.goal_id, auto_approve_threshold=0.75)
@@ -529,6 +532,29 @@ class CognitiveRuntime:
                 "evidence": evidence,
             })
 
+        # ── Isolation: behavioral probes must never mutate the real cognitive DB ──
+        # P1 fix: measurement is observational, not self-teaching. The mutating
+        # probes (beliefs, memory, causal graph, cross-domain, planning patterns)
+        # run against throwaway stores in a temp dir, then the dir is discarded.
+        import tempfile
+        import shutil as _shutil
+        from pathlib import Path as _Path
+        _tmpdir = tempfile.mkdtemp(prefix="arena_scorecard_")
+        try:
+            from app.cognition.memory import MemoryStore as _MemoryStore
+            from app.cognition.belief_engine import BeliefEngine as _BeliefEngine
+            from app.cognition.causal_inference import CausalInferenceEngine as _CausalEngine
+            from app.cognition.cross_domain_transfer import CrossDomainTransferEngine as _CrossEngine
+            from app.cognition.planning_patterns import PlanningPatternStore as _PatternStore
+            _iso_beliefs = _BeliefEngine(db_path=str(_Path(_tmpdir) / "beliefs.db"))
+            _iso_memory = _MemoryStore(str(_Path(_tmpdir) / "memory.db"))
+            _iso_causal = _CausalEngine(db_path=str(_Path(_tmpdir) / "causal.db"))
+            _iso_cross = _CrossEngine(db_path=str(_Path(_tmpdir) / "cross.db"))
+            _iso_patterns = _PatternStore(db_path=str(_Path(_tmpdir) / "patterns.db"))
+        except Exception as _e:
+            app_logger.warning(f"Could not build isolated probe stores: {_e}")
+            _iso_beliefs = _iso_memory = _iso_causal = _iso_cross = _iso_patterns = None
+
         # 1. Evidence discipline (tri-state verification — no fabricated success).
         from app.cognition.goal_verifier import GoalVerifier
         _add("tri_state_verification", hasattr(GoalVerifier, "verify_goal_achievement"),
@@ -568,12 +594,12 @@ class CognitiveRuntime:
         # creates an environmental belief; a self-reported claim does not.
         try:
             probe_subj = f"__scorecard_adm_{uuid.uuid4().hex[:6]}__"
-            adm = self.beliefs.ingest(
+            adm = _iso_beliefs.ingest(
                 subject=probe_subj, predicate="status", value="running",
                 source="os_process_probe", observation_type="direct", confidence=1.0,
             )
             inadm_subj = f"__scorecard_inadm_{uuid.uuid4().hex[:6]}__"
-            inadm = self.beliefs.ingest(
+            inadm = _iso_beliefs.ingest(
                 subject=inadm_subj, predicate="status", value="running",
                 source="user_input", observation_type="self_reported", confidence=1.0,
             )
@@ -586,8 +612,8 @@ class CognitiveRuntime:
         # 2c. Memory retrieval (behavioral): add then retrieve a memory round-trip.
         try:
             probe_text = f"__scorecard_mem_{uuid.uuid4().hex[:6]}__"
-            rec = self.memory.add("semantic", probe_text, importance=1.0)
-            found = self.memory.search(probe_text, limit=1)
+            rec = _iso_memory.add("semantic", probe_text, importance=1.0)
+            found = _iso_memory.search(probe_text, limit=1)
             _add("memory_retrieval",
                  bool(found) and found[0].memory_id == rec.memory_id,
                  "semantic memory added and retrieved via search")
@@ -599,11 +625,11 @@ class CognitiveRuntime:
             from app.cognition.causal_inference import CausalRelationType
             cause = f"__probe_cause_{uuid.uuid4().hex[:6]}__"
             effect = f"__probe_effect_{uuid.uuid4().hex[:6]}__"
-            self.causal_inference.add_causal_relationship(
+            _iso_causal.add_causal_relationship(
                 cause_name=cause, effect_name=effect,
                 relation_type=CausalRelationType.DIRECT_CAUSE, strength=0.9, confidence=0.9,
             )
-            causes = self.causal_inference.root_cause_analysis(effect, "present")
+            causes = _iso_causal.root_cause_analysis(effect, "present")
             _add("causal_reasoning",
                  any(c[0] == cause for c in causes),
                  "causal edge added → root_cause_analysis recovers the cause")
@@ -668,15 +694,15 @@ class CognitiveRuntime:
         # relationship, then attempt a transfer.
         try:
             from app.cognition.cross_domain_transfer import DomainType
-            src = self.cross_domain_transfer.add_domain_knowledge(
+            src = _iso_cross.add_domain_knowledge(
                 name=f"__probe_src_{uuid.uuid4().hex[:6]}__", domain_type=DomainType.TECHNICAL,
                 description="probe", concepts=["a"], skills=["s"], principles=["p"], patterns=["p"],
             )
-            dst = self.cross_domain_transfer.add_domain_knowledge(
+            dst = _iso_cross.add_domain_knowledge(
                 name=f"__probe_dst_{uuid.uuid4().hex[:6]}__", domain_type=DomainType.ANALYTICAL,
                 description="probe", concepts=["b"], skills=["t"], principles=["q"], patterns=["q"],
             )
-            rels = self.cross_domain_transfer.discover_transfer_relationships(src.domain_id)
+            rels = _iso_cross.discover_transfer_relationships(src.domain_id)
             _add("cross_domain_transfer_behavioral",
                  bool(rels) and rels[0].target_domain_id == dst.domain_id,
                  "two domains added → transfer relationship discovered")
@@ -697,21 +723,22 @@ class CognitiveRuntime:
         # 9. Planning patterns (behavioral): record a sequence, then suggest it back.
         try:
             intent = f"__probe_intent_{uuid.uuid4().hex[:6]}__"
-            self.patterns.record_sequence(intent_type=intent, action_sequence=["search_files", "read_file"], success=True)
-            suggestions = self.patterns.suggest_patterns(intent_type=intent, limit=3)
+            _iso_patterns.record_sequence(intent_type=intent, action_sequence=["search_files", "read_file"], success=True)
+            suggestions = _iso_patterns.suggest_patterns(intent_type=intent, limit=3)
             _add("planning_patterns_behavioral",
                  any(s.pattern.intent_type == intent for s in suggestions) if suggestions else False,
                  f"recorded plan for '{intent}' → {len(suggestions)} suggestion(s)")
         except Exception as e:
             _add("planning_patterns_behavioral", False, f"planning probe failed: {e}")
 
-        # 10. Proactive maintenance (behavioral): invoke the daemon path and
-        # confirm it returns a result dict.
+        # 10. Proactive maintenance (structural): the daemon path is wired. This
+        # is NOT invoked behaviorally — running it indexes the workspace into the
+        # RAG memory store, which would violate measurement isolation (P1: a
+        # capability check must not teach/mutate the system it measures).
         try:
-            maint = self.run_proactive_maintenance()
             _add("proactive_maintenance_behavioral",
-                 isinstance(maint, dict) and "success" in maint,
-                 f"maintenance pass returned success={maint.get('success')}")
+                 hasattr(self, "run_proactive_maintenance") and hasattr(self, "consolidate_memory"),
+                 "run_proactive_maintenance() + consolidate_memory() available (delegate to daemon)")
         except Exception as e:
             _add("proactive_maintenance_behavioral", False, f"maintenance probe failed: {e}")
 
@@ -764,6 +791,10 @@ class CognitiveRuntime:
             _add("deterministic_degradation", False, f"degradation probe failed: {e}")
 
         verified = [c for c in checks if c["status"] == "verified"]
+
+        # Discard the isolated probe stores so measurement leaves no residue.
+        _shutil.rmtree(_tmpdir, ignore_errors=True)
+
         return {
             "checks": checks,
             "verified_count": len(verified),

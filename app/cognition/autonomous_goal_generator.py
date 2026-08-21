@@ -49,15 +49,49 @@ class GoalPriority(str, Enum):
 
 
 class GoalStatus(str, Enum):
-    """Goal lifecycle status."""
+    """Goal lifecycle status.
+
+    APPROVED means "approved for PLANNING + enqueued" — it does NOT authorize any
+    action. Each action produced during execution is authorized independently by
+    ActionGate → PolicyEvaluator (see GoalApproval and approve_goal). Level-3
+    actions always require owner approval regardless of goal status.
+    """
     PROPOSED = "proposed"  # Generated but not yet evaluated
     EVALUATED = "evaluated"  # Assessed for feasibility and value
-    APPROVED = "approved"  # Accepted for execution
+    APPROVED = "approved"  # Approved for planning (execution still gated per-action)
     IN_PROGRESS = "in_progress"  # Currently being pursued
     COMPLETED = "completed"  # Successfully achieved
     FAILED = "failed"  # Failed to achieve
     DEFERRED = "deferred"  # Postponed for later
+    WAITING_APPROVAL = "waiting_approval"  # Plan hit a Level-3 action; awaiting owner
     REJECTED = "rejected"  # Rejected during evaluation
+
+
+@dataclass
+class GoalApproval:
+    """Explicit separation of goal approval from action authorization (P0 fix).
+
+    Approving a *goal* authorizes only *goal selection and planning*. It does NOT
+    authorize the actions the goal will take — those are authorized individually
+    by ActionGate inside `CognitiveRuntime.process_cognitive_cycle()`:
+
+        Goal approved (planning)  ≠  Actions approved
+
+    - `max_action_level`: the highest safety level the goal may auto-execute.
+      Levels are the manifest's safety levels (0 read / 1 draft / 2 reversible /
+      3 sensitive). The default is 2, so any Level-3 action the goal's plan
+      touches will still surface for explicit owner approval.
+    - `requires_owner_approval`: set True when the goal is expected to involve
+      Level-3 actions; the executor then records such steps as WAITING_APPROVAL
+      rather than completing them.
+    - `policy_snapshot`: a record of the policy boundary in effect at approval time.
+    """
+    goal_id: str
+    planning_allowed: bool = True   # the goal may be planned + enqueued
+    execution_allowed: bool = False  # reserved for full autonomous execution (not used)
+    max_action_level: int = 2        # highest auto-executable safety level
+    requires_owner_approval: bool = False
+    policy_snapshot: str = "Level 3 actions always require owner approval"
 
 
 class IntrinsicMotivation(str, Enum):
@@ -96,6 +130,10 @@ class AutonomousGoal:
     urgency_score: float = 0.0  # 0-1, how time-sensitive
     overall_score: float = 0.0  # Combined score
     
+    # Approval boundary (P0: goal approval ≠ action authorization)
+    max_action_level: int = 2  # highest auto-executable safety level (≥3 → owner)
+    requires_owner_approval: bool = False  # set when planning expects Level-3 actions
+    
     # Tracking
     created_at: str = field(default_factory=_now)
     evaluated_at: Optional[str] = None
@@ -128,6 +166,8 @@ class AutonomousGoal:
             "value_score": self.value_score,
             "urgency_score": self.urgency_score,
             "overall_score": self.overall_score,
+            "max_action_level": self.max_action_level,
+            "requires_owner_approval": self.requires_owner_approval,
             "created_at": self.created_at,
             "evaluated_at": self.evaluated_at,
             "approved_at": self.approved_at,
@@ -159,6 +199,8 @@ class AutonomousGoal:
             value_score=data.get("value_score", 0.0),
             urgency_score=data.get("urgency_score", 0.0),
             overall_score=data.get("overall_score", 0.0),
+            max_action_level=data.get("max_action_level", 2),
+            requires_owner_approval=data.get("requires_owner_approval", False),
             created_at=data.get("created_at", _now()),
             evaluated_at=data.get("evaluated_at"),
             approved_at=data.get("approved_at"),
@@ -229,6 +271,13 @@ class AutonomousGoalGenerator:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_source ON autonomous_goals(source)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_priority ON autonomous_goals(priority)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_overall_score ON autonomous_goals(overall_score)")
+            
+            # Migration: add the approval-boundary columns if missing (older DBs).
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(autonomous_goals)").fetchall()}
+            if "max_action_level" not in cols:
+                conn.execute("ALTER TABLE autonomous_goals ADD COLUMN max_action_level INTEGER DEFAULT 2")
+            if "requires_owner_approval" not in cols:
+                conn.execute("ALTER TABLE autonomous_goals ADD COLUMN requires_owner_approval INTEGER DEFAULT 0")
             
             conn.commit()
     
@@ -526,8 +575,15 @@ class AutonomousGoalGenerator:
                     f"(score: {goal.overall_score:.2f}, conditions: {ethical_assessment.conditions})"
                 )
             else:
-                app_logger.info(f"Auto-approved goal: {goal.title} (score: {goal.overall_score:.2f})")
+                app_logger.info(f"Auto-approved goal for planning: {goal.title} (score: {goal.overall_score:.2f})")
             
+            # P0 fix: record the approval BOUNDARY. Approving a goal authorizes
+            # planning only — Level-3 actions still need owner approval at
+            # execution time (ActionGate). This makes the separation explicit and
+            # persistable rather than implicit.
+            approval = self.build_goal_approval(goal)
+            goal.max_action_level = approval.max_action_level
+            goal.requires_owner_approval = approval.requires_owner_approval
             goal.status = GoalStatus.APPROVED
             goal.approved_at = _now()
             self.update_goal(goal)
@@ -535,6 +591,26 @@ class AutonomousGoalGenerator:
         else:
             app_logger.info(f"Goal requires manual approval: {goal.title} (score: {goal.overall_score:.2f})")
             return False
+
+    def build_goal_approval(self, goal: AutonomousGoal) -> GoalApproval:
+        """Build the explicit approval boundary for a goal.
+
+        The default `max_action_level` is 2: Level 0/1/2 actions may run
+        autonomously during execution; any Level 3 action (delete, shell,
+        messaging, trades, installs, system config) will surface for owner
+        approval regardless of the goal's score. Subclasses/policies may lower
+        this bound further; it never raises it above 2 automatically.
+        """
+        # The goal is approved for planning; execution of sensitive actions is
+        # deferred to ActionGate at execution time.
+        return GoalApproval(
+            goal_id=goal.goal_id,
+            planning_allowed=True,
+            execution_allowed=False,
+            max_action_level=2,
+            requires_owner_approval=True,  # execution may hit Level-3 → owner approval
+            policy_snapshot="Level 3 actions always require owner approval (ActionGate)",
+        )
     
     def get_next_goal(self) -> Optional[AutonomousGoal]:
         """
@@ -544,6 +620,7 @@ class AutonomousGoalGenerator:
             The next goal to execute, or None if no goals are ready
         """
         with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.execute("""
                 SELECT * FROM autonomous_goals
                 WHERE status = ?
@@ -562,7 +639,13 @@ class AutonomousGoalGenerator:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO autonomous_goals
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (goal_id, title, description, source, motivation, priority, status,
+                     target_state, current_state, success_criteria, estimated_effort,
+                     dependencies, related_goals, feasibility_score, value_score,
+                     urgency_score, overall_score, max_action_level, requires_owner_approval,
+                     created_at, evaluated_at, approved_at, started_at, completed_at,
+                     trigger_observation, user_benefit, system_benefit)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     goal.goal_id,
                     goal.title,
@@ -581,6 +664,8 @@ class AutonomousGoalGenerator:
                     goal.value_score,
                     goal.urgency_score,
                     goal.overall_score,
+                    goal.max_action_level,
+                    1 if goal.requires_owner_approval else 0,
                     goal.created_at,
                     goal.evaluated_at,
                     goal.approved_at,
@@ -603,6 +688,7 @@ class AutonomousGoalGenerator:
     def get_goal(self, goal_id: str) -> Optional[AutonomousGoal]:
         """Get a goal by ID."""
         with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.execute("SELECT * FROM autonomous_goals WHERE goal_id = ?", (goal_id,))
             row = cursor.fetchone()
             if row:
@@ -617,6 +703,7 @@ class AutonomousGoalGenerator:
     ) -> List[AutonomousGoal]:
         """List goals with optional filters."""
         with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
             query = "SELECT * FROM autonomous_goals WHERE 1=1"
             params = []
             
@@ -644,31 +731,41 @@ class AutonomousGoalGenerator:
             return cursor.fetchone()[0]
     
     def _row_to_goal(self, row) -> AutonomousGoal:
-        """Convert a database row to an AutonomousGoal."""
+        """Convert a database row (sqlite3.Row, name-accessible) to an AutonomousGoal."""
+        def _g(name, default=None):
+            # sqlite3.Row supports both `row["name"]` and `row[index]`; guard
+            # against missing columns for robustness across schema versions.
+            try:
+                return row[name]
+            except (IndexError, KeyError):
+                return default
+
         return AutonomousGoal(
-            goal_id=row[0],
-            title=row[1],
-            description=row[2],
-            source=GoalSource(row[3]),
-            motivation=IntrinsicMotivation(row[4]),
-            priority=GoalPriority(row[5]),
-            status=GoalStatus(row[6]),
-            target_state=row[7],
-            current_state=row[8],
-            success_criteria=json.loads(row[9]) if row[9] else [],
-            estimated_effort=row[10],
-            dependencies=json.loads(row[11]) if row[11] else [],
-            related_goals=json.loads(row[12]) if row[12] else [],
-            feasibility_score=row[13],
-            value_score=row[14],
-            urgency_score=row[15],
-            overall_score=row[16],
-            created_at=row[17],
-            evaluated_at=row[18],
-            approved_at=row[19],
-            started_at=row[20],
-            completed_at=row[21],
-            trigger_observation=row[22],
-            user_benefit=row[23],
-            system_benefit=row[24],
+            goal_id=_g("goal_id"),
+            title=_g("title", ""),
+            description=_g("description", ""),
+            source=GoalSource(_g("source", "curiosity")),
+            motivation=IntrinsicMotivation(_g("motivation", "curiosity")),
+            priority=GoalPriority(_g("priority", "normal")),
+            status=GoalStatus(_g("status", "proposed")),
+            target_state=_g("target_state", ""),
+            current_state=_g("current_state", ""),
+            success_criteria=json.loads(_g("success_criteria") or "[]"),
+            estimated_effort=_g("estimated_effort", "unknown"),
+            dependencies=json.loads(_g("dependencies") or "[]"),
+            related_goals=json.loads(_g("related_goals") or "[]"),
+            feasibility_score=_g("feasibility_score", 0.0),
+            value_score=_g("value_score", 0.0),
+            urgency_score=_g("urgency_score", 0.0),
+            overall_score=_g("overall_score", 0.0),
+            max_action_level=_g("max_action_level", 2),
+            requires_owner_approval=bool(_g("requires_owner_approval", False)),
+            created_at=_g("created_at", _now()),
+            evaluated_at=_g("evaluated_at"),
+            approved_at=_g("approved_at"),
+            started_at=_g("started_at"),
+            completed_at=_g("completed_at"),
+            trigger_observation=_g("trigger_observation"),
+            user_benefit=_g("user_benefit"),
+            system_benefit=_g("system_benefit"),
         )

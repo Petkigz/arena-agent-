@@ -162,23 +162,23 @@ class TestAutonomousGoalExecutor:
         assert result.outcome_summary is not None
 
     def test_execute_plan_progress_tracking(self, executor, sample_goal):
-        """Test that plan progress is tracked correctly."""
+        """Test that plan progress is tracked correctly.
+
+        Without a runtime, the first step is UNVERIFIED and the plan HALTS
+        (later steps may depend on it), so exactly one step is processed and the
+        rest remain PENDING.
+        """
         plan = executor.create_execution_plan(sample_goal)
         initial_step_count = len(plan.steps)
         
         result = executor.execute_plan(plan)
         
-        # Progress should be 1.0 (100%) after all steps are processed.
-        assert result.progress == 1.0
-        
-        # All steps should have reached a terminal state.
-        for step in result.steps:
-            assert step.status in [
-                ExecutionStatus.COMPLETED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.UNVERIFIED,
-                ExecutionStatus.WAITING_APPROVAL,
-            ]
+        # Only the first step was processed before halting on UNVERIFIED.
+        assert result.progress == 1.0 / initial_step_count
+        assert result.steps[0].status == ExecutionStatus.UNVERIFIED
+        # Remaining steps were NOT blindly executed.
+        assert all(s.status == ExecutionStatus.PENDING for s in result.steps[1:])
+        assert result.status == ExecutionStatus.PARTIAL
 
     def test_extract_lessons(self, executor, sample_goal):
         """Test lesson extraction from plan execution."""

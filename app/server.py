@@ -123,17 +123,31 @@ async def lifespan(app: FastAPI):
         app_logger.info("Voice service wired into message router")
 
     # Schedule the autonomous cognitive cycle (observe → generate goals → execute
-    # → reflect → consolidate memory → proactive maintenance) on an hourly timer.
-    try:
-        from app.scheduler import ProactiveScheduler
-        ProactiveScheduler.schedule_recurring(
-            "autonomous_cycle",
-            runtime.run_autonomous_cycle,
-            interval_seconds=3600,
-        )
-        app_logger.info("Autonomous cognitive cycle scheduled (every 3600s).")
-    except Exception as e:
-        app_logger.warning(f"Could not schedule autonomous cycle: {e}")
+    # → reflect → consolidate memory → proactive maintenance) — governed by the
+    # explicit AUTONOMY_MODE policy (default "supervised"). Only "off" disables it;
+    # "supervised" keeps it running with Level-3 actions still owner-approved.
+    autonomy_mode = (settings.AUTONOMY_MODE or "supervised").strip().lower()
+    if autonomy_mode == "off":
+        app_logger.info("Autonomy mode is 'off' — autonomous cycle NOT scheduled.")
+    else:
+        if autonomy_mode not in ("supervised", "bounded", "full"):
+            app_logger.warning(
+                f"Unknown AUTONOMY_MODE '{autonomy_mode}' — falling back to 'supervised'."
+            )
+            autonomy_mode = "supervised"
+        try:
+            from app.scheduler import ProactiveScheduler
+            interval = max(60, int(settings.AUTONOMY_INTERVAL_SECONDS or 3600))
+            ProactiveScheduler.schedule_recurring(
+                "autonomous_cycle",
+                runtime.run_autonomous_cycle,
+                interval_seconds=interval,
+            )
+            app_logger.info(
+                f"Autonomous cognitive cycle scheduled every {interval}s (mode: {autonomy_mode})."
+            )
+        except Exception as e:
+            app_logger.warning(f"Could not schedule autonomous cycle: {e}")
 
     if API_KEY_ENABLED:
         app_logger.info(

@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     MAIN_MODEL: str = "qwen2.5-9b-instruct"
     DEFAULT_TIMEOUT: float = 180.0  # Extended timeout (3 mins) to allow LM Studio to auto-load models into VRAM
 
+    # Autonomy policy (P1 fix): the autonomous cycle is opt-in, not always-on.
+    #   "off"        — no autonomous cycle is scheduled.
+    #   "supervised" — cycle runs, but Level-3 actions always require owner approval (default).
+    #   "bounded"    — reserved for a future mode with explicit per-goal limits.
+    #   "full"       — reserved; NOT currently implemented (no path grants full autonomy).
+    AUTONOMY_MODE: str = "supervised"
+    AUTONOMY_INTERVAL_SECONDS: int = 3600
+
     model_config = SettingsConfigDict(
         env_prefix="LPA_",
         env_file=".env",

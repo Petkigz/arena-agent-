@@ -22,7 +22,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1374** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1374 passed, 4 deselected` |
+| Backend tests passing | **1384** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1384 passed, 4 deselected` |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
 | Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
@@ -110,6 +110,11 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ **Goal-approval ≠ action-approval (P0)**: documented + enforced — auto-approving a goal never authorizes its actions; every action still passes `ActionGate`, and gated actions are recorded as `WAITING_APPROVAL`, never completed.
 - ✅ **Server hardened (P0)**: the 127-route core router is now gated by the same `verify_api_key` as the `/api/*` routers (so a set `ARENA_API_KEY` protects everything, not just newer routes); unauthenticated instances reject non-loopback clients by default (localhost-only), with `ARENA_ALLOW_INSECURE_LAN=1` as an explicit opt-out and `ARENA_ENFORCE_AUTH=1` as fail-closed mode.
 - ✅ **Provenance persistence (P1)**: `observation_type` now survives the SQLite save/load round-trip; first belief insertion goes through the same `revise()` path as subsequent observations (one- and two-observation semantics are identical).
+- ✅ **Goal-approval boundary (P0)**: a `GoalApproval` record now makes explicit that approving a goal authorizes *planning only* — `max_action_level` (default 2) caps auto-executable safety, and Level-3 actions always require owner approval at execution time. Persisted per goal.
+- ✅ **Measurement isolation (P1)**: `measure_capabilities()` runs its behavioral probes against throwaway stores in a temp dir (beliefs/memory/causal/cross-domain/patterns) and discards them — measurement no longer teaches/mutates the system it measures. The proactive-maintenance probe was made structural (it writes to RAG memory).
+- ✅ **Plan dependencies (P1)**: `execute_plan` now halts after an `UNVERIFIED` or `WAITING_APPROVAL` step instead of blindly continuing — later steps that depend on an unverified precondition are not executed.
+- ✅ **Resumable approval (P1)**: `WAITING_APPROVAL` plans map the goal to a distinct `WAITING_APPROVAL` state (not `DEFERRED`), and `resume_plan()` re-attempts the gated step once the owner approves.
+- ✅ **Explicit autonomy mode**: `AUTONOMY_MODE` (default `supervised`) governs whether the hourly autonomous cycle is scheduled; `off` disables it.
 
 Still open (future):
 
