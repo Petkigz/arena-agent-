@@ -20,8 +20,13 @@ PYTHONPATH=. python -m desktop.main
 
 ## Phase status
 
-- ✅ **Phase 1** — window shell, connection status, text chat (this dir).
-- ⏳ **Phase 2** — native hardware tabs (camera preview, location, files, voice).
+- ✅ **Phase 1** — window shell, connection status, text chat.
+- ✅ **Phase 2** — native hardware tabs:
+  - **Camera** — live webcam preview + still capture (uploads to the backend).
+    Requires `pip install opencv-python`; degrades gracefully without it.
+  - **Location** — resolve native location (phone GPS → IP fallback) off-thread.
+  - **Files** — search the filesystem via the backend's `/filesystem/search`.
+  - **Status** — live hardware telemetry (CPU/RAM/disk) + backend/LM Studio status.
 - ⏳ **Phase 3** — system tray, notifications, wake word, settings persistence.
 
 See `../DESKTOP_APP_PLAN.md` for the full plan.

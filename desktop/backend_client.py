@@ -71,13 +71,67 @@ class ArenaBackendClient:
         except (KeyError, IndexError, TypeError) as e:
             raise BackendConnectionError(f"Unexpected chat response shape: {data}") from e
 
-    # ── capabilities / self-report ──────────────────────────────────────────
-    def capabilities(self) -> Dict[str, Any]:
-        """POST /chat with a self-report request is overkill; instead read the
-        runtime's measured scorecard via a lightweight dedicated call below.
-        (The scorecard lives in the runtime; expose it via the app if needed.)
-        """
-        raise NotImplementedError
+    # ── hardware / status ───────────────────────────────────────────────────
+    def status(self) -> Dict[str, Any]:
+        """GET /api/status."""
+        return self._get_json("/api/status")
+
+    def hardware_stats(self) -> Dict[str, Any]:
+        """GET /api/hardware-stats (CPU/RAM/disk telemetry)."""
+        return self._get_json("/api/hardware-stats")
+
+    # ── location ────────────────────────────────────────────────────────────
+    def report_location(self, latitude: float, longitude: float, city: str = "") -> Dict[str, Any]:
+        """POST /mobile/location — store a location context in memory."""
+        return self._post_json("/mobile/location", {
+            "latitude": latitude,
+            "longitude": longitude,
+            "city": city,
+        })
+
+    def resolve_location(self) -> Dict[str, Any]:
+        """Resolve native location (phone GPS → IP fallback)."""
+        from app.tools.location_service import LocationService
+        return LocationService.resolve_location()
+
+    # ── camera ──────────────────────────────────────────────────────────────
+    def upload_camera_photo(self, filename: str, data: bytes, content_type: str = "image/jpeg") -> Dict[str, Any]:
+        """POST /mobile/camera — upload a captured still."""
+        try:
+            r = self._client.post(
+                f"{self.base_url}/mobile/camera",
+                files={"file": (filename, data, content_type)},
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"Camera upload failed: {e}") from e
+
+    # ── filesystem ──────────────────────────────────────────────────────────
+    def search_files(self, query: str, root_dir: str = "", max_results: int = 20) -> Dict[str, Any]:
+        """POST /filesystem/search."""
+        return self._post_json("/filesystem/search", {
+            "query": query,
+            "root_dir": root_dir or None,
+            "max_results": max_results,
+        })
+
+    # ── helpers ─────────────────────────────────────────────────────────────
+    def _get_json(self, path: str) -> Dict[str, Any]:
+        try:
+            r = self._client.get(f"{self.base_url}{path}")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"GET {path} failed: {e}") from e
+
+    def _post_json(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            r = self._client.post(f"{self.base_url}{path}", json=payload)
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"POST {path} failed: {e}") from e
 
     def close(self) -> None:
         self._client.close()
