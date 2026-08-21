@@ -9,12 +9,15 @@ class KnowledgeDomainsTool:
         """
         Provides educational legal research, compliance principles (GDPR, Terms of Service, IP Law), and risk analysis.
         """
+        if not topic_or_question or not topic_or_question.strip():
+            return {"success": False, "error": "A topic or question is required."}
+
         system_prompt = (
             "You are a Senior Legal Compliance Analyst. Provide educational legal research, "
             "compliance analysis (GDPR, IP Law, Terms of Service, Contracts), and risk mitigation advice."
         )
 
-        user_prompt = f"Legal Research Topic / Question: \"{topic_or_question}\"\n\nProvide structured analysis with key legal considerations and compliance checkpoints."
+        user_prompt = f"Legal Research Topic / Question: \"{topic_or_question}\"\n\nProvide structured analysis with key legal considerations and compliance checkpoints. State clearly this is educational, not formal legal advice."
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -24,7 +27,8 @@ class KnowledgeDomainsTool:
         try:
             res = llm_client.generate_chat_completion(messages=messages, complexity="main", max_tokens=800)
             analysis = extract_reply(res, fallback="Legal analysis completed.")
-            return {"success": True, "topic": topic_or_question, "analysis": analysis}
+            return {"success": True, "topic": topic_or_question, "analysis": analysis,
+                    "disclaimer": "Educational information, not formal legal advice."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -32,10 +36,18 @@ class KnowledgeDomainsTool:
     def psychological_counseling_partner(cls, user_reflection: str) -> Dict[str, Any]:
         """
         Empathetic, active-listening partner grounded in Cognitive Behavioral Therapy (CBT) and active reflection principles.
+
+        Not a substitute for professional mental-health care — a disclaimer is
+        always included and crisis situations are referred to professional help.
         """
+        if not user_reflection or not user_reflection.strip():
+            return {"success": False, "error": "Please share what's on your mind."}
+
         system_prompt = (
-            "You are a compassionate, active-listening counselor grounded in Cognitive Behavioral Therapy (CBT) principles. "
-            "Provide empathetic, thoughtful reflection, reframing unhelpful thought patterns, and encouraging clarity."
+            "You are a compassionate, active-listening companion grounded in Cognitive Behavioral Therapy (CBT) principles. "
+            "Provide empathetic, thoughtful reflection, reframing unhelpful thought patterns, and encouraging clarity. "
+            "You are NOT a licensed therapist — if the user expresses self-harm, suicide, or a crisis, "
+            "gently encourage them to contact a qualified professional or a crisis line immediately."
         )
 
         user_prompt = f"User Expression: \"{user_reflection}\"\n\nRespond empathetically with reflective listening, CBT perspective reframing, and supportive guidance."
@@ -48,7 +60,8 @@ class KnowledgeDomainsTool:
         try:
             res = llm_client.generate_chat_completion(messages=messages, complexity="main", max_tokens=600)
             response = extract_reply(res, fallback="Reflection completed.")
-            return {"success": True, "counseling_reflection": response}
+            return {"success": True, "counseling_reflection": response,
+                    "disclaimer": "Not a substitute for professional mental-health care."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -57,6 +70,15 @@ class KnowledgeDomainsTool:
         """
         Computes small business profit & loss, operating margin, tax estimation, and net income.
         """
+        try:
+            revenue = float(revenue)
+            operating_expenses = float(operating_expenses)
+            tax_rate_percent = float(tax_rate_percent)
+        except (TypeError, ValueError):
+            return {"success": False, "error": "revenue, operating_expenses, and tax_rate_percent must be numbers."}
+        if tax_rate_percent < 0 or tax_rate_percent > 100:
+            return {"success": False, "error": "tax_rate_percent must be between 0 and 100."}
+
         gross_profit = revenue - operating_expenses
         tax_estimate = max(gross_profit * (tax_rate_percent / 100.0), 0.0) if gross_profit > 0 else 0.0
         net_income = gross_profit - tax_estimate

@@ -14,6 +14,12 @@ class CoderBrainTool:
         """
         Polyglot Code Explainer & Debugger: Explains logic, identifies bugs, and provides clean refactored code.
         """
+        if not code_snippet or not code_snippet.strip():
+            return {"success": False, "error": "A code snippet is required."}
+        language = (language or "python").lower()
+        if language not in cls.LANGUAGES:
+            return {"success": False, "error": f"Unsupported language '{language}'. Supported: {', '.join(cls.LANGUAGES)}."}
+
         system_prompt = (
             "You are an expert Polyglot Software Architect. Explain code logic, "
             "identify syntax/logic bugs, and provide clean, production-grade refactored code."
@@ -61,6 +67,12 @@ Provide:
         """
         Generates comprehensive unit test suites (pytest, jest, cargo test, etc.) for provided code.
         """
+        if not code_snippet or not code_snippet.strip():
+            return {"success": False, "error": "A code snippet is required."}
+        language = (language or "python").lower()
+        if language not in cls.LANGUAGES:
+            return {"success": False, "error": f"Unsupported language '{language}'."}
+
         system_prompt = (
             "You are a Quality Assurance & Test Engineering Lead. "
             "Generate complete, passing unit test suites covering normal cases and edge cases."
@@ -91,10 +103,14 @@ Generate a complete, executable unit test file for this code.
 
             test_code = extract_reply(llm_res, fallback="Unit tests generated.")
 
-            # Save test file draft
-            ext = ".py" if language.lower() == "python" else ".js" if language.lower() in ["javascript", "typescript"] else ".txt"
-            test_file_path = f"drafts/test_suite_{language.lower()}{ext}"
-            DocumentManager.create_document(test_file_path, test_code, overwrite=True)
+            # Save test file draft (best-effort — never fail the whole result).
+            ext = ".py" if language == "python" else ".js" if language in ["javascript", "typescript"] else ".txt"
+            test_file_path = f"drafts/test_suite_{language}{ext}"
+            try:
+                DocumentManager.create_document(test_file_path, test_code, overwrite=True)
+            except Exception as e:
+                app_logger.warning(f"Could not save test file draft: {e}")
+                test_file_path = None  # don't report a path that wasn't written
 
             return {
                 "success": True,
@@ -103,4 +119,5 @@ Generate a complete, executable unit test file for this code.
                 "test_file_path": test_file_path
             }
         except Exception as e:
+            app_logger.error(f"Unit test generation failed: {e}")
             return {"success": False, "error": str(e)}

@@ -22,6 +22,12 @@ class MusicStudioTool:
         """
         Generates tailored vocal chain mixing parameters (EQ, Compression, De-Essing, Reverb/Delay) for DAW production.
         """
+        if not genre or not genre.strip():
+            return {"success": False, "error": "A genre is required.", "quick_frequency_cheatsheet": cls.VOCAL_EQ_GUIDE}
+        genre = genre.strip()
+        vocal_type = (vocal_type or "male_rap").strip()
+        daw_name = (daw_name or "FL Studio / Logic / Pro Tools").strip()
+
         system_prompt = (
             "You are a professional audio mixing engineer. Generate precise, "
             "actionable vocal mixing chain parameter guidelines for music production."

@@ -17,6 +17,10 @@ class SecurityEducationTool:
         Analyzes source code defensively for security flaws, missing sanitization, 
         and OWASP vulnerabilities, providing secure refactored code fixes.
         """
+        if not code_snippet or not code_snippet.strip():
+            return {"success": False, "error": "A code snippet is required."}
+        language = (language or "python").lower()
+
         system_prompt = (
             "You are a Senior Principal Application Security Architect. "
             "Audit the provided source code defensively. Identify security risks "
