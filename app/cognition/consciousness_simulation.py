@@ -556,7 +556,10 @@ class ConsciousnessSimulator:
                 query += " WHERE consciousness_level = ?"
                 params.append(consciousness_level.value)
             
-            query += " ORDER BY timestamp DESC LIMIT ?"
+            # rowid DESC tiebreaks equal microsecond timestamps (fast machines
+            # produce identical isoformat() stamps in tight loops), so "most
+            # recent first" is deterministic.
+            query += " ORDER BY timestamp DESC, rowid DESC LIMIT ?"
             params.append(limit)
             
             cursor = conn.execute(query, params)
@@ -591,7 +594,7 @@ class ConsciousnessSimulator:
                 query += " WHERE qualia_type = ?"
                 params.append(qualia_type.value)
             
-            query += " ORDER BY timestamp DESC LIMIT ?"
+            query += " ORDER BY timestamp DESC, rowid DESC LIMIT ?"
             params.append(limit)
             
             cursor = conn.execute(query, params)

@@ -535,7 +535,7 @@ class MetacognitiveMonitor:
                 query += " WHERE process_type = ?"
                 params.append(process_type.value)
             
-            query += " ORDER BY timestamp DESC LIMIT ?"
+            query += " ORDER BY timestamp DESC, rowid DESC LIMIT ?"
             params.append(limit)
             
             cursor = conn.execute(query, params)
