@@ -251,11 +251,16 @@ class ConfidenceCalibrator:
     def calibrate(
         self,
         action_type: str,
-        raw_confidence: float
+        raw_confidence: float,
+        context: Optional[Dict[str, Any]] = None
     ) -> float:
         """
         Apply calibration correction to a raw confidence prediction.
         Returns adjusted confidence that better reflects actual success rate.
+
+        `context` is accepted for forward-compatibility (the runtime passes
+        skill_type / complexity); the current binning-based calibration does not
+        yet consume it, but accepting it prevents the call from failing.
         """
         raw_confidence = max(0.0, min(1.0, raw_confidence))
         bin_idx = self._bin_index(raw_confidence)

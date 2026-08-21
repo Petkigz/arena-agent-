@@ -85,6 +85,11 @@ class CognitiveTrace:
                     created_at TEXT NOT NULL
                 )
             """)
+            # Migration: older DBs were created before `attention_focus` was added.
+            # CREATE TABLE IF NOT EXISTS won't add it, so patch it in if missing.
+            cols = {r[1] for r in cursor.execute("PRAGMA table_info(cognitive_traces)").fetchall()}
+            if "attention_focus" not in cols:
+                cursor.execute("ALTER TABLE cognitive_traces ADD COLUMN attention_focus TEXT")
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
                 (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, created_at)
