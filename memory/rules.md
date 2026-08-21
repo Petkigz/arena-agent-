@@ -4,7 +4,7 @@ This file defines the authorization model for Arena's cognitive system.
 
 ## Design Philosophy
 
-Arena is a **full-capability private secretary**, not a restricted demo. All capabilities are available, but sensitive actions require explicit user approval. The system distinguishes between:
+Arena is a **full-capability coworker**, not a restricted demo. All capabilities are available, but sensitive actions require explicit user approval. The system distinguishes between:
 
 - **Can the agent do this?** (capability availability)
 - **May it execute this autonomously right now?** (approval gate)

@@ -486,7 +486,7 @@ class CognitiveRuntime:
         require approval"). Levels 0-2 auto-approve; Level 3 requires explicit approval.
         """
         return {
-            "philosophy": "full-capability private secretary; capabilities are approval-gated, not removed",
+            "philosophy": "full-capability coworker; capabilities are approval-gated, not removed",
             "levels": [
                 {"level": 0, "name": "Read/Observe", "autonomous": True,
                  "examples": ["read_file", "web_search", "capture_screen"]},

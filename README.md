@@ -1,6 +1,6 @@
-# Local Cognitive Assistant — Private Secretary Platform
+# Local Cognitive Assistant — Coworker Platform
 
-A **full-capability local-first private secretary** that perceives its environment, understands goals, reasons under uncertainty, plans and executes actions, observes what actually happened, verifies success, remembers lessons, and improves — while the owner retains control over sensitive actions through configurable approval gates.
+A **full-capability local-first coworker** that perceives its environment, understands goals, reasons under uncertainty, plans and executes actions, observes what actually happened, verifies success, remembers lessons, and improves — while the owner retains control over sensitive actions through configurable approval gates.
 
 Runs **entirely locally** on Intel Core i9-14900K, RX 580 GPU (8 GB), and system RAM, connected to **LM Studio** for model inference (Qwen 3B fast model + Qwen 9B reasoning model).
 
@@ -22,7 +22,7 @@ Owner authority before self-action.
 
 ### Full-Capability Design
 
-This is a **private secretary**, not a capability-restricted demo. No domain is permanently forbidden:
+This is a **coworker**, not a capability-restricted demo. No domain is permanently forbidden:
 
 - **Cybersecurity**, **trading**, **system administration**, **communications**, **automation** — all exist as capabilities
 - Sensitive actions enter an **approval state** rather than being deleted from the capability set

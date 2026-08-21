@@ -1,4 +1,4 @@
-"""Email send/read — native secretary tool (Level-3 gated by the caller).
+"""Email send/read — native coworker tool (Level-3 gated by the caller).
 
 Uses only the Python stdlib (smtplib / imaplib / email). Credentials come from
 environment variables (never hardcoded): ARENA_SMTP_HOST, ARENA_SMTP_PORT,

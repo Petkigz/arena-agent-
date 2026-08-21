@@ -1,4 +1,4 @@
-"""Markdown notes manager — a native secretary tool (browser-free).
+"""Markdown notes manager — a native coworker tool (browser-free).
 
 Stores notes as markdown files under DATA_DIR/notes, with CRUD + search.
 No external dependencies; fully testable.

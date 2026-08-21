@@ -143,8 +143,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     # ── Web / research ──────────────────────────────────────────────────────
     add("web_search", "web", 0, "Search the web",
         _wrap(WebResearcher.search_and_scrape, "query"))
-    add("web_workflow", "web", 2, "Run an autonomous web workflow",
-        _wrap(WebAgent.execute_web_workflow, "objective", "target_url"))
+    add("web_workflow", "web", 2, "Run an autonomous multi-step web workflow",
+        _wrap(WebAgent.execute_web_workflow, "objective", "target_url", "steps", "complexity"))
     add("browser_extract", "web", 0, "Navigate and extract a page",
         _wrap(BrowserAutomation.navigate_and_extract, "url"))
     add("youtube_learn", "web", 0, "Learn from a YouTube video",
@@ -220,7 +220,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("trigger_webhook", "integration", 3, "Trigger a webhook",
         _wrap(ConnectorsTool.trigger_webhook, "url", "payload"))
 
-    # ── Secretary essentials (notes / weather / translation / email / SQL /
+    # ── Coworker essentials (notes / weather / translation / email / SQL /
     #    calendar / documents) ───────────────────────────────────────────────
     add("create_note", "productivity", 1, "Create a note",
         _wrap(NotesManager.create_note, "title", "content", "tags"))

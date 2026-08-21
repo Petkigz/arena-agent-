@@ -1,4 +1,4 @@
-"""Local calendar / reminders — a native secretary tool (browser-free).
+"""Local calendar / reminders — a native coworker tool (browser-free).
 
 Stores events and reminders in a local JSON file under DATA_DIR. No external
 services. Provides add / list / upcoming / due-reminders.
