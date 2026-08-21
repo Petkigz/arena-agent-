@@ -798,7 +798,11 @@ class CognitiveRuntime:
 
             # 3. Check ToolRegistry registered tools (normalized dot/underscore
             #    + action-stem matching so "filesystem.search" → "search_files").
-            elif any(tn in cap_clean or cap_clean in tn for tn in tool_norms):
+            #    Match on token boundaries, NOT bare substrings — otherwise a
+            #    short generic stem like "port" (from check_port) would wrongly
+            #    match "quantum_teleportation", just as "phone" would match
+            #    "microphone".
+            elif self._tool_capability_match(cap_clean, tool_norms):
                 cap_map[cap] = True
 
             # 4. Check WorldModel dynamic capabilities synthesized by CapabilityFactory
@@ -810,6 +814,28 @@ class CognitiveRuntime:
                 cap_map[cap] = False
 
         return cap_map
+
+    @staticmethod
+    def _tool_capability_match(cap_clean: str, tool_norms: set) -> bool:
+        """Match a dotted capability string against tool names/stems on token
+        boundaries (dot/underscore), never as a bare substring.
+
+        Examples:
+          "filesystem.search" matches "search_files" (via the "search" stem)
+          "web.search"       matches "web_search"
+          "search"           matches "search_files"
+          "quantum_teleportation" does NOT match "check_port" (no "port" token)
+        """
+        cap_tokens = set(cap_clean.replace(".", "_").split("_"))
+        for tn in tool_norms:
+            if tn == cap_clean:
+                return True
+            tn_tokens = set(tn.split("_"))
+            if cap_clean in tn_tokens:
+                return True
+            if tn in cap_tokens:
+                return True
+        return False
 
     def capture_observed_world_state(
         self,

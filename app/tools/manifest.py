@@ -66,6 +66,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.sql_query import SQLQueryTool
     from app.tools.database_connector import DatabaseConnector
     from app.tools.invoice_generator import InvoiceGenerator
+    from app.tools.network_diagnostics import NetworkDiagnostics
+    from app.tools.budget_tracker import BudgetTracker
     from app.tools.pdf_toolkit import PdfToolkit
     from app.tools.process_manager import ProcessManager
     from app.tools.calendar_service import CalendarService
@@ -283,9 +285,32 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DatabaseConnector.query, "engine", "sql", "host", "port", "database", "user", "password", "limit"))
     add("db_list_tables", "data", 0, "List tables in a database",
         _wrap(DatabaseConnector.list_tables, "engine", "host", "port", "database", "user", "password"))
+    add("db_execute", "data", 3, "Run a write SQL statement (irreversible; requires approval)",
+        _wrap(DatabaseConnector.execute, "engine", "sql", "host", "port", "database", "user", "password",
+              "allow_unfiltered", "allow_destructive", "limit"))
     add("generate_invoice", "documents", 1, "Generate a PDF invoice/quote/receipt",
         _wrap(InvoiceGenerator.generate_invoice, "to_name", "line_items", "from_name",
               "invoice_number", "date", "currency", "tax_rate", "notes", "document_type", "output_path"))
+
+    # ── Network diagnostics ─────────────────────────────────────────────────
+    add("resolve_dns", "network", 0, "Resolve a hostname to IP addresses",
+        _wrap(NetworkDiagnostics.resolve_dns, "host"))
+    add("check_port", "network", 0, "Check if a TCP port is open",
+        _wrap(NetworkDiagnostics.check_port, "host", "port", "timeout"))
+    add("ping", "network", 0, "Ping a host",
+        _wrap(NetworkDiagnostics.ping, "host", "count", "timeout"))
+    add("traceroute", "network", 0, "Trace the route to a host",
+        _wrap(NetworkDiagnostics.traceroute, "host", "max_hops"))
+    add("whois", "network", 0, "Look up domain WHOIS info",
+        _wrap(NetworkDiagnostics.whois, "domain", "timeout"))
+
+    # ── Budget tracker ──────────────────────────────────────────────────────
+    add("add_transaction", "finance", 2, "Add an income/expense transaction to the ledger",
+        _wrap(BudgetTracker.add_transaction, "amount", "category", "description", "date", "kind", "file_path"))
+    add("budget_summary", "finance", 0, "Summarize income/expense/overspend",
+        _wrap(BudgetTracker.summary, "file_path", "month", "budgets"))
+    add("list_transactions", "finance", 0, "List ledger transactions",
+        _wrap(BudgetTracker.list_transactions, "file_path", "category", "month", "limit"))
     add("add_event", "productivity", 1, "Add a calendar event",
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",

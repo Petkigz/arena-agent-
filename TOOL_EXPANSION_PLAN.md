@@ -58,7 +58,9 @@ tools that need real logic.
 - [x] Contacts, spreadsheet engine
 - [x] PDF toolkit (merge/split/extract/fill-form + metadata/text)
 - [x] Process manager (list/inspect/kill/restart, self-protection)
-- [x] Database connector (read-only SQLite/Postgres/MySQL)
+- [x] Database connector (SQLite/Postgres/MySQL: read Level 0, write Level 3)
 - [x] Invoice generator (PDF invoice/quote/receipt)
-- [ ] Remaining Tier 1: messaging, presentation, backup, network diagnostics,
-      package installer, news/RSS, fact-check, budget tracker, price lookup
+- [x] Network diagnostics (DNS, port check, ping, traceroute, WHOIS)
+- [x] Budget tracker (CSV ledger, category totals, overspend)
+- [ ] Remaining Tier 1: messaging, presentation, backup, package installer,
+      news/RSS, fact-check, price lookup
