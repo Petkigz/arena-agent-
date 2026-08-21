@@ -406,6 +406,25 @@ class ObservationCollector:
                             "source": "screen_capture_file_probe", "observation_type": "direct"}
             )
 
+            # Vision loop OBSERVE step: understand the screen CONTENT, not just
+            # confirm the file exists. Deterministic OCR-based observation so the
+            # loop can reason about what is on screen (and GoalVerifier can use
+            # actual observed content as evidence).
+            try:
+                from app.cognition.visual_observer import VisualObserver
+                vobs = VisualObserver.observe_screenshot(file_path)
+                content_obs = cls._make_obs(
+                    subject="screen_capture", predicate="screen_content",
+                    value=vobs.visible_text[:500] if vobs.has_content else "(no readable text observed)",
+                    source=SourceType.SCREEN_CAPTURE_FILE_PROBE,
+                    confidence=1.0 if vobs.has_content else 0.5,
+                    observation_type="direct"
+                )
+                world_model.observe(content_obs)
+                ingested.append(content_obs)
+            except Exception as e:
+                app_logger.warning(f"Visual content observation failed (non-fatal): {e}")
+
     @classmethod
     def _observe_phone_command(cls, payload: Dict, raw_output: Dict,
                                 world_model: WorldModel, ingested: List[Observation]) -> None:
