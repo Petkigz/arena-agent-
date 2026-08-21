@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
+import { BeanieModal } from '../../components/beanie';
 import { EmptyState } from '../../components/ui';
 import { MessageCircle, Share2 } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
@@ -20,6 +21,7 @@ export function ChatPage() {
   } = useConversationStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showBeanie, setShowBeanie] = useState(false);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -256,7 +258,14 @@ export function ChatPage() {
           onSendMessage={handleSendMessage}
           onVoiceStart={handleVoiceStart}
           onVoiceStop={handleVoiceStop}
+          onOpenBeanie={() => setShowBeanie(true)}
           disabled={!webSocketService.isConnected}
+        />
+
+        {/* Beanie floating orb panel (opened from the composer button) */}
+        <BeanieModal
+          isOpen={showBeanie}
+          onClose={() => setShowBeanie(false)}
         />
       </div>
 

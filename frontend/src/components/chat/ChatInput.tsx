@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Mic, X } from 'lucide-react';
+import { Send, Mic, X, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { AttachmentButton } from '../ui/AttachmentButton';
 import { useMultiModalStore, type Attachment } from '../../stores/multiModalStore';
@@ -8,6 +8,7 @@ interface ChatInputProps {
   onSendMessage: (content: string, attachments?: Attachment[]) => void;
   onVoiceStart?: () => void;
   onVoiceStop?: () => void;
+  onOpenBeanie?: () => void;
   disabled?: boolean;
   isListening?: boolean;
 }
@@ -16,6 +17,7 @@ export function ChatInput({
   onSendMessage, 
   onVoiceStart, 
   onVoiceStop,
+  onOpenBeanie,
   disabled = false,
   isListening = false,
 }: ChatInputProps) {
@@ -155,6 +157,22 @@ export function ChatInput({
               style={{ maxHeight: '200px' }}
             />
           </div>
+
+          {/* Beanie button — opens the floating orb panel */}
+          {onOpenBeanie && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={disabled}
+              onClick={onOpenBeanie}
+              className="flex-shrink-0"
+              aria-label="Open Beanie"
+              title="Beanie"
+            >
+              <Sparkles className="w-5 h-5" aria-hidden="true" />
+            </Button>
+          )}
 
           {/* Voice button */}
           {onVoiceStart && (
