@@ -710,6 +710,15 @@ class CognitiveRuntime:
         except Exception as e:
             _add("proactive_maintenance_behavioral", False, f"maintenance probe failed: {e}")
 
+        # 11. Tool wiring: the capability registry must expose the full toolset
+        # (previously only 3 tools were registered; now the whole manifest is).
+        try:
+            n_tools = len(self.registry._registry)
+            _add("tools_wired", n_tools >= 40,
+                 f"{n_tools} tools registered in the capability registry")
+        except Exception as e:
+            _add("tools_wired", False, f"tool-wiring probe failed: {e}")
+
         verified = [c for c in checks if c["status"] == "verified"]
         return {
             "checks": checks,
@@ -742,6 +751,20 @@ class CognitiveRuntime:
 
         registered_tools = set(self.registry._registry.keys())
 
+        # Normalized tool names + action stems, so a dotted capability like
+        # "filesystem.search" can match a tool named "search_files", and
+        # "web.search" matches "web_search" (the LLM emits free-form dotted
+        # capability strings that don't share one naming scheme with the tools).
+        tool_norms = set()
+        for rt in registered_tools:
+            norm = rt.replace(".", "_").replace("-", "_")
+            tool_norms.add(norm)
+            # Also register each underscore-delimited segment as a stem, so
+            # "search" matches "search_files" and "web_search".
+            for seg in norm.split("_"):
+                if len(seg) >= 3:
+                    tool_norms.add(seg)
+
         # WorldModel active capabilities
         wm_caps = set()
         try:
@@ -768,8 +791,9 @@ class CognitiveRuntime:
             elif any(cap_clean == nc or cap_clean in nc or nc in cap_clean for nc in NATIVE_CAPABILITIES):
                 cap_map[cap] = True
 
-            # 3. Check ToolRegistry registered tools
-            elif any(rt in cap_clean or cap_clean in rt for rt in registered_tools):
+            # 3. Check ToolRegistry registered tools (normalized dot/underscore
+            #    + action-stem matching so "filesystem.search" → "search_files").
+            elif any(tn in cap_clean or cap_clean in tn for tn in tool_norms):
                 cap_map[cap] = True
 
             # 4. Check WorldModel dynamic capabilities synthesized by CapabilityFactory

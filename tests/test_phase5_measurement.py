@@ -45,6 +45,7 @@ def test_measure_capabilities_reports_full_wiring(tmp_path):
     assert by_name["skill_classification_behavioral"]["status"] == "verified"
     assert by_name["planning_patterns_behavioral"]["status"] == "verified"
     assert by_name["proactive_maintenance_behavioral"]["status"] == "verified"
+    assert by_name["tools_wired"]["status"] == "verified"
 
 
 def test_measure_capabilities_detects_missing_module(tmp_path):

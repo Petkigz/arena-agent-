@@ -32,25 +32,18 @@ class ToolRegistry:
         }
 
     def _register_default_tools(self) -> None:
-        from app.tools.app_inventory import SystemAppInventory
-        from app.tools.universal_filesystem import UniversalFilesystem
-        from app.tools.screen_capture import ScreenCaptureTool
+        # Register EVERY tool from the unified manifest so the cognitive layer
+        # can reach all 45 capabilities (not just the previous 3).
+        from app.tools.manifest import get_tool_manifest
 
-        self.register_tool(
-            "launch_app", "os_control",
-            lambda p: SystemAppInventory.launch_any_app(p.get("app_query", "notepad")),
-            "Launches an installed application by query", safety_level=2
-        )
-        self.register_tool(
-            "search_files", "filesystem",
-            lambda p: {"files": UniversalFilesystem.search_filesystem(p.get("query", ""))},
-            "Searches local filesystem for files", safety_level=0
-        )
-        self.register_tool(
-            "screen_capture", "vision",
-            lambda p: ScreenCaptureTool.capture_screen_delta(),
-            "Captures screenshot with image delta comparison", safety_level=0
-        )
+        for action_type, entry in get_tool_manifest().items():
+            self.register_tool(
+                entry["name"],
+                entry["category"],
+                entry["handler"],
+                description=entry.get("description", ""),
+                safety_level=entry.get("safety_level", 0),
+            )
 
     def execute_registered_tool(self, tool_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         key = tool_name.lower().strip()
