@@ -215,11 +215,17 @@ def create_app() -> FastAPI:
                         await websocket.send_json({"type": "error", "message": "Server not ready"})
 
                 elif "bytes" in message:
-                    if voice_service and voice_service.pipeline and voice_service.pipeline.audio_capture:
-                        pass  # Audio comes via local mic in PC mode
+                    # Binary frames are always from a remote device (the Android
+                    # phone streams raw PCM). Route them to the voice service for
+                    # utterance detection → STT → cognitive runtime.
+                    # (ingest_remote_audio is synchronous — it buffers audio and
+                    # schedules transcription via asyncio.create_task internally.)
+                    audio_bytes = message["bytes"]
+                    if voice_service:
+                        voice_service.ingest_remote_audio(audio_bytes)
                     else:
                         app_logger.debug(
-                            f"Received {len(message['bytes'])} audio bytes (no pipeline active)"
+                            f"Received {len(audio_bytes)} audio bytes (no voice service)"
                         )
         except WebSocketDisconnect:
             await ws_manager.disconnect(websocket)

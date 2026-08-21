@@ -3,7 +3,12 @@
 import asyncio
 import time
 from typing import Optional
+
+import numpy as np
+
 from backend.voice.orchestrator import VoicePipeline, VoiceState
+from backend.voice.remote_audio import RemoteAudioBuffer
+from backend.voice.stt import SpeechToTextService
 from backend.websocket_server import ws_manager
 import backend.message_router as message_router_module
 from app.utils.logger import app_logger
@@ -16,6 +21,11 @@ class VoiceService:
         self.pipeline: Optional[VoicePipeline] = None
         self.current_conversation_id: Optional[str] = None
         self._enabled = False
+
+        # Remote (phone) audio ingestion — independent of the PC pipeline.
+        self.remote_audio = RemoteAudioBuffer()
+        self.remote_audio.on_utterance = self._on_remote_utterance
+        self._remote_stt: Optional[SpeechToTextService] = None
 
     async def start(self, conversation_id: str):
         """Start voice pipeline for a conversation."""
@@ -127,6 +137,56 @@ class VoiceService:
 
         # Send voice feedback
         asyncio.create_task(self._speak_feedback("Yes?"))
+
+    # --- Remote (phone) audio ingestion ---
+
+    def ingest_remote_audio(self, data: bytes) -> None:
+        """Feed a binary PCM frame (from the phone) into the utterance buffer."""
+        self.remote_audio.ingest(data)
+
+    def _on_remote_utterance(self, audio: np.ndarray) -> None:
+        """A complete utterance was detected from the remote device."""
+        asyncio.create_task(self._transcribe_remote_utterance(audio))
+
+    def _get_remote_stt(self) -> Optional[SpeechToTextService]:
+        """Lazily create + start a standalone STT for remote audio."""
+        if self._remote_stt is None:
+            try:
+                self._remote_stt = SpeechToTextService(model_size="base")
+                self._remote_stt.start()
+            except Exception as e:
+                app_logger.warning(f"Could not start remote STT: {e}")
+                self._remote_stt = None
+
+        stt = self._remote_stt
+        if stt is None or stt.model is None:
+            return None
+        return stt
+
+    async def _transcribe_remote_utterance(self, audio: np.ndarray) -> None:
+        """Transcribe a remote utterance and route it through the same path as a
+        PC transcript (broadcast + cognitive runtime)."""
+        if not self.current_conversation_id:
+            app_logger.warning("Remote utterance received but no conversation is active")
+            return
+
+        stt = self._get_remote_stt()
+        if stt is None:
+            app_logger.warning("STT unavailable — remote audio not transcribed (install faster-whisper)")
+            return
+
+        try:
+            result = await stt.transcribe_async(audio, sample_rate=16000)
+        except Exception as e:
+            app_logger.error(f"Remote transcription failed: {e}")
+            return
+
+        text = (result.get("text") or "").strip()
+        if text:
+            app_logger.info(f"Remote transcription: '{text}'")
+            await self._handle_transcript(text, is_final=True)
+        else:
+            app_logger.warning("Remote transcription returned empty text")
 
     async def _handle_transcript(self, transcript: str, is_final: bool):
         """Handle speech transcript from pipeline."""
