@@ -9,7 +9,7 @@ Arena is a **full-capability coworker**, not a restricted demo. All capabilities
 - **Can the agent do this?** (capability availability)
 - **May it execute this autonomously right now?** (approval gate)
 
-Capabilities are **approval-gated**, not permanently disabled. The user defines which actions require confirmation.
+Capabilities are **approval-gated**, not permanently removed from consideration. The owner defines which actions require confirmation and may pause all execution, block exact actions, lower the autonomous safety ceiling, or require approval for every action or plan.
 
 ## Authority Levels
 
@@ -85,23 +85,25 @@ REQUIRES_APPROVAL = {
 
 ### Configurable Policies
 
-Users can customize approval requirements via:
+The persistent Owner Control Plane (`app/cognition/owner_control.py`) supports:
 
-1. **ActionGate rules** — Define which action types require approval
-2. **Resource policies** — Set budget limits for autonomous execution
-3. **Domain scopes** — Restrict actions to specific targets (optional)
+1. **Control mode** — observe only, suggest only, approve every action, approve
+   each plan, bounded autonomy, or custom allowlist.
+2. **Autonomous ceiling** — choose the highest delegated level from 0 through 2.
+3. **Per-action rules** — actions that always require approval or are absolutely blocked.
+4. **Emergency pause** — stop all capability execution before prediction or resource work.
+5. **Resource/domain scopes** — additional bounded-execution constraints (expanded incrementally).
 
-Example custom policy:
-```python
-# In app/cognition/action_gate.py
-CUSTOM_APPROVAL_RULES = {
-    "run_command": {
-        "requires_approval": True,
-        "allowed_patterns": ["ls", "cat", "grep"],  # Allow safe commands
-        "blocked_patterns": ["rm -rf", "sudo"],     # Block dangerous commands
-    }
-}
+The authenticated control surface is:
+
+```text
+GET  /owner-control
+PUT  /owner-control
+POST /owner-control/pause
 ```
+
+The default remains bounded autonomy through Level 2. Owner policy can tighten
+that authority but cannot silently make a manifest Level-3 action autonomous.
 
 ## Domain-Specific Policies (Optional)
 
@@ -141,17 +143,12 @@ Logs are stored in:
 
 ## Modifying Rules
 
-To add custom approval rules:
+Use the Owner Control API to change mode, approval lists, block lists, and the
+autonomous ceiling. Changes are persisted atomically to
+`data/owner_control.json` and apply to the next proposal without a restart.
 
-1. Edit `app/cognition/action_gate.py` — Add rules to `CUSTOM_APPROVAL_RULES`
-2. Edit this file — Document your custom policies
-3. Restart the system — Rules are loaded at startup
-
-To remove restrictions:
-
-1. Remove action types from `REQUIRES_APPROVAL`
-2. Or set `requires_approval: False` in custom rules
-3. Restart the system
+Manifest Level-3 classifications remain a minimum safety boundary. Lowering
+owner restrictions must not downgrade a tool's authoritative manifest level.
 
 ## Security Model
 

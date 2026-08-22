@@ -568,8 +568,12 @@ class CognitiveRuntime:
         explain its own boundaries ("nothing is off-limits, but sensitive actions
         require approval"). Levels 0-2 auto-approve; Level 3 requires explicit approval.
         """
+        from app.cognition.owner_control import owner_control_store
+        owner_policy = owner_control_store.get_policy().to_dict()
         return {
             "philosophy": "full-capability coworker; capabilities are approval-gated, not removed",
+            "owner_control": owner_policy,
+            "decision_stages": ["consideration", "recommendation", "authorization", "execution"],
             "levels": [
                 {"level": 0, "name": "Read/Observe", "autonomous": True,
                  "examples": ["read_file", "web_search", "capture_screen"]},
@@ -667,15 +671,27 @@ class CognitiveRuntime:
         except Exception as e:
             _add("verification_honesty", False, f"verification-honesty probe failed: {e}")
 
-        # 2. Owner-authority approval gate (Level 3 requires approval).
+        # 2. Owner-authority approval gate: Level 3 requires approval and the
+        # owner can tighten Level 0 to approve-every-action without mutating the
+        # live policy (isolated temp policy file).
         try:
             allowed, _, level = __import__("app.policy", fromlist=["PolicyEvaluator"]).PolicyEvaluator.evaluate_action(
                 "send_email", {"to": "a@b.com"}
             )
-            _add("approval_gate", (not allowed and level == 3),
-                 "send_email requires explicit approval (Level 3)", "behavioral")
+            from app.cognition.owner_control import OwnerControlStore as _OwnerControlStore
+            _owner_probe = _OwnerControlStore(_Path(_tmpdir) / "owner_control.json")
+            default_read = _owner_probe.evaluate("read_file", 0)
+            _owner_probe.update({"mode": "approve_every_action"})
+            strict_read = _owner_probe.evaluate("read_file", 0)
+            _add(
+                "approval_gate",
+                (not allowed and level == 3 and default_read.allowed and
+                 not strict_read.allowed and strict_read.requires_approval),
+                "Level 3 requires approval; isolated Owner Control policy can also gate Level 0",
+                "behavioral",
+            )
         except Exception as e:
-            _add("approval_gate", False, f"policy probe failed: {e}")
+            _add("approval_gate", False, f"owner-control policy probe failed: {e}")
 
         # 2b. Belief evidence discipline (behavioral): admissible (probe) evidence
         # creates an environmental belief; a self-reported claim does not.

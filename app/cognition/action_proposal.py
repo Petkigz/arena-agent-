@@ -10,6 +10,7 @@ from app.policy import PolicyEvaluator
 from app.utils.hardware_governor import HardwareGovernor
 from app.utils.hardware_monitor import HardwareMonitor
 from app.cognition.prediction_engine import PredictionEngine
+from app.cognition.owner_control import owner_control_store
 from app.utils.logger import app_logger, audit_logger
 
 def _now() -> str:
@@ -122,6 +123,22 @@ class ActionGate:
 
     @classmethod
     def evaluate_proposal(cls, proposal: ActionProposal) -> GateResult:
+        # Owner control is evaluated independently from capability/safety policy.
+        # A global pause or non-executing mode must stop the proposal before any
+        # resource cleanup, prediction, or capability code can run.
+        owner_preflight = owner_control_store.evaluate(proposal.action_type, 0)
+        if not owner_preflight.allowed:
+            proposal.decision_stage = (
+                "awaiting_authorization" if owner_preflight.requires_approval else "rejected"
+            )
+            return GateResult(
+                allowed=False,
+                gate_name="owner_control_gate",
+                reason=owner_preflight.reason,
+                requires_approval=owner_preflight.requires_approval,
+                decision_stage=proposal.decision_stage,
+            )
+
         # 1. Policy Gate (Evaluates underlying action list if present)
         actions_to_check = [proposal.action_type]
         if isinstance(proposal.payload.get("actions"), list):
@@ -140,18 +157,25 @@ class ActionGate:
 
             if manifest_level is not None:
                 proposal.safety_level = max(proposal.safety_level, manifest_level)
-                if manifest_level >= 3:
-                    reason = f"Action '{act}' is Level 3 (sensitive) and requires explicit owner approval."
-                    audit_logger.warning(f"ActionGate BLOCKED proposal '{act}' at Policy Gate (Level 3)")
-                    proposal.decision_stage = "awaiting_authorization"
+                owner_decision = owner_control_store.evaluate(act_key, manifest_level)
+                if not owner_decision.allowed:
+                    reason = owner_decision.reason
+                    gate_name = "policy_gate" if manifest_level >= 3 else "owner_control_gate"
+                    audit_logger.warning(
+                        f"ActionGate BLOCKED proposal '{act}' at {gate_name} "
+                        f"(Level {manifest_level}, mode={owner_decision.mode})"
+                    )
+                    proposal.decision_stage = (
+                        "awaiting_authorization" if owner_decision.requires_approval else "rejected"
+                    )
                     return GateResult(
                         allowed=False,
-                        gate_name="policy_gate",
+                        gate_name=gate_name,
                         reason=reason,
-                        requires_approval=True,
-                        decision_stage="awaiting_authorization",
+                        requires_approval=owner_decision.requires_approval,
+                        decision_stage=proposal.decision_stage,
                     )
-                # Level 0-2 manifest tools are allowed autonomously (audited).
+                # Manifest tool is within owner-delegated authority.
                 continue
 
             # ── Legacy fallback: PolicyEvaluator for non-manifest action names ──
@@ -169,6 +193,19 @@ class ActionGate:
                     reason=f"Action '{act}' blocked: {reason}",
                     requires_approval=(level == 3),
                     decision_stage=stage,
+                )
+
+            owner_decision = owner_control_store.evaluate(act_key, level)
+            if not owner_decision.allowed:
+                proposal.decision_stage = (
+                    "awaiting_authorization" if owner_decision.requires_approval else "rejected"
+                )
+                return GateResult(
+                    allowed=False,
+                    gate_name="owner_control_gate",
+                    reason=owner_decision.reason,
+                    requires_approval=owner_decision.requires_approval,
+                    decision_stage=proposal.decision_stage,
                 )
 
         # 2. Resource Gate (Non-destructive check)

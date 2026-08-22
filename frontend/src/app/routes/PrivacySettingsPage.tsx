@@ -1,9 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { usePrivacySettingsStore } from '../../stores';
 import { ArrowLeft, Database, BarChart3, Lock, FileText, Download, Upload } from 'lucide-react';
 import { notifications } from '../../services/notifications';
+import { apiKeyHeader } from '../../services/api';
+
+type ControlMode =
+  | 'observe_only'
+  | 'suggest_only'
+  | 'approve_every_action'
+  | 'approve_each_plan'
+  | 'bounded_autonomy'
+  | 'custom';
+
+interface OwnerControlPolicy {
+  mode: ControlMode;
+  paused: boolean;
+  max_autonomous_level: number;
+  require_approval_actions: string[];
+  blocked_actions: string[];
+  custom_autonomous_actions: string[];
+  revision: number;
+}
 
 export function PrivacySettingsPage() {
   const navigate = useNavigate();
@@ -12,13 +31,11 @@ export function PrivacySettingsPage() {
     autoDeleteOldData,
     enableTelemetry,
     shareUsageStats,
-    requireApprovalForSensitiveActions,
     logAllActions,
     setDataRetentionDays,
     setAutoDeleteOldData,
     setEnableTelemetry,
     setShareUsageStats,
-    setRequireApprovalForSensitiveActions,
     setLogAllActions,
     exportSettings,
     importSettings,
@@ -26,6 +43,55 @@ export function PrivacySettingsPage() {
 
   const [importData, setImportData] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [ownerPolicy, setOwnerPolicy] = useState<OwnerControlPolicy | null>(null);
+  const [controlBusy, setControlBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/owner-control', { headers: apiKeyHeader() })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Control policy unavailable')))
+      .then((data) => { if (!cancelled) setOwnerPolicy(data.policy); })
+      .catch(() => { if (!cancelled) notifications.error('Could not load owner control policy'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const updateOwnerPolicy = async (patch: Partial<OwnerControlPolicy>) => {
+    setControlBusy(true);
+    try {
+      const response = await fetch('/owner-control', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify(patch),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setOwnerPolicy(data.policy);
+      notifications.success('Owner control policy updated');
+    } catch {
+      notifications.error('Could not update owner control policy');
+    } finally {
+      setControlBusy(false);
+    }
+  };
+
+  const setEmergencyPause = async (paused: boolean) => {
+    setControlBusy(true);
+    try {
+      const response = await fetch('/owner-control/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify({ paused }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setOwnerPolicy(data.policy);
+      notifications.success(paused ? 'All action execution paused' : 'Execution resumed under your policy');
+    } catch {
+      notifications.error('Could not change emergency pause');
+    } finally {
+      setControlBusy(false);
+    }
+  };
 
   const handleExport = () => {
     const data = exportSettings();
@@ -66,6 +132,145 @@ export function PrivacySettingsPage() {
             Configure data retention, telemetry, and security settings
           </p>
         </div>
+
+        {/* Owner Control Plane */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Lock className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Owner Control</h2>
+          </div>
+          <Card className="space-y-5">
+            <p className="text-sm text-text-secondary">
+              The agent may consider and explain broad alternatives, but recommendation,
+              authorization, and execution remain separate. This policy controls execution.
+            </p>
+
+            {!ownerPolicy ? (
+              <p className="text-sm text-text-muted">Loading effective policy…</p>
+            ) : (
+              <>
+                <div className={`rounded border p-4 ${ownerPolicy.paused ? 'border-red-500 bg-red-500/10' : 'border-border'}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-medium text-text-primary">
+                        {ownerPolicy.paused ? 'Emergency pause active' : 'Execution active'}
+                      </h3>
+                      <p className="text-xs text-text-muted mt-1">
+                        Emergency pause stops every capability before prediction or resource work.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={controlBusy}
+                      onClick={() => setEmergencyPause(!ownerPolicy.paused)}
+                      className={`px-4 py-2 rounded text-white disabled:opacity-50 ${ownerPolicy.paused ? 'bg-green-600' : 'bg-red-600'}`}
+                    >
+                      {ownerPolicy.paused ? 'Resume' : 'Pause all actions'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Control mode</label>
+                  <select
+                    value={ownerPolicy.mode}
+                    disabled={controlBusy}
+                    onChange={(event) => updateOwnerPolicy({ mode: event.target.value as ControlMode })}
+                    className="w-full px-3 py-2 bg-background-surface border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent-primary"
+                  >
+                    <option value="observe_only">Observe only — no execution</option>
+                    <option value="suggest_only">Suggest only — recommendations, no execution</option>
+                    <option value="approve_every_action">Approve every action</option>
+                    <option value="approve_each_plan">Approve each plan</option>
+                    <option value="bounded_autonomy">Bounded autonomy</option>
+                    <option value="custom">Custom action allowlist</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
+                    Highest autonomous safety level: {ownerPolicy.max_autonomous_level}
+                  </label>
+                  <select
+                    value={ownerPolicy.max_autonomous_level}
+                    disabled={controlBusy || !['bounded_autonomy', 'custom'].includes(ownerPolicy.mode)}
+                    onChange={(event) => updateOwnerPolicy({ max_autonomous_level: Number(event.target.value) })}
+                    className="w-full px-3 py-2 bg-background-surface border border-border rounded disabled:opacity-50"
+                  >
+                    <option value={0}>Level 0 — read and observe only</option>
+                    <option value={1}>Level 1 — include drafts</option>
+                    <option value={2}>Level 2 — include reversible actions</option>
+                  </select>
+                  <p className="text-xs text-text-muted mt-1">
+                    Level 3 always requires explicit approval and cannot be delegated here.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Always require approval
+                    </label>
+                    <textarea
+                      value={ownerPolicy.require_approval_actions.join(', ')}
+                      disabled={controlBusy}
+                      onBlur={(event) => updateOwnerPolicy({
+                        require_approval_actions: event.target.value.split(',').map((v) => v.trim()).filter(Boolean),
+                      })}
+                      onChange={(event) => setOwnerPolicy({
+                        ...ownerPolicy,
+                        require_approval_actions: event.target.value.split(',').map((v) => v.trim()),
+                      })}
+                      className="w-full h-24 px-3 py-2 bg-background-surface border border-border rounded text-sm"
+                      placeholder="run_command, open_application"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Absolutely blocked actions
+                    </label>
+                    <textarea
+                      value={ownerPolicy.blocked_actions.join(', ')}
+                      disabled={controlBusy}
+                      onBlur={(event) => updateOwnerPolicy({
+                        blocked_actions: event.target.value.split(',').map((v) => v.trim()).filter(Boolean),
+                      })}
+                      onChange={(event) => setOwnerPolicy({
+                        ...ownerPolicy,
+                        blocked_actions: event.target.value.split(',').map((v) => v.trim()),
+                      })}
+                      className="w-full h-24 px-3 py-2 bg-background-surface border border-border rounded text-sm"
+                      placeholder="delete_file, trade_action"
+                    />
+                  </div>
+                </div>
+
+                {ownerPolicy.mode === 'custom' && (
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Custom autonomous action allowlist
+                    </label>
+                    <textarea
+                      value={ownerPolicy.custom_autonomous_actions.join(', ')}
+                      disabled={controlBusy}
+                      onBlur={(event) => updateOwnerPolicy({
+                        custom_autonomous_actions: event.target.value.split(',').map((v) => v.trim()).filter(Boolean),
+                      })}
+                      onChange={(event) => setOwnerPolicy({
+                        ...ownerPolicy,
+                        custom_autonomous_actions: event.target.value.split(',').map((v) => v.trim()),
+                      })}
+                      className="w-full h-24 px-3 py-2 bg-background-surface border border-border rounded text-sm"
+                      placeholder="read_file, web_search"
+                    />
+                  </div>
+                )}
+
+                <p className="text-xs text-text-muted">Policy revision {ownerPolicy.revision}</p>
+              </>
+            )}
+          </Card>
+        </section>
 
         {/* Data Retention */}
         <section className="mb-8">
@@ -166,22 +371,11 @@ export function PrivacySettingsPage() {
             <h2 className="text-2xl font-semibold text-text-primary">Security</h2>
           </div>
           <Card className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-text-primary">Require Approval for Sensitive Actions</h3>
-                <p className="text-xs text-text-muted mt-1">
-                  Ask for approval before executing sensitive actions
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={requireApprovalForSensitiveActions}
-                  onChange={(e) => setRequireApprovalForSensitiveActions(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
-              </label>
+            <div className="rounded border border-border p-3">
+              <h3 className="text-sm font-medium text-text-primary">Sensitive-action boundary</h3>
+              <p className="text-xs text-text-muted mt-1">
+                Manifest Level-3 actions always require explicit authorization. Use Owner Control above to make lower levels stricter.
+              </p>
             </div>
 
             <div className="flex items-center justify-between">

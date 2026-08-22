@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useModelSettingsStore, type ModelConfig } from '../../stores';
 import { ArrowLeft, Brain, Mic, Volume2, Gauge, Zap, Cpu, Shield, RotateCcw, CheckCircle, XCircle, Layers } from 'lucide-react';
-import { getSharedSettings, apiKeyHeader } from '../../services/api';
+import { apiKeyHeader } from '../../services/api';
 
 interface LoraAdapter {
   name: string;

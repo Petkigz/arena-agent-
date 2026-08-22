@@ -69,14 +69,19 @@ Every non-trivial agent step is verified by an executor, not by the model:
 - Degrade gracefully: offline LLM → simulated/empty reply handled; missing file →
   clean error; git unavailable → continue best-effort.
 
-## 7. Permissions are capability-aware, not "no gates"
+## 7. Permissions are owner-controlled and capability-aware
 
-Nothing is off-limits, but **sensitive/irreversible actions require explicit
-owner approval** (Level 3). The tool manifest's `safety_level` is authoritative:
+Nothing is off-limits for consideration, but execution authority belongs to the
+owner. The tool manifest's `safety_level` is authoritative, while the persistent
+Owner Control Plane may always impose a stricter rule:
 
-- `0` read / `1` draft / `2` reversible → auto-allowed.
-- `≥ 3` sensitive/irreversible → approval required (owner decides via the
-  `action_approval` WebSocket message).
+- Default bounded autonomy: `0` read / `1` draft / `2` reversible are delegated;
+  `≥ 3` sensitive/irreversible requires explicit approval.
+- The owner may switch to observe-only, suggest-only, approve-every-action,
+  approve-each-plan, bounded-autonomy, or a custom action allowlist.
+- Per-action approval and block lists override the default delegation.
+- Emergency pause blocks all capability execution before resource or prediction
+  work. A malformed control policy fails closed in paused mode.
 
 ## 8. Honesty over AGI theater
 

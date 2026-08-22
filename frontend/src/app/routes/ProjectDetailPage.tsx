@@ -152,7 +152,7 @@ export function ProjectDetailPage() {
                   {backendDetail.project.milestones.map((m: any, i: number) => (
                     <div key={m.id || i} className="flex items-center justify-between p-3 bg-background-surface rounded border border-border">
                       <span className="text-sm">{m.description || m}</span>
-                      <span className={`text-xs px-2 py-1 rounded ${m.status === 'reached' ? 'bg-green-500/20 text-green-600' : 'bg-yellow-500/20 text-yellow-600'}">{m.status}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${m.status === 'reached' ? 'bg-green-500/20 text-green-600' : 'bg-yellow-500/20 text-yellow-600'}`}>{m.status}</span>
                     </div>
                   ))}
                 </div>

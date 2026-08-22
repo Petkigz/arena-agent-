@@ -82,6 +82,7 @@ from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
 from app.cognition.world_model import WorldModel
 from app.settings_store import get_settings, update_settings
+from app.cognition.owner_control import ControlMode, owner_control_store
 
 # The 127 core REST routes are registered on a router so the unified server
 # (app/server.py) can include them alongside the WebSocket/API/SPA routes.
@@ -174,6 +175,17 @@ class MobileLocationRequest(BaseModel):
 
 class SystemSleepRequest(BaseModel):
     mode: str = Field(..., description="'sleeping' or 'active'")
+
+class OwnerControlUpdate(BaseModel):
+    mode: Optional[ControlMode] = None
+    paused: Optional[bool] = None
+    max_autonomous_level: Optional[int] = Field(default=None, ge=0, le=2)
+    require_approval_actions: Optional[List[str]] = None
+    blocked_actions: Optional[List[str]] = None
+    custom_autonomous_actions: Optional[List[str]] = None
+
+class OwnerPauseRequest(BaseModel):
+    paused: bool
 
 class VisionOCRRequest(BaseModel):
     image_path: str
@@ -770,6 +782,38 @@ async def update_settings_endpoint(payload: Dict[str, Any]):
     updated = update_settings(payload)
     await _apply_settings_live(payload)
     return updated
+
+
+# ── Owner control plane ──────────────────────────────────────────────────────
+@router.get("/owner-control")
+def get_owner_control_endpoint():
+    """Return the effective owner authorization policy."""
+    return {"success": True, "policy": owner_control_store.get_policy().to_dict()}
+
+
+@router.put("/owner-control")
+def update_owner_control_endpoint(req: OwnerControlUpdate):
+    """Atomically update owner authority; omitted fields remain unchanged."""
+    try:
+        patch = req.model_dump(exclude_none=True)
+        if "mode" in patch and isinstance(patch["mode"], ControlMode):
+            patch["mode"] = patch["mode"].value
+        policy = owner_control_store.update(patch)
+        return {"success": True, "policy": policy.to_dict()}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/owner-control/pause")
+def pause_owner_control_endpoint(req: OwnerPauseRequest):
+    """Emergency stop/resume for all capability execution."""
+    policy = owner_control_store.set_paused(req.paused)
+    return {
+        "success": True,
+        "paused": policy.paused,
+        "policy": policy.to_dict(),
+        "message": "All action execution paused." if policy.paused else "Action execution resumed under owner policy.",
+    }
 
 
 async def _apply_settings_live(patch: Dict[str, Any]) -> None:
