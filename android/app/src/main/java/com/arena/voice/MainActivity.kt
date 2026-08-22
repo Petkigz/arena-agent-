@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private var apiKey by mutableStateOf("")
     private var isConnected by mutableStateOf(false)
     private var isListening by mutableStateOf(false)
+    private var voiceState by mutableStateOf<String?>(null)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -71,6 +72,22 @@ class MainActivity : ComponentActivity() {
             settings.apiKey.collect { key -> apiKey = key }
         }
 
+        // Reflect the backend voice pipeline (listening/thinking/speaking/…)
+        // onto the presence orb. The callback runs on OkHttp's thread; snapshot
+        // state writes are thread-safe and schedule recomposition on the main
+        // thread.
+        webSocketClient.addListener(object : VoiceWebSocketClient.VoiceWebSocketListener {
+            override fun onVoiceState(state: String) {
+                voiceState = state
+            }
+            override fun onConnected() {
+                isConnected = true
+            }
+            override fun onDisconnected(reason: String) {
+                isConnected = false
+            }
+        })
+
         setContent {
             ArenaVoiceTheme {
                 Surface(
@@ -78,16 +95,8 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     AppScaffold(
-                        presenceStatus = when {
-                            isListening -> PresenceStatus.LISTENING
-                            !isConnected -> PresenceStatus.OFFLINE
-                            else -> PresenceStatus.IDLE
-                        },
-                        statusMessage = when {
-                            isListening -> "Listening…"
-                            !isConnected -> "Offline — connect to your PC."
-                            else -> "I'm here."
-                        },
+                        presenceStatus = resolvePresenceStatus(),
+                        statusMessage = resolveStatusMessage(),
                         isListening = isListening,
                         serverUrl = serverUrl,
                         apiKey = apiKey,
@@ -101,6 +110,35 @@ class MainActivity : ComponentActivity() {
         }
 
         checkPermissions()
+    }
+
+    /** Map the backend voice_state + local flags onto the orb's presence states. */
+    private fun resolvePresenceStatus(): PresenceStatus {
+        when (voiceState) {
+            "listening", "recording" -> return PresenceStatus.LISTENING
+            "processing", "thinking" -> return PresenceStatus.THINKING
+            "speaking" -> return PresenceStatus.SPEAKING
+        }
+        return when {
+            isListening -> PresenceStatus.LISTENING
+            !isConnected -> PresenceStatus.OFFLINE
+            else -> PresenceStatus.IDLE
+        }
+    }
+
+    private fun resolveStatusMessage(): String {
+        when (voiceState) {
+            "listening" -> return "Listening…"
+            "recording" -> return "Listening…"
+            "processing" -> return "Thinking…"
+            "thinking" -> return "Thinking…"
+            "speaking" -> return "Speaking…"
+        }
+        return when {
+            isListening -> "Listening…"
+            !isConnected -> "Offline — connect to your PC."
+            else -> "I'm here."
+        }
     }
 
     private fun saveServerUrl(url: String) {
@@ -185,15 +223,29 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startWakeWordService() {
-        val intent = Intent(this, WakeWordService::class.java).apply {
-            action = WakeWordService.ACTION_START
+        // A microphone foreground service must not start until RECORD_AUDIO is
+        // granted, and on newer Android it can throw SecurityException /
+        // ForegroundServiceStartNotAllowedException — log instead of crashing.
+        val micGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!micGranted) {
+            Log.w(TAG, "Skipping wake-word service: RECORD_AUDIO not granted")
+            return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            val intent = Intent(this, WakeWordService::class.java).apply {
+                action = WakeWordService.ACTION_START
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            Log.i(TAG, "Wake word service started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not start wake-word service: ${e.message}")
         }
-        Log.i(TAG, "Wake word service started")
     }
 
     private fun stopWakeWordService() {
