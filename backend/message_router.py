@@ -123,9 +123,16 @@ class MessageRouter:
             return None
 
     async def _handle_user_message(self, websocket, message: Dict[str, Any]):
-        """Handle user message with LLM-powered streaming response."""
+        """Handle user message with LLM-powered streaming response (now multimodal).
+
+        P2 AGI: Accepts optional image_path, audio_path, attachments so chat can be
+        multimodal (text + vision + files) through the ONE cognitive runtime.
+        """
         conversation_id = message.get("conversation_id")
         content = message.get("content")
+        image_path = message.get("image_path") or message.get("image") or None
+        audio_path = message.get("audio_path") or None
+        attachments = message.get("attachments") or []
 
         if not conversation_id or not content:
             if websocket:
@@ -188,7 +195,13 @@ class MessageRouter:
 
             # Route through the authoritative cognitive runtime (world model, beliefs,
             # reasoning loop, goal verification, memory) rather than a raw LLM call.
-            response_text = await self._call_cognitive_runtime(content)
+            # P2: Pass multimodal context (image_path, attachments) so vision is grounded
+            response_text = await self._call_cognitive_runtime(
+                content,
+                image_path=image_path,
+                audio_path=audio_path,
+                attachments=attachments,
+            )
 
             # Stream response tokens to client
             tokens = self._tokenize_response(response_text)
@@ -219,17 +232,29 @@ class MessageRouter:
             })
             return None
 
-    async def _call_cognitive_runtime(self, content: str) -> str:
+    async def _call_cognitive_runtime(
+        self,
+        content: str,
+        image_path: Optional[str] = None,
+        audio_path: Optional[str] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """Route the message through CognitiveRuntime (the authoritative cognitive path).
 
         Runs the full closed-loop cycle (perceive → reason → plan → execute → verify →
         replan → learn) in a worker thread, then returns the assistant reply for streaming.
+
+        P2 AGI: Now accepts multimodal inputs (image_path, attachments) so chat can be
+        vision-grounded, not text-only.
         """
         try:
             result = await asyncio.to_thread(
                 self.runtime.process_cognitive_cycle,
                 user_text=content,
                 complexity="main",
+                image_path=image_path,
+                audio_path=audio_path,
+                attachments=attachments,
             )
 
             if not isinstance(result, dict):

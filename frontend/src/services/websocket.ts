@@ -158,8 +158,11 @@ class WebSocketService {
     return true;
   }
 
-  sendMessage(conversationId: string, content: string) {
-    return this.send('user_message', { conversation_id: conversationId, content });
+  sendMessage(conversationId: string, content: string, imagePath?: string, attachments?: Array<{ name: string; path: string }>) {
+    const payload: Record<string, unknown> = { conversation_id: conversationId, content };
+    if (imagePath) payload.image_path = imagePath;
+    if (attachments && attachments.length) payload.attachments = attachments;
+    return this.send('user_message', payload);
   }
 
   retryMessage(conversationId: string, messageId: string, content: string) {

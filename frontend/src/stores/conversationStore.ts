@@ -17,7 +17,7 @@ interface ConversationState {
   removeMessage: (messageId: string) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string, imagePath?: string, attachments?: Array<{ name: string; path: string }>) => void;
   createConversation: (title?: string) => Promise<string>;
   removeConversation: (id: string) => void;
   exportConversation: (id: string) => Conversation | null;
@@ -99,7 +99,7 @@ export const useConversationStore = create<ConversationState>()(
 
       setError: (error) => set({ error }),
 
-      sendMessage: (content) => {
+      sendMessage: (content, imagePath, attachments) => {
         const { currentConversation } = get();
         if (!currentConversation) return;
 
@@ -120,8 +120,8 @@ export const useConversationStore = create<ConversationState>()(
           };
         });
 
-        // Send via WebSocket
-        webSocketService.sendMessage(currentConversation.id, content);
+        // Send via WebSocket — P2 multimodal: include image_path + attachments so backend grounds vision
+        webSocketService.sendMessage(currentConversation.id, content, imagePath, attachments as any);
       },
 
       createConversation: async (title) => {

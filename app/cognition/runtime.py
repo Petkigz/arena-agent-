@@ -1396,7 +1396,10 @@ class CognitiveRuntime:
         self,
         user_text: str,
         complexity: str = "fast",
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        image_path: Optional[str] = None,
+        audio_path: Optional[str] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Authoritative Closed-Loop Predictive Cognitive Cycle with Goal Lifecycle & Verification:
@@ -1446,9 +1449,45 @@ class CognitiveRuntime:
         self.blackboard.set("current_user_query", user_text, source=SourceType.USER_INPUT, confidence=1.0)
         # Phase 3: expose the hardware self-model so reasoning can consult the machine state.
         self.blackboard.set("hardware_self_model", self.hardware_self_model, source="hardware_governor")
+        # P2 AGI: Multimodal ingestion — if image_path or attachments provided, analyze and ground
+        multimodal_context = ""
+        if image_path:
+            try:
+                from app.tools.vision_analyzer import VisionAnalyzerTool
+                from app.tools.object_detector import ObjectDetectorTool
+                # Run grounded detection (perception→grounding loop)
+                det_res = ObjectDetectorTool.analyze_image_grounded(image_path, auto_create_groundings=True)
+                if det_res.get("success"):
+                    dets = det_res.get("detections", [])
+                    self.blackboard.set("multimodal_detections", dets, source="object_detector")
+                    multimodal_context += f"\n[VISION: {len(dets)} objects detected in {image_path}: {', '.join(d.get('label','?') for d in dets[:10])}]"
+                    # Also run OCR + LLM analysis for screen content
+                    vis_res = VisionAnalyzerTool.analyze_screen_image(image_path, prompt_focus=user_text[:100], auto_save_memory=False, skip_delta_check=True)
+                    if vis_res.get("success"):
+                        multimodal_context += f"\n[OCR: {vis_res.get('ocr_text','')[:500]}]"
+                        multimodal_context += f"\n[VISION ANALYSIS: {vis_res.get('ai_analysis','')[:500]}]"
+            except Exception as e:
+                app_logger.warning(f"Multimodal image ingestion failed: {e}")
+
+        if attachments:
+            try:
+                for att in attachments[:3]:
+                    att_path = att.get("path") or att.get("file_path") or ""
+                    if att_path:
+                        multimodal_context += f"\n[ATTACHMENT: {att.get('name','file')} at {att_path}]"
+            except Exception as e:
+                app_logger.warning(f"Attachment ingestion failed: {e}")
+
+        if multimodal_context:
+            self.blackboard.set("multimodal_context", multimodal_context, source="multimodal", confidence=0.9)
+
         try:
             sliced_ctx = PromptSlicerEngine.slice_context_for_task(user_text)
-            self.blackboard.set("sliced_context", sliced_ctx.compact_prompt_str, source="prompt_slicer")
+            # Enrich sliced context with multimodal if present
+            ctx_str = sliced_ctx.compact_prompt_str
+            if multimodal_context:
+                ctx_str += "\n\n" + multimodal_context
+            self.blackboard.set("sliced_context", ctx_str, source="prompt_slicer")
         except Exception as e:
             app_logger.warning(f"PromptSlicer error: {e}")
 

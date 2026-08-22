@@ -108,6 +108,7 @@ export function ChatPage() {
 
       // Upload attachments if any
       let uploadedAttachments: Attachment[] | undefined;
+      let imagePathForGrounding: string | undefined;
       if (attachments && attachments.length > 0) {
         uploadedAttachments = await Promise.all(
           attachments.map(async (attachment) => {
@@ -120,6 +121,11 @@ export function ChatPage() {
                   id: result.data.id,
                   file: undefined, // Don't store the File object in the message
                 };
+
+                // P2 AGI: Capture image path for multimodal grounding (perception→grounding)
+                if (attachment.type === 'image' && !imagePathForGrounding) {
+                  imagePathForGrounding = result.data.path;
+                }
 
                 // Trigger analysis for images and documents
                 if (attachment.type === 'image' || attachment.type === 'document') {
@@ -160,7 +166,9 @@ export function ChatPage() {
       };
 
       addMessage(userMessage);
-      sendMessage(content);
+      // P2 multimodal: pass image path + attachments so backend grounds vision via cognitive runtime
+      const attachPayload = uploadedAttachments?.map((a) => ({ name: a.name, path: a.path || '' })) || [];
+      sendMessage(content, imagePathForGrounding, attachPayload as any);
     },
     [currentConversation, addMessage, sendMessage]
   );
