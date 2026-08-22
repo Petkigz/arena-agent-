@@ -67,6 +67,19 @@ class VisionPage(QWidget):
         self._sight_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
         layout.addWidget(self._sight_label)
 
+        # Keep the capability boundary visible instead of implying that every
+        # installation has a full vision-language model. Object detection and
+        # OCR are always attempted; true VLM analysis is optional and its status
+        # is reported by the backend.
+        self._vision_note = QLabel(
+            "Uses OCR + Qwen text analysis + object detection (YOLO/SSD/face). "
+            "True VLM analysis is optional and falls back honestly when unavailable."
+        )
+        self._vision_note.setWordWrap(True)
+        self._vision_note.setAccessibleName("Vision capability note")
+        self._vision_note.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED};")
+        layout.addWidget(self._vision_note)
+
         self.focus_input = QLineEdit()
         self.focus_input.setPlaceholderText("What should I focus on? (optional, e.g. \"the error dialog\")")
         self.focus_input.setStyleSheet(_input_style())
@@ -118,6 +131,7 @@ class VisionPage(QWidget):
     def refresh_theme(self) -> None:
         self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
         self._sight_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self._vision_note.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED};")
         self.focus_input.setStyleSheet(_input_style())
         self.capture_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.analyze_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))

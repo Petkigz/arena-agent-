@@ -1,6 +1,6 @@
 # Arena Agent — Measured Status
 
-**Updated:** 2026-08-22 · Branch `arena/01a02a43-arena-agent`
+**Updated:** 2026-08-22 · Branch `arena/01a02b25-arena-agent`
 **This is the canonical status document.** It supersedes the percentage-based status
 files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,
 `AGI_FINAL_SUMMARY.md`, `PHASES.md`, `PROJECT_REVIEW.md`, and the recovered branch's
@@ -27,13 +27,11 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds (previous baseline, code-reviewed this audit) |
 | Python source | ~50,000 lines / 220 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
 | Tools in the manifest | **133** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
-| Cognition modules wired | **17/17** | runtime._integrate_phase_modules() + module_wiring probe — added goal_decomposer + project_manager (P2) — 27 checks now |
-| Capability scorecard | **27/27 verified** | After P3 push — added perception_grounding, causal_learning, memory_association, curiosity_info_gain, resource_aware_planning, prosody_emotion, multimodal_chat, self_evolution_verified, project_management, vlm_integration, lora_continual_learning |
+| Cognition modules wired | **17/17** | `runtime._integrate_phase_modules()` + `module_wiring` probe — includes `goal_decomposer` + `project_manager` |
+| Capability scorecard | **27/27 verified** across 7 evidence categories | `runtime.measure_capabilities()` → `verified_count == total_count`; includes grounding, causal learning, memory association, curiosity, resource-aware planning, prosody, multimodal chat, verified self-evolution, projects, VLM integration, and LoRA management |
 | Live verification of external APIs | script | `scripts/live_check.py` + `LIVE_VERIFICATION.md` |
 | Deterministic Tier-1 tools | ✅ all present | `runtime.measure_capabilities()` → `tier1_tool_manifest = verified` |
 | Deterministic degradation | ✅ | `runtime.measure_capabilities()` → `deterministic_degradation = verified` |
-| Cognition modules wired into the cycle | **15/15** | `runtime.measure_capabilities()` → `module_wiring = verified` |
-| Capability scorecard | **21/21 verified** across 7 evidence categories | `runtime.measure_capabilities()` → `verified_count == total_count`, per-category summary |
 | Chat path uses cognitive runtime | ✅ | `tests/test_message_router_cognitive.py` (regression guard) |
 | Chat history persists across restart | ✅ | `tests/test_conversation_persistence.py` (SQLite-backed) |
 | Conversation list syncs FE↔BE | ✅ | `db.get_conversation_previews()` + `useConversationSync` hook + store tests |
@@ -56,7 +54,7 @@ User / WebSocket chat (now multimodal: text + image_path + attachments)
       → reasoning loop (ANSWER / INVESTIGATE / DEFER / ACT)
       → counterfactual strategy simulation (resource-aware: penalizes heavy actions under RAM/CPU/disk pressure)
       → action gate (policy: Level 0–3)
-      → capability execution (125 tools)
+      → capability execution (133 manifest tools)
       → observation → tri-state verification (SATISFIED / FAILED / UNKNOWN)
       → causal learning from execution + surprisal (learns action→effect, intent→outcome)
       → replan on failure (resource-aware)
@@ -167,10 +165,15 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 Still open (future):
 
-1. Tiny VLM on RX 580 (Moondream 1.8B Q4) alongside Qwen 3B fast — turns G6 from OCR+LLM to true VLM (needs 24GB GPU or 32GB RAM upgrade for full VLM).
-2. Continual LoRA adapters for Qwen 3B to learn user-specific skills without full fine-tune.
-3. Deliver `.github/workflows/{tests,android}.yml` — blocked on workflows permission.
-4. Full end-to-end browser test of multimodal round-trip (text+image → grounded detection → reply) against live server.
-5. Exercise external-API tools against live endpoints on owner's machine.
-6. Split `desktop/app.py` (~2000 lines) into `desktop/pages/` + `theme.py` + `widgets/orb.py` (code-quality debt).
+1. Install and exercise the optional tiny VLM on the owner's hardware. The integration and honest OCR+detector fallback exist, but model quality/performance on the RX 580 has not been live-verified in this sandbox.
+2. Automatically derive reviewed LoRA training examples from successful outcomes and lessons; dataset preparation and training scaffolding currently require explicit examples.
+3. Automatically reconcile verified sub-goal execution with project milestones; projects currently persist milestones and sessions but do not infer milestone completion.
+4. Full end-to-end browser test of the multimodal round trip (text + image → grounded detection → reply) against a live server.
+5. Exercise external-API tools against live endpoints on the owner's machine.
+6. Add pagination to large Files, Pansophy, and Projects collections.
+
+Python CI is defined in `.github/workflows/tests.yml`. An Android workflow is
+still pending because the connected GitHub App cannot create workflow files
+without `workflows` permission; Android builds therefore still need to be run
+locally or after that permission is granted.
 

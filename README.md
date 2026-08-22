@@ -177,6 +177,20 @@ Current baseline: **1414 backend + 184 frontend tests passing** (previous baseli
 > `python scripts/live_check.py` on your machine to exercise them for real
 > (see [`LIVE_VERIFICATION.md`](LIVE_VERIFICATION.md)).
 
+### Run the Capability Demo
+
+The demo exercises the measured P1–P3 capability path, including grounding,
+causal learning, resource-aware planning, projects, optional VLM status, and
+LoRA management. It reports unavailable optional hardware/models honestly.
+Run it from the repository root after installing the Python dependencies:
+
+```bash
+PYTHONPATH=. python scripts/demo_agi.py
+```
+
+This is a local capability demonstration, not a human-level-AGI benchmark.
+For real external integrations, use `scripts/live_check.py` separately.
+
 ### Run Server
 
 A single unified entry point serves everything — the WebSocket chat, the 127 core
