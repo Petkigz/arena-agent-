@@ -72,13 +72,25 @@ PRESENCE_COLORS = {
     "listening": "#10B981",
     "speaking": "#8B5CF6",
     "offline": "#334155",
+    "thinking": "#F59E0B",
+    "acting": "#38BDF8",
+    "observing": "#38BDF8",
+    "success": "#10B981",
+    "error": "#EF4444",
+    "sleeping": "#334155",
 }
 PRESENCE_DURATIONS = {
-    "idle": 2200,
-    "working": 1000,
-    "listening": 1500,
-    "speaking": 1200,
+    "idle": 3400,
+    "working": 1600,
+    "listening": 1200,
+    "speaking": 1050,
     "offline": 0,
+    "thinking": 1600,
+    "acting": 2000,
+    "observing": 2000,
+    "success": 2000,
+    "error": 400,
+    "sleeping": 5000,
 }
 
 
@@ -95,12 +107,22 @@ def _lighten(hex_color: str, factor: float = 0.6) -> QColor:
 # Floating presence orb
 # ════════════════════════════════════════════════════════════════════════════
 class PresenceOrbWidget(QWidget):
-    """A breathing, glowing sphere whose color/pulse reflects the agent's state."""
+    """Reactive presence orb — a layered translucent core wrapped in a voice
+    field of ring-lines, mirroring the web/Android ReactiveBeanieOrb.
+
+    The rings are not decoration: they carry the cognitive/voice state
+    (idle breathe, listening mic-reactive, thinking circulating, acting sweep,
+    speaking outward waves, success ripple, error disturbance, sleeping dim)."""
+
+    # States whose `pulse` should advance linearly (rotation / outward / ripple).
+    _LINEAR_STATES = {"speaking", "thinking", "acting", "observing", "success", "error"}
 
     def __init__(self, diameter: int = 220, parent=None):
         super().__init__(parent)
         self.setFixedSize(diameter, diameter)
         self._pulse = 0.0
+        self._status = "idle"
+        self._level = 0.0
         self._color = QColor(PRESENCE_COLORS["idle"])
         self._anim = QPropertyAnimation(self, b"pulse", self)
         self._anim.setStartValue(0.0)
@@ -121,8 +143,13 @@ class PresenceOrbWidget(QWidget):
     pulse = Property(float, _get_pulse, _set_pulse)
 
     def set_status(self, status: str) -> None:
+        self._status = status
         self._color = QColor(PRESENCE_COLORS.get(status, PRESENCE_COLORS["idle"]))
         dur = PRESENCE_DURATIONS.get(status, PRESENCE_DURATIONS["idle"])
+        if status in self._LINEAR_STATES:
+            self._anim.setEasingCurve(QEasingCurve.Type.Linear)
+        else:
+            self._anim.setEasingCurve(QEasingCurve.Type.InOutSine)
         if dur == 0:
             self._anim.stop()
         else:
@@ -131,33 +158,104 @@ class PresenceOrbWidget(QWidget):
                 self._anim.start()
         self.update()
 
+    @Slot(float)
+    def set_level(self, level: float) -> None:
+        """0..1 amplitude (mic while listening / TTS while speaking)."""
+        self._level = max(0.0, min(1.0, level))
+        self.update()
+
+    def _ring_motion(self, status: str, phase: float, breath: float, index: int):
+        """Return (rotation_deg, scale, alpha) for a ring, keyed by state."""
+        level = self._level
+        if status == "idle":
+            return 0.0, 1.0 + 0.05 * breath, 0.28
+        if status == "working":
+            return 0.0, 1.0 + 0.08 * breath, 0.4
+        if status == "listening":
+            amp = level * 0.14 * (1.0 - index * 0.18)
+            auto = 0.04 * breath
+            return 0.0, 1.0 + amp + auto, 0.3 + level * 0.35
+        if status == "speaking":
+            s = 1.0 + phase * 0.55 + level * 0.1
+            a = max(0.0, min(0.55, 0.55 * (1.0 - phase)))
+            return 0.0, s, a
+        if status in ("thinking", "acting", "observing"):
+            direction = 1.0 if index % 2 == 0 else -1.0
+            alpha = 0.38 if status == "thinking" else (0.42 if status == "acting" else 0.36)
+            return phase * 360.0 * direction, 1.0, alpha
+        if status == "success":
+            s = 0.55 + phase * 1.15
+            a = max(0.0, min(0.85, 0.85 * (1.0 - phase)))
+            return 0.0, s, a
+        if status == "error":
+            jitter = 1.08 if int(phase * 10) % 2 == 0 else 0.94
+            return 0.0, jitter, 0.5
+        return 0.0, 1.0, 0.0
+
     def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width()
         center = QPointF(w / 2.0, w / 2.0)
+        color = self._color
+        status = self._status
 
         # Breathing scale: pulse (0→1) → a single smooth in-out breath.
         breath = 0.5 + 0.5 * math.sin(self._pulse * 2.0 * math.pi)
-        radius = (w / 2.0) * (0.82 + 0.10 * breath)
 
-        # Soft outer glow.
-        glow = QRadialGradient(center, w / 2.0)
-        glow_color = QColor(self._color)
-        glow_color.setAlpha(60)
-        glow.setColorAt(0.0, glow_color)
-        glow.setColorAt(1.0, QColor(0, 0, 0, 0))
-        p.setBrush(glow)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(center, w / 2.0, w / 2.0)
+        if status not in ("offline", "sleeping"):
+            # Soft outer glow.
+            glow = QRadialGradient(center, w / 2.0)
+            glow_color = QColor(color)
+            glow_color.setAlpha(70)
+            glow.setColorAt(0.0, glow_color)
+            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+            p.setBrush(glow)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(center, w / 2.0, w / 2.0)
 
-        # 3D sphere: highlight offset toward the top-left.
+            # Voice-field rings (dashed, rotating/scaling per state).
+            ring_radii = [w * 0.31, w * 0.39, w * 0.47]
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            for i, r in enumerate(ring_radii):
+                rotation, scale, alpha = self._ring_motion(status, self._pulse, breath, i)
+                if alpha <= 0.01:
+                    continue
+                pen = QPen(color)
+                pen.setWidth(2)
+                pen.setStyle(Qt.PenStyle.DashLine)
+                pen.setDashPattern([10, 8])
+                pen.setColor(QColor(color.red(), color.green(), color.blue(), int(255 * alpha)))
+                p.setPen(pen)
+                rr = r * scale
+                p.save()
+                p.translate(center)
+                p.rotate(rotation)
+                p.translate(-center)
+                p.drawEllipse(center, rr, rr)
+                p.restore()
+
+        # Core sphere: highlight offset toward the top-left.
+        radius = (w / 2.0) * 0.42 * (0.96 + 0.05 * breath)
         sphere = QRadialGradient(QPointF(w * 0.36, w * 0.36), radius)
-        sphere.setColorAt(0.0, _lighten(self._color.name(), 0.7))
-        sphere.setColorAt(0.55, self._color)
-        sphere.setColorAt(1.0, QColor(self._color).darker(160))
+        sphere.setColorAt(0.0, _lighten(color.name(), 0.7))
+        sphere.setColorAt(0.55, color)
+        sphere.setColorAt(1.0, QColor(color).darker(160))
         p.setBrush(sphere)
+        p.setPen(Qt.PenStyle.NoPen)
         p.drawEllipse(center, radius, radius)
+
+        # Inner highlight (light diffusion, not a face).
+        p.setBrush(QColor(255, 255, 255, 80))
+        p.drawEllipse(QPointF(w * 0.42, w * 0.42), w * 0.14, w * 0.14)
+
+        # Focal point (presence, subtle).
+        focal = QColor(color)
+        focal.setAlpha(220)
+        p.setBrush(focal)
+        fr = w * 0.07 * (1.0 if status in ("offline", "sleeping") else 1.0 + 0.25 * breath)
+        p.drawEllipse(center, fr, fr)
+
         p.end()
 
 
@@ -574,6 +672,9 @@ def _textarea_style() -> str:
 # Main window
 # ════════════════════════════════════════════════════════════════════════════
 class MainWindow(QMainWindow):
+    # Marshal mic amplitude from the capture thread onto the GUI thread.
+    _level_signal = Signal(float)
+
     def __init__(self, base_url: str = "http://localhost:8000"):
         super().__init__()
         self.setWindowTitle("Arena — Beanie")
@@ -593,6 +694,9 @@ class MainWindow(QMainWindow):
         self.voice.on_reply = self._on_voice_reply
         self.voice.on_transcript = self._on_voice_transcript
         self.voice.on_error = self._on_voice_error
+        self.voice.on_level = self._on_voice_level
+        # Cross-thread: capture thread emits → beanie.set_level runs on GUI thread.
+        self._level_signal.connect(self.beanie.set_level)
         self._listening = False
 
         # Pages
@@ -723,8 +827,8 @@ class MainWindow(QMainWindow):
             return
         self.chat.input.clear()
         self.chat.append("You", content)
-        self.beanie.set_status("working")
-        self.beanie.set_message("Working…")
+        self.beanie.set_status("thinking")
+        self.beanie.set_message("Thinking…")
         self._chat_worker = ChatWorker(self.client, content, self)
         self._chat_worker.reply_ready.connect(self._on_reply)
         self._chat_worker.error_ready.connect(self._on_chat_error)
@@ -781,8 +885,8 @@ class MainWindow(QMainWindow):
     def _on_voice_transcript(self, text: str, is_final: bool) -> None:
         if is_final and text.strip():
             self.chat.append("You (voice)", text.strip())
-            self.beanie.set_status("working")
-            self.beanie.set_message("Working…")
+            self.beanie.set_status("thinking")
+            self.beanie.set_message("Thinking…")
 
     def _on_voice_reply(self, text: str) -> None:
         self.chat.append("Arena", text)
@@ -793,6 +897,9 @@ class MainWindow(QMainWindow):
             self.tray.showMessage("Arena", (text[:160] + "…") if len(text) > 160 else text, QSystemTrayIcon.MessageIcon.Information, 5000)
         # Return to idle after a short speaking pause.
         QThread.msleep(0)  # speaking state is cleared below by TTS completion
+
+    def _on_voice_level(self, level: float) -> None:
+        self._level_signal.emit(level)
 
     def _on_voice_error(self, err: str) -> None:
         self.chat.append("System", f"⚠ {err}")

@@ -10,7 +10,9 @@ GUI-free; degrades gracefully when PyAudio / a mic / websockets is absent.
 
 from __future__ import annotations
 
+import array
 import json
+import math
 import threading
 from typing import Callable, Optional
 
@@ -57,6 +59,8 @@ class DesktopVoiceClient:
         self.on_reply: Optional[Callable[[str], None]] = None
         #: Called with (text, is_final) for live transcripts.
         self.on_transcript: Optional[Callable[[str, bool], None]] = None
+        #: Called with a 0..1 microphone amplitude (drives the reactive orb).
+        self.on_level: Optional[Callable[[float], None]] = None
         #: Called with an error string.
         self.on_error: Optional[Callable[[str], None]] = None
 
@@ -127,6 +131,8 @@ class DesktopVoiceClient:
                     break
                 if data and self._ws is not None:
                     self._ws.send(data)
+                if self.on_level:
+                    self.on_level(self._rms_level(data))
         finally:
             try:
                 stream.stop_stream()
@@ -169,3 +175,22 @@ class DesktopVoiceClient:
     def _send(self, payload: dict) -> None:
         if self._ws is not None:
             self._ws.send(json.dumps(payload))
+
+    @staticmethod
+    def _rms_level(data: bytes) -> float:
+        """Normalized 0..1 microphone amplitude from int16 PCM bytes."""
+        try:
+            if not data:
+                return 0.0
+            samples = array.array("h", data)
+            n = len(samples)
+            if n == 0:
+                return 0.0
+            sumsq = 0.0
+            for s in samples:
+                f = s / 32768.0
+                sumsq += f * f
+            rms = math.sqrt(sumsq / n)
+            return max(0.0, min(1.0, (rms - 0.02) / 0.3))
+        except Exception:
+            return 0.0
