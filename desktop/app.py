@@ -702,8 +702,8 @@ class MainWindow(QMainWindow):
         self.chat = ChatPage(on_send=self._send_message)
         self.tools = ToolsPage(self.client)
 
-        # Cross-thread: capture thread emits → beanie.set_level runs on GUI thread.
-        self._level_signal.connect(self.beanie.set_level)
+        # Cross-thread: capture thread emits → orb.set_level runs on GUI thread.
+        self._level_signal.connect(self.beanie.orb.set_level)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.beanie)   # index 0
