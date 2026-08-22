@@ -51,7 +51,7 @@ from PySide6.QtWidgets import (
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.chat_client import DesktopChatClient
 from desktop.settings import DesktopSettings
-from desktop.voice_client import DesktopVoiceClient
+from desktop.voice_client import DesktopAudioPlayer, DesktopVoiceClient
 
 try:
     import cv2
@@ -427,30 +427,6 @@ class CameraThread(QThread):
 
     def stop(self) -> None:
         self._running = False
-
-
-class SpeakWorker(QThread):
-    """Runs local TTS (pyttsx3) off the GUI thread so `runAndWait()` never
-    freezes the window. Emits `finished_speaking` (delivered to the GUI thread)
-    when the utterance completes — or immediately if TTS is unavailable."""
-
-    finished_speaking = Signal()
-
-    def __init__(self, text: str, rate: int, parent=None):
-        super().__init__(parent)
-        self._text = text
-        self._rate = rate
-
-    def run(self) -> None:
-        try:
-            import pyttsx3
-            engine = pyttsx3.init()
-            engine.setProperty("rate", self._rate)
-            engine.say(self._text)
-            engine.runAndWait()
-        except Exception:
-            pass  # TTS is optional; the reply is still shown in chat.
-        self.finished_speaking.emit()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1459,6 +1435,7 @@ class MainWindow(QMainWindow):
     _voice_transcript_signal = Signal(str, bool)
     _voice_reply_signal = Signal(str)
     _voice_error_signal = Signal(str)
+    _voice_state_signal = Signal(str)
 
     def __init__(self, base_url: str = "http://localhost:8000"):
         super().__init__()
@@ -1477,10 +1454,18 @@ class MainWindow(QMainWindow):
         # fire on the voice client's recv thread, so they only emit signals here;
         # the actual UI mutation happens in the _on_voice_* slots (GUI thread).
         ws_url = base_url.replace("http://", "ws://").rstrip("/") + "/ws"
+        # Plays the backend's streamed Piper reply audio (replaces local pyttsx3,
+        # which caused double speech). Created before the voice client so its
+        # push() can be wired directly as the audio callback.
+        self.audio_player = DesktopAudioPlayer()
         self.voice = DesktopVoiceClient(ws_url=ws_url, conversation_id="desktop-voice")
         self.voice.on_reply = lambda text: self._voice_reply_signal.emit(text)
         self.voice.on_transcript = lambda text, final: self._voice_transcript_signal.emit(text, final)
         self.voice.on_error = lambda err: self._voice_error_signal.emit(err)
+        self.voice.on_voice_state = lambda state: self._voice_state_signal.emit(state)
+        # Streamed Piper audio arrives on the WS recv thread; the player consumes
+        # it via a thread-safe queue, so no GUI-thread marshalling is needed.
+        self.voice.on_audio = self.audio_player.push
         self.voice.on_level = self._on_voice_level
         self._listening = False
 
@@ -1503,6 +1488,7 @@ class MainWindow(QMainWindow):
         self._voice_transcript_signal.connect(self._on_voice_transcript)
         self._voice_reply_signal.connect(self._on_voice_reply)
         self._voice_error_signal.connect(self._on_voice_error)
+        self._voice_state_signal.connect(self._on_voice_state)
 
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
@@ -1735,6 +1721,7 @@ class MainWindow(QMainWindow):
     def _start_voice(self) -> None:
         if self.voice.start():
             self._listening = True
+            self.audio_player.start()
             self._set_status("listening")
             self.chat.set_voice_status("listening")
             self.sidebar.set_conversation_mode(True)
@@ -1745,6 +1732,7 @@ class MainWindow(QMainWindow):
     def _stop_voice(self) -> None:
         if self._listening:
             self.voice.stop()
+            self.audio_player.stop()
             self._listening = False
             self._set_status("idle")
             self.chat.set_voice_status("idle")
@@ -1756,17 +1744,13 @@ class MainWindow(QMainWindow):
     def _on_voice_transcript(self, text: str, is_final: bool) -> None:
         if is_final and text.strip():
             self.chat.append_message("user", text.strip())
-            self._set_status("thinking")
-            self.chat.set_voice_status("thinking")
-            self.beanie.set_message("Thinking…")
 
     @Slot(str)
     def _on_voice_reply(self, text: str) -> None:
         self.chat.append_message("assistant", text)
-        self._set_status("speaking")
-        self.chat.set_voice_status("speaking")
-        self.beanie.set_message("Speaking…")
-        self._speak(text)
+        # The reply is spoken by the backend (Piper) and streamed back to us as
+        # audio; the "speaking" state is driven by the backend's voice_state
+        # broadcasts, not here. Only raise a desktop notification (best-effort).
         if self.settings.get("notifications_enabled") and not self.isVisible():
             self.tray.showMessage("Arena", (text[:160] + "…") if len(text) > 160 else text, QSystemTrayIcon.MessageIcon.Information, 5000)
 
@@ -1774,28 +1758,36 @@ class MainWindow(QMainWindow):
         self._level_signal.emit(level)
 
     @Slot(str)
+    def _on_voice_state(self, state: str) -> None:
+        """Reflect the backend voice pipeline state onto the orb + banner.
+
+        Backend VoiceState values: idle, listening, recording, processing,
+        thinking, speaking. We collapse recording→listening and processing→
+        thinking, since the desktop orb distinguishes those four presence states.
+        """
+        orb_state = {
+            "recording": "listening",
+            "processing": "thinking",
+        }.get(state, state)
+        if orb_state not in ("listening", "thinking", "speaking", "idle"):
+            orb_state = "idle"
+        self._set_status(orb_state)
+        self.chat.set_voice_status(orb_state)
+        if orb_state == "listening":
+            self.beanie.set_message("Listening…")
+        elif orb_state == "thinking":
+            self.beanie.set_message("Thinking…")
+        elif orb_state == "speaking":
+            self.beanie.set_message("Speaking…")
+        elif orb_state == "idle":
+            self.beanie.set_message("I'm here.")
+        # The backend streams the reply audio around the "speaking" state; the
+        # player consumes it on its own thread, so nothing extra to do here.
+
+    @Slot(str)
     def _on_voice_error(self, err: str) -> None:
         self.chat.append_message("assistant", f"⚠ {err}")
         self._stop_voice()
-
-    def _speak(self, text: str) -> None:
-        """Local TTS via pyttsx3, on a worker thread (optional; skipped if absent).
-
-        NOTE: the backend already synthesizes the reply with Piper; this local
-        pyttsx3 path is a best-effort fallback so the reply is still audible
-        without extra audio plumbing. It does not block the GUI thread.
-        """
-        self._speak_worker = SpeakWorker(
-            text, int(175 * self.settings.get("voice_speed")), self,
-        )
-        self._speak_worker.finished_speaking.connect(self._on_speak_done)
-        self._speak_worker.start()
-
-    @Slot()
-    def _on_speak_done(self) -> None:
-        self._set_status("idle")
-        self.chat.set_voice_status("idle")
-        self.beanie.set_message("I'm here.")
 
     def closeEvent(self, event) -> None:
         self._stop_voice()
