@@ -227,6 +227,46 @@ class TestVoiceService:
         assert _map_wake_word(None) == "hey_jarvis"
 
     @pytest.mark.asyncio
+    async def test_start_refuses_when_voice_disabled(self, service):
+        """voice_enabled=False must prevent the pipeline from starting (G2)."""
+        with patch('backend.voice.service.VoicePipeline') as mock_pipeline, \
+             patch('backend.voice.service.get_settings') as mock_get:
+            mock_get.return_value = {"voice_enabled": False}
+
+            await service.start("conv_123")
+
+            mock_pipeline.assert_not_called()
+            assert not service._enabled
+            assert service.pipeline is None
+
+    @pytest.mark.asyncio
+    async def test_speak_reply_honors_response_delay(self, service):
+        """_speak_reply pauses for the configured response_delay (G2)."""
+        service.current_conversation_id = "conv_123"
+
+        sleeps = []
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+
+        with patch('backend.voice.service.get_settings') as mock_get, \
+             patch('backend.voice.service.ws_manager') as mock_ws, \
+             patch('backend.voice.service.asyncio.sleep', new=fake_sleep), \
+             patch('backend.voice.service.synthesize_piper', return_value=None):
+            mock_get.return_value = {"response_delay": 800}
+            mock_ws.broadcast_to_conversation = AsyncMock()
+            mock_ws.send_audio_to_conversation = AsyncMock()
+            await service._speak_reply("hello")
+
+            assert sleeps == [0.8]
+            # SPEAKING still broadcast after the delay.
+            states = [c.args[1].get("state") for c in mock_ws.broadcast_to_conversation.await_args_list]
+            assert "speaking" in states
+
+    def test_map_wake_word_unknown_returns_default(self):
+        from backend.voice.service import _map_wake_word
+        assert _map_wake_word("") == "hey_jarvis"
+
+    @pytest.mark.asyncio
     async def test_update_settings(self, service):
         """Test settings update."""
         with patch('backend.voice.service.VoicePipeline') as mock_pipeline:

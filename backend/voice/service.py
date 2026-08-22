@@ -55,6 +55,12 @@ class VoiceService:
             app_logger.warning("Voice service already running")
             return
 
+        # Honor the global voice-enabled toggle (G2): if the owner disabled voice,
+        # refuse to start the pipeline rather than ignoring the setting.
+        if get_settings().get("voice_enabled") is False:
+            app_logger.info("Voice disabled by settings — not starting the pipeline.")
+            return
+
         self.current_conversation_id = conversation_id
 
         # Apply persisted settings (voice + speed + wake word) so the pipeline
@@ -324,6 +330,15 @@ class VoiceService:
         conv_id = self.current_conversation_id
         if not conv_id or not text:
             return
+
+        # Honor the configured response delay (G2) — pause briefly before the
+        # assistant starts speaking, per the user's preference.
+        try:
+            delay_ms = float(get_settings().get("response_delay") or 0)
+        except (TypeError, ValueError):
+            delay_ms = 0.0
+        if delay_ms > 0:
+            await asyncio.sleep(delay_ms / 1000.0)
 
         await ws_manager.broadcast_to_conversation(conv_id, {
             "type": "voice_state",

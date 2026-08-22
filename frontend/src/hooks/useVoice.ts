@@ -1,6 +1,7 @@
 import { logger } from '../services/logger';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { webSocketService, type VoiceState } from '../services/websocket';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface UseVoiceOptions {
   conversationId: string;
@@ -27,6 +28,9 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
   const [error, setError] = useState<string | null>(null);
   const [inputLevel, setInputLevel] = useState(0);
   const [outputLevel, setOutputLevel] = useState(0);
+
+  // Honor the user's noise-suppression toggle (G2) — previously hardcoded true.
+  const noiseSuppression = useSettingsStore((s) => s.noiseSuppression);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -179,7 +183,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
           sampleRate: 16000,
           channelCount: 1,
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression,
         },
       });
 
