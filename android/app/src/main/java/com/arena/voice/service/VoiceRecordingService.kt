@@ -178,8 +178,21 @@ class VoiceRecordingService : Service() {
             startService(intent)
         } catch (e: Exception) {
             // ForegroundServiceStartNotAllowedException when the app is
-            // backgrounded on newer Android — log, don't crash.
+            // backgrounded on newer Android — log, don't crash, but show user feedback (G7).
             Log.w(TAG, "Could not re-arm wake-word service: ${e.message}")
+            // Show a low-priority notification so owner knows listening paused
+            try {
+                val notification = NotificationCompat.Builder(this, ArenaVoiceApp.WAKE_WORD_CHANNEL_ID)
+                    .setContentTitle("Beanie paused")
+                    .setContentText("Tap to resume listening — background start restricted by Android")
+                    .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setAutoCancel(true)
+                    .build()
+                val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                nm.notify(1003, notification)
+            } catch (_: Exception) {
+            }
         }
     }
 

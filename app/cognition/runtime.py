@@ -156,6 +156,11 @@ class CognitiveRuntime:
         # Phase 22: Language Grounding (symbol ↔ perception/action/meaning).
         from app.cognition.language_grounding import LanguageGroundingEngine
         self.language_grounding = LanguageGroundingEngine(db_path=path)
+        # Phase 6A/6B: Long-horizon goal decomposition + multi-session project management
+        from app.cognition.goal_decomposer import GoalDecomposer
+        from app.cognition.project_manager import ProjectManager
+        self.goal_decomposer = GoalDecomposer(db_path=str(Path(path).parent / "goal_decompositions.db") if path else "data/goal_decompositions.db")
+        self.project_manager = ProjectManager(db_path=str(Path(path).parent / "projects.db") if path else "data/projects.db")
         
         self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
@@ -754,6 +759,8 @@ class CognitiveRuntime:
             ("cultural_learning", self.cultural_learning),
             ("advanced_cognition", self.advanced_cognition),
             ("language_grounding", self.language_grounding),
+            ("goal_decomposer", self.goal_decomposer),
+            ("project_manager", self.project_manager),
         ]
         _add("module_wiring", all(obj is not None for _, obj in wired_modules),
              f"{len(wired_modules)} cognition modules instantiated in the runtime", "integration")
@@ -1498,6 +1505,33 @@ class CognitiveRuntime:
         )
         query_pred = goal_rep.primary_intent_type
         tracker.transition(GoalLifecycleState.UNDERSTOOD, f"Parsed goal in domain '{goal_rep.target_domain}'")
+
+        # P2 AGI: Long-horizon goal decomposition — if goal is complex, break into sub-goals and track as project
+        decomposition = None
+        project = None
+        try:
+            # Heuristic for complex goals: contains setup/install/configure + research/report + multi-step keywords
+            complex_keywords = ["setup", "install", "configure", "research and report", "analyze and", "create and", "build", "full", "complete", "project"]
+            is_complex = any(k in user_text.lower() for k in complex_keywords) or len(user_text.split()) > 15
+            if is_complex:
+                decomposition = self.goal_decomposer.decompose(goal_text=user_text, intent_type=query_pred)
+                # Create persistent project for multi-session tracking
+                project = self.project_manager.create_project(
+                    name=user_text[:60],
+                    description=user_text,
+                    priority="high" if "critical" in user_text.lower() or "urgent" in user_text.lower() else "normal",
+                    milestones=[sg.description for sg in decomposition.sub_goals],
+                    tags=[query_pred, goal_rep.target_domain],
+                    context={"original_goal": user_text, "intent": query_pred, "decomposition_id": decomposition.project_id},
+                    decomposition_id=decomposition.project_id,
+                )
+                # Start first session
+                self.project_manager.start_session(project.project_id)
+                self.blackboard.set("active_project", project.project_id, source="project_manager")
+                self.blackboard.set("goal_decomposition", decomposition.project_id, source="goal_decomposer")
+                app_logger.info(f"Created project {project.project_id} with {len(decomposition.sub_goals)} sub-goals for complex goal")
+        except Exception as e:
+            app_logger.warning(f"Goal decomposition/project creation failed (best-effort): {e}")
 
         try:
             self.world_ingest.ingest(

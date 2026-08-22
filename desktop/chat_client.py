@@ -20,6 +20,8 @@ class DesktopChatClient:
         self._connected = False
         self._recv_thread: Optional[threading.Thread] = None
         self._reply_parts: List[str] = []
+        self._should_reconnect = True
+        self._reconnect_attempts = 0
 
         #: Called with no args when the socket opens.
         self.on_connected: Optional[Callable[[], None]] = None
@@ -110,10 +112,14 @@ class DesktopChatClient:
             if isinstance(frame, (bytes, bytearray)):
                 continue  # binary audio echo — not chat text
             self._handle_text(frame)
+        # Connection lost — mark offline and try to reconnect if allowed
         if self._connected:
             self._connected = False
             if self.on_disconnected:
                 self.on_disconnected()
+            # Auto-reconnect (best-effort, up to 10 attempts)
+            if getattr(self, "_should_reconnect", True) and getattr(self, "_reconnect_attempts", 0) < 10:
+                self._schedule_reconnect()
 
     def _handle_text(self, text: str) -> None:
         try:
@@ -156,9 +162,21 @@ class DesktopChatClient:
 
     def close(self) -> None:
         self._connected = False
+        self._should_reconnect = False
         if self._ws is not None:
             try:
                 self._ws.close()
             except Exception:  # noqa: BLE001
                 pass
             self._ws = None
+
+    def _schedule_reconnect(self) -> None:
+        """Auto-reconnect with exponential backoff (P2: desktop parity with web)."""
+        if not getattr(self, "_should_reconnect", True):
+            return
+        import time
+        delay = min(30, 1 * (2 ** getattr(self, "_reconnect_attempts", 0)))
+        self._reconnect_attempts = getattr(self, "_reconnect_attempts", 0) + 1
+        time.sleep(delay)
+        if self._should_reconnect:
+            self.connect()

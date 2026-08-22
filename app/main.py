@@ -664,6 +664,101 @@ def get_knowledge_graph(limit: int = Query(500, ge=1, le=2000)):
         return {"entities": [], "relationships": [], "error": str(e)}
 
 
+# ── Projects (P2 AGI: long-horizon + multi-session) ──────────────────────────
+class ProjectCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    priority: str = "normal"
+    milestones: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+@router.get("/projects")
+def list_projects_endpoint(status: Optional[str] = Query(None)):
+    """List persistent projects (multi-session)."""
+    try:
+        from app.cognition.runtime import CognitiveRuntime
+        runtime = CognitiveRuntime.get_instance()
+        if status == "active":
+            projects = runtime.project_manager.get_active_projects()
+        else:
+            # Return all from in-memory (which loads from DB)
+            projects = list(runtime.project_manager._projects.values())
+        return {
+            "projects": [
+                {
+                    "project_id": p.project_id,
+                    "name": p.name,
+                    "description": p.description,
+                    "status": p.status.value,
+                    "priority": p.priority,
+                    "progress_percent": p.progress_percent,
+                    "milestones_total": p.milestones_total,
+                    "milestones_reached": p.milestones_reached,
+                    "total_sessions": p.total_sessions,
+                    "tags": p.tags,
+                    "created_at": p.created_at,
+                    "updated_at": p.updated_at,
+                }
+                for p in projects[:100]
+            ],
+            "total": len(projects),
+        }
+    except Exception as e:
+        app_logger.error(f"List projects failed: {e}")
+        return {"projects": [], "total": 0, "error": str(e)}
+
+@router.get("/projects/{project_id}")
+def get_project_endpoint(project_id: str):
+    """Get project + resume context."""
+    try:
+        from app.cognition.runtime import CognitiveRuntime
+        runtime = CognitiveRuntime.get_instance()
+        proj = runtime.project_manager.get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found")
+        resume = runtime.project_manager.get_resume_context(project_id)
+        decomp = runtime.goal_decomposer.get_project(resume.get("context", {}).get("decomposition_id", "")) if resume else None
+        return {
+            "project": {
+                "project_id": proj.project_id,
+                "name": proj.name,
+                "description": proj.description,
+                "status": proj.status.value,
+                "priority": proj.priority,
+                "progress_percent": proj.progress_percent,
+                "milestones": [{"id": m.milestone_id, "description": m.description, "status": m.status} for m in proj.milestones],
+                "sessions": len(proj.sessions),
+                "context": proj.context,
+                "tags": proj.tags,
+            },
+            "resume_context": resume,
+            "decomposition": runtime.goal_decomposer.get_progress_report(decomp.project_id) if decomp else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Get project failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/projects")
+def create_project_endpoint(req: ProjectCreateRequest):
+    """Create a persistent project."""
+    try:
+        from app.cognition.runtime import CognitiveRuntime
+        runtime = CognitiveRuntime.get_instance()
+        proj = runtime.project_manager.create_project(
+            name=req.name,
+            description=req.description,
+            priority=req.priority,
+            milestones=req.milestones,
+            tags=req.tags,
+        )
+        return {"success": True, "project_id": proj.project_id, "project": {"name": proj.name, "status": proj.status.value}}
+    except Exception as e:
+        app_logger.error(f"Create project failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Shared settings (cross-platform: web / desktop / Android) ────────────────
 @router.get("/settings")
 def get_settings_endpoint():

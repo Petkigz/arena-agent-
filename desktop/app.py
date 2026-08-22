@@ -2000,7 +2000,7 @@ class MainWindow(QMainWindow):
         )
 
     def _refresh_all_themes(self) -> None:
-        """Re-apply stylesheets to every widget using current globals."""
+        """Re-apply stylesheets to every widget using current globals (G4 live theme)."""
         self.setStyleSheet(f"QMainWindow {{ background: {BG_PRIMARY}; }}")
         # Sidebar + context
         try:
@@ -2018,6 +2018,11 @@ class MainWindow(QMainWindow):
                     page.refresh_theme()
             except Exception:
                 pass
+        # Tray icon uses ACCENT — regenerate so it matches new theme
+        try:
+            self.tray.setIcon(self._tray_icon())
+        except Exception:
+            pass
         # Force repaint
         self.update()
 
