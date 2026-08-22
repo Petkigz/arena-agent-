@@ -12,8 +12,10 @@ object AudioConfig {
     const val STREAMING_CHUNK_SIZE = 1024  // Samples per chunk
     const val RECORDING_BUFFER_SIZE = 4096  // Buffer size for AudioRecord
     
-    // Wake word configuration
-    const val WAKE_WORD = "hey_arena"
+    // Wake word configuration.
+    // The canonical wake phrase is "hi android"; the WakeWordService's keyword
+    // spotter also accepts a few common aliases (see WAKE_PHRASES there).
+    const val WAKE_WORD = "hi android"
     const val WAKE_WORD_SENSITIVITY = 0.5f
 
     // Network configuration: the server URL lives in
