@@ -101,6 +101,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.object_detector import ObjectDetectorTool
     from app.tools.prosody_analyzer import ProsodyAnalyzerTool
     from app.tools.vlm_analyzer import VlmAnalyzerTool
+    from app.tools.lora_manager import LoraManagerTool
     from app.tools.web_agent import WebAgent
     from app.tools.web_research import WebResearcher
     from app.tools.win32_ghost_operator import Win32GhostOperator
@@ -195,6 +196,19 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(VlmAnalyzerTool.analyze_image, "image_path", "prompt", "max_tokens"))
     add("vlm_status", "vision", 0, "Check VLM availability (Moondream2/Llava) — honest status",
         _ignore_payload(VlmAnalyzerTool.get_status))
+    # LoRA continual learning (P2 AGI)
+    add("list_loras", "learning", 0, "List LoRA adapters (continual learning without forgetting)",
+        _ignore_payload(LoraManagerTool.list_adapters))
+    add("lora_status", "learning", 0, "Get LoRA system status (adapters, active, datasets)",
+        _ignore_payload(LoraManagerTool.get_status))
+    add("activate_lora", "learning", 2, "Activate a LoRA adapter (reversible)",
+        _wrap(LoraManagerTool.activate_adapter, "adapter_name"))
+    add("deactivate_lora", "learning", 1, "Deactivate LoRA adapter — use base model",
+        _ignore_payload(LoraManagerTool.deactivate_adapter))
+    add("prepare_lora_dataset", "learning", 1, "Prepare dataset for LoRA training from examples",
+        _wrap(LoraManagerTool.prepare_dataset, "skill_name", "examples"))
+    add("create_lora_job", "learning", 1, "Create LoRA training job config (scaffolding)",
+        _wrap(LoraManagerTool.create_training_job, "adapter_name", "base_model", "skill_name", "r", "lora_alpha", "epochs", "learning_rate"))
 
     # ── Location ────────────────────────────────────────────────────────────
     add("resolve_location", "location", 0, "Resolve geographic location",

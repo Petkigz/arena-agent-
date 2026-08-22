@@ -1269,6 +1269,89 @@ def vlm_analyze_endpoint(req: VisionAnalyzeRequest):
         app_logger.error(f"VLM analyze failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# LoRA continual learning (P2 AGI)
+class LoraActivateRequest(BaseModel):
+    adapter_name: str
+
+class LoraDatasetRequest(BaseModel):
+    skill_name: str
+    examples: List[Dict[str, str]]
+
+class LoraJobRequest(BaseModel):
+    adapter_name: str
+    base_model: str = "Qwen/Qwen2.5-3B-Instruct"
+    skill_name: str = "general"
+    r: int = 8
+    lora_alpha: int = 16
+    epochs: int = 3
+    learning_rate: float = 2e-4
+
+@router.get("/loras")
+def list_loras_endpoint():
+    """List LoRA adapters."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.list_adapters()
+    except Exception as e:
+        app_logger.error(f"List loras failed: {e}")
+        return {"success": False, "error": str(e), "adapters": []}
+
+@router.get("/loras/status")
+def lora_status_endpoint():
+    """Get LoRA system status."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.get_status()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@router.get("/loras/active")
+def get_active_lora_endpoint():
+    """Get active LoRA adapter."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.get_active_adapter()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@router.post("/loras/activate")
+def activate_lora_endpoint(req: LoraActivateRequest):
+    """Activate LoRA adapter."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.activate_adapter(req.adapter_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/loras/deactivate")
+def deactivate_lora_endpoint():
+    """Deactivate LoRA adapter."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.deactivate_adapter()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/loras/dataset")
+def prepare_lora_dataset_endpoint(req: LoraDatasetRequest):
+    """Prepare dataset for LoRA training."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.prepare_dataset(req.skill_name, req.examples)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/loras/train-job")
+def create_lora_job_endpoint(req: LoraJobRequest):
+    """Create LoRA training job config."""
+    try:
+        from app.tools.lora_manager import LoraManagerTool
+        return LoraManagerTool.create_training_job(
+            req.adapter_name, req.base_model, req.skill_name, req.r, req.lora_alpha, req.epochs, req.learning_rate
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
 @router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):
