@@ -41,8 +41,12 @@ soundfile>=0.12.0
 torch>=2.0.0
 torchaudio>=2.0.0
 
-# Native webcam capture (optional — uncomment to enable desktop camera access)
-# opencv-python>=4.8.0
+# Native webcam capture (enables the desktop/vision loop's OBSERVE step).
+opencv-python>=4.8.0
+
+# Tesseract OCR is a separate SYSTEM BINARY (not pip-installable). Install it
+# from https://github.com/UB-Mannheim/tesseract/wiki and ensure `tesseract` is
+# on PATH. Without it, OCR degrades gracefully (see app/tools/ocr_reader.py).
 
 # Native desktop window (optional — GUI client)
 # PySide6>=6.6.0
