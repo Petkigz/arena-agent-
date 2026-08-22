@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Image as ImageIcon, Monitor, Camera, Upload, Loader2, ScanText } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import {
@@ -26,6 +26,18 @@ export function ImagesPage() {
   const [ocrText, setOcrText] = useState('');
   const [analysisText, setAnalysisText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Track the local blob: URL so we can revoke it (avoid leaking object URLs).
+  const localPreviewUrlRef = useRef<string | null>(null);
+
+  // Revoke any local blob URL on unmount or when the preview changes.
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrlRef.current) {
+        URL.revokeObjectURL(localPreviewUrlRef.current);
+        localPreviewUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const applyResult = (res: VisionResult) => {
     setBusy(false);
@@ -94,8 +106,12 @@ export function ImagesPage() {
     setError(null);
     setOcrText('');
     setAnalysisText('');
-    // Show a local preview immediately.
-    setPreviewUrl(URL.createObjectURL(file));
+    // Show a local preview immediately (revoke the previous blob URL first).
+    if (localPreviewUrlRef.current) {
+      URL.revokeObjectURL(localPreviewUrlRef.current);
+    }
+    localPreviewUrlRef.current = URL.createObjectURL(file);
+    setPreviewUrl(localPreviewUrlRef.current);
     try {
       const upload = await uploadImageForVision(file);
       if (!upload.success || !upload.file_path) {

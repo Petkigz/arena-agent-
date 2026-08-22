@@ -287,6 +287,11 @@ export function VoiceSettingsPage() {
                   <p className="text-xs text-text-muted mt-1">
                     Choose a phrase that's easy to say and unlikely to occur in normal conversation
                   </p>
+                  <p className="text-xs text-amber-500/90 mt-2">
+                    Note: the PC-side wake-word pipeline only recognizes the installed
+                    Picovoice keywords (hey_jarvis / hey_mycroft / alexa) — a custom
+                    phrase here gates the Android app, which uses on-device recognition.
+                  </p>
                 </div>
 
                 <Button
