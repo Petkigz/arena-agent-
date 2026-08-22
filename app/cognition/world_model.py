@@ -459,6 +459,26 @@ class WorldModel:
                       for table in ("world_entities", "world_relationships", "world_observations")]
         return {"entities": counts[0], "relationships": counts[1], "observations": counts[2], "updated_at": _now()}
 
+    def get_graph(self, limit: int = 500) -> Dict[str, Any]:
+        """Return the full knowledge graph (entities + relationships) for visualization."""
+        limit = max(1, min(limit, 2000))
+        with self._connect() as conn:
+            entity_rows = conn.execute(
+                "SELECT * FROM world_entities ORDER BY last_seen DESC LIMIT ?", (limit,)
+            ).fetchall()
+            rel_rows = conn.execute(
+                "SELECT * FROM world_relationships ORDER BY last_confirmed DESC LIMIT ?", (limit,)
+            ).fetchall()
+        entities = [self._entity(r) for r in entity_rows]
+        relationships = [
+            Relationship(
+                r["id"], r["subject_id"], r["predicate"], r["object_id"],
+                r["confidence"], json.loads(r["attributes"]), r["created_at"], r["last_confirmed"],
+            )
+            for r in rel_rows
+        ]
+        return {"entities": entities, "relationships": relationships}
+
     # ── Phase 2A: Relationship Inference ──────────────────────────────
 
     # Standard relationship types

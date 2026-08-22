@@ -123,6 +123,10 @@ class ArenaBackendClient:
         data = self._get_json(path)
         return data if isinstance(data, list) else []
 
+    def knowledge_graph(self, limit: int = 500) -> Dict[str, Any]:
+        """GET /knowledge/graph → {entities, relationships}."""
+        return self._get_json(f"/knowledge/graph?limit={limit}")
+
     # ── models (Settings) ───────────────────────────────────────────────────
     def list_models(self) -> Dict[str, Any]:
         """GET /models → LM Studio model info."""

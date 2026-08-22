@@ -80,6 +80,7 @@ from app.tools.win32_ghost_operator import Win32GhostOperator
 from app.tools.ast_janitor import ASTJanitor
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
+from app.cognition.world_model import WorldModel
 
 # The 127 core REST routes are registered on a router so the unified server
 # (app/server.py) can include them alongside the WebSocket/API/SPA routes.
@@ -623,6 +624,43 @@ def add_new_memory(mem: MemoryCreate):
 @router.get("/memories")
 def list_memories(category: Optional[str] = Query(None, description="Filter memories by category")):
     return db.get_memories(category=category)
+
+
+@router.get("/knowledge/graph")
+def get_knowledge_graph(limit: int = Query(500, ge=1, le=2000)):
+    """Return the world-model knowledge graph as {entities, relationships}."""
+    try:
+        wm = WorldModel(str(settings.DB_PATH))
+        graph = wm.get_graph(limit=limit)
+        return {
+            "entities": [
+                {
+                    "id": e.id,
+                    "name": e.name,
+                    "type": e.entity_type,
+                    "confidence": e.confidence,
+                    "first_seen": e.first_seen,
+                    "last_seen": e.last_seen,
+                    "attributes": e.attributes,
+                }
+                for e in graph["entities"]
+            ],
+            "relationships": [
+                {
+                    "id": r.id,
+                    "subject_id": r.subject_id,
+                    "predicate": r.predicate,
+                    "object_id": r.object_id,
+                    "confidence": r.confidence,
+                    "created_at": r.created_at,
+                    "last_confirmed": r.last_confirmed,
+                }
+                for r in graph["relationships"]
+            ],
+        }
+    except Exception as e:
+        app_logger.error(f"Knowledge graph query failed: {e}")
+        return {"entities": [], "relationships": [], "error": str(e)}
 
 @router.delete("/memories/{memory_id}")
 def delete_memory_record(memory_id: int):

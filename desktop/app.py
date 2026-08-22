@@ -624,15 +624,32 @@ class PansophyPage(QWidget):
 
     def _load(self) -> None:
         self.list.clear()
+        # Knowledge graph (entities + relationships) from the world model.
+        try:
+            graph = self._client.knowledge_graph()
+            entities = graph.get("entities") or []
+            relationships = graph.get("relationships") or []
+            self.list.addItem(f"── Knowledge Graph — {len(entities)} entities, {len(relationships)} links ──")
+            for e in entities[:150]:
+                self.list.addItem(f"• {e.get('name')}  [{e.get('type')}]")
+            for r in relationships[:150]:
+                self.list.addItem(f"↳ {r.get('predicate')} ({r.get('subject_id', '')[:8]} → {r.get('object_id', '')[:8]})")
+            if not entities and not relationships:
+                self.list.addItem("(knowledge graph is empty)")
+        except BackendConnectionError as e:
+            self.list.addItem(f"⚠ knowledge graph: {e}")
+
+        # Memories (vector memory).
         try:
             memories = self._client.list_memories()
-            for m in memories[:200]:
+            self.list.addItem(f"── Memories ({len(memories)}) ──")
+            for m in memories[:150]:
                 text = m.get("title") or m.get("content") or str(m)
-                self.list.addItem(str(text))
-            if self.list.count() == 0:
+                self.list.addItem(f"• {text}")
+            if not memories:
                 self.list.addItem("(no memories yet)")
         except BackendConnectionError as e:
-            self.list.addItem(f"⚠ {e}")
+            self.list.addItem(f"⚠ memories: {e}")
 
 
 class SettingsPage(QWidget):
