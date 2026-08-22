@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores';
 import { Button, Input, Card } from '../../components/ui';
 import { Mic, Volume2, Waves, Settings, CheckCircle, XCircle } from 'lucide-react';
@@ -11,6 +11,30 @@ import {
   type PiperVoice,
 } from '../../services/api';
 import { webSocketService } from '../../services/websocket';
+
+/** Debounce a callback so rapid events (keystrokes, slider ticks) collapse into one call. */
+function useDebouncedCallback<T extends (...args: any[]) => void>(
+  fn: T,
+  delayMs: number
+): T {
+  const ref = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+
+  useEffect(() => {
+    return () => {
+      if (ref.current) clearTimeout(ref.current);
+    };
+  }, []);
+
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (ref.current) clearTimeout(ref.current);
+      ref.current = setTimeout(() => fnRef.current(...args), delayMs);
+    },
+    [delayMs]
+  ) as T;
+}
 
 export function VoiceSettingsPage() {
   const {
@@ -34,6 +58,17 @@ export function VoiceSettingsPage() {
   const [testResult, setTestResult] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [piperVoices, setPiperVoices] = useState<PiperVoice[]>([]);
   const [loadingVoices, setLoadingVoices] = useState(true);
+
+  // Debounced persistence: typing/dragging fires many events; collapse them so
+  // we send ONE /settings POST ~400ms after the user stops (regression B2).
+  const persistWakeWord = useDebouncedCallback(
+    (value: string) => updateSharedSettings({ wake_word: value }).catch(() => {}),
+    400
+  );
+  const persistVoiceSpeed = useDebouncedCallback(
+    (value: number) => updateSharedSettings({ voice_speed: value }).catch(() => {}),
+    400
+  );
 
   // Load real Piper voices discovered on the backend.
   useEffect(() => {
@@ -245,7 +280,7 @@ export function VoiceSettingsPage() {
                     value={wakeWord}
                     onChange={(e) => {
                       setWakeWord(e.target.value);
-                      updateSharedSettings({ wake_word: e.target.value }).catch(() => {});
+                      persistWakeWord(e.target.value);
                     }}
                     placeholder="e.g., Hey Arena, Computer, Assistant"
                   />
@@ -330,7 +365,7 @@ export function VoiceSettingsPage() {
                     onChange={(e) => {
                       const speed = parseFloat(e.target.value);
                       setVoiceSpeed(speed);
-                      updateSharedSettings({ voice_speed: speed }).catch(() => {});
+                      persistVoiceSpeed(speed);
                     }}
                     className="w-full h-2 bg-background-surface rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
