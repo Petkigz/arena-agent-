@@ -88,7 +88,18 @@ fun AppScaffold(
                 )
             }
             composable(AppTab.CHAT.route) {
-                ChatScreen(onVoiceToggle = onToggleTalk)
+                ChatScreen(
+                    onVoiceToggle = onToggleTalk,
+                    onOpenSettings = {
+                        navController.navigate(AppTab.TOOLS.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(AppTab.TOOLS.route) {
                 ToolsScreen(
