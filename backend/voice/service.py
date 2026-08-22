@@ -90,6 +90,13 @@ class VoiceService:
             await self.pipeline.update_wake_word(model_name)
             app_logger.info(f"Updated wake word to {wake_word} (model: {model_name})")
 
+        # Update voice (Piper voice id, e.g. "en_US-lessac-medium")
+        if "voice" in settings or "selectedVoice" in settings:
+            voice = settings.get("voice") or settings.get("selectedVoice")
+            if voice and self.pipeline and self.pipeline.tts:
+                self.pipeline.tts.set_voice(str(voice))
+                app_logger.info(f"Updated voice to {voice}")
+
         # Update voice speed
         if "voiceSpeed" in settings:
             speed = float(settings["voiceSpeed"])

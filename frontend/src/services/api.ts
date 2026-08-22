@@ -25,6 +25,77 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+export interface PiperVoice {
+  id: string;
+  name: string;
+  language: string;
+  region: string | null;
+  quality: string;
+  path: string;
+  has_config: boolean;
+  active?: boolean;
+}
+
+/**
+ * List Piper voice models discovered on the backend (scans ~/piper_models,
+ * ~/.local/share/piper, ARENA_PIPER_MODEL_DIR, and the piper-tts package dir).
+ */
+export async function listPiperVoices(): Promise<PiperVoice[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/voice/piper-voices`, { headers: apiKeyHeader() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.voices) ? (data.voices as PiperVoice[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Persist the active Piper voice on the backend (drives /voice/synthesize and
+ * the running voice pipeline).
+ */
+export async function selectPiperVoice(voiceId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/voice/piper/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ profile_name: voiceId }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.success === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Synthesize speech on the backend (Piper-first, pyttsx3 fallback) and return
+ * the playable audio URL, or null on failure.
+ */
+export async function synthesizeVoice(
+  text: string,
+  voice?: string
+): Promise<{ audio_url: string; engine?: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/voice/synthesize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ text, voice }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.success || !data?.audio_url) return null;
+    const url = data.audio_url.startsWith('/')
+      ? `${API_BASE_URL}${data.audio_url}`
+      : data.audio_url;
+    return { audio_url: url, engine: data.engine };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Upload a file to the backend.
  */

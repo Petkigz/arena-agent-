@@ -8,11 +8,66 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.utils.logger import app_logger
 
+try:
+    import soundfile as _sf
+except ImportError:
+    _sf = None
+
+from app.perception.piper_voice import (
+    PIPER_AVAILABLE,
+    DEFAULT_VOICE_ID,
+    find_piper_models,
+    resolve_voice_id,
+    synthesize_piper,
+)
+
 class LocalTextToSpeech:
     AUDIO_DIR = settings.DATA_DIR / "audio"
     VOICES_DIR = AUDIO_DIR / "voices"
     CUSTOM_VOICE_REF = AUDIO_DIR / "custom_voice_reference.wav"
     ACTIVE_VOICE_CONFIG = AUDIO_DIR / "active_voice.txt"
+    ACTIVE_PIPER_VOICE_CONFIG = AUDIO_DIR / "active_piper_voice.txt"
+
+    @classmethod
+    def get_active_piper_voice(cls) -> str:
+        """Return the active Piper voice id (env override > saved > first available > default)."""
+        env = os.environ.get("ARENA_PIPER_VOICE")
+        if env:
+            return env.strip()
+
+        cls.ensure_audio_dir()
+        if cls.ACTIVE_PIPER_VOICE_CONFIG.exists():
+            try:
+                saved = cls.ACTIVE_PIPER_VOICE_CONFIG.read_text(encoding="utf-8").strip()
+                if saved:
+                    return saved
+            except Exception:
+                pass
+        return resolve_voice_id(DEFAULT_VOICE_ID)
+
+    @classmethod
+    def set_active_piper_voice(cls, voice_id: str) -> bool:
+        """Persist the active Piper voice id."""
+        cls.ensure_audio_dir()
+        resolved = resolve_voice_id(voice_id.strip())
+        if resolved != voice_id.strip():
+            app_logger.warning(f"Piper voice '{voice_id}' not found; using '{resolved}'")
+        try:
+            cls.ACTIVE_PIPER_VOICE_CONFIG.write_text(resolved, encoding="utf-8")
+        except Exception as e:
+            app_logger.error(f"Could not persist active Piper voice: {e}")
+            return False
+        app_logger.info(f"Set active Piper voice to '{resolved}'")
+        return True
+
+    @classmethod
+    def list_piper_voices(cls) -> List[Dict[str, Any]]:
+        """Return discovered Piper voices with an 'active' flag."""
+        voices = find_piper_models()
+        active = cls.get_active_piper_voice()
+        for v in voices:
+            v["active"] = v["id"] == active
+        return voices
 
     @classmethod
     def ensure_audio_dir(cls):
@@ -112,6 +167,17 @@ class LocalTextToSpeech:
                 wav_file.writeframes(data)
 
     @classmethod
+    def _write_pcm16_wav(cls, file_path: Path, audio: Any, sample_rate: int) -> None:
+        """Write float32 mono audio as a 16-bit PCM WAV (no soundfile dependency)."""
+        samples = audio.astype("float32")
+        pcm = (samples.clip(-1.0, 1.0) * 32767.0).astype("<i2")
+        with wave.open(str(file_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(int(sample_rate))
+            wav_file.writeframes(pcm.tobytes())
+
+    @classmethod
     def clean_text_for_speech(cls, text: str) -> str:
         """
         Cleans stage directions like *laughs*, *chuckles*, [gasp] for smooth speech synthesis.
@@ -122,11 +188,13 @@ class LocalTextToSpeech:
         return cleaned.strip() or text
 
     @classmethod
-    def synthesize_speech(cls, text: str, filename: Optional[str] = None, use_custom_voice: bool = True) -> Dict[str, Any]:
+    def synthesize_speech(cls, text: str, filename: Optional[str] = None, use_custom_voice: bool = True, voice: Optional[str] = None) -> Dict[str, Any]:
         """
         Synthesizes text into spoken audio (.wav) locally.
-        If active voice profile is set and exists, uses it as reference.
-        Saves audio file into data/audio/ and returns relative URL for web playback.
+
+        Prefers Piper (offline, deterministic, real voices) when the model is
+        available; falls back to the OS TTS driver (pyttsx3), then a beep.
+        Saves audio into data/audio/ and returns a relative URL for playback.
         """
         cls.ensure_audio_dir()
         text = text.strip()
@@ -142,6 +210,33 @@ class LocalTextToSpeech:
         audio_path = cls.AUDIO_DIR / filename
         active_profile = cls.get_active_voice_profile()
         has_custom_voice = use_custom_voice and active_profile != "Default Assistant" and cls.CUSTOM_VOICE_REF.exists()
+
+        # 1) Piper (offline, real voice). Write a 16-bit PCM WAV for browser playback.
+        piper_voice_id = voice or cls.get_active_piper_voice()
+        if PIPER_AVAILABLE:
+            try:
+                result = synthesize_piper(speech_text, voice_id=piper_voice_id, speed=1.0)
+                if result is not None:
+                    audio, sr = result
+                    if _sf is not None:
+                        _sf.write(str(audio_path), audio, sr, subtype="PCM_16")
+                    else:  # fallback: write via wave module
+                        cls._write_pcm16_wav(audio_path, audio, sr)
+                    if audio_path.exists() and audio_path.stat().st_size > 0:
+                        return {
+                            "success": True,
+                            "text": text,
+                            "spoken_text": speech_text,
+                            "engine": "piper",
+                            "voice": piper_voice_id,
+                            "active_voice_profile": active_profile,
+                            "custom_voice_cloned": False,
+                            "file_path": str(audio_path),
+                            "file_name": filename,
+                            "audio_url": f"/audio/{filename}",
+                        }
+            except Exception as e:
+                app_logger.warning(f"Piper synthesis failed, falling back to pyttsx3: {e}")
 
         try:
             if has_custom_voice:

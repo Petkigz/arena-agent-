@@ -1,7 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSettingsStore } from '../../stores';
 import { Button, Input, Card } from '../../components/ui';
 import { Mic, Volume2, Waves, Settings, CheckCircle, XCircle } from 'lucide-react';
+import { listPiperVoices, synthesizeVoice, selectPiperVoice, type PiperVoice } from '../../services/api';
+import { webSocketService } from '../../services/websocket';
 
 export function VoiceSettingsPage() {
   const {
@@ -23,13 +25,54 @@ export function VoiceSettingsPage() {
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [piperVoices, setPiperVoices] = useState<PiperVoice[]>([]);
+  const [loadingVoices, setLoadingVoices] = useState(true);
 
-  const availableVoices = [
-    { id: 'default', name: 'Default Voice', description: 'Standard Arena voice' },
-    { id: 'professional', name: 'Professional', description: 'Clear and professional tone' },
-    { id: 'friendly', name: 'Friendly', description: 'Warm and conversational' },
-    { id: 'technical', name: 'Technical', description: 'Precise and technical tone' },
-  ];
+  // Load real Piper voices discovered on the backend.
+  useEffect(() => {
+    let cancelled = false;
+    listPiperVoices().then((voices) => {
+      if (!cancelled) {
+        setPiperVoices(voices);
+        setLoadingVoices(false);
+        // If the persisted selection is a stale fake id (default/professional/...),
+        // switch to the active Piper voice.
+        const known = voices.map((v) => v.id);
+        if (voices.length > 0 && !known.includes(selectedVoice)) {
+          const active = voices.find((v) => v.active);
+          setSelectedVoice(active?.id ?? voices[0].id);
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A voice list built from real Piper voices, plus a "system OS voice" fallback.
+  const availableVoices = piperVoices.length
+    ? piperVoices.map((v) => ({
+        id: v.id,
+        name: v.name,
+        description: `Offline Piper voice (${v.quality}, ${v.language}${v.region ? '-' + v.region : ''})${v.has_config ? '' : ' — missing .onnx.json config'}`,
+      }))
+    : [{ id: 'system', name: 'System Voice', description: 'OS default TTS (pyttsx3) — no Piper model found' }];
+
+  const handleSelectVoice = useCallback(
+    (voiceId: string) => {
+      setSelectedVoice(voiceId);
+      // Persist on the backend (drives /voice/synthesize + the Beanie orb pipeline).
+      selectPiperVoice(voiceId).catch(() => {});
+      // Best-effort: sync the running voice pipeline too.
+      try {
+        webSocketService.updateVoiceSettings({ selectedVoice: voiceId });
+      } catch {
+        /* WS not connected */
+      }
+    },
+    [setSelectedVoice]
+  );
 
   const handleTestWakeWord = useCallback(async () => {
     setTesting(true);
@@ -54,47 +97,54 @@ export function VoiceSettingsPage() {
     }
   }, [wakeWord]);
 
-  const handleTestVoice = useCallback(() => {
+  const handleTestVoice = useCallback(async () => {
     setTesting(true);
     setTestResult(null);
 
-    // Use Web Speech API for actual audio playback test
+    const text = `Hello! This is Arena speaking with the ${selectedVoice} voice.`;
+
+    // Prefer backend synthesis (Piper-first, pyttsx3 fallback) so the preview
+    // matches what Beanie actually sounds like.
+    const synth = await synthesizeVoice(text, selectedVoice);
+    if (synth) {
+      const audio = new Audio(synth.audio_url);
+      audio.onended = () => {
+        setTesting(false);
+        setTestResult({
+          type: 'success',
+          message: `Voice test completed (engine: ${synth.engine ?? 'backend'}).`,
+        });
+      };
+      audio.onerror = () => {
+        setTesting(false);
+        setTestResult({ type: 'error', message: 'Audio playback failed.' });
+      };
+      audio.play().catch(() => {
+        setTesting(false);
+        setTestResult({ type: 'error', message: 'Audio playback was blocked by the browser.' });
+      });
+      return;
+    }
+
+    // Fall back to the browser's speech synthesis.
     if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(
-        `Hello! This is Arena speaking with the ${selectedVoice} voice at ${voiceSpeed}x speed.`
-      );
+      const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = voiceSpeed;
-
-      // Try to find a matching voice
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(
-        (v) => v.name.toLowerCase().includes(selectedVoice) || v.lang.startsWith('en')
-      );
-      if (match) utterance.voice = match;
-
       utterance.onend = () => {
         setTesting(false);
         setTestResult({
           type: 'success',
-          message: 'Voice test completed successfully.',
+          message: 'Voice test completed (browser speech synthesis — backend unavailable).',
         });
       };
-
       utterance.onerror = (event) => {
         setTesting(false);
-        setTestResult({
-          type: 'error',
-          message: `Voice synthesis error: ${event.error}`,
-        });
+        setTestResult({ type: 'error', message: `Voice synthesis error: ${event.error}` });
       };
-
       window.speechSynthesis.speak(utterance);
     } else {
       setTesting(false);
-      setTestResult({
-        type: 'error',
-        message: 'Speech synthesis not supported in this browser.',
-      });
+      setTestResult({ type: 'error', message: 'No speech synthesis available (backend or browser).' });
     }
   }, [selectedVoice, voiceSpeed]);
 
@@ -193,8 +243,12 @@ export function VoiceSettingsPage() {
                 <h3 className="text-lg font-semibold text-text-primary">Voice Selection</h3>
               </div>
               <p className="text-sm text-text-secondary mb-4">
-                Choose the voice personality for Arena
+                Choose the voice personality for Arena (offline Piper voices)
               </p>
+
+              {loadingVoices ? (
+                <p className="text-sm text-text-muted mb-4">Discovering Piper voices…</p>
+              ) : null}
 
               <div className="space-y-3 mb-4">
                 {availableVoices.map((voice) => (
@@ -211,7 +265,7 @@ export function VoiceSettingsPage() {
                       name="voice"
                       value={voice.id}
                       checked={selectedVoice === voice.id}
-                      onChange={(e) => setSelectedVoice(e.target.value)}
+                      onChange={(e) => handleSelectVoice(e.target.value)}
                       className="mt-1"
                     />
                     <div className="flex-1">

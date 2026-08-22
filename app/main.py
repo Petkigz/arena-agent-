@@ -160,6 +160,7 @@ class DocEditRequest(BaseModel):
 
 class TTSSynthesizeRequest(BaseModel):
     text: str
+    voice: Optional[str] = None
 
 class VoiceProfileSelectRequest(BaseModel):
     profile_name: str
@@ -821,9 +822,22 @@ async def voice_transcribe_endpoint(file: UploadFile = File(...)):
 
 @router.post("/voice/synthesize")
 def voice_synthesize_endpoint(req: TTSSynthesizeRequest):
-    res = LocalTextToSpeech.synthesize_speech(req.text)
+    res = LocalTextToSpeech.synthesize_speech(req.text, voice=req.voice)
     db.create_audit_log("voice_synthesize", "success", f"Synthesized speech for text: '{req.text[:80]}'", level=0)
     return res
+
+
+@router.get("/voice/piper-voices")
+def list_piper_voices_endpoint():
+    """List available Piper voice models (discovered from disk)."""
+    return {"voices": LocalTextToSpeech.list_piper_voices(), "active_voice": LocalTextToSpeech.get_active_piper_voice()}
+
+
+@router.post("/voice/piper/select")
+def select_piper_voice_endpoint(req: VoiceProfileSelectRequest):
+    ok = LocalTextToSpeech.set_active_piper_voice(req.profile_name)
+    db.create_audit_log("select_piper_voice", "success", f"Selected Piper voice: '{req.profile_name}'", level=0)
+    return {"success": ok, "active_voice": LocalTextToSpeech.get_active_piper_voice()}
 
 @router.post("/voice/clone-reference")
 async def upload_voice_clone_reference(file: UploadFile = File(...)):
