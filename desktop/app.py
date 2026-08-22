@@ -825,7 +825,7 @@ class MainWindow(QMainWindow):
     def __init__(self, base_url: str = "http://localhost:8000"):
         super().__init__()
         self.setWindowTitle("Arena — Beanie")
-        self.resize(520, 760)
+        self.resize(920, 720)
 
         self.settings = DesktopSettings()
         # Persisted server URL overrides the CLI default when set.
