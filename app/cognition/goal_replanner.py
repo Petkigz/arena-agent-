@@ -92,7 +92,10 @@ class GoalReplanner:
         world_model: Optional[Any] = None,
         tool_registry: Optional[Any] = None,
         failed_payload: Optional[Dict[str, Any]] = None,
-        lesson_store: Optional[Any] = None
+        lesson_store: Optional[Any] = None,
+        outcome_store: Optional[Any] = None,
+        hardware_self_model: Optional[Dict[str, Any]] = None,
+        resource_manager: Optional[Any] = None,
     ) -> Optional[ActionProposal]:
         app_logger.info(f"GoalReplanner triggered for goal '{tracker.goal_id[:8]}': Reassessing & generating Plan B...")
 
@@ -108,7 +111,8 @@ class GoalReplanner:
             return ActionPlanner.plan_and_evaluate_action(
                 user_text, complexity=complexity, goal_rep=goal_rep, candidates=re_obs_candidates,
                 memory_store=memory_store, world_model=world_model, tool_registry=tool_registry,
-                lesson_store=lesson_store
+                outcome_store=outcome_store, lesson_store=lesson_store,
+                hardware_self_model=hardware_self_model, resource_manager=resource_manager,
             )
 
         tracker.transition(GoalLifecycleState.REASSESSING, f"Reassessing failed conditions: {failed_result.failed_conditions}")
@@ -146,7 +150,8 @@ class GoalReplanner:
         replan_proposal = ActionPlanner.plan_and_evaluate_action(
             user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates,
             memory_store=memory_store, world_model=world_model, tool_registry=tool_registry,
-            lesson_store=lesson_store
+            outcome_store=outcome_store, lesson_store=lesson_store,
+            hardware_self_model=hardware_self_model, resource_manager=resource_manager,
         )
         audit_logger.info(f"GoalReplanner evaluated {len(plan_b_candidates)} Plan B branches, generated proposal '{replan_proposal.action_type}'")
 

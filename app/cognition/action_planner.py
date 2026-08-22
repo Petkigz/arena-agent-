@@ -40,7 +40,9 @@ class ActionPlanner:
         world_model: Optional[Any] = None,
         tool_registry: Optional[Any] = None,
         outcome_store: Optional[Any] = None,
-        lesson_store: Optional[Any] = None
+        lesson_store: Optional[Any] = None,
+        hardware_self_model: Optional[Dict[str, Any]] = None,
+        resource_manager: Optional[Any] = None,
     ) -> ActionProposal:
         """
         Generates candidate strategies via SemanticGoalInterpreter (or uses provided candidates),
@@ -49,18 +51,39 @@ class ActionPlanner:
 
         Phase 1B: When outcome_store is provided, historical success rates adjust utility scores.
         Phase 1C: When lesson_store is provided, structured lessons influence strategy selection.
+        P2 AGI: When hardware_self_model/resource_manager provided, resource-aware adjustment
+        penalizes high-cost actions under pressure (RAM/CPU/disk).
         """
         candidate_list = candidates if candidates is not None else cls.generate_candidate_actions(
             goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
         )
-        # Phase 1B/1C: Pass stores for history-influenced selection
+        # Phase 1B/1C/P2: Pass stores for history-influenced + resource-aware selection
         goal_type = goal_rep.primary_intent_type if goal_rep else None
+        # Auto-fetch hardware self-model and resource manager from runtime if not provided
+        if hardware_self_model is None or resource_manager is None:
+            try:
+                from app.cognition.runtime import CognitiveRuntime
+                rt = CognitiveRuntime.get_instance()
+                if hardware_self_model is None:
+                    hardware_self_model = getattr(rt, "hardware_self_model", None)
+                if resource_manager is None:
+                    # ResourceManager lives in advanced_cognition
+                    rm = getattr(getattr(rt, "advanced_cognition", None), "resource_manager", None)
+                    if rm is None:
+                        # Fallback: try direct
+                        rm = getattr(rt, "resource_manager", None)
+                    resource_manager = rm
+            except Exception:
+                pass
+
         sim_res = CounterfactualSimulator.simulate_competing_branches(
             goal_text, candidate_list, goal_type=goal_type,
-            outcome_store=outcome_store, lesson_store=lesson_store
+            outcome_store=outcome_store, lesson_store=lesson_store,
+            hardware_self_model=hardware_self_model,
+            resource_manager=resource_manager,
         )
         winner = sim_res.winning_branch
 
-        app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}'")
+        app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}' (utility {winner.utility_score:.4f})")
 
         return ActionProposal.from_candidate(winner, goal_text=goal_text, complexity=complexity)
