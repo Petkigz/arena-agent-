@@ -93,6 +93,7 @@ class DisposableSandbox:
         # Determine optimal execution engine based on Host OS -> Guest OS matrix
         cmd_args = command
         use_shell = True
+        isolated = False
         exec_mode = f"Native Subprocess ({host_os})"
 
         # 1. Specific Target Linux requested explicitly
@@ -102,6 +103,7 @@ class DisposableSandbox:
             wsl_path = f"/mnt/{drive_letter}{raw_rel}" if drive_letter else raw_rel
             cmd_args = ["wsl", "bash", "-c", f"cd '{wsl_path}' 2>/dev/null || cd ~; {command}"]
             use_shell = False
+            isolated = True
             exec_mode = "WSL (Linux on Windows)"
         elif guest_os == "linux" and shutil.which("docker"):
             cmd_args = [
@@ -112,6 +114,7 @@ class DisposableSandbox:
                 "bash", "-c", command
             ]
             use_shell = False
+            isolated = True
             exec_mode = "Docker Container (Linux/Ubuntu)"
 
         # 2. Target Windows (from Linux or Mac via Wine)
@@ -125,6 +128,7 @@ class DisposableSandbox:
         # 3. Target Android
         elif guest_os == "android" and shutil.which("adb"):
             cmd_args = f"adb shell '{command}'"
+            isolated = True
             exec_mode = "ADB Remote Shell (Android Target)"
 
         # 4. Target macOS
@@ -158,6 +162,7 @@ class DisposableSandbox:
                     "host_os": platform.system(),
                     "target_guest_os": guest_os,
                     "execution_mode": exec_mode,
+                    "isolated": isolated,
                     "exit_code": 0,
                     "stdout": res.stdout,
                     "stderr": res.stderr,
@@ -199,6 +204,7 @@ class DisposableSandbox:
                 "host_os": platform.system(),
                 "target_guest_os": guest_os,
                 "execution_mode": f"Native Isolated Subprocess ({host_os})",
+                "isolated": isolated,
                 "exit_code": exit_code,
                 "stdout": fallback_res.stdout,
                 "stderr": fallback_res.stderr,
