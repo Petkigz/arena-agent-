@@ -15,16 +15,25 @@ interface UseVoiceReturn {
   stopListening: () => void;
   transcript: string;
   error: string | null;
+  /** 0..1 — microphone amplitude (for the reactive orb's "listening" field). */
+  inputLevel: number;
+  /** 0..1 — TTS playback amplitude (for the orb's "speaking" field). */
+  outputLevel: number;
 }
 
 export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOptions): UseVoiceReturn {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [inputLevel, setInputLevel] = useState(0);
+  const [outputLevel, setOutputLevel] = useState(0);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const levelRafRef = useRef<number | null>(null);
+  const lastOutputRef = useRef(0);
   const audioQueueRef = useRef<AudioBuffer[]>([]);
   const isPlayingRef = useRef(false);
 
@@ -32,6 +41,45 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
 
   // Use ref to break circular reference for React Compiler
   const playNextBufferRef = useRef<() => void>(() => {});
+
+  // ── Amplitude loop (mic level via AnalyserNode + TTS level decay) ─────────
+  const stopLevelLoop = useCallback(() => {
+    if (levelRafRef.current) {
+      cancelAnimationFrame(levelRafRef.current);
+      levelRafRef.current = null;
+    }
+    setInputLevel(0);
+    setOutputLevel(0);
+  }, []);
+
+  const startLevelLoop = useCallback(() => {
+    if (levelRafRef.current) return;
+    let last = 0;
+    const loop = (ts: number) => {
+      // Throttle state updates to ~30 fps (orb smooths the rest in its own rAF).
+      if (ts - last > 33) {
+        last = ts;
+        const analyser = analyserRef.current;
+        if (analyser) {
+          const data = new Uint8Array(analyser.fftSize);
+          analyser.getByteTimeDomainData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            const v = (data[i] - 128) / 128;
+            sum += v * v;
+          }
+          const rms = Math.sqrt(sum / data.length);
+          setInputLevel(clampLevel((rms - 0.02) / 0.3));
+        }
+        // Decay the TTS level when nothing has played recently.
+        if (ts - lastOutputRef.current > 180) {
+          setOutputLevel((prev) => (prev > 0.01 ? prev * 0.6 : 0));
+        }
+      }
+      levelRafRef.current = requestAnimationFrame(loop);
+    };
+    levelRafRef.current = requestAnimationFrame(loop);
+  }, []);
 
   // Play next buffer from queue
   const playNextBuffer = useCallback(() => {
@@ -68,9 +116,17 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       // Assuming 16-bit PCM, mono
       const int16Array = new Int16Array(audioData);
       const float32Array = new Float32Array(int16Array.length);
+      let sum = 0;
       for (let i = 0; i < int16Array.length; i++) {
         float32Array[i] = int16Array[i] / 32768.0;
+        const v = int16Array[i] / 32768.0;
+        sum += v * v;
       }
+
+      // Track playback amplitude so the orb's "speaking" field reacts to TTS.
+      const rms = int16Array.length ? Math.sqrt(sum / int16Array.length) : 0;
+      setOutputLevel(clampLevel(rms / 0.3));
+      lastOutputRef.current = performance.now();
 
       const audioBuffer = audioContext.createBuffer(1, float32Array.length, 16000);
       audioBuffer.getChannelData(0).set(float32Array);
@@ -153,6 +209,14 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       source.connect(processor);
       processor.connect(audioContext.destination);
 
+      // AnalyserNode (parallel tap) for smooth mic-amplitude → orb field.
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.4;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      startLevelLoop();
+
       // Tell backend to start voice input
       webSocketService.startVoiceInput(conversationId);
     } catch (err) {
@@ -182,6 +246,9 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       audioContextRef.current = null;
     }
 
+    analyserRef.current = null;
+    stopLevelLoop();
+
     // Clear audio queue
     audioQueueRef.current = [];
     isPlayingRef.current = false;
@@ -191,14 +258,15 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
 
     setVoiceState('idle');
     setTranscript('');
-  }, [conversationId]);
+  }, [conversationId, stopLevelLoop]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      stopLevelLoop();
       stopListening();
     };
-  }, [stopListening]);
+  }, [stopListening, stopLevelLoop]);
 
   return {
     voiceState,
@@ -207,5 +275,11 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
     stopListening,
     transcript,
     error,
+    inputLevel,
+    outputLevel,
   };
+}
+
+function clampLevel(n: number): number {
+  return n <= 0 ? 0 : n >= 1 ? 1 : n;
 }

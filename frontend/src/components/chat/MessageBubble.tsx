@@ -2,12 +2,13 @@ import { useState, memo, useCallback, useMemo, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion } from 'framer-motion';
-import { User, Bot, RotateCcw, Trash2, Copy, Check } from 'lucide-react';
+import { User, RotateCcw, Trash2, Copy, Check } from 'lucide-react';
 import { ActionSteps } from './ActionSteps';
 import { ReasoningTrace } from './ReasoningTrace';
 import { CodeChanges } from './CodeChanges';
 import { AttachmentDisplay } from '../ui/AttachmentDisplay';
 import { messageVariants } from '../animations/variants';
+import { BeanieAvatar } from '../presence/BeanieAvatar';
 import type { Message } from '../../types';
 
 interface MessageBubbleProps {
@@ -62,22 +63,20 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
       aria-label={`${isUser ? 'You' : 'Arena'} said at ${formattedTime}`}
       className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
     >
-      {/* Avatar */}
+      {/* Avatar — the user keeps a simple glyph; the assistant is Beanie's orb */}
       <motion.div
         className="flex-shrink-0"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ delay: 0.1, type: 'spring', stiffness: 300 }}
       >
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-          isUser ? 'bg-blue-600' : 'bg-purple-600'
-        }`}>
-          {isUser ? (
+        {isUser ? (
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
             <User className="w-5 h-5 text-white" aria-hidden="true" />
-          ) : (
-            <Bot className="w-5 h-5 text-white" aria-hidden="true" />
-          )}
-        </div>
+          </div>
+        ) : (
+          <BeanieAvatar messageStatus={message.status} />
+        )}
       </motion.div>
 
       {/* Message content */}

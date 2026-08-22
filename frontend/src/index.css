@@ -234,3 +234,68 @@ body,
   white-space: nowrap;
   border-width: 0;
 }
+
+/* ── Reactive Beanie orb ───────────────────────────────────────────────────
+   The orb is the assistant's "presence": a layered translucent core wrapped in
+   a voice field of concentric rings. The rings are not decoration — they carry
+   the cognitive/voice state (idle breathe, listening reacts to mic amplitude,
+   thinking circulates, speaking radiates outward, acting sweeps, success
+   ripples, error disturbs, sleeping dims). Amplitude is driven by the
+   rAF loop in ReactiveBeanieOrb (sets `r`/`opacity`), motion by these
+   keyframes (transform). Both respect prefers-reduced-motion above. */
+.beanie-orb,
+.beanie-orb__ring,
+.beanie-orb__core,
+.beanie-orb__focus,
+.beanie-orb__halo {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.beanie-orb__ring { will-change: transform, opacity; }
+
+@keyframes beanie-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+
+@keyframes beanie-breathe-fast {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+@keyframes beanie-ring-pulse {
+  0%, 100% { opacity: 0.22; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.06); }
+}
+
+@keyframes beanie-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes beanie-spin-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes beanie-outward {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+@keyframes beanie-ripple {
+  0% { transform: scale(0.55); opacity: 0.85; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@keyframes beanie-disturb {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px) rotate(-2deg); }
+  40% { transform: translateX(3px) rotate(2deg); }
+  60% { transform: translateX(-2px) rotate(-1deg); }
+  80% { transform: translateX(2px) rotate(1deg); }
+}
+
+@keyframes beanie-focus {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.35); }
+}

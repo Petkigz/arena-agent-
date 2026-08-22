@@ -1,4 +1,4 @@
-import { PresenceOrb } from '../../components/presence/PresenceOrb';
+import { ReactiveBeanieOrb } from '../../components/presence/ReactiveBeanieOrb';
 import { usePresenceStore } from '../../stores';
 import { Button } from '../../components/ui';
 
@@ -8,7 +8,7 @@ export function BeaniePage() {
   return (
     <div className="h-full flex flex-col items-center justify-center p-6 bg-background-primary">
       {/* Presence orb */}
-      <PresenceOrb status={presence.status} className="mb-8" />
+      <ReactiveBeanieOrb status={presence.status} size="lg" className="mb-8" />
 
       {/* Name and status */}
       <h1 className="text-3xl font-bold text-text-primary mb-2">BEANIE</h1>

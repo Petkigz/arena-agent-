@@ -1,18 +1,17 @@
-import { PresenceOrb } from '../presence/PresenceOrb';
+import { ReactiveBeanieOrb, type BeanieOrbStatus } from '../presence/ReactiveBeanieOrb';
 import { Button } from '../ui/Button';
 import { useVoice } from '../../hooks/useVoice';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { Mic, MicOff } from 'lucide-react';
-import type { PresenceStatus } from '../../types/presence';
 
-// Map the voice state machine onto the orb's presence states (color + pulse).
-const VOICE_TO_ORB: Record<string, PresenceStatus> = {
+// Map the voice state machine onto the orb's presence states.
+const VOICE_TO_ORB: Record<string, BeanieOrbStatus> = {
   idle: 'idle',
   stopped: 'idle',
   listening: 'listening',
   recording: 'listening',
-  processing: 'working',
-  thinking: 'working',
+  processing: 'thinking',
+  thinking: 'thinking',
   speaking: 'speaking',
 };
 
@@ -34,7 +33,9 @@ interface BeanieOrbPanelProps {
 /**
  * BeanieOrbPanel — the centered floating orb that replaces the chat content when
  * the user presses the Beanie button. Talking is real: it uses `useVoice` (mic
- * capture → PCM stream → backend STT → cognitive runtime → spoken reply).
+ * capture → PCM stream → backend STT → cognitive runtime → spoken reply). The
+ * orb's voice-field rings react to the live mic (listening) and TTS (speaking)
+ * amplitude.
  */
 export function BeanieOrbPanel({ conversationId, onTranscript }: BeanieOrbPanelProps) {
   const { presence } = usePresenceStore();
@@ -45,15 +46,19 @@ export function BeanieOrbPanel({ conversationId, onTranscript }: BeanieOrbPanelP
     stopListening,
     transcript,
     error,
+    inputLevel,
+    outputLevel,
   } = useVoice({ conversationId, onTranscript });
 
-  const orbStatus = VOICE_TO_ORB[voiceState] ?? 'idle';
+  const orbStatus: BeanieOrbStatus = VOICE_TO_ORB[voiceState] ?? 'idle';
   const stateLabel = STATE_LABELS[voiceState] ?? presence.message;
+  // Speaking → react to TTS audio; otherwise react to the microphone.
+  const level = orbStatus === 'speaking' ? outputLevel : inputLevel;
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-6" role="region" aria-label="Beanie">
-      {/* Floating presence orb — color/pulse reflects listening/thinking/speaking */}
-      <PresenceOrb status={orbStatus} size="lg" className="mb-6" />
+      {/* Floating presence orb — voice field reacts to mic/TTS amplitude */}
+      <ReactiveBeanieOrb status={orbStatus} level={level} size="lg" className="mb-8" />
 
       {/* Identity */}
       <h2 className="text-2xl font-bold text-text-primary mb-1">BEANIE</h2>
