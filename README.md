@@ -102,27 +102,41 @@ Actions without reliable postcondition sensors (SMS, screen taps, camera) remain
 arena-agent-/
 ├── app/
 │   ├── agents/           # Thin agent loops (coding, data analysis) sharing the one brain
-│   ├── cognition/        # Cognitive pipeline (reasoning, goals, verification)
-│   │   ├── runtime.py           # CognitiveRuntime (main orchestration loop)
+│   │   ├── coding_agent.py      # Plan→write→test→iterate, shares ONE brain
+│   │   ├── data_analysis_agent.py # Read-only SQL/pandas, shares ONE brain
+│   │   └── self_evolving_agent.py # Verified: synthesize→pytest→hotload only if green (P2)
+│   ├── cognition/        # Cognitive pipeline (reasoning, goals, verification) — 17 modules wired
+│   │   ├── runtime.py           # CognitiveRuntime (main orchestration, 17 modules, multimodal)
 │   │   ├── goal_interpreter.py  # Semantic goal parsing
 │   │   ├── goal_verifier.py     # Tri-state condition verification
-│   │   ├── goal_replanner.py    # Plan B generation on failure
+│   │   ├── goal_replanner.py    # Plan B generation (resource-aware)
+│   │   ├── goal_decomposer.py   # Long-horizon decomposition → sub-goals DAG (P2)
+│   │   ├── project_manager.py   # Multi-session project tracking (P2)
 │   │   ├── perception.py        # Environmental observation strategies
 │   │   ├── world_model.py       # Entity/observation store
 │   │   ├── reasoning_loop.py    # ACT/INVESTIGATE/DEFER/ANSWER routing
-│   │   ├── counterfactual_simulator.py
+│   │   ├── counterfactual_simulator.py # Resource-aware (cpu/memory/time) + Hist/Lesson/Skill/Res
+│   │   ├── causal_inference.py  # Learns from execution + surprisal (Bayesian) (P1-2)
+│   │   ├── language_grounding.py # Perceptual/motor/multimodal groundings (populated via detector)
+│   │   ├── social_cognition.py  # Theory of mind + emotion from prosody + text (P2)
 │   │   └── action_proposal.py   # ActionGate safety evaluation
-│   ├── memory/           # Memory systems (episodic, semantic, procedural)
-│   ├── perception/       # Low-level perception (screen, OCR, audio)
+│   ├── memory/           # Memory systems (episodic, semantic, procedural) + association
+│   ├── perception/       # Low-level perception (screen, OCR, audio, Piper)
 │   ├── runtime/          # Runtime state management
-│   ├── scheduler/        # Task scheduling
+│   ├── scheduler/        # Task scheduling + autonomous cycle (hourly)
 │   ├── static/           # Dashboard UI (HTML/JS PWA)
-│   ├── tools/            # 115+ capability tools (118 in the manifest)
-│   ├── utils/            # Logging, helpers
-│   ├── main.py           # FastAPI application (134 routes)
-│   ├── llm.py            # LM Studio client & model router
-│   ├── database.py       # SQLite persistence
-│   └── policy.py         # Action policy (Levels 0-3)
+│   ├── tools/            # 133 capability tools (manifest) — vision grounding + VLM + LoRA + prosody
+│   │   ├── object_detector.py   # Face via Haar + YOLO/SSD fallback + auto-grounding (P1-1)
+│   │   ├── vlm_analyzer.py      # True VLM Moondream2/Llava with OCR+LLM fallback (P3, optional)
+│   │   ├── prosody_analyzer.py  # Voice pitch/energy/ZCR → emotion from real signals (P2)
+│   │   ├── lora_manager.py      # Continual LoRA adapters without forgetting (P3)
+│   │   └── manifest.py          # Single source of truth for all tools
+│   ├── utils/            # Logging, hardware monitor/governor (P/E cores, VRAM)
+│   ├── main.py           # FastAPI core router (now 140+ routes: vision grounding, VLM, LoRA, projects)
+│   ├── llm.py            # LM Studio client & model router (single loaded model)
+│   ├── database.py       # SQLite persistence (conversations, memories, beliefs)
+│   ├── settings_store.py # Shared settings (backend source of truth for web/desktop/Android)
+│   └── policy.py         # Action policy (Levels 0-3, approval-gated not removed)
 ├── docs/                 # Architecture documentation
 ├── memory/               # User rules & operating manual
 │   ├── rules.md          # Permission boundaries
@@ -156,7 +170,7 @@ source .venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-Current baseline: **1414 backend + 184 frontend tests passing**
+Current baseline: **1414 backend + 184 frontend tests passing** (previous baseline, now 27/27 scorecard checks, 133 tools, 17 modules)
 
 > **Live verification:** tools that hit external APIs (prices, RSS, search,
 > Telegram/WhatsApp) are unit-tested for degradation only in CI — run

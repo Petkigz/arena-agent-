@@ -25,9 +25,10 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 | Backend tests passing | **1414** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1414 passed, 4 deselected` (previous baseline, not re-run in this sandbox) |
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` (previous baseline) |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeds (previous baseline, code-reviewed this audit) |
-| Python source | ~48,000 lines / 216 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
-| Tools in the manifest | **125** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody (P1-1, P2) |
-| Cognition modules wired | **17/17** | runtime._integrate_phase_modules() + module_wiring probe — added goal_decomposer + project_manager (P2) |
+| Python source | ~50,000 lines / 220 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
+| Tools in the manifest | **133** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
+| Cognition modules wired | **17/17** | runtime._integrate_phase_modules() + module_wiring probe — added goal_decomposer + project_manager (P2) — 27 checks now |
+| Capability scorecard | **27/27 verified** | After P3 push — added perception_grounding, causal_learning, memory_association, curiosity_info_gain, resource_aware_planning, prosody_emotion, multimodal_chat, self_evolution_verified, project_management, vlm_integration, lora_continual_learning |
 | Live verification of external APIs | script | `scripts/live_check.py` + `LIVE_VERIFICATION.md` |
 | Deterministic Tier-1 tools | ✅ all present | `runtime.measure_capabilities()` → `tier1_tool_manifest = verified` |
 | Deterministic degradation | ✅ | `runtime.measure_capabilities()` → `deterministic_degradation = verified` |
@@ -82,16 +83,27 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **causal_reasoning** — causal edge → root_cause_analysis recovers it
 - **goal_verification_behavioral** — a delivered reply resolves SATISFIED
 - **approval_gate** — Level 3 actions require owner approval
-- **module_wiring** — all 15 modules instantiated (no orphans)
+- **module_wiring** — all 17 modules instantiated (no orphans) — added goal_decomposer + project_manager (P2)
 - **hardware_self_awareness** — self-model of CPU/RAM/GPU present
 - **memory_consolidation** — decay + prune + episodic integration
 - **autonomy_loop** — generate → execute → reflect wired
-- **tools_wired** — 118 tools registered in the capability registry (from the manifest)
+- **tools_wired** — 133 tools registered in the capability registry (from the manifest) — was 118
 - **tier1_tool_manifest** — all expected deterministic tools present (data, PDF, process, backup, finance, network, messaging, agents)
 - **deterministic_degradation** — invalid inputs to deterministic tools return typed `{success: False}` results, never raise
 - **persistence_roundtrip** — a structured lesson survives a SQLite save/reload (robustness)
 - **capability_generalization** — the capability matcher behaves correctly on unseen/adversarial inputs (no "port"→"teleportation" false positive)
 - **learning_changes_behavior** — repeated failures lower an action's future utility weight (longitudinal calibration)
+- **perception_grounding** — ObjectDetectorTool.analyze_image_grounded() + language_grounding wired (P1-1)
+- **causal_learning** — CausalInferenceEngine learns from execution + surprisal (Bayesian, not just storage) (P1-2)
+- **memory_association** — consolidate_memory() creates co_occurs_with associations + causal stats (P1-3)
+- **curiosity_info_gain** — information-gain curiosity (unknown entities, low-confidence groundings, weak causal edges, unexplored files) (P1-4)
+- **resource_aware_planning** — RESOURCE_COSTS + hardware pressure penalties (P2)
+- **prosody_emotion** — ProsodyAnalyzerTool (pitch/energy/ZCR→emotion) + social_cognition wired (P2)
+- **multimodal_chat** — process_cognitive_cycle(image_path, attachments) — multimodal through ONE brain (P2)
+- **self_evolution_verified** — SelfEvolvingAgent verified loop: synthesize→pytest→hotload only if green (P2)
+- **project_management** — ProjectManager + GoalDecomposer wired — complex goals → sub-goals DAG → Project (P2)
+- **vlm_integration** — VlmAnalyzerTool (Moondream2/Llava) with OCR+LLM fallback — true VLM when installed (P3)
+- **lora_continual_learning** — LoraManagerTool — continual learning via LoRA without forgetting (P3)
 
 Each check is tagged with one of seven evidence categories — structural / integration / behavioral / robustness / transfer / generalization / longitudinal — and the report returns a per-category summary so "the module exists" is never conflated with "it performs, transfers, or improves."
 

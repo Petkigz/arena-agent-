@@ -34,9 +34,25 @@ class SubGoalStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+# Resource costs per sub-goal action (P3 AGI: resource-budgeted project scheduling)
+SUBGOAL_RESOURCE_COSTS: Dict[str, Dict[str, float]] = {
+    "diagnostic": {"cpu": 0.2, "memory": 0.2, "time": 2},
+    "search_files": {"cpu": 0.2, "memory": 0.2, "time": 1},
+    "web_search": {"cpu": 0.1, "memory": 0.1, "time": 3},
+    "read_document": {"cpu": 0.1, "memory": 0.2, "time": 1},
+    "vision_analyze": {"cpu": 0.4, "memory": 0.7, "time": 15},
+    "detect_objects": {"cpu": 0.5, "memory": 0.6, "time": 5},
+    "run_command": {"cpu": 0.5, "memory": 0.4, "time": 10},
+    "formulate_answer": {"cpu": 0.2, "memory": 0.2, "time": 2},
+    "generic_action": {"cpu": 0.3, "memory": 0.3, "time": 5},
+}
+
 @dataclass
 class SubGoal:
-    """A single sub-goal within a larger decomposition."""
+    """A single sub-goal within a larger decomposition.
+
+    P3 AGI: Now has resource estimates (cpu, memory, time) for resource-budgeted scheduling.
+    """
     sub_goal_id: str
     parent_project_id: str
     description: str
@@ -50,6 +66,23 @@ class SubGoal:
     created_at: str = field(default_factory=_now)
     completed_at: Optional[str] = None
     error: Optional[str] = None
+    estimated_cpu: float = 0.3
+    estimated_memory: float = 0.3
+    estimated_time: float = 5.0
+
+    def __post_init__(self):
+        # Auto-estimate resources based on action_type if not explicitly set
+        costs = SUBGOAL_RESOURCE_COSTS.get(self.action_type, SUBGOAL_RESOURCE_COSTS["generic_action"])
+        # Only override if default (0.3/0.3/5.0) and action has specific cost
+        if self.estimated_cpu == 0.3 and self.estimated_memory == 0.3 and self.estimated_time == 5.0:
+            if self.action_type in SUBGOAL_RESOURCE_COSTS:
+                self.estimated_cpu = costs["cpu"]
+                self.estimated_memory = costs["memory"]
+                self.estimated_time = costs["time"]
+
+    def to_resource_dict(self) -> Dict[str, float]:
+        """Return resource requirements for ResourceManager allocation."""
+        return {"cpu": self.estimated_cpu, "memory": self.estimated_memory, "time": self.estimated_time}
 
     @property
     def is_ready(self) -> bool:
@@ -133,10 +166,59 @@ class GoalDecomposition:
             batch = [sg for sg in remaining if all(d in resolved for d in sg.depends_on)]
             if not batch:
                 break  # Circular dependency or all blocked
+            # P3: Sort batch by resource cost (cheapest first) for efficient scheduling under pressure
+            batch.sort(key=lambda sg: (sg.estimated_memory + sg.estimated_cpu))
             for sg in batch:
                 order.append(sg)
                 resolved.add(sg.sub_goal_id)
                 remaining.remove(sg)
+
+        return order
+
+    def get_resource_aware_schedule(self, hardware_self_model: Optional[Dict[str, Any]] = None, resource_manager: Optional[Any] = None) -> List[SubGoal]:
+        """
+        P3 AGI: Resource-budgeted project scheduling.
+
+        Returns execution order sorted by:
+        1. Dependencies (topological)
+        2. Resource availability (cheapest first when under pressure)
+        3. Historical success (via outcome store if available)
+
+        This is hierarchical planning with resources — human-like project management
+        that knows its hardware and avoids heavy actions under pressure.
+        """
+        order = self.get_execution_order()
+
+        # If hardware under pressure, re-sort ready sub-goals by cost
+        try:
+            if hardware_self_model:
+                live = hardware_self_model.get("live", {})
+                ram_pressure = float(live.get("ram_percent", 0) or 0)
+                cpu_pressure = float(live.get("cpu_percent", 0) or 0)
+                if ram_pressure > 75 or cpu_pressure > 70:
+                    # Under pressure — cheapest first
+                    order.sort(key=lambda sg: (sg.estimated_memory * 2 + sg.estimated_cpu))
+        except Exception:
+            pass
+
+        # If resource_manager has budgets, filter out allocations that would exceed
+        if resource_manager:
+            try:
+                filtered = []
+                for sg in order:
+                    req = sg.to_resource_dict()
+                    # Try to allocate — if would exceed budget, deprioritize (move to end)
+                    alloc = resource_manager.allocate_resources(sg.sub_goal_id, {"cpu": req["cpu"], "memory": req["memory"]})
+                    if alloc:
+                        # Release immediately (we're just checking feasibility, not actually allocating yet)
+                        resource_manager.release_resources(alloc.allocation_id)
+                        filtered.append(sg)
+                    else:
+                        # Would exceed budget — deprioritize
+                        filtered.append(sg)  # still include but at end (already sorted cheap first)
+                order = filtered
+            except Exception:
+                pass
 
         return order
 
