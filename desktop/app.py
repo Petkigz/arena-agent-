@@ -30,6 +30,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -313,6 +314,87 @@ class LocationWorker(QThread):
             self.error.emit(str(e))
 
 
+class VisionWorker(QThread):
+    """Runs a vision operation off the GUI thread and marshals results back.
+
+    The LLM analysis step can take tens of seconds on CPU inference, so it must
+    not run inside the event loop (it would freeze the window).
+    """
+
+    result = Signal(dict)
+    preview = Signal(QImage)
+    error = Signal(str)
+
+    def __init__(self, client: ArenaBackendClient, parent=None):
+        super().__init__(parent)
+        self._client = client
+        # One of: "capture", "capture_analyze", "ocr", "analyze", "analyze_upload"
+        self._mode = "capture_analyze"
+        self._prompt_focus: Optional[str] = None
+        self._image_path: str = ""
+        self._upload_path: str = ""
+
+    def capture(self, prompt_focus: Optional[str] = None) -> None:
+        self._mode = "capture"
+        self._prompt_focus = prompt_focus
+
+    def capture_and_analyze(self, prompt_focus: Optional[str] = None) -> None:
+        self._mode = "capture_analyze"
+        self._prompt_focus = prompt_focus
+
+    def ocr(self, image_path: str) -> None:
+        self._mode = "ocr"
+        self._image_path = image_path
+
+    def analyze(self, image_path: str, prompt_focus: Optional[str] = None) -> None:
+        self._mode = "analyze"
+        self._image_path = image_path
+        self._prompt_focus = prompt_focus
+
+    def analyze_upload(self, upload_path: str, prompt_focus: Optional[str] = None) -> None:
+        self._mode = "analyze_upload"
+        self._upload_path = upload_path
+        self._prompt_focus = prompt_focus
+
+    def run(self) -> None:
+        try:
+            if self._mode == "capture":
+                res = self._client.capture_screen()
+            elif self._mode == "capture_analyze":
+                res = self._client.capture_and_analyze(self._prompt_focus)
+            elif self._mode == "ocr":
+                res = self._client.ocr_image(self._image_path)
+            elif self._mode == "analyze":
+                res = self._client.analyze_image(self._image_path, self._prompt_focus)
+            elif self._mode == "analyze_upload":
+                up = self._client.upload_image_file(self._upload_path)
+                if not up.get("success"):
+                    self.error.emit(f"Upload failed: {up.get('error', 'unknown')}")
+                    return
+                res = self._client.analyze_image(up.get("file_path", ""), self._prompt_focus)
+                res["image_url"] = up.get("file_url", "")
+                res["file_name"] = up.get("file_name", "")
+            else:
+                self.error.emit("Unknown vision mode.")
+                return
+
+            # Try to load the returned image so the UI can preview it.
+            url = res.get("image_url") or res.get("file_url")
+            if url:
+                try:
+                    data = self._client.fetch_image_bytes(url)
+                    img = QImage.fromData(data)
+                    if not img.isNull():
+                        self.preview.emit(img)
+                except BackendConnectionError:
+                    pass  # preview is best-effort; text results still matter
+            self.result.emit(res)
+        except BackendConnectionError as e:
+            self.error.emit(str(e))
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e))
+
+
 class CameraThread(QThread):
     frame = Signal(QImage)
 
@@ -488,7 +570,7 @@ class LeftSidebar(QFrame):
         # Navigation (mirrors the web sidebar: Chats / Pansophy / Files / Code / Settings)
         for label, key in [
             ("Chats", "chat"), ("Pansophy", "pansophy"), ("Files", "files"),
-            ("Code", "code"), ("Settings", "settings"),
+            ("Code", "code"), ("Images", "images"), ("Settings", "settings"),
             ("Beanie", "beanie"), ("Tools", "tools"),
         ]:
             btn = QPushButton(label)
@@ -793,6 +875,147 @@ class CodePage(QWidget):
             self.output.setPlainText(str(out))
         except BackendConnectionError as e:
             self.output.setPlainText(f"⚠ {e}")
+
+
+class VisionPage(QWidget):
+    """Images / Vision — desktop sight (native screen capture) + OCR + image analysis.
+
+    Mirrors the web Images page but adds the native-only killer feature: capturing
+    and understanding the host desktop screen (browsers can't do this without a
+    screen-capture permission flow). Backed by /vision/capture, /vision/ocr,
+    /vision/analyze, /vision/capture-and-analyze, /mobile/camera.
+    """
+
+    def __init__(self, client: ArenaBackendClient, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._worker: Optional[VisionWorker] = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Images / Vision")
+        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        # ── Desktop sight ──
+        sight_label = QLabel("Desktop sight")
+        sight_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        layout.addWidget(sight_label)
+
+        self.focus_input = QLineEdit()
+        self.focus_input.setPlaceholderText("What should I focus on? (optional, e.g. \"the error dialog\")")
+        self.focus_input.setStyleSheet(_input_style())
+        layout.addWidget(self.focus_input)
+
+        sight_row = QHBoxLayout()
+        self.capture_btn = QPushButton("Capture screen")
+        self.capture_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.capture_btn.clicked.connect(self._capture)
+        sight_row.addWidget(self.capture_btn)
+        self.analyze_btn = QPushButton("Capture & analyze")
+        self.analyze_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.analyze_btn.clicked.connect(self._capture_and_analyze)
+        sight_row.addWidget(self.analyze_btn)
+        layout.addLayout(sight_row)
+
+        # ── Image preview ──
+        self.preview = QLabel("No image captured yet")
+        self.preview.setMinimumHeight(180)
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview.setStyleSheet(f"background: {BG_PRIMARY}; color: {TEXT_MUTED}; border-radius: 8px;")
+        layout.addWidget(self.preview, 1)
+
+        # ── Analyze an image file ──
+        file_label = QLabel("Analyze an image file")
+        file_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        layout.addWidget(file_label)
+        file_row = QHBoxLayout()
+        self.file_btn = QPushButton("Choose image…")
+        self.file_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.file_btn.clicked.connect(self._choose_file)
+        file_row.addWidget(self.file_btn)
+        layout.addLayout(file_row)
+
+        # ── Results: OCR + analysis ──
+        self.ocr_text = QTextEdit()
+        self.ocr_text.setReadOnly(True)
+        self.ocr_text.setPlaceholderText("OCR text appears here…")
+        self.ocr_text.setStyleSheet(_textarea_style())
+        self.ocr_text.setFixedHeight(90)
+        layout.addWidget(self.ocr_text)
+
+        self.analysis_text = QTextEdit()
+        self.analysis_text.setReadOnly(True)
+        self.analysis_text.setPlaceholderText("AI analysis appears here…")
+        self.analysis_text.setStyleSheet(_textarea_style())
+        layout.addWidget(self.analysis_text, 1)
+
+    def _busy(self, busy: bool) -> None:
+        for b in (self.capture_btn, self.analyze_btn, self.file_btn):
+            b.setEnabled(not busy)
+
+    def _focus(self) -> Optional[str]:
+        text = self.focus_input.text().strip()
+        return text or None
+
+    def _capture(self) -> None:
+        self._start_worker(lambda w: w.capture(self._focus()))
+
+    def _capture_and_analyze(self) -> None:
+        self._start_worker(lambda w: w.capture_and_analyze(self._focus()))
+
+    def _choose_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose an image", "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All files (*)",
+        )
+        if not path:
+            return
+        self.ocr_text.setPlainText("Uploading and analysing…")
+        self.analysis_text.setPlainText("")
+        w = VisionWorker(self._client, self)
+        w.analyze_upload(path, self._focus())
+        self._run_worker(w)
+
+    def _start_worker(self, config) -> None:
+        w = VisionWorker(self._client, self)
+        config(w)
+        self._run_worker(w)
+
+    def _run_worker(self, w: VisionWorker) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.quit()
+        self._worker = w
+        w.result.connect(self._on_result)
+        w.preview.connect(self._on_preview)
+        w.error.connect(self._on_error)
+        self._busy(True)
+        w.start()
+
+    @Slot(dict)
+    def _on_result(self, res: dict) -> None:
+        self._busy(False)
+        if not res.get("success"):
+            self.analysis_text.setPlainText(f"⚠ {res.get('error', 'Analysis failed')}")
+            return
+        self.ocr_text.setPlainText(res.get("ocr_text") or res.get("extracted_text") or "(no OCR text)")
+        if res.get("screen_changed") is False and res.get("note"):
+            self.analysis_text.setPlainText(res.get("note", ""))
+        else:
+            self.analysis_text.setPlainText(res.get("ai_analysis") or res.get("analysis") or "(no analysis)")
+
+    @Slot(QImage)
+    def _on_preview(self, img: QImage) -> None:
+        self.preview.setPixmap(QPixmap.fromImage(img).scaled(
+            self.preview.size(), Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation))
+
+    @Slot(str)
+    def _on_error(self, err: str) -> None:
+        self._busy(False)
+        self.analysis_text.setPlainText(f"⚠ {err}")
 
 
 class ChatPage(QWidget):
@@ -1188,6 +1411,7 @@ class MainWindow(QMainWindow):
         self.pansophy = PansophyPage(self.client)
         self.files = FilesPage(self.client)
         self.code = CodePage(self.client)
+        self.vision = VisionPage(self.client)
         self.settings_page = SettingsPage(self.settings, self.client, on_save=self._on_save_server_url)
         self.tools = ToolsPage(self.client)
 
@@ -1212,6 +1436,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.settings_page)  # index 4
         self.stack.addWidget(self.beanie)       # index 5
         self.stack.addWidget(self.tools)        # index 6
+        self.stack.addWidget(self.vision)       # index 7
         self.stack.setCurrentIndex(0)
 
         # Right context panel
@@ -1292,7 +1517,7 @@ class MainWindow(QMainWindow):
     def _nav_to_key(self, key: str) -> None:
         index = {
             "chat": 0, "pansophy": 1, "files": 2, "code": 3,
-            "settings": 4, "beanie": 5, "tools": 6,
+            "settings": 4, "beanie": 5, "tools": 6, "images": 7,
         }.get(key, 0)
         self.stack.setCurrentIndex(index)
         if key == "tools":

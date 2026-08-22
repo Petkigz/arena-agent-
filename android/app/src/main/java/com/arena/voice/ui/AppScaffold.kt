@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brain
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -22,12 +23,14 @@ import com.arena.voice.ui.screens.FilesScreen
 import com.arena.voice.ui.screens.PansophyScreen
 import com.arena.voice.ui.screens.PresenceStatus
 import com.arena.voice.ui.screens.ToolsScreen
+import com.arena.voice.ui.screens.VisionScreen
 
 enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     BEANIE("beanie", "Beanie", Icons.Default.Person),
     CHAT("chat", "Chat", Icons.Default.Chat),
     PANSOPHY("pansophy", "Pansophy", Icons.Default.Brain),
     FILES("files", "Files", Icons.Default.Folder),
+    IMAGES("images", "Images", Icons.Default.Image),
     SETTINGS("settings", "Settings", Icons.Default.Settings),
 }
 
@@ -106,6 +109,9 @@ fun AppScaffold(
             }
             composable(AppTab.FILES.route) {
                 FilesScreen()
+            }
+            composable(AppTab.IMAGES.route) {
+                VisionScreen()
             }
             composable(AppTab.SETTINGS.route) {
                 ToolsScreen(

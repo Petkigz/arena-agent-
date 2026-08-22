@@ -153,6 +153,87 @@ def test_report_location_posts_coordinates():
     client.close()
 
 
+def test_capture_screen_posts_empty_body():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        return httpx.Response(200, json={"success": True, "file_name": "screen_1.png"})
+
+    client = ArenaBackendClient()
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    res = client.capture_screen()
+    assert captured["path"] == "/vision/capture"
+    assert res["success"] is True
+    client.close()
+
+
+def test_capture_and_analyze_adds_prompt_focus_query():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["query"] = request.url.query.decode()
+        return httpx.Response(200, json={"success": True})
+
+    client = ArenaBackendClient()
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    client.capture_and_analyze("the error dialog")
+    assert captured["path"] == "/vision/capture-and-analyze"
+    assert "prompt_focus=the%20error%20dialog" in captured["query"]
+    client.close()
+
+
+def test_ocr_image_posts_image_path():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(200, json={"extracted_text": "hello"})
+
+    client = ArenaBackendClient()
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    res = client.ocr_image("/tmp/shot.png")
+    assert captured["body"]["image_path"] == "/tmp/shot.png"
+    assert res["extracted_text"] == "hello"
+    client.close()
+
+
+def test_analyze_image_posts_path_focus_and_flag():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(200, json={"ai_analysis": "a window is open"})
+
+    client = ArenaBackendClient()
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    res = client.analyze_image("/tmp/shot.png", prompt_focus="errors", auto_save_memory=False)
+    assert captured["body"]["image_path"] == "/tmp/shot.png"
+    assert captured["body"]["prompt_focus"] == "errors"
+    assert captured["body"]["auto_save_memory"] is False
+    assert res["ai_analysis"] == "a window is open"
+    client.close()
+
+
+def test_fetch_image_bytes_gets_url():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"\x89PNG\r\n\x1a\n")
+
+    client = ArenaBackendClient(base_url="http://localhost:8000")
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    data = client.fetch_image_bytes("/static/workspace/screenshots/screen_1.png")
+    assert data == b"\x89PNG\r\n\x1a\n"
+    client.close()
+
+
 def test_resolve_location_uses_native_service(monkeypatch):
     from desktop import backend_client as bc
 

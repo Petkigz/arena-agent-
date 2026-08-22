@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -57,4 +58,49 @@ class ApiClient @Inject constructor(
         call("/filesystem/search", "POST", JSONObject().put("query", query).toString())
 
     suspend fun models(): String? = call("/models")
+
+    // ── vision / images ──────────────────────────────────────────────────────
+    /** POST /vision/capture-and-analyze — capture the host PC's screen and analyse it. */
+    suspend fun captureAndAnalyze(promptFocus: String? = null): String? {
+        val path = if (promptFocus.isNullOrBlank()) "/vision/capture-and-analyze"
+        else "/vision/capture-and-analyze?prompt_focus=" + java.net.URLEncoder.encode(promptFocus, "UTF-8")
+        return call(path, "POST", "{}")
+    }
+
+    /** POST /vision/ocr — OCR an image already on the host. */
+    suspend fun ocrImage(imagePath: String): String? =
+        call("/vision/ocr", "POST", JSONObject().put("image_path", imagePath).toString())
+
+    /** POST /vision/analyze — OCR + LLM analysis of an image on the host. */
+    suspend fun analyzeImage(imagePath: String, promptFocus: String? = null): String? {
+        val body = JSONObject()
+            .put("image_path", imagePath)
+            .put("prompt_focus", promptFocus ?: "")
+        return call("/vision/analyze", "POST", body.toString())
+    }
+
+    /** POST /mobile/camera — upload an image; returns { file_path, file_url, ... }. */
+    suspend fun uploadImage(filename: String, bytes: ByteArray, mime: String = "image/jpeg"): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                val base = settings.httpBaseUrl()
+                val body = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("file", filename, bytes.toRequestBody(mime.toMediaTypeOrNull()))
+                    .build()
+                val request = Request.Builder()
+                    .url("$base/mobile/camera")
+                    .post(body)
+                    .apply {
+                        val key = settings.apiKey.first()
+                        if (key.isNotBlank()) header("X-API-Key", key)
+                    }
+                    .build()
+                client.newCall(request).execute().use { resp ->
+                    if (resp.isSuccessful) resp.body?.string() else null
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
 }

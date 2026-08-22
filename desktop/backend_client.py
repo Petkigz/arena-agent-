@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -115,6 +116,47 @@ class ArenaBackendClient:
             "root_dir": root_dir or None,
             "max_results": max_results,
         })
+
+    # ── vision / images ─────────────────────────────────────────────────────
+    def capture_screen(self) -> Dict[str, Any]:
+        """POST /vision/capture — grab the host desktop screen (native sight)."""
+        return self._post_json("/vision/capture", {})
+
+    def capture_and_analyze(self, prompt_focus: Optional[str] = None) -> Dict[str, Any]:
+        """POST /vision/capture-and-analyze — capture the screen, OCR + LLM-analyse it."""
+        path = "/vision/capture-and-analyze"
+        if prompt_focus:
+            path += f"?prompt_focus={quote(prompt_focus)}"
+        return self._post_json(path, {})
+
+    def ocr_image(self, image_path: str) -> Dict[str, Any]:
+        """POST /vision/ocr — extract text from an image already on the host."""
+        return self._post_json("/vision/ocr", {"image_path": image_path})
+
+    def analyze_image(self, image_path: str, prompt_focus: Optional[str] = None,
+                      auto_save_memory: bool = True) -> Dict[str, Any]:
+        """POST /vision/analyze — OCR + LLM analysis of an image on the host."""
+        return self._post_json("/vision/analyze", {
+            "image_path": image_path,
+            "prompt_focus": prompt_focus,
+            "auto_save_memory": auto_save_memory,
+        })
+
+    def upload_image_file(self, file_path: str) -> Dict[str, Any]:
+        """POST /mobile/camera — upload a local image file (by path) for analysis."""
+        with open(file_path, "rb") as f:
+            data = f.read()
+        name = file_path.replace("\\", "/").rsplit("/", 1)[-1] or "image.jpg"
+        return self.upload_camera_photo(name, data)
+
+    def fetch_image_bytes(self, image_url: str) -> bytes:
+        """GET an image served by the backend (e.g. /static/…) and return its bytes."""
+        try:
+            r = self._client.get(f"{self.base_url}{image_url}")
+            r.raise_for_status()
+            return r.content
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"Image download failed: {e}") from e
 
     # ── knowledge / memory (Pansophy) ───────────────────────────────────────
     def list_memories(self, category: Optional[str] = None) -> list:
