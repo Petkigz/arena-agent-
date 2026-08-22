@@ -2,7 +2,9 @@ package com.arena.voice.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Brain
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -16,18 +18,22 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.arena.voice.ui.screens.BeanieScreen
 import com.arena.voice.ui.screens.ChatScreen
+import com.arena.voice.ui.screens.FilesScreen
+import com.arena.voice.ui.screens.PansophyScreen
 import com.arena.voice.ui.screens.PresenceStatus
 import com.arena.voice.ui.screens.ToolsScreen
 
 enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     BEANIE("beanie", "Beanie", Icons.Default.Person),
     CHAT("chat", "Chat", Icons.Default.Chat),
-    TOOLS("tools", "Tools", Icons.Default.Settings),
+    PANSOPHY("pansophy", "Pansophy", Icons.Default.Brain),
+    FILES("files", "Files", Icons.Default.Folder),
+    SETTINGS("settings", "Settings", Icons.Default.Settings),
 }
 
 /**
- * Root scaffold with bottom navigation, matching the web/desktop's primary nav
- * (Beanie / Chat / Tools).
+ * Root scaffold with bottom navigation, mirroring the web/desktop nav
+ * (Beanie / Chat / Pansophy / Files / Settings), optimised for mobile.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,11 +52,6 @@ fun AppScaffold(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("BEANIE", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-            )
-        },
         bottomBar = {
             NavigationBar {
                 val currentRoute = navController.currentBackStackEntry?.destination?.route
@@ -75,7 +76,7 @@ fun AppScaffold(
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = AppTab.BEANIE.route,
+            startDestination = AppTab.CHAT.route,
             modifier = Modifier.padding(padding),
         ) {
             composable(AppTab.BEANIE.route) {
@@ -91,10 +92,8 @@ fun AppScaffold(
                 ChatScreen(
                     onVoiceToggle = onToggleTalk,
                     onOpenSettings = {
-                        navController.navigate(AppTab.TOOLS.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
+                        navController.navigate(AppTab.SETTINGS.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
                         }
@@ -102,7 +101,13 @@ fun AppScaffold(
                     voiceStatus = presenceStatus,
                 )
             }
-            composable(AppTab.TOOLS.route) {
+            composable(AppTab.PANSOPHY.route) {
+                PansophyScreen()
+            }
+            composable(AppTab.FILES.route) {
+                FilesScreen()
+            }
+            composable(AppTab.SETTINGS.route) {
                 ToolsScreen(
                     serverUrl = serverUrl,
                     apiKey = apiKey,
