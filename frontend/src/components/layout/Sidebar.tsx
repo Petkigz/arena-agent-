@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { MessageCircle, Brain, Settings, Plus, File, Code, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Brain, Settings, Plus, File, Code, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/Button';
@@ -8,6 +8,7 @@ import { ConversationFilters } from '../chat/ConversationFilters';
 import { ConversationItem } from '../chat/ConversationItem';
 import { useConversationStore, useLayoutStore } from '../../stores';
 import { webSocketService } from '../../services/websocket';
+import { PresenceOrb } from '../presence/PresenceOrb';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 const statusConfig: Record<ConnectionStatus, { color: string; label: string }> = {
@@ -46,7 +47,6 @@ export function Sidebar() {
   }, [removeConversation]);
 
   const links = useMemo(() => [
-    { to: '/chat', icon: MessageCircle, label: 'Chats' },
     { to: '/pansophy', icon: Brain, label: 'Pansophy' },
     { to: '/files', icon: File, label: 'Files' },
     { to: '/code', icon: Code, label: 'Code' },
@@ -63,11 +63,10 @@ export function Sidebar() {
       aria-label="Application sidebar"
       className={cn('bg-background-secondary border-r border-background-surface flex flex-col transition-all duration-300', sidebarCollapsed ? 'w-16' : 'w-64')}
     >
-      <div className="p-4 border-b border-background-surface" data-tutorial="presence-orb">
-        <NavLink to="/beanie" className="flex items-center gap-3 group" aria-label="Open Beanie">
-          <div className="relative w-10 h-10 flex-shrink-0 rounded-full bg-gradient-to-br from-blue-400/80 via-blue-600 to-slate-950 shadow-[0_0_20px_rgba(59,130,246,.28)] flex items-center justify-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,.9)]" />
-          </div>
+      {/* ChatGPT-style assistant identity */}
+      <div className="p-3 border-b border-background-surface" data-tutorial="presence-orb">
+        <NavLink to="/beanie" className={cn('flex items-center gap-3 group rounded-lg p-2 hover:bg-background-surface transition-colors', sidebarCollapsed && 'justify-center')} aria-label="Open Beanie">
+          <PresenceOrb status="idle" size="sm" />
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-text-primary group-hover:text-accent-primary transition-colors">Beanie</h2>
@@ -77,19 +76,18 @@ export function Sidebar() {
               </div>
             </div>
           )}
-          {sidebarCollapsed && <span className="sr-only">Beanie — {status.label}</span>}
         </NavLink>
       </div>
 
-      <div className={cn('p-4 space-y-3', sidebarCollapsed && 'px-2')}>
+      <div className={cn('p-3 space-y-3', sidebarCollapsed && 'px-2')}>
         <Button className={cn('w-full', sidebarCollapsed && 'px-2')} variant="primary" onClick={handleNewConversation} aria-label={sidebarCollapsed ? 'New conversation' : undefined}>
           <Plus className="w-4 h-4" aria-hidden="true" />
-          {!sidebarCollapsed && <span className="ml-2">New Conversation</span>}
+          {!sidebarCollapsed && <span className="ml-2">New chat</span>}
         </Button>
 
         {!sidebarCollapsed && conversations.length > 0 && (
-          <button onClick={() => setShowFilters(!showFilters)} className="w-full text-sm text-text-muted hover:text-text-primary transition-colors" aria-expanded={showFilters} aria-controls="conversation-filters">
-            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          <button onClick={() => setShowFilters(!showFilters)} className="w-full text-xs text-left px-3 text-text-muted hover:text-text-primary transition-colors" aria-expanded={showFilters} aria-controls="conversation-filters">
+            {showFilters ? 'Hide filters' : 'Search / filter chats'}
           </button>
         )}
         {showFilters && !sidebarCollapsed && <div id="conversation-filters"><ConversationFilters /></div>}
@@ -97,8 +95,8 @@ export function Sidebar() {
 
       {!sidebarCollapsed && conversations.length > 0 && (
         <div className="px-2 mb-2" data-tutorial="conversation-list" role="region" aria-label="Conversations">
-          <h3 className="px-3 text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Conversations</h3>
-          <ul className="space-y-0.5 max-h-48 overflow-y-auto">
+          <h3 className="px-3 text-xs font-medium text-text-muted mb-1">Chats</h3>
+          <ul className="space-y-0.5 max-h-[38vh] overflow-y-auto">
             <AnimatePresence>
               {conversations.map((conv) => (
                 <li key={conv.id}>
@@ -110,17 +108,11 @@ export function Sidebar() {
         </div>
       )}
 
-      <nav className={cn('flex-1 overflow-y-auto px-2', sidebarCollapsed && 'px-1')} aria-label="Main navigation">
+      <nav className={cn('flex-1 overflow-y-auto px-2', sidebarCollapsed && 'px-1')} aria-label="Workspace navigation">
         <ul className="list-none p-0 m-0">
-          <li>
-            <NavLink to="/beanie" className={({ isActive }) => cn('flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors', isActive ? 'bg-accent-primary text-white' : 'text-text-secondary hover:bg-background-surface hover:text-text-primary', sidebarCollapsed && 'justify-center px-2')}>
-              <Sparkles className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-              {!sidebarCollapsed && <span className="font-medium">Beanie</span>}
-            </NavLink>
-          </li>
           {links.map(({ to, icon: Icon, label }, index) => (
             <motion.li key={to} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, delay: index * 0.05 }}>
-              <NavLink to={to} data-tutorial={`nav-${label.toLowerCase()}`} aria-label={sidebarCollapsed ? label : undefined} className={({ isActive }) => cn('flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors', isActive ? 'bg-accent-primary text-white' : 'text-text-secondary hover:bg-background-surface hover:text-text-primary', sidebarCollapsed && 'justify-center px-2')}>
+              <NavLink to={to} data-tutorial={`nav-${label.toLowerCase()}`} aria-label={sidebarCollapsed ? label : undefined} className={({ isActive }) => cn('flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors', isActive ? 'bg-background-surface text-text-primary' : 'text-text-secondary hover:bg-background-surface hover:text-text-primary', sidebarCollapsed && 'justify-center px-2')}>
                 <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                 {!sidebarCollapsed && <span className="font-medium">{label}</span>}
               </NavLink>
