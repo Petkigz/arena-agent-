@@ -426,40 +426,44 @@ class BeaniePage(QWidget):
         self.orb.set_status(status)
 
 
-class ChatPage(QWidget):
-    """ChatGPT-style conversation: left chat sidebar + message bubbles + composer."""
+class LeftSidebar(QFrame):
+    """ChatGPT-style left sidebar: Beanie identity + New Chat + conversation list + nav."""
 
-    def __init__(self, on_send, on_new_chat, on_select_conversation, on_voice, parent=None):
+    def __init__(self, on_new_chat, on_select_conversation, on_nav, parent=None):
         super().__init__(parent)
-        self._on_send = on_send
-        self._on_new_chat = on_new_chat
         self._on_select_conversation = on_select_conversation
-        self._on_voice = on_voice
+        self.setFixedWidth(240)
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
-        self.messages: list = []          # (role, content)
-        self._streaming = ""              # in-progress assistant reply
+        # Beanie identity (orb + name + status)
+        ident = QHBoxLayout()
+        self.orb = PresenceOrbWidget(diameter=36)
+        ident.addWidget(self.orb)
+        name_col = QVBoxLayout()
+        name_col.setSpacing(1)
+        name = QLabel("Beanie")
+        name.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {TEXT_PRIMARY};")
+        name_col.addWidget(name)
+        self.status_label = QLabel("● Offline")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED};")
+        name_col.addWidget(self.status_label)
+        ident.addLayout(name_col)
+        ident.addStretch(1)
+        layout.addLayout(ident)
 
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        # New chat
+        new_chat = QPushButton("+ New Chat")
+        new_chat.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        new_chat.clicked.connect(on_new_chat)
+        layout.addWidget(new_chat)
 
-        # ── Left: conversation sidebar ──
-        sidebar = QFrame()
-        sidebar.setFixedWidth(220)
-        sidebar.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
-        side = QVBoxLayout(sidebar)
-        side.setContentsMargins(12, 12, 12, 12)
-        side.setSpacing(8)
-
-        self.new_chat_btn = QPushButton("+ New Chat")
-        self.new_chat_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        self.new_chat_btn.clicked.connect(self._on_new_chat)
-        side.addWidget(self.new_chat_btn)
-
+        # Conversation list
         chats_label = QLabel("Chats")
         chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        side.addWidget(chats_label)
-
+        layout.addWidget(chats_label)
         self.conv_list = QListWidget()
         self.conv_list.setStyleSheet(
             f"background: transparent; color: {TEXT_PRIMARY}; border: none;"
@@ -467,11 +471,72 @@ class ChatPage(QWidget):
             f" QListWidget::item:selected {{ background: {BG_SURFACE}; }}"
         )
         self.conv_list.itemClicked.connect(self._on_item_clicked)
-        side.addWidget(self.conv_list, stretch=1)
-        outer.addWidget(sidebar)
+        layout.addWidget(self.conv_list, stretch=1)
 
-        # ── Right: messages + composer ──
-        right = QVBoxLayout()
+        # Secondary views
+        for label, key in [("● Beanie", "beanie"), ("Tools", "tools")]:
+            btn = QPushButton(label)
+            btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+            btn.clicked.connect(lambda _=False, k=key: on_nav(k))
+            layout.addWidget(btn)
+
+    def _on_item_clicked(self, item) -> None:
+        cid = item.data(Qt.ItemDataRole.UserRole)
+        if cid:
+            self._on_select_conversation(cid)
+
+    def set_conversations(self, conversations) -> None:
+        self.conv_list.clear()
+        for cid, title in conversations:
+            item = self.conv_list.addItem(title or "Conversation")
+            item.setData(Qt.ItemDataRole.UserRole, cid)
+
+    def set_status(self, connected: bool) -> None:
+        color = "#10B981" if connected else TEXT_MUTED
+        self.status_label.setText("● Online" if connected else "● Offline")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {color};")
+
+    def set_orb_status(self, status: str) -> None:
+        self.orb.set_status(status)
+
+
+class ContextPanel(QFrame):
+    """Right context panel: connection + hardware (Goal/Memory/Knowledge are web-only)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(240)
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-left: 1px solid {BG_SURFACE};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        title = QLabel("Context")
+        title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        self.body = QLabel("Checking…")
+        self.body.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 13px;")
+        self.body.setWordWrap(True)
+        self.body.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.body, stretch=1)
+
+    def set_text(self, text: str) -> None:
+        self.body.setText(text)
+
+
+class ChatPage(QWidget):
+    """ChatGPT-style conversation: message bubbles + composer (sidebar lives in MainWindow)."""
+
+    def __init__(self, on_send, on_voice, parent=None):
+        super().__init__(parent)
+        self._on_send = on_send
+        self._on_voice = on_voice
+
+        self.messages: list = []          # (role, content)
+        self._streaming = ""              # in-progress assistant reply
+
+        right = QVBoxLayout(self)
         right.setContentsMargins(16, 16, 16, 12)
         right.setSpacing(8)
 
@@ -504,7 +569,6 @@ class ChatPage(QWidget):
         composer.addWidget(self.send_btn)
 
         right.addLayout(composer)
-        outer.addLayout(right, stretch=1)
 
     # ── events ──────────────────────────────────────────────────────────────
     def _submit(self) -> None:
@@ -512,18 +576,6 @@ class ChatPage(QWidget):
         if content:
             self._on_send(content)
             self.input.clear()
-
-    def _on_item_clicked(self, item) -> None:
-        cid = item.data(Qt.ItemDataRole.UserRole)
-        if cid:
-            self._on_select_conversation(cid)
-
-    # ── data in ─────────────────────────────────────────────────────────────
-    def set_conversations(self, conversations) -> None:
-        self.conv_list.clear()
-        for cid, title in conversations:
-            item = self.conv_list.addItem(title or "Conversation")
-            item.setData(Qt.ItemDataRole.UserRole, cid)
 
     def clear_messages(self) -> None:
         self.messages = []
@@ -862,49 +914,38 @@ class MainWindow(QMainWindow):
 
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
-        self.chat = ChatPage(
-            on_send=self._send_message,
-            on_new_chat=self._new_chat,
-            on_select_conversation=self._select_conversation,
-            on_voice=self._toggle_talk,
-        )
+        self.chat = ChatPage(on_send=self._send_message, on_voice=self._toggle_talk)
         self.tools = ToolsPage(self.client)
 
         # Cross-thread: capture thread emits → orb.set_level runs on GUI thread.
         self._level_signal.connect(self.beanie.orb.set_level)
 
+        # Left sidebar (ChatGPT-style)
+        self.sidebar = LeftSidebar(
+            on_new_chat=self._new_chat,
+            on_select_conversation=self._select_conversation,
+            on_nav=self._nav_to_key,
+        )
+        self._level_signal.connect(self.sidebar.orb.set_level)
+
+        # Center stack (Chat is the default view)
         self.stack = QStackedWidget()
-        self.stack.addWidget(self.beanie)   # index 0
-        self.stack.addWidget(self.chat)     # index 1
+        self.stack.addWidget(self.chat)     # index 0
+        self.stack.addWidget(self.beanie)   # index 1
         self.stack.addWidget(self.tools)    # index 2
-        self.stack.setCurrentIndex(1)       # open on the ChatGPT-style chat
+        self.stack.setCurrentIndex(0)
 
-        # Bottom navigation (Beanie / Chat / Tools)
-        nav = QFrame()
-        nav.setStyleSheet(f"background: {BG_SECONDARY}; border-top: 1px solid {BG_SURFACE};")
-        nav_layout = QHBoxLayout(nav)
-        nav_layout.setContentsMargins(0, 0, 0, 0)
+        # Right context panel
+        self.context = ContextPanel()
 
-        self.nav_buttons = []
-        for i, (label, icon) in enumerate([("● Beanie", "beanie"), ("Chat", "chat"), ("Tools", "tools")]):
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setMinimumHeight(56)
-            btn.setStyleSheet(
-                f"QPushButton {{ color: {TEXT_MUTED}; border: none; font-weight: 600; }}"
-                f"QPushButton:checked {{ color: {ACCENT}; }}"
-            )
-            btn.clicked.connect(lambda _=False, idx=i: self._nav_to(idx))
-            nav_layout.addWidget(btn)
-            self.nav_buttons.append(btn)
-        self.nav_buttons[1].setChecked(True)  # Chat is the default view
-
+        # Three-column ChatGPT-style layout
         central = QWidget()
-        central_layout = QVBoxLayout(central)
+        central_layout = QHBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
-        central_layout.addWidget(self.stack)
-        central_layout.addWidget(nav)
+        central_layout.addWidget(self.sidebar)
+        central_layout.addWidget(self.stack, stretch=1)
+        central_layout.addWidget(self.context)
         self.setCentralWidget(central)
 
         # Dark theme
@@ -969,12 +1010,16 @@ class MainWindow(QMainWindow):
         QApplication.instance().quit()
 
     # ── Navigation ──
-    def _nav_to(self, index: int) -> None:
+    def _nav_to_key(self, key: str) -> None:
+        index = {"chat": 0, "beanie": 1, "tools": 2}.get(key, 0)
         self.stack.setCurrentIndex(index)
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == index)
-        if index == 2:
+        if key == "tools":
             self.tools.refresh_status()
+
+    def _set_status(self, status: str) -> None:
+        """Update the orb on both the Beanie page and the sidebar."""
+        self.beanie.set_status(status)
+        self.sidebar.set_orb_status(status)
 
     # ── Health ──
     def _check_health(self) -> None:
@@ -985,13 +1030,17 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_online(self) -> None:
-        self.beanie.set_status("idle")
+        self._set_status("idle")
+        self.sidebar.set_status(True)
         self.beanie.set_message("I'm here.")
+        self.context.set_text("● Online\n\nConnected to the backend.")
 
     @Slot(str)
     def _on_offline(self, err: str) -> None:
-        self.beanie.set_status("offline")
+        self._set_status("offline")
+        self.sidebar.set_status(False)
         self.beanie.set_message("Offline — start the backend.")
+        self.context.set_text(f"● Offline\n\n{err}")
 
     # ── Chat (ChatGPT-style) ──
     def _on_chat_connected(self) -> None:
@@ -1007,7 +1056,7 @@ class MainWindow(QMainWindow):
 
     def _send_message(self, content: str) -> None:
         self.chat.append_message("user", content)
-        self.beanie.set_status("thinking")
+        self._set_status("thinking")
         self.chat.set_voice_status("thinking")
         self.beanie.set_message("Thinking…")
         self.chat_client.send_user_message(self.current_conv_id, content)
@@ -1016,13 +1065,13 @@ class MainWindow(QMainWindow):
     def _handle_chat_token(self, token: str, done: bool) -> None:
         self.chat.stream_token(token, done)
         if done:
-            self.beanie.set_status("idle")
+            self._set_status("idle")
             self.chat.set_voice_status("idle")
             self.beanie.set_message("I'm here.")
 
     @Slot(list)
     def _handle_conversation_list(self, conversations: list) -> None:
-        self.chat.set_conversations(conversations)
+        self.sidebar.set_conversations(conversations)
 
     @Slot(str, list)
     def _handle_conversation_history(self, cid: str, history: list) -> None:
@@ -1041,7 +1090,7 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _handle_chat_error(self, err: str) -> None:
         self.chat.append_message("assistant", f"⚠ {err}")
-        self.beanie.set_status("offline")
+        self._set_status("offline")
         self.beanie.set_message("Connection error.")
 
     # ── Quick actions / talk ──
@@ -1055,7 +1104,7 @@ class MainWindow(QMainWindow):
         }
         prompt = prompts.get(action, "")
         if prompt:
-            self._nav_to(1)
+            self._nav_to_key("chat")
             self._send_message(prompt)
 
     def _toggle_talk(self) -> None:
@@ -1067,7 +1116,7 @@ class MainWindow(QMainWindow):
     def _start_voice(self) -> None:
         if self.voice.start():
             self._listening = True
-            self.beanie.set_status("listening")
+            self._set_status("listening")
             self.chat.set_voice_status("listening")
             self.beanie.set_message("Listening…")
             if self.settings.get("notifications_enabled"):
@@ -1077,7 +1126,7 @@ class MainWindow(QMainWindow):
         if self._listening:
             self.voice.stop()
             self._listening = False
-            self.beanie.set_status("idle")
+            self._set_status("idle")
             self.chat.set_voice_status("idle")
             self.beanie.set_message("I'm here.")
 
@@ -1085,13 +1134,13 @@ class MainWindow(QMainWindow):
     def _on_voice_transcript(self, text: str, is_final: bool) -> None:
         if is_final and text.strip():
             self.chat.append_message("user", text.strip())
-            self.beanie.set_status("thinking")
+            self._set_status("thinking")
             self.chat.set_voice_status("thinking")
             self.beanie.set_message("Thinking…")
 
     def _on_voice_reply(self, text: str) -> None:
         self.chat.append_message("assistant", text)
-        self.beanie.set_status("speaking")
+        self._set_status("speaking")
         self.chat.set_voice_status("speaking")
         self.beanie.set_message("Speaking…")
         self._speak(text)
@@ -1117,7 +1166,7 @@ class MainWindow(QMainWindow):
             engine.runAndWait()
         except Exception:
             pass
-        self.beanie.set_status("idle")
+        self._set_status("idle")
         self.chat.set_voice_status("idle")
         self.beanie.set_message("I'm here.")
 
