@@ -10,6 +10,7 @@ Hardware access (camera, location, files, status) is native — no browser.
 
 from __future__ import annotations
 
+import html
 import math
 import sys
 from typing import List, Optional
@@ -46,6 +47,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
+from desktop.chat_client import DesktopChatClient
 from desktop.settings import DesktopSettings
 from desktop.voice_client import DesktopVoiceClient
 
@@ -425,38 +427,124 @@ class BeaniePage(QWidget):
 
 
 class ChatPage(QWidget):
-    def __init__(self, on_send, parent=None):
+    """ChatGPT-style conversation: left chat sidebar + message bubbles + composer."""
+
+    def __init__(self, on_send, on_new_chat, on_select_conversation, on_voice, parent=None):
         super().__init__(parent)
         self._on_send = on_send
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        self._on_new_chat = on_new_chat
+        self._on_select_conversation = on_select_conversation
+        self._on_voice = on_voice
 
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setStyleSheet(_textarea_style())
-        layout.addWidget(self.log)
+        self.messages: list = []          # (role, content)
+        self._streaming = ""              # in-progress assistant reply
 
-        row = QHBoxLayout()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Left: conversation sidebar ──
+        sidebar = QFrame()
+        sidebar.setFixedWidth(220)
+        sidebar.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(12, 12, 12, 12)
+        side.setSpacing(8)
+
+        self.new_chat_btn = QPushButton("+ New Chat")
+        self.new_chat_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.new_chat_btn.clicked.connect(self._on_new_chat)
+        side.addWidget(self.new_chat_btn)
+
+        chats_label = QLabel("Chats")
+        chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        side.addWidget(chats_label)
+
+        self.conv_list = QListWidget()
+        self.conv_list.setStyleSheet(
+            f"background: transparent; color: {TEXT_PRIMARY}; border: none;"
+            f" QListWidget::item {{ padding: 8px; border-radius: 6px; }}"
+            f" QListWidget::item:selected {{ background: {BG_SURFACE}; }}"
+        )
+        self.conv_list.itemClicked.connect(self._on_item_clicked)
+        side.addWidget(self.conv_list, stretch=1)
+        outer.addWidget(sidebar)
+
+        # ── Right: messages + composer ──
+        right = QVBoxLayout()
+        right.setContentsMargins(16, 16, 16, 12)
+        right.setSpacing(8)
+
+        self.message_area = QTextEdit()
+        self.message_area.setReadOnly(True)
+        self.message_area.setStyleSheet(_textarea_style())
+        right.addWidget(self.message_area, stretch=1)
+
+        composer = QHBoxLayout()
         self.input = QLineEdit()
-        self.input.setPlaceholderText("Message Arena…")
+        self.input.setPlaceholderText("Message Beanie…")
         self.input.setStyleSheet(_input_style())
         self.input.returnPressed.connect(self._submit)
-        row.addWidget(self.input)
+        composer.addWidget(self.input, stretch=1)
+
+        self.mic_btn = QPushButton("🎙")
+        self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.mic_btn.clicked.connect(self._on_voice)
+        composer.addWidget(self.mic_btn)
+
         self.send_btn = QPushButton("Send")
         self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
         self.send_btn.clicked.connect(self._submit)
-        row.addWidget(self.send_btn)
-        layout.addLayout(row)
+        composer.addWidget(self.send_btn)
 
+        right.addLayout(composer)
+        outer.addLayout(right, stretch=1)
+
+    # ── events ──────────────────────────────────────────────────────────────
     def _submit(self) -> None:
         content = self.input.text().strip()
         if content:
             self._on_send(content)
+            self.input.clear()
 
-    def append(self, speaker: str, text: str) -> None:
-        self.log.append(f"<span style='color:{ACCENT};font-weight:600'>{speaker}:</span>")
-        self.log.append(text)
-        self.log.append("")
+    def _on_item_clicked(self, item) -> None:
+        cid = item.data(Qt.ItemDataRole.UserRole)
+        if cid:
+            self._on_select_conversation(cid)
+
+    # ── data in ─────────────────────────────────────────────────────────────
+    def set_conversations(self, conversations) -> None:
+        self.conv_list.clear()
+        for cid, title in conversations:
+            item = self.conv_list.addItem(title or "Conversation")
+            item.setData(Qt.ItemDataRole.UserRole, cid)
+
+    def clear_messages(self) -> None:
+        self.messages = []
+        self._streaming = ""
+        self._render()
+
+    def append_message(self, role: str, content: str) -> None:
+        self.messages.append((role, content))
+        self._render()
+
+    def stream_token(self, token: str, done: bool) -> None:
+        self._streaming += token
+        if done:
+            self.messages.append(("assistant", self._streaming))
+            self._streaming = ""
+        self._render()
+
+    # ── render ──────────────────────────────────────────────────────────────
+    def _render(self) -> None:
+        parts = []
+        for role, content in self.messages:
+            parts.append(_user_bubble(content) if role == "user" else _assistant_bubble(content))
+        if self._streaming:
+            parts.append(_assistant_bubble(self._streaming))
+        self.message_area.setHtml("".join(parts))
+        scrollbar = self.message_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
 
 class ToolsPage(QWidget):
@@ -668,12 +756,37 @@ def _textarea_style() -> str:
     )
 
 
+def _user_bubble(content: str) -> str:
+    esc = html.escape(content).replace("\n", "<br/>")
+    return (
+        f'<div style="text-align:right; margin:6px 0;">'
+        f'<span style="background:#3B82F6; color:#ffffff; padding:8px 12px;'
+        f' border-radius:12px; display:inline-block; max-width:80%;">{esc}</span></div>'
+    )
+
+
+def _assistant_bubble(content: str) -> str:
+    esc = html.escape(content).replace("\n", "<br/>")
+    return (
+        f'<div style="margin:6px 0;">'
+        f'<span style="color:#8B5CF6; font-weight:600;">● Beanie</span><br/>'
+        f'<span style="background:#1E293B; color:#F1F5F9; padding:8px 12px;'
+        f' border-radius:12px; display:inline-block; max-width:80%;">{esc}</span></div>'
+    )
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # Main window
 # ════════════════════════════════════════════════════════════════════════════
 class MainWindow(QMainWindow):
     # Marshal mic amplitude from the capture thread onto the GUI thread.
     _level_signal = Signal(float)
+    # Marshal chat events from the WS recv thread onto the GUI thread.
+    _chat_token_signal = Signal(str, bool)
+    _chat_list_signal = Signal(list)
+    _chat_history_signal = Signal(str, list)
+    _chat_created_signal = Signal(str, str)
+    _chat_error_signal = Signal(str)
 
     def __init__(self, base_url: str = "http://localhost:8000"):
         super().__init__()
@@ -697,9 +810,30 @@ class MainWindow(QMainWindow):
         self.voice.on_level = self._on_voice_level
         self._listening = False
 
+        # Chat (ChatGPT-style, same WS protocol as web/Android).
+        self.chat_client = DesktopChatClient(ws_url=ws_url, conversation_id="desktop-chat")
+        self.chat_client.on_connected = self._on_chat_connected
+        self.chat_client.on_token = lambda t, d: self._chat_token_signal.emit(t, d)
+        self.chat_client.on_conversation_list = lambda c: self._chat_list_signal.emit(c)
+        self.chat_client.on_history = lambda cid, h: self._chat_history_signal.emit(cid, h)
+        self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
+        self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
+        self.current_conv_id = "desktop-chat"
+
+        self._chat_token_signal.connect(self._handle_chat_token)
+        self._chat_list_signal.connect(self._handle_conversation_list)
+        self._chat_history_signal.connect(self._handle_conversation_history)
+        self._chat_created_signal.connect(self._handle_conversation_created)
+        self._chat_error_signal.connect(self._handle_chat_error)
+
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
-        self.chat = ChatPage(on_send=self._send_message)
+        self.chat = ChatPage(
+            on_send=self._send_message,
+            on_new_chat=self._new_chat,
+            on_select_conversation=self._select_conversation,
+            on_voice=self._toggle_talk,
+        )
         self.tools = ToolsPage(self.client)
 
         # Cross-thread: capture thread emits → orb.set_level runs on GUI thread.
@@ -709,6 +843,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.beanie)   # index 0
         self.stack.addWidget(self.chat)     # index 1
         self.stack.addWidget(self.tools)    # index 2
+        self.stack.setCurrentIndex(1)       # open on the ChatGPT-style chat
 
         # Bottom navigation (Beanie / Chat / Tools)
         nav = QFrame()
@@ -728,7 +863,7 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda _=False, idx=i: self._nav_to(idx))
             nav_layout.addWidget(btn)
             self.nav_buttons.append(btn)
-        self.nav_buttons[0].setChecked(True)
+        self.nav_buttons[1].setChecked(True)  # Chat is the default view
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
@@ -742,6 +877,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(f"QMainWindow {{ background: {BG_PRIMARY}; }}")
         self._setup_tray()
         self._check_health()
+        self.chat_client.connect()
 
     # ── System tray ─────────────────────────────────────────────────────────
     def _setup_tray(self) -> None:
@@ -793,6 +929,7 @@ class MainWindow(QMainWindow):
 
     def _quit(self) -> None:
         self._stop_voice()
+        self.chat_client.close()
         self.tray.hide()
         self.client.close()
         QApplication.instance().quit()
@@ -822,28 +959,52 @@ class MainWindow(QMainWindow):
         self.beanie.set_status("offline")
         self.beanie.set_message("Offline — start the backend.")
 
-    # ── Chat ──
+    # ── Chat (ChatGPT-style) ──
+    def _on_chat_connected(self) -> None:
+        self.chat_client.list_conversations()
+
+    def _new_chat(self) -> None:
+        self.chat_client.create_conversation()
+
+    def _select_conversation(self, cid: str) -> None:
+        self.current_conv_id = cid
+        self.chat.clear_messages()
+        self.chat_client.get_history(cid)
+
     def _send_message(self, content: str) -> None:
-        if self._chat_worker is not None and self._chat_worker.isRunning():
-            return
-        self.chat.input.clear()
-        self.chat.append("You", content)
+        self.chat.append_message("user", content)
         self.beanie.set_status("thinking")
         self.beanie.set_message("Thinking…")
-        self._chat_worker = ChatWorker(self.client, content, self)
-        self._chat_worker.reply_ready.connect(self._on_reply)
-        self._chat_worker.error_ready.connect(self._on_chat_error)
-        self._chat_worker.start()
+        self.chat_client.send_user_message(self.current_conv_id, content)
+
+    @Slot(str, bool)
+    def _handle_chat_token(self, token: str, done: bool) -> None:
+        self.chat.stream_token(token, done)
+        if done:
+            self.beanie.set_status("idle")
+            self.beanie.set_message("I'm here.")
+
+    @Slot(list)
+    def _handle_conversation_list(self, conversations: list) -> None:
+        self.chat.set_conversations(conversations)
+
+    @Slot(str, list)
+    def _handle_conversation_history(self, cid: str, history: list) -> None:
+        if cid != self.current_conv_id:
+            return
+        self.chat.clear_messages()
+        for role, content in history:
+            self.chat.append_message(role, content)
+
+    @Slot(str, str)
+    def _handle_conversation_created(self, cid: str, title: str) -> None:
+        self.current_conv_id = cid
+        self.chat.clear_messages()
+        self.chat_client.list_conversations()
 
     @Slot(str)
-    def _on_reply(self, text: str) -> None:
-        self.chat.append("Arena", text)
-        self.beanie.set_status("idle")
-        self.beanie.set_message("I'm here.")
-
-    @Slot(str)
-    def _on_chat_error(self, err: str) -> None:
-        self.chat.append("System", f"⚠ {err}")
+    def _handle_chat_error(self, err: str) -> None:
+        self.chat.append_message("assistant", f"⚠ {err}")
         self.beanie.set_status("offline")
         self.beanie.set_message("Connection error.")
 
@@ -885,12 +1046,12 @@ class MainWindow(QMainWindow):
     # ── Voice callbacks ─────────────────────────────────────────────────────
     def _on_voice_transcript(self, text: str, is_final: bool) -> None:
         if is_final and text.strip():
-            self.chat.append("You (voice)", text.strip())
+            self.chat.append_message("user", text.strip())
             self.beanie.set_status("thinking")
             self.beanie.set_message("Thinking…")
 
     def _on_voice_reply(self, text: str) -> None:
-        self.chat.append("Arena", text)
+        self.chat.append_message("assistant", text)
         self.beanie.set_status("speaking")
         self.beanie.set_message("Speaking…")
         self._speak(text)
@@ -903,7 +1064,7 @@ class MainWindow(QMainWindow):
         self._level_signal.emit(level)
 
     def _on_voice_error(self, err: str) -> None:
-        self.chat.append("System", f"⚠ {err}")
+        self.chat.append_message("assistant", f"⚠ {err}")
         self._stop_voice()
 
     def _speak(self, text: str) -> None:
@@ -921,6 +1082,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._stop_voice()
+        self.chat_client.close()
         self.tools._stop_camera()
         self.client.close()
         # Minimize to tray instead of quitting (unless the user chose Quit).
