@@ -80,6 +80,9 @@ class DesktopVoiceClient:
             import websockets
             self._ws = websockets.connect(self.ws_url).__enter__()
             self._send({"type": "join_conversation", "conversation_id": self.conversation_id})
+            # Tell the backend to start the voice pipeline so the streamed PCM
+            # (remote_audio path) is actually processed (sets current_conversation_id).
+            self._send({"type": "voice_start", "conversation_id": self.conversation_id})
         except Exception as e:
             self._ws = None
             if self.on_error:
@@ -95,6 +98,11 @@ class DesktopVoiceClient:
 
     def stop(self) -> None:
         self._capturing = False
+        if self._ws is not None:
+            try:
+                self._send({"type": "voice_stop", "conversation_id": self.conversation_id})
+            except Exception:
+                pass
         for t in (self._capture_thread, self._recv_thread):
             if t is not None:
                 t.join(timeout=2.0)
