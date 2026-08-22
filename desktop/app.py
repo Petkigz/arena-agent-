@@ -10,7 +10,6 @@ Hardware access (camera, location, files, status) is native — no browser.
 
 from __future__ import annotations
 
-import html
 import math
 import sys
 from typing import List, Optional
@@ -24,6 +23,7 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     Qt,
     QThread,
+    QTimer,
     Signal,
     Slot,
 )
@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QSystemTrayIcon,
     QTextEdit,
@@ -426,6 +427,30 @@ class CameraThread(QThread):
 
     def stop(self) -> None:
         self._running = False
+
+
+class SpeakWorker(QThread):
+    """Runs local TTS (pyttsx3) off the GUI thread so `runAndWait()` never
+    freezes the window. Emits `finished_speaking` (delivered to the GUI thread)
+    when the utterance completes — or immediately if TTS is unavailable."""
+
+    finished_speaking = Signal()
+
+    def __init__(self, text: str, rate: int, parent=None):
+        super().__init__(parent)
+        self._text = text
+        self._rate = rate
+
+    def run(self) -> None:
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            engine.setProperty("rate", self._rate)
+            engine.say(self._text)
+            engine.runAndWait()
+        except Exception:
+            pass  # TTS is optional; the reply is still shown in chat.
+        self.finished_speaking.emit()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1018,25 +1043,95 @@ class VisionPage(QWidget):
         self.analysis_text.setPlainText(f"⚠ {err}")
 
 
+class MessageBubble(QWidget):
+    """A single chat bubble.
+
+    Assistant bubbles carry a small animated presence orb beside them (matching
+    the web/Android layout where the Beanie orb sits next to assistant messages);
+    user bubbles are right-aligned blue bubbles. Rendered as real widgets — not
+    HTML — so the orb is a live QPainter animation rather than a text glyph.
+    """
+
+    MAX_WIDTH = 560
+
+    def __init__(self, role: str, content: str = "", parent=None):
+        super().__init__(parent)
+        self._role = role
+        self._orb: Optional[PresenceOrbWidget] = None
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 2, 0, 2)
+        row.setSpacing(8)
+
+        self.label = QLabel()
+        self.label.setWordWrap(True)
+        self.label.setTextFormat(Qt.TextFormat.PlainText)
+        self.label.setMaximumWidth(self.MAX_WIDTH)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.label.setCursor(Qt.CursorShape.IBeamCursor)
+
+        if role == "user":
+            self.label.setStyleSheet(
+                f"background: {ACCENT}; color: #FFFFFF; padding: 10px 14px;"
+                f" border-radius: 14px; font-size: 14px;"
+            )
+            row.addStretch(1)
+            row.addWidget(self.label)
+        else:
+            self._orb = PresenceOrbWidget(diameter=30)
+            self.label.setStyleSheet(
+                f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 14px;"
+                f" border: 1px solid {BG_SURFACE}; border-radius: 14px; font-size: 14px;"
+            )
+            row.addWidget(self._orb, alignment=Qt.AlignmentFlag.AlignTop)
+            row.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignTop)
+            row.addStretch(1)
+
+        self.set_text(content)
+
+    def set_text(self, content: str) -> None:
+        self.label.setText(content)
+
+    def set_status(self, status: str) -> None:
+        if self._orb is not None:
+            self._orb.set_status(status)
+
+
 class ChatPage(QWidget):
-    """ChatGPT-style conversation: message bubbles + composer (sidebar lives in MainWindow)."""
+    """ChatGPT-style conversation: message bubbles + composer (sidebar lives in MainWindow).
+
+    Messages are individual widgets in a scroll area, so assistant bubbles show
+    the animated presence orb inline instead of an HTML "● Beanie" text label.
+    """
 
     def __init__(self, on_send, on_voice, parent=None):
         super().__init__(parent)
         self._on_send = on_send
         self._on_voice = on_voice
 
-        self.messages: list = []          # (role, content)
-        self._streaming = ""              # in-progress assistant reply
+        self._bubbles: List[MessageBubble] = []
+        self._streaming_bubble: Optional[MessageBubble] = None
+        self._streaming = ""
 
         right = QVBoxLayout(self)
         right.setContentsMargins(16, 16, 16, 12)
         right.setSpacing(8)
 
-        self.message_area = QTextEdit()
-        self.message_area.setReadOnly(True)
-        self.message_area.setStyleSheet(_textarea_style())
-        right.addWidget(self.message_area, stretch=1)
+        # Scrollable message list (widget-based, so orbs animate in place).
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet(f"background: {BG_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+
+        self.container = QWidget()
+        self.container.setStyleSheet(f"background: {BG_PRIMARY};")
+        self.list_layout = QVBoxLayout(self.container)
+        self.list_layout.setContentsMargins(12, 12, 12, 12)
+        self.list_layout.setSpacing(6)
+        self.list_layout.addStretch(1)  # push bubbles to the top; new ones insert above it
+        self.scroll.setWidget(self.container)
+        right.addWidget(self.scroll, stretch=1)
 
         # Floating voice-state banner (hidden unless listening/thinking/speaking).
         self.voice_banner = QLabel()
@@ -1071,20 +1166,32 @@ class ChatPage(QWidget):
             self.input.clear()
 
     def clear_messages(self) -> None:
-        self.messages = []
+        for bubble in self._bubbles:
+            bubble.deleteLater()
+        if self._streaming_bubble is not None:
+            self._streaming_bubble.deleteLater()
+        self._bubbles = []
+        self._streaming_bubble = None
         self._streaming = ""
-        self._render()
 
     def append_message(self, role: str, content: str) -> None:
-        self.messages.append((role, content))
-        self._render()
+        bubble = MessageBubble(role, content)
+        self._bubbles.append(bubble)
+        self._insert_bubble(bubble)
 
     def stream_token(self, token: str, done: bool) -> None:
+        if self._streaming_bubble is None:
+            self._streaming_bubble = MessageBubble("assistant", "")
+            self._streaming_bubble.set_status("thinking")
+            self._insert_bubble(self._streaming_bubble)
         self._streaming += token
+        self._streaming_bubble.set_text(self._streaming)
         if done:
-            self.messages.append(("assistant", self._streaming))
+            self._streaming_bubble.set_status("idle")
+            self._bubbles.append(self._streaming_bubble)
+            self._streaming_bubble = None
             self._streaming = ""
-        self._render()
+        self._scroll_to_bottom()
 
     def set_voice_status(self, status: str) -> None:
         """Show/hide the floating voice-state banner."""
@@ -1114,16 +1221,15 @@ class ChatPage(QWidget):
         )
         self.voice_banner.show()
 
-    # ── render ──────────────────────────────────────────────────────────────
-    def _render(self) -> None:
-        parts = []
-        for role, content in self.messages:
-            parts.append(_user_bubble(content) if role == "user" else _assistant_bubble(content))
-        if self._streaming:
-            parts.append(_assistant_bubble(self._streaming))
-        self.message_area.setHtml("".join(parts))
-        scrollbar = self.message_area.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+    # ── internals ───────────────────────────────────────────────────────────
+    def _insert_bubble(self, bubble: MessageBubble) -> None:
+        # Insert above the trailing stretch (which sits at the last index).
+        self.list_layout.insertWidget(self.list_layout.count() - 1, bubble)
+
+    def _scroll_to_bottom(self) -> None:
+        # Defer to the next event-loop tick so the layout has settled first.
+        QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(
+            self.scroll.verticalScrollBar().maximum()))
 
 
 class ToolsPage(QWidget):
@@ -1335,25 +1441,6 @@ def _textarea_style() -> str:
     )
 
 
-def _user_bubble(content: str) -> str:
-    esc = html.escape(content).replace("\n", "<br/>")
-    return (
-        f'<div style="text-align:right; margin:6px 0;">'
-        f'<span style="background:#3B82F6; color:#ffffff; padding:8px 12px;'
-        f' border-radius:12px; display:inline-block; max-width:80%;">{esc}</span></div>'
-    )
-
-
-def _assistant_bubble(content: str) -> str:
-    esc = html.escape(content).replace("\n", "<br/>")
-    return (
-        f'<div style="margin:6px 0;">'
-        f'<span style="color:#8B5CF6; font-weight:600;">● Beanie</span><br/>'
-        f'<span style="background:#1E293B; color:#F1F5F9; padding:8px 12px;'
-        f' border-radius:12px; display:inline-block; max-width:80%;">{esc}</span></div>'
-    )
-
-
 # ════════════════════════════════════════════════════════════════════════════
 # Main window
 # ════════════════════════════════════════════════════════════════════════════
@@ -1366,6 +1453,12 @@ class MainWindow(QMainWindow):
     _chat_history_signal = Signal(str, list)
     _chat_created_signal = Signal(str, str)
     _chat_error_signal = Signal(str)
+    # Marshal voice events from the voice WS recv thread onto the GUI thread
+    # (the _on_voice_* handlers mutate widgets, which must only happen on the
+    # GUI thread).
+    _voice_transcript_signal = Signal(str, bool)
+    _voice_reply_signal = Signal(str)
+    _voice_error_signal = Signal(str)
 
     def __init__(self, base_url: str = "http://localhost:8000"):
         super().__init__()
@@ -1380,12 +1473,14 @@ class MainWindow(QMainWindow):
         self.client = ArenaBackendClient(base_url=base_url)
         self._chat_worker: Optional[ChatWorker] = None
 
-        # Voice (talk to Beanie) — streams mic PCM to the backend.
+        # Voice (talk to Beanie) — streams mic PCM to the backend. The callbacks
+        # fire on the voice client's recv thread, so they only emit signals here;
+        # the actual UI mutation happens in the _on_voice_* slots (GUI thread).
         ws_url = base_url.replace("http://", "ws://").rstrip("/") + "/ws"
         self.voice = DesktopVoiceClient(ws_url=ws_url, conversation_id="desktop-voice")
-        self.voice.on_reply = self._on_voice_reply
-        self.voice.on_transcript = self._on_voice_transcript
-        self.voice.on_error = self._on_voice_error
+        self.voice.on_reply = lambda text: self._voice_reply_signal.emit(text)
+        self.voice.on_transcript = lambda text, final: self._voice_transcript_signal.emit(text, final)
+        self.voice.on_error = lambda err: self._voice_error_signal.emit(err)
         self.voice.on_level = self._on_voice_level
         self._listening = False
 
@@ -1404,6 +1499,10 @@ class MainWindow(QMainWindow):
         self._chat_history_signal.connect(self._handle_conversation_history)
         self._chat_created_signal.connect(self._handle_conversation_created)
         self._chat_error_signal.connect(self._handle_chat_error)
+
+        self._voice_transcript_signal.connect(self._on_voice_transcript)
+        self._voice_reply_signal.connect(self._on_voice_reply)
+        self._voice_error_signal.connect(self._on_voice_error)
 
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
@@ -1653,6 +1752,7 @@ class MainWindow(QMainWindow):
             self.beanie.set_message("I'm here.")
 
     # ── Voice callbacks ─────────────────────────────────────────────────────
+    @Slot(str, bool)
     def _on_voice_transcript(self, text: str, is_final: bool) -> None:
         if is_final and text.strip():
             self.chat.append_message("user", text.strip())
@@ -1660,6 +1760,7 @@ class MainWindow(QMainWindow):
             self.chat.set_voice_status("thinking")
             self.beanie.set_message("Thinking…")
 
+    @Slot(str)
     def _on_voice_reply(self, text: str) -> None:
         self.chat.append_message("assistant", text)
         self._set_status("speaking")
@@ -1668,26 +1769,30 @@ class MainWindow(QMainWindow):
         self._speak(text)
         if self.settings.get("notifications_enabled") and not self.isVisible():
             self.tray.showMessage("Arena", (text[:160] + "…") if len(text) > 160 else text, QSystemTrayIcon.MessageIcon.Information, 5000)
-        # Return to idle after a short speaking pause.
-        QThread.msleep(0)  # speaking state is cleared below by TTS completion
 
     def _on_voice_level(self, level: float) -> None:
         self._level_signal.emit(level)
 
+    @Slot(str)
     def _on_voice_error(self, err: str) -> None:
         self.chat.append_message("assistant", f"⚠ {err}")
         self._stop_voice()
 
     def _speak(self, text: str) -> None:
-        """Local TTS via pyttsx3 (optional; silently skipped if absent)."""
-        try:
-            import pyttsx3
-            engine = pyttsx3.init()
-            engine.setProperty("rate", int(175 * self.settings.get("voice_speed")))
-            engine.say(text)
-            engine.runAndWait()
-        except Exception:
-            pass
+        """Local TTS via pyttsx3, on a worker thread (optional; skipped if absent).
+
+        NOTE: the backend already synthesizes the reply with Piper; this local
+        pyttsx3 path is a best-effort fallback so the reply is still audible
+        without extra audio plumbing. It does not block the GUI thread.
+        """
+        self._speak_worker = SpeakWorker(
+            text, int(175 * self.settings.get("voice_speed")), self,
+        )
+        self._speak_worker.finished_speaking.connect(self._on_speak_done)
+        self._speak_worker.start()
+
+    @Slot()
+    def _on_speak_done(self) -> None:
         self._set_status("idle")
         self.chat.set_voice_status("idle")
         self.beanie.set_message("I'm here.")

@@ -81,12 +81,12 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.11.0")
 
     // Wake word (Porcupine)
-    // NOTE: removed — it was never actually used. WakeWordService.tryStartPorcupine()
-    // always returns false and falls back to a simulated detector. Its native .so
-    // files also triggered the Android 16 KB page-size alignment build failure
-    // ("not 16 KB aligned"). Re-add (with a Picovoice access key + a real .ppn
-    // model + a 16 KB-aligned SDK version) only when a real wake-word
-    // implementation is built.
+    // NOTE: removed — WakeWordService now does REAL energy-based voice-activity
+    // detection (AudioRecord + RMS threshold), not a simulated timer. Porcupine's
+    // native .so files also triggered the Android 16 KB page-size alignment build
+    // failure ("not 16 KB aligned"). Re-add (with a Picovoice access key + a real
+    // .ppn model + a 16 KB-aligned SDK version) only when true "Hey Beanie"
+    // keyword spotting is wanted.
     // implementation("ai.picovoice:porcupine-android:2.2.0")
 
     // Audio playback
