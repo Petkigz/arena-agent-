@@ -234,6 +234,32 @@ def test_fetch_image_bytes_gets_url():
     client.close()
 
 
+def test_get_shared_settings_with_short_timeout():
+    """Startup hydration uses a bounded timeout (backend may be offline)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"theme": "light", "wake_word": "hey_arena"})
+
+    client = ArenaBackendClient()
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    data = client.get_shared_settings(timeout=2.0)
+    assert data["theme"] == "light"
+    client.close()
+
+
+def test_get_shared_settings_timeout_raises_backend_error():
+    """A short-timeout hydration fails fast (BackendConnectionError), not hang."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = ArenaBackendClient()
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=1.0)
+
+    with pytest.raises(BackendConnectionError):
+        client.get_shared_settings(timeout=0.5)
+    client.close()
+
+
 def test_resolve_location_uses_native_service(monkeypatch):
     from desktop import backend_client as bc
 

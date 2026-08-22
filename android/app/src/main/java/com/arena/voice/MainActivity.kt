@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.arena.voice.api.ApiClient
 import com.arena.voice.service.WakeWordService
 import com.arena.voice.ui.AppScaffold
 import com.arena.voice.ui.ArenaVoiceTheme
@@ -26,6 +27,7 @@ import com.arena.voice.util.SettingsRepository
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -36,6 +38,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var settings: SettingsRepository
+
+    @Inject
+    lateinit var apiClient: ApiClient
 
     private var serverUrl by mutableStateOf(SettingsRepository.DEFAULT_SERVER_URL)
     private var apiKey by mutableStateOf("")
@@ -74,6 +79,22 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             settings.theme.collect { t -> theme = t }
+        }
+
+        // Hydrate the theme from the backend's shared settings so a theme change
+        // made on web/desktop is honored here too (fall back to the local
+        // DataStore value on failure). (regression B3)
+        lifecycleScope.launch {
+            val raw = apiClient.getSharedSettings()
+            if (raw != null) {
+                runCatching {
+                    val backendTheme = JSONObject(raw).optString("theme", "")
+                    if (backendTheme == "dark" || backendTheme == "light") {
+                        settings.setTheme(backendTheme)
+                        theme = backendTheme
+                    }
+                }
+            }
         }
 
         // Reflect the backend voice pipeline (listening/thinking/speaking/…)

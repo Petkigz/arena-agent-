@@ -170,9 +170,21 @@ class ArenaBackendClient:
         return self._get_json(f"/knowledge/graph?limit={limit}")
 
     # ── shared settings (cross-platform) ────────────────────────────────────
-    def get_shared_settings(self) -> Dict[str, Any]:
-        """GET /settings → settings dict."""
-        return self._get_json("/settings")
+    def get_shared_settings(self, timeout: Optional[float] = None) -> Dict[str, Any]:
+        """GET /settings → settings dict.
+
+        `timeout` bounds the wait (used at startup to hydrate local settings
+        without hanging the window for the full 180s default when the backend
+        is offline)."""
+        try:
+            r = self._client.get(
+                f"{self.base_url}/settings",
+                timeout=timeout,  # per-request override (None → client default)
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"GET /settings failed: {e}") from e
 
     def update_shared_settings(self, patch: Dict[str, Any]) -> Dict[str, Any]:
         """POST /settings → merged settings dict."""

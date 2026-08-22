@@ -1594,14 +1594,26 @@ class MainWindow(QMainWindow):
         self.resize(920, 720)
 
         self.settings = DesktopSettings()
-        # Apply the persisted theme BEFORE any widget is constructed, so the
-        # whole window renders in the active palette (light or dark).
-        apply_theme(self.settings.get("theme") or "dark")
         # Persisted server URL overrides the CLI default when set.
         saved_url = self.settings.get("server_url")
         base_url = saved_url if saved_url and saved_url != "http://localhost:8000" else base_url
 
         self.client = ArenaBackendClient(base_url=base_url)
+
+        # Hydrate the theme from the backend's shared settings (short timeout so
+        # an offline backend doesn't block launch), then apply it BEFORE any
+        # widget is constructed so the whole window renders in the right palette.
+        # This makes the "backend-driven" theme actually two-way: a theme change
+        # made on web/Android now re-themes the desktop on next launch.
+        try:
+            shared = self.client.get_shared_settings(timeout=3.0)
+            backend_theme = shared.get("theme")
+            if backend_theme in ("dark", "light"):
+                self.settings.set("theme", backend_theme)
+        except BackendConnectionError:
+            pass  # backend offline — keep the locally-persisted theme
+        apply_theme(self.settings.get("theme") or "dark")
+
         self._chat_worker: Optional[ChatWorker] = None
 
         # Voice (talk to Beanie) — streams mic PCM to the backend. The callbacks
