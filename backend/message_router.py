@@ -117,9 +117,10 @@ class MessageRouter:
 
         handler = handlers.get(msg_type)
         if handler:
-            await handler(websocket, message)
+            return await handler(websocket, message)
         else:
             app_logger.warning(f"Unknown message type: {msg_type}")
+            return None
 
     async def _handle_user_message(self, websocket, message: Dict[str, Any]):
         """Handle user message with LLM-powered streaming response."""
@@ -204,6 +205,7 @@ class MessageRouter:
 
             # Store assistant response in history
             add_to_history(conversation_id, "assistant", response_text)
+            return response_text
 
         except asyncio.CancelledError:
             app_logger.info(f"Message processing cancelled for {conversation_id}")
@@ -215,6 +217,7 @@ class MessageRouter:
                 "conversation_id": conversation_id,
                 "message": f"Error processing message: {str(e)}"
             })
+            return None
 
     async def _call_cognitive_runtime(self, content: str) -> str:
         """Route the message through CognitiveRuntime (the authoritative cognitive path).

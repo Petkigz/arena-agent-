@@ -11,6 +11,7 @@ from backend.voice.remote_audio import RemoteAudioBuffer
 from backend.voice.stt import SpeechToTextService
 from backend.websocket_server import ws_manager
 import backend.message_router as message_router_module
+from app.perception.piper_voice import synthesize_piper
 from app.utils.logger import app_logger
 
 
@@ -46,9 +47,12 @@ class VoiceService:
 
         app_logger.info(f"Voice service started for conversation {conversation_id}")
 
+        # Push-to-talk: the user explicitly started voice, so go straight to
+        # LISTENING (the wake word only gates hands-free mode). This is the
+        # first visible orb-state change the user sees after clicking.
         await ws_manager.broadcast_to_conversation(conversation_id, {
             "type": "voice_state",
-            "state": VoiceState.IDLE.value,
+            "state": VoiceState.LISTENING.value,
         })
 
     async def stop(self):
@@ -177,6 +181,13 @@ class VoiceService:
             app_logger.warning("Remote utterance received but no conversation is active")
             return
 
+        # The user has stopped speaking — show "thinking" while we transcribe
+        # and the cognitive runtime produces a reply.
+        await ws_manager.broadcast_to_conversation(self.current_conversation_id, {
+            "type": "voice_state",
+            "state": VoiceState.THINKING.value,
+        })
+
         stt = self._get_remote_stt()
         if stt is None:
             app_logger.warning("STT unavailable — remote audio not transcribed (install faster-whisper)")
@@ -230,12 +241,14 @@ class VoiceService:
                 # capture the initial None and never see the real instance.
                 router = message_router_module.message_router
                 if router:
-                    await router.handle_message(None, {
+                    reply = await router.handle_message(None, {
                         "type": "user_message",
                         "conversation_id": self.current_conversation_id,
                         "content": transcript,
                         "source": "voice",
                     })
+                    if isinstance(reply, str) and reply.strip():
+                        await self._speak_reply(reply)
                 else:
                     app_logger.warning("Message router not available")
             else:
@@ -271,6 +284,37 @@ class VoiceService:
             await self.pipeline.speak(text)
         except Exception as e:
             app_logger.error(f"Failed to speak feedback: {e}")
+
+    async def _speak_reply(self, text: str) -> None:
+        """Speak a cognitive reply: broadcast SPEAKING, stream TTS audio, then IDLE.
+
+        Uses Piper directly (in-process) so the remote/phone path also speaks,
+        independent of the PC-side pipeline.
+        """
+        conv_id = self.current_conversation_id
+        if not conv_id or not text:
+            return
+
+        await ws_manager.broadcast_to_conversation(conv_id, {
+            "type": "voice_state",
+            "state": VoiceState.SPEAKING.value,
+        })
+
+        try:
+            result = await asyncio.to_thread(synthesize_piper, text, None, 1.0, 16000)
+            if result is not None:
+                audio, _sr = result
+                pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
+                await ws_manager.send_audio_to_conversation(conv_id, pcm)
+                # Hold SPEAKING while the client plays the audio (int16 @ 16 kHz).
+                await asyncio.sleep(len(pcm) / 32000.0 + 0.25)
+        except Exception as e:
+            app_logger.error(f"Voice reply TTS failed: {e}")
+
+        await ws_manager.broadcast_to_conversation(conv_id, {
+            "type": "voice_state",
+            "state": VoiceState.IDLE.value,
+        })
 
     def _parse_voice_command(self, transcript: str) -> Optional[str]:
         """Parse voice transcript into command.
