@@ -18,19 +18,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import com.arena.voice.service.WakeWordService
+import com.arena.voice.ui.AppScaffold
 import com.arena.voice.ui.ArenaVoiceTheme
-import com.arena.voice.ui.screens.MainScreen
 import com.arena.voice.ui.screens.PresenceStatus
 import com.arena.voice.util.SettingsRepository
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
+
     @Inject
     lateinit var webSocketClient: VoiceWebSocketClient
 
@@ -38,9 +38,10 @@ class MainActivity : ComponentActivity() {
     lateinit var settings: SettingsRepository
 
     private var serverUrl by mutableStateOf(SettingsRepository.DEFAULT_SERVER_URL)
+    private var apiKey by mutableStateOf("")
     private var isConnected by mutableStateOf(false)
     private var isListening by mutableStateOf(false)
-    
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -48,9 +49,6 @@ class MainActivity : ComponentActivity() {
         if (denied.isNotEmpty()) {
             Log.w(TAG, "Some permissions denied: $denied")
         }
-        // Start services as long as the mic permission is granted — the other
-        // permissions (camera, location, SMS, …) are optional sensors and should
-        // not block the core voice assistant.
         val micGranted = permissions[Manifest.permission.RECORD_AUDIO] == true ||
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.RECORD_AUDIO
@@ -61,42 +59,25 @@ class MainActivity : ComponentActivity() {
             Log.e(TAG, "Microphone permission denied — voice assistant cannot start.")
         }
     }
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Load the persisted server URL so the UI can show/edit it.
+        // Load persisted settings so the UI can show/edit them.
         lifecycleScope.launch {
-            settings.serverUrl.collect { url ->
-                serverUrl = url
-            }
+            settings.serverUrl.collect { url -> serverUrl = url }
+        }
+        lifecycleScope.launch {
+            settings.apiKey.collect { key -> apiKey = key }
         }
 
         setContent {
             ArenaVoiceTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background,
                 ) {
-                    MainScreen(
-                        onStartListening = {
-                            isListening = true
-                            startWakeWordService()
-                        },
-                        onStopListening = {
-                            isListening = false
-                            stopWakeWordService()
-                        },
-                        onConnect = {
-                            isConnected = true
-                            connectToServer()
-                        },
-                        onDisconnect = {
-                            isConnected = false
-                            disconnectFromServer()
-                        },
-                        serverUrl = serverUrl,
-                        onSaveServerUrl = { url -> saveServerUrl(url) },
+                    AppScaffold(
                         presenceStatus = when {
                             isListening -> PresenceStatus.LISTENING
                             !isConnected -> PresenceStatus.OFFLINE
@@ -107,12 +88,18 @@ class MainActivity : ComponentActivity() {
                             !isConnected -> "Offline — connect to your PC."
                             else -> "I'm here."
                         },
+                        isListening = isListening,
+                        serverUrl = serverUrl,
+                        apiKey = apiKey,
+                        onToggleTalk = { toggleTalk() },
                         onQuickAction = { action -> handleQuickAction(action) },
+                        onSaveServerUrl = { url -> saveServerUrl(url) },
+                        onSaveApiKey = { key -> saveApiKey(key) },
                     )
                 }
             }
         }
-        
+
         checkPermissions()
     }
 
@@ -120,21 +107,35 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             settings.setServerUrl(url)
             serverUrl = url
-            // Reconnect using the newly-saved URL.
             disconnectFromServer()
             connectToServer()
         }
     }
-    
+
+    private fun saveApiKey(key: String) {
+        lifecycleScope.launch {
+            settings.setApiKey(key)
+            apiKey = key
+        }
+    }
+
+    private fun toggleTalk() {
+        if (isListening) {
+            isListening = false
+            stopWakeWordService()
+        } else {
+            isListening = true
+            startWakeWordService()
+        }
+    }
+
     /**
      * Request every dangerous permission the app can use, grouped by API level.
-     * Normal permissions (INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, etc.) are
-     * auto-granted at install and are NOT requested here.
+     * Normal permissions are auto-granted at install and NOT requested here.
      */
     private fun checkPermissions() {
         val permissions = mutableListOf<String>()
 
-        // Always-required
         permissions.add(Manifest.permission.RECORD_AUDIO)
         permissions.add(Manifest.permission.CAMERA)
         permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -147,90 +148,69 @@ class MainActivity : ComponentActivity() {
         permissions.add(Manifest.permission.RECEIVE_SMS)
         permissions.add(Manifest.permission.BODY_SENSORS)
 
-        // Activity recognition (API 29+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             permissions.add(Manifest.permission.ACTIVITY_RECOGNITION)
-        }
-
-        // Photo location metadata (API 29+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             permissions.add(Manifest.permission.ACCESS_MEDIA_LOCATION)
         }
-
-        // Bluetooth runtime permissions (API 31+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
             permissions.add(Manifest.permission.BLUETOOTH_SCAN)
             permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
         }
-
-        // Scoped storage: READ_MEDIA_* on 13+, legacy external storage on 12 and below
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
             permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
             permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-        // Nearby Wi-Fi devices (API 33+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-        }
-
-        // Only request what's not already granted.
         val notGranted = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (notGranted.isEmpty()) {
-            Log.i(TAG, "All permissions already granted")
             startServices()
         } else {
-            Log.i(TAG, "Requesting ${notGranted.size} permission(s)...")
             requestPermissionLauncher.launch(notGranted.toTypedArray())
         }
     }
-    
+
     private fun startServices() {
         connectToServer()
         startWakeWordService()
     }
-    
+
     private fun startWakeWordService() {
         val intent = Intent(this, WakeWordService::class.java).apply {
             action = WakeWordService.ACTION_START
         }
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
             startService(intent)
         }
-        
         Log.i(TAG, "Wake word service started")
     }
-    
+
     private fun stopWakeWordService() {
         val intent = Intent(this, WakeWordService::class.java).apply {
             action = WakeWordService.ACTION_STOP
         }
         startService(intent)
-        
         Log.i(TAG, "Wake word service stopped")
     }
-    
+
     private fun connectToServer() {
-        // Read the persisted server URL (DataStore) and connect.
         lifecycleScope.launch {
             webSocketClient.connectToSavedServer()
             isConnected = webSocketClient.isConnected()
         }
     }
 
-    /** Quick actions route a chat prompt to the backend (like the web/desktop). */
     private fun handleQuickAction(action: String) {
         val prompt = when (action) {
             "continue_project" -> "What were we working on? Continue the project."
@@ -243,17 +223,17 @@ class MainActivity : ComponentActivity() {
             webSocketClient.sendUserMessage(webSocketClient.conversationId, prompt)
         }
     }
-    
+
     private fun disconnectFromServer() {
         webSocketClient.disconnect()
     }
-    
+
     override fun onDestroy() {
         stopWakeWordService()
         disconnectFromServer()
         super.onDestroy()
     }
-    
+
     companion object {
         private const val TAG = "MainActivity"
     }

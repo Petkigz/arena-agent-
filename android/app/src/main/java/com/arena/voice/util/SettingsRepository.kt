@@ -28,6 +28,7 @@ class SettingsRepository @Inject constructor(
 ) {
     companion object {
         private val KEY_SERVER_URL = stringPreferencesKey("server_url")
+        private val KEY_API_KEY = stringPreferencesKey("api_key")
 
         /** Emulator default: 10.0.2.2 aliases the host machine's localhost. */
         const val DEFAULT_SERVER_URL = "ws://10.0.2.2:8000/ws"
@@ -37,8 +38,26 @@ class SettingsRepository @Inject constructor(
         prefs[KEY_SERVER_URL] ?: DEFAULT_SERVER_URL
     }
 
+    /** API key for authenticated backends (matches the web's X-API-Key / VITE_API_KEY). */
+    val apiKey: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_API_KEY] ?: ""
+    }
+
     suspend fun setServerUrl(url: String) {
         val cleaned = url.trim().let { if (it.isEmpty()) DEFAULT_SERVER_URL else it }
         context.dataStore.edit { prefs -> prefs[KEY_SERVER_URL] = cleaned }
+    }
+
+    suspend fun setApiKey(key: String) {
+        context.dataStore.edit { prefs -> prefs[KEY_API_KEY] = key.trim() }
+    }
+
+    /** Derive the HTTP base URL (http://…) from the WebSocket URL (ws://…). */
+    suspend fun httpBaseUrl(): String {
+        val ws = serverUrl.first()
+        return ws
+            .replace("wss://", "https://")
+            .replace("ws://", "http://")
+            .substringBefore("/ws")
     }
 }

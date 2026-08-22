@@ -125,6 +125,27 @@ class VoiceWebSocketClient @Inject constructor(
         ))
     }
 
+    /** Create a new conversation on the backend. */
+    fun createConversation(title: String? = null) {
+        sendJson(mapOf(
+            "type" to "create_conversation",
+            "title" to (title ?: ""),
+        ))
+    }
+
+    /** Request the conversation list. */
+    fun listConversations() {
+        sendJson(mapOf("type" to "list_conversations"))
+    }
+
+    /** Request message history for a conversation. */
+    fun requestHistory(convId: String) {
+        sendJson(mapOf(
+            "type" to "get_history",
+            "conversation_id" to convId,
+        ))
+    }
+
     private fun sendJson(data: Map<String, Any>) {
         if (!isConnected) {
             Log.w(TAG, "Cannot send message: not connected")
@@ -196,6 +217,63 @@ class VoiceWebSocketClient @Inject constructor(
                         val audioBase64 = json.getString("audio")
                         listeners.forEach { it.onAudioResponse(audioBase64) }
                     }
+                    // ── Chat protocol (matches the web frontend / backend message_router) ──
+                    "message_ack" -> {
+                        val convId = json.optString("conversation_id")
+                        listeners.forEach { it.onMessageAck(convId) }
+                    }
+                    "message_token" -> {
+                        val convId = json.optString("conversation_id")
+                        val msgId = json.optString("message_id")
+                        val token = json.optString("token")
+                        val done = json.optBoolean("done", false)
+                        listeners.forEach { it.onMessageToken(convId, msgId, token, done) }
+                    }
+                    "action_step" -> {
+                        val convId = json.optString("conversation_id")
+                        val msgId = json.optString("message_id")
+                        val label = json.optString("label", json.optString("action", ""))
+                        val status = json.optString("status", "")
+                        listeners.forEach { it.onActionStep(convId, msgId, label, status) }
+                    }
+                    "conversation_joined" -> {
+                        val convId = json.optString("conversation_id")
+                        listeners.forEach { it.onConversationJoined(convId) }
+                    }
+                    "conversation_created" -> {
+                        val convId = json.optString("conversation_id")
+                        listeners.forEach { it.onConversationCreated(convId) }
+                    }
+                    "conversation_list" -> {
+                        val conversations = json.optJSONArray("conversations")
+                        val ids = mutableListOf<String>()
+                        if (conversations != null) {
+                            for (i in 0 until conversations.length()) {
+                                val c = conversations.optJSONObject(i)
+                                val id = c?.optString("id", c?.optString("conversation_id", ""))
+                                if (!id.isNullOrBlank()) ids.add(id)
+                            }
+                        }
+                        listeners.forEach { it.onConversationList(ids) }
+                    }
+                    "conversation_history" -> {
+                        val convId = json.optString("conversation_id")
+                        val history = json.optJSONArray("messages")
+                        val msgs = mutableListOf<Pair<String, String>>() // role, content
+                        if (history != null) {
+                            for (i in 0 until history.length()) {
+                                val m = history.optJSONObject(i)
+                                val role = m?.optString("role", "assistant") ?: "assistant"
+                                val content = m?.optString("content", "") ?: ""
+                                if (content.isNotBlank()) msgs.add(role to content)
+                            }
+                        }
+                        listeners.forEach { it.onConversationHistory(convId, msgs) }
+                    }
+                    "error" -> {
+                        val message = json.optString("message", "Unknown error")
+                        listeners.forEach { it.onChatError(message) }
+                    }
                     else -> {
                         Log.w(TAG, "Unknown message type: $type")
                     }
@@ -239,6 +317,15 @@ class VoiceWebSocketClient @Inject constructor(
         fun onTranscript(text: String, isFinal: Boolean) {}
         fun onAudioResponse(audio: String) {}
         fun onAudioResponse(audio: ByteArray) {}
+        // Chat callbacks (default no-ops so existing voice-only listeners are unaffected).
+        fun onMessageAck(conversationId: String) {}
+        fun onMessageToken(conversationId: String, messageId: String, token: String, done: Boolean) {}
+        fun onActionStep(conversationId: String, messageId: String, label: String, status: String) {}
+        fun onConversationJoined(conversationId: String) {}
+        fun onConversationCreated(conversationId: String) {}
+        fun onConversationList(ids: List<String>) {}
+        fun onConversationHistory(conversationId: String, messages: List<Pair<String, String>>) {}
+        fun onChatError(message: String) {}
     }
 
     companion object {
