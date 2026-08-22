@@ -261,7 +261,11 @@ class CognitiveRuntime:
     def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast", goal_rep: Optional[Any] = None) -> ActionProposal:
         from app.cognition.action_planner import ActionPlanner
         res = ActionPlanner.plan_and_evaluate_action(
-            user_text, complexity=complexity, goal_rep=goal_rep, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
+            user_text, complexity=complexity, goal_rep=goal_rep,
+            memory_store=self.memory, world_model=self.world, tool_registry=self.registry,
+            outcome_store=self.outcomes, lesson_store=self.lessons,
+            hardware_self_model=self.hardware_self_model,
+            resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
         )
         if isinstance(res, ActionProposal):
             return res
@@ -1237,7 +1241,7 @@ class CognitiveRuntime:
             app_logger.warning(f"Creative generation integration failed: {e}")
 
         try:
-            from app.cognition.social_cognition import MentalState, SocialNorm
+            from app.cognition.social_cognition import MentalState, SocialNorm, Emotion
             self.social_cognition.infer_mental_state(
                 agent_id="owner",
                 state_type=MentalState.INTENTION,
@@ -1245,6 +1249,34 @@ class CognitiveRuntime:
                 evidence=[f"user message: {user_text[:80]}"],
                 confidence=0.6,
             )
+            # P2 AGI: Infer emotion from text cues (real signal, not just rule-based response)
+            # Human intelligence detects frustration, joy, sadness from language
+            lower = user_text.lower()
+            emotion_map = {
+                "joy": (["happy", "great", "wonderful", "excited", "love", "awesome"], Emotion.JOY),
+                "sadness": (["sad", "down", "depressed", "unhappy", "lonely", "miss"], Emotion.SADNESS),
+                "anger": (["angry", "frustrated", "annoyed", "mad", "hate", "furious", "irritated"], Emotion.ANGER),
+                "fear": (["scared", "afraid", "worried", "anxious", "nervous", "fear"], Emotion.FEAR),
+                "surprise": (["wow", "surprised", "amazing", "unexpected", "incredible"], Emotion.SURPRISE),
+            }
+            for emo_name, (keywords, emo_enum) in emotion_map.items():
+                if any(k in lower for k in keywords):
+                    intensity = 0.7 if any(k in lower for k in ["very", "really", "so", "extremely"]) else 0.5
+                    self.social_cognition.recognize_emotion(
+                        agent_id="owner",
+                        primary_emotion=emo_enum,
+                        intensity=intensity,
+                        triggers=[f"emotion keyword '{emo_name}' in: {user_text[:60]}"],
+                    )
+                    self.social_cognition.infer_mental_state(
+                        agent_id="owner",
+                        state_type=MentalState.EMOTION,
+                        content=f"owner feels {emo_name} (from text)",
+                        evidence=[f"keyword in: {user_text[:60]}"],
+                        confidence=0.65,
+                    )
+                    break
+
             self.social_cognition.record_interaction(
                 participants=["owner", "arena"],
                 interaction_type="task",
@@ -1801,7 +1833,9 @@ class CognitiveRuntime:
             replan_proposal = GoalReplanner.execute_reassessment_and_replan(
                 user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory,
                 world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload,
-                lesson_store=self.lessons
+                lesson_store=self.lessons, outcome_store=self.outcomes,
+                hardware_self_model=self.hardware_self_model,
+                resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
             )
             if replan_proposal:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)

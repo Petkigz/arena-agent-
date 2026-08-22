@@ -269,7 +269,11 @@ class VoiceService:
 
     async def _transcribe_remote_utterance(self, audio: np.ndarray) -> None:
         """Transcribe a remote utterance and route it through the same path as a
-        PC transcript (broadcast + cognitive runtime)."""
+        PC transcript (broadcast + cognitive runtime).
+
+        P2 AGI: Now also analyzes voice prosody (pitch, energy, rate) to infer
+        emotion from real signals and feeds it to social_cognition.
+        """
         if not self.current_conversation_id:
             app_logger.warning("Remote utterance received but no conversation is active")
             return
@@ -281,9 +285,64 @@ class VoiceService:
             "state": VoiceState.THINKING.value,
         })
 
+        # P2: Prosody analysis from real audio (before STT, so we have raw PCM)
+        prosody_emotion = "neutral"
+        prosody_intensity = 0.3
+        prosody_triggers = []
+        try:
+            from app.tools.prosody_analyzer import ProsodyAnalyzerTool
+            prosody_res = ProsodyAnalyzerTool.analyze_prosody(audio, sample_rate=16000)
+            if prosody_res.get("success"):
+                prosody_emotion = prosody_res.get("emotion", "neutral")
+                prosody_intensity = prosody_res.get("intensity", 0.3)
+                prosody_triggers = prosody_res.get("triggers", [])
+                app_logger.info(f"Prosody: {prosody_emotion} intensity {prosody_intensity:.2f} — {prosody_triggers}")
+
+                # Feed to social cognition (real signal, not rule-based)
+                try:
+                    import backend.message_router as mr
+                    rt = getattr(mr.message_router, "runtime", None) if mr.message_router else None
+                    if rt and hasattr(rt, "social_cognition"):
+                        from app.cognition.social_cognition import Emotion
+                        emo_map = {
+                            "joy": Emotion.JOY,
+                            "sadness": Emotion.SADNESS,
+                            "anger": Emotion.ANGER,
+                            "fear": Emotion.FEAR,
+                            "surprise": Emotion.SURPRISE,
+                            "disgust": Emotion.DISGUST,
+                            "neutral": Emotion.NEUTRAL,
+                        }
+                        emo = emo_map.get(prosody_emotion, Emotion.NEUTRAL)
+                        rt.social_cognition.recognize_emotion(
+                            agent_id="owner",
+                            primary_emotion=emo,
+                            intensity=prosody_intensity,
+                            triggers=prosody_triggers,
+                        )
+                        # Also store as mental state
+                        from app.cognition.social_cognition import MentalState
+                        rt.social_cognition.infer_mental_state(
+                            agent_id="owner",
+                            state_type=MentalState.EMOTION,
+                            content=f"owner feels {prosody_emotion} (intensity {prosody_intensity:.2f})",
+                            evidence=prosody_triggers,
+                            confidence=0.7,
+                        )
+                except Exception as e:
+                    app_logger.warning(f"Could not feed prosody to social cognition: {e}")
+
+        except Exception as e:
+            app_logger.warning(f"Prosody analysis failed (best-effort): {e}")
+
         stt = self._get_remote_stt()
         if stt is None:
             app_logger.warning("STT unavailable — remote audio not transcribed (install faster-whisper)")
+            # Even without STT, if prosody detected strong emotion, provide empathetic feedback
+            if prosody_emotion in ("anger", "sadness", "fear") and prosody_intensity > 0.6:
+                await self._speak_feedback(
+                    "I hear you — it sounds like you're feeling something. Could you say that again?"
+                )
             return
 
         try:
@@ -294,7 +353,7 @@ class VoiceService:
 
         text = (result.get("text") or "").strip()
         if text:
-            app_logger.info(f"Remote transcription: '{text}'")
+            app_logger.info(f"Remote transcription: '{text}' (prosody: {prosody_emotion} {prosody_intensity:.2f})")
             await self._handle_transcript(text, is_final=True)
         else:
             app_logger.warning("Remote transcription returned empty text")

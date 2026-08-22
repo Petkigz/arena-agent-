@@ -99,6 +99,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.universal_media_learner import UniversalMediaLearner
     from app.tools.vision_analyzer import VisionAnalyzerTool
     from app.tools.object_detector import ObjectDetectorTool
+    from app.tools.prosody_analyzer import ProsodyAnalyzerTool
     from app.tools.web_agent import WebAgent
     from app.tools.web_research import WebResearcher
     from app.tools.win32_ghost_operator import Win32GhostOperator
@@ -187,6 +188,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(ObjectDetectorTool.detect_faces, "image_path"))
     add("analyze_image_grounded", "vision", 0, "Detect objects + create language groundings (perception→grounding loop)",
         _wrap(ObjectDetectorTool.analyze_image_grounded, "image_path", "auto_create_groundings"))
+    add("analyze_prosody", "audio", 0, "Analyze voice prosody (pitch, energy, rate) → emotion from real signals",
+        _wrap(ProsodyAnalyzerTool.analyze_file, "file_path", "sample_rate"))
 
     # ── Location ────────────────────────────────────────────────────────────
     add("resolve_location", "location", 0, "Resolve geographic location",
