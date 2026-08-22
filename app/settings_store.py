@@ -16,11 +16,27 @@ from app.utils.logger import app_logger
 _SETTINGS_PATH = settings.DATA_DIR / "settings.json"
 
 _DEFAULTS: Dict[str, Any] = {
+    # Voice
     "wake_word": "hey_arena",
-    "voice_speed": 1.0,
     "voice": "en_US-lessac-medium",
+    "voice_speed": 1.0,
+    "voice_enabled": True,
+    "language": "en_US",
+    "noise_suppression": True,
+    "vad_sensitivity": 50,      # 0-100 (0 = least sensitive)
+    "response_delay": 500,      # ms before the assistant starts speaking
+    # Appearance
     "theme": "dark",
+    "font_size": "medium",
+    "high_contrast": False,
+    "large_text": False,
+    "reduced_motion": False,
+    # Connection / models
     "server_url": "http://localhost:8000",
+    "api_key": "",
+    "fast_model": "",
+    "main_model": "",
+    "lm_studio_url": "",
 }
 
 

@@ -671,8 +671,46 @@ def get_settings_endpoint():
 
 
 @router.post("/settings")
-def update_settings_endpoint(payload: Dict[str, Any]):
-    return update_settings(payload)
+async def update_settings_endpoint(payload: Dict[str, Any]):
+    updated = update_settings(payload)
+    await _apply_settings_live(payload)
+    return updated
+
+
+async def _apply_settings_live(patch: Dict[str, Any]) -> None:
+    """Apply a settings patch to the running subsystems (best-effort).
+
+    - `voice` → persist the active Piper voice (drives /voice/synthesize).
+    - `wake_word` / `voice` / `voice_speed` / `vad_sensitivity` → live-update the
+      running voice pipeline when one is active.
+    """
+    # Piper voice selection is a file-backed setting consumed at synth time, so
+    # persist it regardless of whether the pipeline is currently running.
+    if patch.get("voice"):
+        try:
+            LocalTextToSpeech.set_active_piper_voice(str(patch["voice"]))
+        except Exception as e:  # noqa: BLE001
+            app_logger.warning(f"Could not set active Piper voice: {e}")
+
+    live: Dict[str, Any] = {}
+    if "wake_word" in patch:
+        live["wakeWord"] = patch["wake_word"]
+    if "voice" in patch:
+        live["selectedVoice"] = patch["voice"]
+    if "voice_speed" in patch:
+        live["voiceSpeed"] = patch["voice_speed"]
+    if "vad_sensitivity" in patch:
+        live["vadSensitivity"] = patch["vad_sensitivity"]
+    if not live:
+        return
+
+    try:
+        # Imported lazily: the voice service pulls in the pipeline/orchestrator
+        # stack, which is only needed here when a live update is requested.
+        from backend.voice.service import voice_service
+        await voice_service.update_settings(live)
+    except Exception as e:  # noqa: BLE001
+        app_logger.warning(f"Could not apply live voice settings: {e}")
 
 
 @router.delete("/memories/{memory_id}")
@@ -887,6 +925,8 @@ def list_piper_voices_endpoint():
 @router.post("/voice/piper/select")
 def select_piper_voice_endpoint(req: VoiceProfileSelectRequest):
     ok = LocalTextToSpeech.set_active_piper_voice(req.profile_name)
+    # Keep the shared settings store in sync so web/desktop/Android see the same voice.
+    update_settings({"voice": LocalTextToSpeech.get_active_piper_voice()})
     db.create_audit_log("select_piper_voice", "success", f"Selected Piper voice: '{req.profile_name}'", level=0)
     return {"success": ok, "active_voice": LocalTextToSpeech.get_active_piper_voice()}
 

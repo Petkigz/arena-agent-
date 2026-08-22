@@ -2,7 +2,14 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSettingsStore } from '../../stores';
 import { Button, Input, Card } from '../../components/ui';
 import { Mic, Volume2, Waves, Settings, CheckCircle, XCircle } from 'lucide-react';
-import { listPiperVoices, synthesizeVoice, selectPiperVoice, type PiperVoice } from '../../services/api';
+import {
+  listPiperVoices,
+  synthesizeVoice,
+  selectPiperVoice,
+  getSharedSettings,
+  updateSharedSettings,
+  type PiperVoice,
+} from '../../services/api';
 import { webSocketService } from '../../services/websocket';
 
 export function VoiceSettingsPage() {
@@ -50,6 +57,22 @@ export function VoiceSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Hydrate from the backend's shared settings (wake word / voice / speed), so
+  // the web edits the SAME values the desktop + Android apps edit.
+  useEffect(() => {
+    let cancelled = false;
+    getSharedSettings().then((s) => {
+      if (cancelled || !s) return;
+      if (s.wake_word) setWakeWord(s.wake_word);
+      if (typeof s.voice_speed === 'number') setVoiceSpeed(s.voice_speed);
+      if (s.voice) setSelectedVoice(s.voice);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // A voice list built from real Piper voices, plus a "system OS voice" fallback.
   const availableVoices = piperVoices.length
     ? piperVoices.map((v) => ({
@@ -64,6 +87,8 @@ export function VoiceSettingsPage() {
       setSelectedVoice(voiceId);
       // Persist on the backend (drives /voice/synthesize + the Beanie orb pipeline).
       selectPiperVoice(voiceId).catch(() => {});
+      // Also update the shared settings store so desktop/Android see the change.
+      updateSharedSettings({ voice: voiceId }).catch(() => {});
       // Best-effort: sync the running voice pipeline too.
       try {
         webSocketService.updateVoiceSettings({ selectedVoice: voiceId });
@@ -218,7 +243,10 @@ export function VoiceSettingsPage() {
                   </label>
                   <Input
                     value={wakeWord}
-                    onChange={(e) => setWakeWord(e.target.value)}
+                    onChange={(e) => {
+                      setWakeWord(e.target.value);
+                      updateSharedSettings({ wake_word: e.target.value }).catch(() => {});
+                    }}
                     placeholder="e.g., Hey Arena, Computer, Assistant"
                   />
                   <p className="text-xs text-text-muted mt-1">
@@ -299,7 +327,11 @@ export function VoiceSettingsPage() {
                     max="2"
                     step="0.1"
                     value={voiceSpeed}
-                    onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                    onChange={(e) => {
+                      const speed = parseFloat(e.target.value);
+                      setVoiceSpeed(speed);
+                      updateSharedSettings({ voice_speed: speed }).catch(() => {});
+                    }}
                     className="w-full h-2 bg-background-surface rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
                   <div className="flex justify-between text-xs text-text-muted mt-1">

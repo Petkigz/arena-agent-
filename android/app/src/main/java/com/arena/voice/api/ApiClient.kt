@@ -59,6 +59,21 @@ class ApiClient @Inject constructor(
 
     suspend fun models(): String? = call("/models")
 
+    // ── shared settings (wake word, voice, speed, theme, …) ──────────────────
+    /** GET /settings → the backend's shared settings JSON (null on failure). */
+    suspend fun getSharedSettings(): String? = call("/settings")
+
+    /** POST /settings → merge a partial patch; returns the merged settings. */
+    suspend fun updateSharedSettings(patch: JSONObject): String? =
+        call("/settings", "POST", patch.toString())
+
+    /** GET /voice/piper-voices → available Piper voices + active voice. */
+    suspend fun listPiperVoices(): String? = call("/voice/piper-voices")
+
+    /** POST /voice/piper/select → set the active Piper voice. */
+    suspend fun selectPiperVoice(voiceId: String): String? =
+        call("/voice/piper/select", "POST", JSONObject().put("profile_name", voiceId).toString())
+
     // ── vision / images ──────────────────────────────────────────────────────
     /** POST /vision/capture-and-analyze — capture the host PC's screen and analyse it. */
     suspend fun captureAndAnalyze(promptFocus: String? = null): String? {

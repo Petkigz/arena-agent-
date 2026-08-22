@@ -183,6 +183,32 @@ class ArenaBackendClient:
         """GET /models → LM Studio model info."""
         return self._get_json("/models")
 
+    def update_model_config(self, fast_model: str = "", main_model: str = "",
+                            lm_studio_url: str = "") -> Dict[str, Any]:
+        """POST /models/config → set fast/main models + LM Studio endpoint.
+
+        Only non-empty fields are sent (the backend ignores falsy values, so an
+        empty field would otherwise never clear a previously-set value).
+        """
+        payload: Dict[str, Any] = {}
+        if fast_model.strip():
+            payload["fast_model"] = fast_model.strip()
+        if main_model.strip():
+            payload["main_model"] = main_model.strip()
+        if lm_studio_url.strip():
+            payload["lm_studio_url"] = lm_studio_url.strip()
+        return self._post_json("/models/config", payload)
+
+    # ── voice (Settings) ────────────────────────────────────────────────────
+    def list_piper_voices(self) -> list:
+        """GET /voice/piper-voices → discovered Piper voices + active voice."""
+        data = self._get_json("/voice/piper-voices")
+        return data.get("voices") or []
+
+    def select_piper_voice(self, voice_id: str) -> Dict[str, Any]:
+        """POST /voice/piper/select → set the active Piper voice."""
+        return self._post_json("/voice/piper/select", {"profile_name": voice_id})
+
     # ── code execution ──────────────────────────────────────────────────────
     def execute_code(self, code: str, language: str = "python") -> Dict[str, Any]:
         """POST /code/execute."""

@@ -22,7 +22,7 @@ import com.arena.voice.ui.screens.ChatScreen
 import com.arena.voice.ui.screens.FilesScreen
 import com.arena.voice.ui.screens.PansophyScreen
 import com.arena.voice.ui.screens.PresenceStatus
-import com.arena.voice.ui.screens.ToolsScreen
+import com.arena.voice.ui.screens.SettingsScreen
 import com.arena.voice.ui.screens.VisionScreen
 
 enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
@@ -114,7 +114,7 @@ fun AppScaffold(
                 VisionScreen()
             }
             composable(AppTab.SETTINGS.route) {
-                ToolsScreen(
+                SettingsScreen(
                     serverUrl = serverUrl,
                     apiKey = apiKey,
                     onSaveServerUrl = onSaveServerUrl,

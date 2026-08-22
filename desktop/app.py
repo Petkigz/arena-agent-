@@ -30,6 +30,8 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -736,99 +738,207 @@ class PansophyPage(QWidget):
 
 
 class SettingsPage(QWidget):
-    """Settings: server URL + API key + models."""
+    """Full settings form (shared across web / desktop / Android via the backend).
+
+    Editable: server URL, API key, wake word, voice (Piper), voice speed, theme,
+    language, voice on/off, VAD sensitivity, response delay, and fast/main models.
+    Everything except the server URL (which is a local QSettings value) is
+    persisted on the backend's shared settings store.
+    """
 
     def __init__(self, settings: DesktopSettings, client: ArenaBackendClient, on_save, parent=None):
         super().__init__(parent)
         self._settings = settings
         self._client = client
         self._on_save = on_save
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
 
         title = QLabel("Settings")
         title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        outer.addWidget(title)
 
-        url_label = QLabel("Server URL")
-        url_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        layout.addWidget(url_label)
-        self.url_input = QLineEdit(settings.get("server_url"))
-        self.url_input.setStyleSheet(_input_style())
-        layout.addWidget(self.url_input)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(f"background: {BG_PRIMARY};")
+        container = QWidget()
+        container.setStyleSheet(f"background: {BG_PRIMARY};")
+        form = QVBoxLayout(container)
+        form.setContentsMargins(0, 0, 8, 0)
+        form.setSpacing(8)
 
-        # Voice settings (persisted on the backend, shared across clients).
-        wake_label = QLabel("Wake word")
-        wake_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        layout.addWidget(wake_label)
-        self.wake_input = QLineEdit()
-        self.wake_input.setStyleSheet(_input_style())
-        layout.addWidget(self.wake_input)
+        def section(label_text: str) -> QLabel:
+            lbl = QLabel(label_text)
+            lbl.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 700; margin-top: 6px;")
+            form.addWidget(lbl)
+            return lbl
 
-        speed_label = QLabel("Voice speed (0.5–2.0)")
-        speed_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        layout.addWidget(speed_label)
-        self.speed_input = QLineEdit("1.0")
-        self.speed_input.setStyleSheet(_input_style())
-        layout.addWidget(self.speed_input)
+        def field(label_text: str) -> QLineEdit:
+            lbl = QLabel(label_text)
+            lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+            form.addWidget(lbl)
+            edit = QLineEdit()
+            edit.setStyleSheet(_input_style())
+            form.addWidget(edit)
+            return edit
 
-        voice_label = QLabel("Voice (Piper id)")
-        voice_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        layout.addWidget(voice_label)
-        self.voice_input = QLineEdit()
-        self.voice_input.setStyleSheet(_input_style())
-        layout.addWidget(self.voice_input)
+        # ── Connection ──
+        section("Connection")
+        self.url_input = field("Server URL")
+        self.url_input.setText(settings.get("server_url"))
+        self.api_key_input = field("API key (optional)")
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+
+        # ── Voice ──
+        section("Voice")
+        self.wake_input = field("Wake word")
+        self.voice_combo = QComboBox()
+        self.voice_combo.setEditable(True)
+        self.voice_combo.setStyleSheet(_input_style())
+        self.voice_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        form.addWidget(QLabel("Voice (Piper)"))
+        form.addWidget(self.voice_combo)
+        self.speed_input = field("Voice speed (0.5–2.0)")
+        self.language_combo = QComboBox()
+        self.language_combo.setEditable(True)
+        self.language_combo.setStyleSheet(_input_style())
+        for lang in ("en_US", "en_GB", "es_ES", "fr_FR", "de_DE", "it_IT", "pt_PT", "nl_NL"):
+            self.language_combo.addItem(lang)
+        form.addWidget(QLabel("Language"))
+        form.addWidget(self.language_combo)
+        self.voice_enabled_check = QCheckBox("Voice enabled")
+        self.voice_enabled_check.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        form.addWidget(self.voice_enabled_check)
+        self.vad_input = field("VAD sensitivity (0–100)")
+        self.delay_input = field("Response delay (ms)")
+
+        # ── Appearance ──
+        section("Appearance")
+        self.theme_combo = QComboBox()
+        self.theme_combo.setStyleSheet(_input_style())
+        self.theme_combo.addItems(["dark", "light"])
+        form.addWidget(QLabel("Theme"))
+        form.addWidget(self.theme_combo)
+
+        # ── Models ──
+        section("Models (LM Studio)")
+        self.fast_model_combo = QComboBox()
+        self.fast_model_combo.setEditable(True)
+        self.fast_model_combo.setStyleSheet(_input_style())
+        self.fast_model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        form.addWidget(QLabel("Fast model"))
+        form.addWidget(self.fast_model_combo)
+        self.main_model_combo = QComboBox()
+        self.main_model_combo.setEditable(True)
+        self.main_model_combo.setStyleSheet(_input_style())
+        self.main_model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        form.addWidget(QLabel("Main model"))
+        form.addWidget(self.main_model_combo)
+
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
+        self.status_label.setWordWrap(True)
+        form.addWidget(self.status_label)
+
+        form.addStretch(1)
+        scroll.setWidget(container)
+        outer.addWidget(scroll, stretch=1)
 
         save = QPushButton("Save")
         save.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
         save.clicked.connect(self._save)
-        layout.addWidget(save)
+        outer.addWidget(save)
 
-        models_label = QLabel("Models (LM Studio)")
-        models_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        layout.addWidget(models_label)
-        self.models_text = QLabel("Loading…")
-        self.models_text.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 13px;")
-        self.models_text.setWordWrap(True)
-        layout.addWidget(self.models_text)
+        self._load()
 
-        layout.addStretch(1)
-        self._load_shared_settings()
-        self._load_models()
-
-    def _save(self) -> None:
-        url = self.url_input.text().strip()
-        self._settings.set("server_url", url)
-        # Persist voice settings on the backend so web/desktop/Android share them.
-        try:
-            self._client.update_shared_settings({
-                "wake_word": self.wake_input.text().strip(),
-                "voice_speed": float(self.speed_input.text().strip() or "1.0"),
-                "voice": self.voice_input.text().strip(),
-            })
-        except (BackendConnectionError, ValueError) as e:
-            app_logger.warning(f"Could not save shared settings: {e}")
-        if self._on_save:
-            self._on_save(url)
-
-    def _load_shared_settings(self) -> None:
+    # ── load / save ─────────────────────────────────────────────────────────
+    def _load(self) -> None:
+        # Shared settings (wake word, voice, speed, theme, language, api key, models).
         try:
             data = self._client.get_shared_settings()
             self.wake_input.setText(str(data.get("wake_word", "hey_arena")))
             self.speed_input.setText(str(data.get("voice_speed", 1.0)))
-            self.voice_input.setText(str(data.get("voice", "en_US-lessac-medium")))
+            self.vad_input.setText(str(data.get("vad_sensitivity", 50)))
+            self.delay_input.setText(str(data.get("response_delay", 500)))
+            self.voice_enabled_check.setChecked(bool(data.get("voice_enabled", True)))
+            self.api_key_input.setText(str(data.get("api_key", "")))
+            self._set_combo(self.theme_combo, str(data.get("theme", "dark")))
+            self._set_combo(self.language_combo, str(data.get("language", "en_US")))
+            voice = str(data.get("voice", "en_US-lessac-medium"))
+            self._set_combo(self.voice_combo, voice)
+            self._set_combo(self.fast_model_combo, str(data.get("fast_model", "")))
+            self._set_combo(self.main_model_combo, str(data.get("main_model", "")))
         except BackendConnectionError as e:
-            app_logger.warning(f"Could not load shared settings: {e}")
+            self.status_label.setText(f"⚠ {e}")
 
-    def _load_models(self) -> None:
+        # Piper voices (populate the dropdown).
+        try:
+            voices = self._client.list_piper_voices()
+            for v in voices:
+                self.voice_combo.addItem(str(v.get("id", "")), str(v.get("id", "")))
+        except BackendConnectionError as e:
+            app_logger.warning(f"Could not list Piper voices: {e}")
+
+        # LM Studio models (populate fast/main dropdowns).
         try:
             data = self._client.list_models()
-            loaded = data.get("loaded_models") or data.get("available_models") or []
-            text = "\n".join(loaded[:20]) if loaded else "No models reported."
-            self.models_text.setText(text)
+            loaded = data.get("loaded_models") or []
+            for m in loaded:
+                self.fast_model_combo.addItem(str(m))
+                self.main_model_combo.addItem(str(m))
         except BackendConnectionError as e:
-            self.models_text.setText(f"⚠ {e}")
+            app_logger.warning(f"Could not list models: {e}")
+
+    @staticmethod
+    def _set_combo(combo: QComboBox, value: str) -> None:
+        if not value:
+            return
+        idx = combo.findText(value)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        else:
+            combo.setCurrentText(value)
+
+    def _combo_text(self, combo: QComboBox) -> str:
+        return combo.currentText().strip()
+
+    def _save(self) -> None:
+        url = self.url_input.text().strip()
+        self._settings.set("server_url", url)
+
+        voice = self._combo_text(self.voice_combo)
+        try:
+            # Shared settings: wake word / voice / speed / theme / language / …
+            self._client.update_shared_settings({
+                "wake_word": self.wake_input.text().strip(),
+                "voice": voice,
+                "voice_speed": float(self.speed_input.text().strip() or "1.0"),
+                "voice_enabled": self.voice_enabled_check.isChecked(),
+                "language": self._combo_text(self.language_combo),
+                "vad_sensitivity": int(float(self.vad_input.text().strip() or "50")),
+                "response_delay": int(float(self.delay_input.text().strip() or "500")),
+                "theme": self._combo_text(self.theme_combo),
+                "api_key": self.api_key_input.text().strip(),
+            })
+            # Models (LM Studio).
+            self._client.update_model_config(
+                fast_model=self._combo_text(self.fast_model_combo),
+                main_model=self._combo_text(self.main_model_combo),
+            )
+            # Ensure the active Piper voice matches (idempotent; /settings already
+            # applies it, but this also drives /voice/piper-voices active flag).
+            if voice:
+                self._client.select_piper_voice(voice)
+            self.status_label.setText("✓ Saved.")
+        except (BackendConnectionError, ValueError) as e:
+            self.status_label.setText(f"⚠ Could not save: {e}")
+
+        if self._on_save:
+            self._on_save(url)
 
 
 class CodePage(QWidget):

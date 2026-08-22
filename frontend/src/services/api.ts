@@ -448,6 +448,57 @@ export async function uploadImageForVision(file: File): Promise<VisionResult> {
   }
 }
 
+/**
+ * Shared settings (wake word, voice, speed, theme, connection, models, …) —
+ * persisted on the backend so web/desktop/Android share one source of truth.
+ */
+export interface SharedSettings {
+  wake_word: string;
+  voice: string;
+  voice_speed: number;
+  voice_enabled: boolean;
+  language: string;
+  noise_suppression: boolean;
+  vad_sensitivity: number;
+  response_delay: number;
+  theme: string;
+  font_size: string;
+  high_contrast: boolean;
+  large_text: boolean;
+  reduced_motion: boolean;
+  server_url: string;
+  api_key: string;
+  fast_model: string;
+  main_model: string;
+  lm_studio_url: string;
+}
+
+export async function getSharedSettings(): Promise<SharedSettings | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/settings`, { headers: apiKeyHeader() });
+    if (!res.ok) return null;
+    return (await res.json()) as SharedSettings;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateSharedSettings(
+  patch: Partial<SharedSettings>
+): Promise<SharedSettings | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as SharedSettings;
+  } catch {
+    return null;
+  }
+}
+
 export interface KnowledgeEntity {
   id: string;
   name: string;
