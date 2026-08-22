@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +35,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
@@ -48,10 +48,7 @@ private data class ChatMessage(
 
 private enum class Role { USER, BEANIE }
 
-/**
- * The same Beanie visual language used by the web UI: a small living orb
- * for normal chat, with animated radial interaction lines during voice use.
- */
+/** Beanie's compact presence used beside assistant messages and in the header. */
 @Composable
 private fun BeanieOrb(
     isListening: Boolean,
@@ -147,10 +144,10 @@ fun MainScreen(
 ) {
     var isListening by remember { mutableStateOf(false) }
     var isConnected by remember { mutableStateOf(false) }
-    var isDrawerOpen by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     var isThinking by remember { mutableStateOf(false) }
     var conversationTitle by remember { mutableStateOf("New conversation") }
+    var drawerState by remember { mutableStateOf(DrawerValue.Closed) }
     val messages = remember {
         mutableStateListOf(
             ChatMessage(1L, Role.BEANIE, "Hi, I'm Beanie. How can I help you today?")
@@ -158,6 +155,22 @@ fun MainScreen(
     }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
+
+    LaunchedEffect(drawerState) {
+        if (drawerState == DrawerValue.Open) drawer.open() else drawer.close()
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    LaunchedEffect(isThinking) {
+        if (isThinking) {
+            delay(1200)
+            isThinking = false
+        }
+    }
 
     fun send() {
         val text = input.trim()
@@ -171,7 +184,7 @@ fun MainScreen(
     }
 
     ModalNavigationDrawer(
-        drawerState = rememberDrawerState(if (isDrawerOpen) DrawerValue.Open else DrawerValue.Closed),
+        drawerState = drawer,
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = Color(0xFF111827),
@@ -189,7 +202,7 @@ fun MainScreen(
                         Text("Beanie", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                         Text("Personal AI", color = Color(0xFF94A3B8), fontSize = 12.sp)
                     }
-                    IconButton(onClick = { isDrawerOpen = false }) {
+                    IconButton(onClick = { drawerState = DrawerValue.Closed }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color(0xFFCBD5E1))
                     }
                 }
@@ -199,7 +212,7 @@ fun MainScreen(
                         messages.clear()
                         messages += ChatMessage(System.currentTimeMillis(), Role.BEANIE, "Hi, I'm Beanie. What are we working on?")
                         conversationTitle = "New conversation"
-                        isDrawerOpen = false
+                        drawerState = DrawerValue.Closed
                     },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                     shape = RoundedCornerShape(10.dp),
@@ -214,7 +227,7 @@ fun MainScreen(
                 NavigationDrawerItem(
                     label = { Text(conversationTitle, maxLines = 1) },
                     selected = true,
-                    onClick = { isDrawerOpen = false },
+                    onClick = { drawerState = DrawerValue.Closed },
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                     colors = NavigationDrawerItemDefaults.colors(
                         selectedContainerColor = Color(0xFF1F2937),
@@ -226,7 +239,7 @@ fun MainScreen(
                 NavigationDrawerItem(
                     label = { Text("Settings") },
                     selected = false,
-                    onClick = { isDrawerOpen = false },
+                    onClick = { drawerState = DrawerValue.Closed },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                     modifier = Modifier.padding(10.dp)
                 )
@@ -249,7 +262,7 @@ fun MainScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { isDrawerOpen = true }) {
+                        IconButton(onClick = { drawerState = DrawerValue.Open }) {
                             Icon(Icons.Default.Menu, contentDescription = "Open chats", tint = Color(0xFFCBD5E1))
                         }
                     },
@@ -304,11 +317,7 @@ fun MainScreen(
                 }
 
                 if (!isConnected) {
-                    Surface(
-                        color = Color(0xFF111827),
-                        modifier = Modifier.fillMaxWidth(),
-                        tonalElevation = 0.dp
-                    ) {
+                    Surface(color = Color(0xFF111827), modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.WifiOff, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
@@ -318,10 +327,7 @@ fun MainScreen(
                     }
                 }
 
-                Surface(
-                    color = Color(0xFF0B1020),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Surface(color = Color(0xFF0B1020), modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.Bottom
@@ -363,7 +369,7 @@ fun MainScreen(
                         }
                         Spacer(Modifier.width(6.dp))
                         IconButton(
-                            onClick = { send(); isThinking = false },
+                            onClick = { send() },
                             enabled = input.isNotBlank(),
                             modifier = Modifier.size(44.dp).clip(CircleShape).background(if (input.isNotBlank()) Color(0xFF2563EB) else Color(0xFF1F2937))
                         ) {
