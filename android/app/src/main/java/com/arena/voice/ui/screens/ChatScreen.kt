@@ -216,7 +216,16 @@ private fun MessageBubble(msg: ChatMessage) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top,
     ) {
+        if (!isUser) {
+            // Beanie orb beside assistant messages (matches the web BeanieAvatar).
+            ReactiveBeanieOrb(
+                status = if (msg.isStreaming) PresenceStatus.THINKING else PresenceStatus.IDLE,
+                sizeDp = 28,
+            )
+            Spacer(Modifier.width(8.dp))
+        }
         Surface(
             color = if (isUser) Color(0xFF3B82F6) else Color(0xFF1E293B),
             shape = RoundedCornerShape(16.dp),
