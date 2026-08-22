@@ -37,6 +37,12 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
   const audioQueueRef = useRef<AudioBuffer[]>([]);
   const isPlayingRef = useRef(false);
 
+  // Mirror of voiceState kept in a ref so the audio processor's callback always
+  // reads the *current* state instead of the stale value captured when
+  // startListening was called (which left the mic stuck in 'idle').
+  const voiceStateRef = useRef<VoiceState>('idle');
+  voiceStateRef.current = voiceState;
+
   const isListening = voiceState !== 'idle' && voiceState !== 'stopped';
 
   // Use ref to break circular reference for React Compiler
@@ -191,7 +197,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       processorRef.current = processor;
 
       processor.onaudioprocess = (event) => {
-        if (voiceState === 'idle' || voiceState === 'stopped') return;
+        if (voiceStateRef.current === 'idle' || voiceStateRef.current === 'stopped') return;
 
         const inputData = event.inputBuffer.getChannelData(0);
 
@@ -224,7 +230,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       setError(message);
       onError?.(message);
     }
-  }, [conversationId, voiceState, onError]);
+  }, [conversationId, onError]);
 
   // Stop listening
   const stopListening = useCallback(() => {

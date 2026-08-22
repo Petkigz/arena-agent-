@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
 import { BeanieOrbPanel } from '../../components/beanie';
+import { ReactiveBeanieOrb } from '../../components/presence';
 import { EmptyState } from '../../components/ui';
 import { MessageCircle, Share2 } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
@@ -226,12 +227,12 @@ export function ChatPage() {
           <BeanieOrbPanel conversationId={currentConversation.id} />
         </div>
       ) : currentConversation.messages.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center px-6 py-4" role="region" aria-label="Messages">
-          <EmptyState
-            icon={<MessageCircle className="w-12 h-12" />}
-            title="Start a conversation"
-            description="Send a message or use voice input to begin"
-          />
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-4" role="region" aria-label="Messages">
+          <ReactiveBeanieOrb status="idle" size="lg" className="mb-4" />
+          <h2 className="text-xl font-semibold text-text-primary">I'm Beanie.</h2>
+          <p className="text-sm text-text-secondary mt-1 text-center">
+            Send a message or tap the ✨ orb to talk.
+          </p>
         </div>
       ) : currentConversation.messages.length > 50 ? (
         /* Virtual scrolling for large message lists */
