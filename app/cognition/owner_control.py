@@ -8,12 +8,15 @@ owner to tighten control globally or per action.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
+from uuid import uuid4
 
 from app.config import settings
 from app.utils.logger import app_logger, audit_logger
@@ -135,7 +138,14 @@ class OwnerControlStore:
             return self.get_policy()
 
     def set_paused(self, paused: bool) -> OwnerControlPolicy:
-        return self.update({"paused": bool(paused)})
+        policy = self.update({"paused": bool(paused)})
+        if paused and self is globals().get("owner_control_store"):
+            # Emergency stop on the live singleton also invalidates authority
+            # issued before the stop. Isolated test/config stores do not affect it.
+            grants = globals().get("authorization_store")
+            if grants is not None:
+                grants.revoke_all()
+        return policy
 
     def _persist(self, policy: OwnerControlPolicy) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -173,4 +183,169 @@ class OwnerControlStore:
         return OwnerControlDecision(True, False, "Allowed within owner-delegated authority.", policy.mode.value)
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def payload_digest(payload: Dict[str, Any]) -> str:
+    """Return a stable digest for an exact JSON payload.
+
+    Authorization is intentionally parameter-bound. Changing a recipient, path,
+    command, nested action, or any other value produces a different digest.
+    """
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+@dataclass
+class AuthorizationGrant:
+    authorization_id: str
+    action_type: str
+    payload_sha256: str
+    issued_at: str
+    expires_at: str
+    max_uses: int = 1
+    uses: int = 0
+    revoked: bool = False
+    source_approval_id: Optional[str] = None
+    plan_id: Optional[str] = None
+
+    @property
+    def active(self) -> bool:
+        try:
+            expires = datetime.fromisoformat(self.expires_at)
+        except ValueError:
+            return False
+        return not self.revoked and self.uses < self.max_uses and _utcnow() < expires
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self) | {"active": self.active}
+
+
+@dataclass(frozen=True)
+class AuthorizationDecision:
+    valid: bool
+    reason: str
+    grant: Optional[AuthorizationGrant] = None
+
+
+class AuthorizationStore:
+    """Short-lived, exact-payload execution grants.
+
+    Grants are intentionally memory-only: a process restart revokes every grant.
+    This avoids stale authority surviving a restart or policy recovery.
+    """
+
+    def __init__(self) -> None:
+        self._grants: Dict[str, AuthorizationGrant] = {}
+        self._lock = threading.RLock()
+
+    def issue(
+        self,
+        action_type: str,
+        payload: Dict[str, Any],
+        *,
+        ttl_seconds: int = 300,
+        max_uses: int = 1,
+        source_approval_id: Optional[str] = None,
+        plan_id: Optional[str] = None,
+    ) -> AuthorizationGrant:
+        ttl = max(1, min(3600, int(ttl_seconds)))
+        uses = max(1, min(100, int(max_uses)))
+        now = _utcnow()
+        grant = AuthorizationGrant(
+            authorization_id=f"auth_{uuid4().hex[:16]}",
+            action_type=str(action_type).strip().lower(),
+            payload_sha256=payload_digest(payload),
+            issued_at=now.isoformat(),
+            expires_at=(now + timedelta(seconds=ttl)).isoformat(),
+            max_uses=uses,
+            source_approval_id=source_approval_id,
+            plan_id=plan_id,
+        )
+        with self._lock:
+            self._grants[grant.authorization_id] = grant
+        audit_logger.warning(
+            f"Scoped authorization issued: {grant.authorization_id}, action={grant.action_type}, "
+            f"ttl={ttl}s, max_uses={uses}"
+        )
+        return grant
+
+    def validate(
+        self,
+        authorization_id: str,
+        action_type: str,
+        payload: Dict[str, Any],
+        *,
+        plan_id: Optional[str] = None,
+    ) -> AuthorizationDecision:
+        with self._lock:
+            grant = self._grants.get(authorization_id)
+            if grant is None:
+                return AuthorizationDecision(False, "Authorization grant not found.")
+            if not grant.active:
+                return AuthorizationDecision(False, "Authorization grant is expired, revoked, or exhausted.", grant)
+            if grant.action_type != str(action_type).strip().lower():
+                return AuthorizationDecision(False, "Authorization action type does not match proposal.", grant)
+            try:
+                digest = payload_digest(payload)
+            except (TypeError, ValueError):
+                return AuthorizationDecision(False, "Proposal payload is not canonical JSON.", grant)
+            if grant.payload_sha256 != digest:
+                return AuthorizationDecision(False, "Authorization payload does not match proposal.", grant)
+            if grant.plan_id is not None and grant.plan_id != plan_id:
+                return AuthorizationDecision(False, "Authorization plan scope does not match proposal.", grant)
+            return AuthorizationDecision(True, "Exact scoped authorization is valid.", grant)
+
+    def consume(
+        self,
+        authorization_id: str,
+        action_type: str,
+        payload: Dict[str, Any],
+        *,
+        plan_id: Optional[str] = None,
+    ) -> AuthorizationDecision:
+        with self._lock:
+            decision = self.validate(
+                authorization_id, action_type, payload, plan_id=plan_id
+            )
+            if not decision.valid or decision.grant is None:
+                return decision
+            decision.grant.uses += 1
+            audit_logger.warning(
+                f"Scoped authorization consumed: {authorization_id} "
+                f"({decision.grant.uses}/{decision.grant.max_uses})"
+            )
+            return AuthorizationDecision(True, "Exact scoped authorization consumed.", decision.grant)
+
+    def revoke(self, authorization_id: str) -> bool:
+        with self._lock:
+            grant = self._grants.get(authorization_id)
+            if grant is None:
+                return False
+            grant.revoked = True
+            audit_logger.warning(f"Scoped authorization revoked: {authorization_id}")
+            return True
+
+    def revoke_all(self) -> int:
+        with self._lock:
+            active = [grant for grant in self._grants.values() if grant.active]
+            for grant in active:
+                grant.revoked = True
+            if active:
+                audit_logger.warning(f"All scoped authorizations revoked: {len(active)}")
+            return len(active)
+
+    def list_active(self) -> list[AuthorizationGrant]:
+        with self._lock:
+            return [grant for grant in self._grants.values() if grant.active]
+
+
 owner_control_store = OwnerControlStore()
+authorization_store = AuthorizationStore()

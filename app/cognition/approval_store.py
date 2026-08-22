@@ -5,8 +5,9 @@ When the ActionGate blocks a Level-3 proposal, the runtime records it here as
 WebSocket message (handled in the message router), and the stored decision can be
 used to resume execution.
 
-In-memory (a full resume pipeline is future work) but provides a consistent,
-queryable surface and fixes the previously-dead `action_approval` message.
+Approval requests are in-memory. An approval mints a separate short-lived,
+single-use authorization grant bound to the exact action and payload; execution
+then requires an explicit second stage through ActionGate.
 """
 
 from __future__ import annotations
@@ -31,6 +32,9 @@ class ApprovalRequest:
     reason: str
     status: str = "pending"  # pending | approved | denied
     created_at: str = field(default_factory=_now)
+    decided_at: Optional[str] = None
+    decision_note: str = ""
+    authorization_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -41,6 +45,9 @@ class ApprovalRequest:
             "reason": self.reason,
             "status": self.status,
             "created_at": self.created_at,
+            "decided_at": self.decided_at,
+            "decision_note": self.decision_note,
+            "authorization_id": self.authorization_id,
         }
 
 
@@ -63,13 +70,34 @@ class ApprovalStore:
             self._requests[req.action_id] = req
         return req
 
-    def decide(self, action_id: str, approved: bool, note: str = "") -> Optional[ApprovalRequest]:
+    def decide(
+        self,
+        action_id: str,
+        approved: bool,
+        note: str = "",
+        ttl_seconds: int = 300,
+    ) -> Optional[ApprovalRequest]:
         with self._lock:
             req = self._requests.get(action_id)
             if req is None:
                 return None
+            # Decisions are final. Replaying or flipping an approval must not
+            # mint additional authority.
+            if req.status != "pending":
+                return req
             req.status = "approved" if approved else "denied"
-            req.payload = {**req.payload, "approval_note": note}
+            req.decided_at = _now()
+            req.decision_note = note
+            if approved:
+                from app.cognition.owner_control import authorization_store
+                grant = authorization_store.issue(
+                    req.action_type,
+                    req.payload,
+                    ttl_seconds=ttl_seconds,
+                    max_uses=1,
+                    source_approval_id=req.action_id,
+                )
+                req.authorization_id = grant.authorization_id
         return req
 
     def list_pending(self) -> List[ApprovalRequest]:

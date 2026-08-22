@@ -203,6 +203,24 @@ class MessageRouter:
                 attachments=attachments,
             )
 
+            # Surface the exact pending scope to the owner. This event is only a
+            # request; approval mints a separate short-lived authorization grant.
+            try:
+                from app.cognition.approval_store import approval_store
+                pending = [
+                    req for req in approval_store.list_pending()
+                    if req.conversation_id == conversation_id
+                ]
+                if pending:
+                    latest = max(pending, key=lambda req: req.created_at)
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "approval_request",
+                        "conversation_id": conversation_id,
+                        **latest.to_dict(),
+                    })
+            except Exception as exc:
+                app_logger.warning(f"Could not surface approval request: {exc}")
+
             # Stream response tokens to client
             tokens = self._tokenize_response(response_text)
             for i, token in enumerate(tokens):
@@ -493,6 +511,12 @@ class MessageRouter:
                 "type": "approval_result",
                 "action_id": action_id,
                 "status": "approved" if approved else "denied",
+                "authorization_id": req.authorization_id,
+                "authorization_scope": {
+                    "action_type": req.action_type,
+                    "payload": req.payload,
+                    "single_use": True,
+                } if req.authorization_id else None,
             })
 
 

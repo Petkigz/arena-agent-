@@ -10,7 +10,7 @@ from app.policy import PolicyEvaluator
 from app.utils.hardware_governor import HardwareGovernor
 from app.utils.hardware_monitor import HardwareMonitor
 from app.cognition.prediction_engine import PredictionEngine
-from app.cognition.owner_control import owner_control_store
+from app.cognition.owner_control import authorization_store, owner_control_store
 from app.utils.logger import app_logger, audit_logger
 
 def _now() -> str:
@@ -28,6 +28,8 @@ class ActionProposal:
     recommendation_reason: str = ""
     alternatives_considered: List[Dict[str, Any]] = field(default_factory=list)
     decision_stage: str = "recommendation"
+    authorization_id: Optional[str] = None
+    plan_id: Optional[str] = None
     proposal_id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(default_factory=_now)
 
@@ -123,11 +125,35 @@ class ActionGate:
 
     @classmethod
     def evaluate_proposal(cls, proposal: ActionProposal) -> GateResult:
+        # Validate a supplied grant early, but consume it only after every other
+        # gate passes. The grant is exact-action, exact-payload, short-lived, and
+        # cannot override hard owner denials such as pause/block/observe-only.
+        authorization_valid = False
+        if proposal.authorization_id:
+            auth = authorization_store.validate(
+                proposal.authorization_id,
+                proposal.action_type,
+                proposal.payload,
+                plan_id=proposal.plan_id,
+            )
+            if not auth.valid:
+                proposal.decision_stage = "rejected"
+                return GateResult(
+                    allowed=False,
+                    gate_name="authorization_gate",
+                    reason=auth.reason,
+                    requires_approval=True,
+                    decision_stage="rejected",
+                )
+            authorization_valid = True
+
         # Owner control is evaluated independently from capability/safety policy.
         # A global pause or non-executing mode must stop the proposal before any
         # resource cleanup, prediction, or capability code can run.
         owner_preflight = owner_control_store.evaluate(proposal.action_type, 0)
-        if not owner_preflight.allowed:
+        if not owner_preflight.allowed and not (
+            owner_preflight.requires_approval and authorization_valid
+        ):
             proposal.decision_stage = (
                 "awaiting_authorization" if owner_preflight.requires_approval else "rejected"
             )
@@ -158,7 +184,9 @@ class ActionGate:
             if manifest_level is not None:
                 proposal.safety_level = max(proposal.safety_level, manifest_level)
                 owner_decision = owner_control_store.evaluate(act_key, manifest_level)
-                if not owner_decision.allowed:
+                if not owner_decision.allowed and not (
+                    owner_decision.requires_approval and authorization_valid
+                ):
                     reason = owner_decision.reason
                     gate_name = "policy_gate" if manifest_level >= 3 else "owner_control_gate"
                     audit_logger.warning(
@@ -183,7 +211,7 @@ class ActionGate:
             allowed, reason, level = PolicyEvaluator.evaluate_action(action_name, proposal.payload)
             proposal.safety_level = max(proposal.safety_level, level)
 
-            if not allowed:
+            if not allowed and not (level == 3 and authorization_valid):
                 audit_logger.warning(f"ActionGate BLOCKED proposal '{act}' at Policy Gate: {reason}")
                 stage = "awaiting_authorization" if level == 3 else "rejected"
                 proposal.decision_stage = stage
@@ -196,7 +224,9 @@ class ActionGate:
                 )
 
             owner_decision = owner_control_store.evaluate(act_key, level)
-            if not owner_decision.allowed:
+            if not owner_decision.allowed and not (
+                owner_decision.requires_approval and authorization_valid
+            ):
                 proposal.decision_stage = (
                     "awaiting_authorization" if owner_decision.requires_approval else "rejected"
                 )
@@ -232,6 +262,23 @@ class ActionGate:
             pe = PredictionEngine()
             pred = pe.predict_action(proposal.action_type, proposal.payload)
             proposal.predicted_outcome = pred.expected_changes
+
+        if proposal.authorization_id:
+            consumed = authorization_store.consume(
+                proposal.authorization_id,
+                proposal.action_type,
+                proposal.payload,
+                plan_id=proposal.plan_id,
+            )
+            if not consumed.valid:
+                proposal.decision_stage = "rejected"
+                return GateResult(
+                    allowed=False,
+                    gate_name="authorization_gate",
+                    reason=consumed.reason,
+                    requires_approval=True,
+                    decision_stage="rejected",
+                )
 
         audit_logger.info(f"ActionGate PASSED proposal '{proposal.action_type}' (Safety Level {proposal.safety_level})")
         proposal.decision_stage = "authorized"

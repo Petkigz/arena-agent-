@@ -3,11 +3,33 @@ import type { Message, ActionStep, PresenceState } from '../types';
 
 export type VoiceState = 'idle' | 'listening' | 'recording' | 'processing' | 'thinking' | 'speaking' | 'stopped';
 
+export interface ApprovalRequestEvent {
+  action_id: string;
+  conversation_id: string;
+  action_type: string;
+  payload: Record<string, unknown>;
+  reason: string;
+  status: 'pending';
+}
+
+export interface ApprovalResultEvent {
+  action_id: string;
+  status: 'approved' | 'denied' | 'not_found';
+  authorization_id?: string;
+  authorization_scope?: {
+    action_type: string;
+    payload: Record<string, unknown>;
+    single_use: boolean;
+  };
+}
+
 export type WebSocketEvent =
   | { type: 'message'; data: Message }
   | { type: 'message_ack'; data: { conversation_id: string; status: string } }
   | { type: 'message_token'; data: { conversation_id: string; message_id: string; token: string; done: boolean } }
   | { type: 'action_step'; data: ActionStep & { conversation_id: string; message_id: string } }
+  | { type: 'approval_request'; data: ApprovalRequestEvent }
+  | { type: 'approval_result'; data: ApprovalResultEvent }
   | { type: 'presence_update'; data: PresenceState }
   | { type: 'conversation_created'; data: { conversation_id: string; title: string } }
   | { type: 'conversation_joined'; data: { conversation_id: string } }

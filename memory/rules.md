@@ -97,10 +97,19 @@ The persistent Owner Control Plane (`app/cognition/owner_control.py`) supports:
 The authenticated control surface is:
 
 ```text
-GET  /owner-control
-PUT  /owner-control
-POST /owner-control/pause
+GET    /owner-control
+PUT    /owner-control
+POST   /owner-control/pause
+GET    /owner-control/authorizations
+POST   /owner-control/authorizations
+DELETE /owner-control/authorizations/{authorization_id}
+POST   /owner-control/execute-authorized
 ```
+
+Explicit approval creates a short-lived grant bound to the exact action type and
+SHA-256 digest of the canonical payload. Grants are single-use by default,
+expire within at most one hour, are lost on process restart, and are all revoked
+by emergency pause. Changing any payload field invalidates the grant.
 
 The default remains bounded autonomy through Level 2. Owner policy can tighten
 that authority but cannot silently make a manifest Level-3 action autonomous.

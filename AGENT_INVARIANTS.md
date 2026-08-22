@@ -82,6 +82,9 @@ Owner Control Plane may always impose a stricter rule:
 - Per-action approval and block lists override the default delegation.
 - Emergency pause blocks all capability execution before resource or prediction
   work. A malformed control policy fails closed in paused mode.
+- Explicit approval mints only a short-lived, revocable grant bound to the exact
+  action type and canonical payload digest. It is single-use by default; changed
+  parameters, replay, expiry, restart, or revocation invalidate it.
 
 ## 8. Honesty over AGI theater
 

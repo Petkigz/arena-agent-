@@ -3,9 +3,15 @@ import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } f
 import { BeanieOrbPanel, ListeningIndicator } from '../../components/beanie';
 import { ReactiveBeanieOrb } from '../../components/presence';
 import { EmptyState } from '../../components/ui';
-import { MessageCircle, Share2 } from 'lucide-react';
+import { MessageCircle, Share2, ShieldAlert } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
-import { webSocketService, type VoiceState } from '../../services/websocket';
+import {
+  webSocketService,
+  type ApprovalRequestEvent,
+  type ApprovalResultEvent,
+  type VoiceState,
+} from '../../services/websocket';
+import { executeAuthorizedAction, revokeAuthorization } from '../../services/ownerControl';
 import * as api from '../../services/api';
 import type { Message, ActionStep } from '../../types';
 import type { Attachment } from '../../stores/multiModalStore';
@@ -24,6 +30,9 @@ export function ChatPage() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [beanieActive, setBeanieActive] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequestEvent | null>(null);
+  const [approvalResult, setApprovalResult] = useState<ApprovalResultEvent | null>(null);
+  const [authorizedExecutionBusy, setAuthorizedExecutionBusy] = useState(false);
 
   // Track the voice pipeline state so the floating listening indicator reflects it.
   useEffect(() => {
@@ -85,6 +94,18 @@ export function ChatPage() {
             status: done ? 'complete' as const : 'streaming' as const,
           });
         }
+      } else if (event.type === 'approval_request') {
+        const request = event.data as ApprovalRequestEvent;
+        if (request.conversation_id === currentConversation.id) {
+          setApprovalRequest(request);
+          setApprovalResult(null);
+        }
+      } else if (event.type === 'approval_result') {
+        const result = event.data as ApprovalResultEvent;
+        if (approvalRequest?.action_id === result.action_id) {
+          setApprovalResult(result);
+          if (result.status === 'denied') setApprovalRequest(null);
+        }
       } else if (event.type === 'action_step') {
         const step = event.data as ActionStep & { message_id: string };
         const message = currentConversation.messages.find((m) => m.id === step.message_id);
@@ -100,7 +121,7 @@ export function ChatPage() {
     });
 
     return unsubscribe;
-  }, [currentConversation, conversations, addMessage, updateMessage]);
+  }, [currentConversation, conversations, addMessage, updateMessage, approvalRequest]);
 
   const handleSendMessage = useCallback(
     async (content: string, attachments?: Attachment[]) => {
@@ -204,6 +225,49 @@ export function ChatPage() {
     }
   };
 
+  const decideApproval = (approved: boolean) => {
+    if (!currentConversation || !approvalRequest) return;
+    webSocketService.approveAction(
+      currentConversation.id,
+      approvalRequest.action_id,
+      approved,
+      approved ? 'Approved exact scope' : 'Denied by owner',
+    );
+    if (!approved) {
+      setApprovalRequest(null);
+      setApprovalResult(null);
+      toast('Action denied');
+    }
+  };
+
+  const discardAuthorization = async () => {
+    if (approvalResult?.authorization_id) {
+      await revokeAuthorization(approvalResult.authorization_id);
+    }
+    setApprovalRequest(null);
+    setApprovalResult(null);
+    toast('Authorization revoked');
+  };
+
+  const executeApprovedScope = async () => {
+    if (!approvalRequest || !approvalResult?.authorization_id) return;
+    setAuthorizedExecutionBusy(true);
+    const result = await executeAuthorizedAction({
+      authorizationId: approvalResult.authorization_id,
+      actionType: approvalRequest.action_type,
+      payload: approvalRequest.payload,
+      userText: `Execute owner-approved ${approvalRequest.action_type}`,
+    });
+    setAuthorizedExecutionBusy(false);
+    if (result.success) {
+      toast.success('Authorized action executed');
+      setApprovalRequest(null);
+      setApprovalResult(null);
+    } else {
+      toast.error(result.reason || 'Authorized action did not execute');
+    }
+  };
+
   if (!currentConversation) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -238,6 +302,67 @@ export function ChatPage() {
           </button>
         </div>
       </div>
+
+      {/* Owner approval is separate from execution. */}
+      {approvalRequest && (
+        <div className="flex-shrink-0 mx-6 mt-4 rounded-lg border border-amber-500/60 bg-amber-500/10 p-4" role="alert">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-500 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-text-primary">Owner authorization required</h2>
+              <p className="text-sm text-text-secondary mt-1">{approvalRequest.reason}</p>
+              <p className="text-sm font-medium text-text-primary mt-2">
+                Action: <code>{approvalRequest.action_type}</code>
+              </p>
+              <pre className="mt-2 max-h-32 overflow-auto rounded bg-background-primary p-2 text-xs text-text-secondary">
+                {JSON.stringify(approvalRequest.payload, null, 2)}
+              </pre>
+
+              {!approvalResult?.authorization_id ? (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => decideApproval(false)}
+                    className="px-3 py-2 rounded border border-border text-text-primary"
+                  >
+                    Deny
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => decideApproval(true)}
+                    className="px-3 py-2 rounded bg-amber-600 text-white"
+                  >
+                    Authorize exact scope
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <p className="text-xs text-text-secondary">
+                    Authorized once. Nothing has executed yet. Review the unchanged payload, then execute separately.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={discardAuthorization}
+                      className="px-3 py-2 rounded border border-border text-text-primary"
+                    >
+                      Do not execute
+                    </button>
+                    <button
+                      type="button"
+                      disabled={authorizedExecutionBusy}
+                      onClick={executeApprovedScope}
+                      className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+                    >
+                      {authorizedExecutionBusy ? 'Executing…' : 'Execute authorized action'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Beanie orb (replaces the chat content when active) OR messages */}
       {beanieActive ? (

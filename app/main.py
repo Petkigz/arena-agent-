@@ -82,7 +82,7 @@ from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
 from app.cognition.world_model import WorldModel
 from app.settings_store import get_settings, update_settings
-from app.cognition.owner_control import ControlMode, owner_control_store
+from app.cognition.owner_control import ControlMode, authorization_store, owner_control_store
 
 # The 127 core REST routes are registered on a router so the unified server
 # (app/server.py) can include them alongside the WebSocket/API/SPA routes.
@@ -186,6 +186,21 @@ class OwnerControlUpdate(BaseModel):
 
 class OwnerPauseRequest(BaseModel):
     paused: bool
+
+class AuthorizationIssueRequest(BaseModel):
+    action_type: str = Field(min_length=1)
+    payload: Dict[str, Any]
+    ttl_seconds: int = Field(default=300, ge=1, le=3600)
+    max_uses: int = Field(default=1, ge=1, le=100)
+    plan_id: Optional[str] = None
+
+class AuthorizedExecutionRequest(BaseModel):
+    authorization_id: str = Field(min_length=1)
+    action_type: str = Field(min_length=1)
+    payload: Dict[str, Any]
+    user_text: str = "Owner-authorized action"
+    complexity: str = "fast"
+    plan_id: Optional[str] = None
 
 class VisionOCRRequest(BaseModel):
     image_path: str
@@ -806,13 +821,81 @@ def update_owner_control_endpoint(req: OwnerControlUpdate):
 
 @router.post("/owner-control/pause")
 def pause_owner_control_endpoint(req: OwnerPauseRequest):
-    """Emergency stop/resume for all capability execution."""
+    """Emergency stop/resume for all capability execution and issued grants."""
     policy = owner_control_store.set_paused(req.paused)
     return {
         "success": True,
         "paused": policy.paused,
         "policy": policy.to_dict(),
-        "message": "All action execution paused." if policy.paused else "Action execution resumed under owner policy.",
+        "message": "All action execution paused and grants revoked." if policy.paused else "Action execution resumed under owner policy.",
+    }
+
+
+@router.get("/owner-control/authorizations")
+def list_authorizations_endpoint():
+    """List only currently active, short-lived execution grants."""
+    return {
+        "success": True,
+        "authorizations": [grant.to_dict() for grant in authorization_store.list_active()],
+    }
+
+
+@router.post("/owner-control/authorizations")
+def issue_authorization_endpoint(req: AuthorizationIssueRequest):
+    """Owner-authorize one exact action/payload scope for a short period."""
+    try:
+        grant = authorization_store.issue(
+            req.action_type,
+            req.payload,
+            ttl_seconds=req.ttl_seconds,
+            max_uses=req.max_uses,
+            plan_id=req.plan_id,
+        )
+        return {"success": True, "authorization": grant.to_dict()}
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/owner-control/authorizations/{authorization_id}")
+def revoke_authorization_endpoint(authorization_id: str):
+    if not authorization_store.revoke(authorization_id):
+        raise HTTPException(status_code=404, detail="Authorization not found")
+    return {"success": True, "authorization_id": authorization_id, "revoked": True}
+
+
+@router.post("/owner-control/execute-authorized")
+def execute_authorized_endpoint(req: AuthorizedExecutionRequest):
+    """Execute only after the exact scoped grant passes ActionGate and is consumed."""
+    from app.cognition.action_proposal import ActionGate, ActionProposal
+
+    proposal = ActionProposal(
+        action_type=req.action_type,
+        payload=req.payload,
+        authorization_id=req.authorization_id,
+        plan_id=req.plan_id,
+        decision_stage="authorization",
+    )
+    gate = ActionGate.evaluate_proposal(proposal)
+    if not gate.allowed:
+        return {
+            "success": False,
+            "execution_success": False,
+            "gate": gate.gate_name,
+            "reason": gate.reason,
+            "decision_stage": gate.decision_stage,
+        }
+
+    result = MasterAgentOrchestrator.execute_proposal(
+        proposal,
+        req.user_text,
+        complexity=req.complexity,
+    )
+    return {
+        "success": bool(result.get("success", False)),
+        "execution_success": bool(result.get("success", False)),
+        "decision_stage": "execution_completed",
+        "authorization_id": req.authorization_id,
+        "result": result,
     }
 
 

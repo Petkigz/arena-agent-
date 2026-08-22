@@ -1939,6 +1939,7 @@ class CognitiveRuntime:
         trace.gate_decision = gate_res.gate_name
 
         if not gate_res.allowed:
+            approval_request = None
             if gate_res.requires_approval:
                 tracker.transition(GoalLifecycleState.WAITING_FOR_USER, f"Action requires 1-click UI approval: {gate_res.reason}")
                 # Record the pending approval so the owner can approve/deny via
@@ -1951,6 +1952,7 @@ class CognitiveRuntime:
                         payload=proposal.payload,
                         reason=gate_res.reason,
                     )
+                    approval_request = req.to_dict()
                     app_logger.info(f"Pending approval recorded: action_id={req.action_id}")
                 except Exception as e:
                     app_logger.warning(f"Could not record pending approval: {e}")
@@ -1988,6 +1990,7 @@ class CognitiveRuntime:
                 "executed_actions": [],
                 "requires_approval": gate_res.requires_approval,
                 "gate_blocked": gate_res.gate_name,
+                "approval_request": approval_request,
                 "decision_stage": gate_res.decision_stage,
                 "recommendation": {
                     "action_type": proposal.action_type,
