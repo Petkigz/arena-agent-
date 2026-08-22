@@ -81,6 +81,7 @@ from app.tools.ast_janitor import ASTJanitor
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
 from app.cognition.world_model import WorldModel
+from app.settings_store import get_settings, update_settings
 
 # The 127 core REST routes are registered on a router so the unified server
 # (app/server.py) can include them alongside the WebSocket/API/SPA routes.
@@ -661,6 +662,18 @@ def get_knowledge_graph(limit: int = Query(500, ge=1, le=2000)):
     except Exception as e:
         app_logger.error(f"Knowledge graph query failed: {e}")
         return {"entities": [], "relationships": [], "error": str(e)}
+
+
+# ── Shared settings (cross-platform: web / desktop / Android) ────────────────
+@router.get("/settings")
+def get_settings_endpoint():
+    return get_settings()
+
+
+@router.post("/settings")
+def update_settings_endpoint(payload: Dict[str, Any]):
+    return update_settings(payload)
+
 
 @router.delete("/memories/{memory_id}")
 def delete_memory_record(memory_id: int):

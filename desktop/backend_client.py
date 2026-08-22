@@ -127,6 +127,15 @@ class ArenaBackendClient:
         """GET /knowledge/graph → {entities, relationships}."""
         return self._get_json(f"/knowledge/graph?limit={limit}")
 
+    # ── shared settings (cross-platform) ────────────────────────────────────
+    def get_shared_settings(self) -> Dict[str, Any]:
+        """GET /settings → settings dict."""
+        return self._get_json("/settings")
+
+    def update_shared_settings(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /settings → merged settings dict."""
+        return self._post_json("/settings", patch)
+
     # ── models (Settings) ───────────────────────────────────────────────────
     def list_models(self) -> Dict[str, Any]:
         """GET /models → LM Studio model info."""

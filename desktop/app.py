@@ -675,6 +675,28 @@ class SettingsPage(QWidget):
         self.url_input.setStyleSheet(_input_style())
         layout.addWidget(self.url_input)
 
+        # Voice settings (persisted on the backend, shared across clients).
+        wake_label = QLabel("Wake word")
+        wake_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        layout.addWidget(wake_label)
+        self.wake_input = QLineEdit()
+        self.wake_input.setStyleSheet(_input_style())
+        layout.addWidget(self.wake_input)
+
+        speed_label = QLabel("Voice speed (0.5–2.0)")
+        speed_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        layout.addWidget(speed_label)
+        self.speed_input = QLineEdit("1.0")
+        self.speed_input.setStyleSheet(_input_style())
+        layout.addWidget(self.speed_input)
+
+        voice_label = QLabel("Voice (Piper id)")
+        voice_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        layout.addWidget(voice_label)
+        self.voice_input = QLineEdit()
+        self.voice_input.setStyleSheet(_input_style())
+        layout.addWidget(self.voice_input)
+
         save = QPushButton("Save")
         save.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
         save.clicked.connect(self._save)
@@ -689,13 +711,32 @@ class SettingsPage(QWidget):
         layout.addWidget(self.models_text)
 
         layout.addStretch(1)
+        self._load_shared_settings()
         self._load_models()
 
     def _save(self) -> None:
         url = self.url_input.text().strip()
         self._settings.set("server_url", url)
+        # Persist voice settings on the backend so web/desktop/Android share them.
+        try:
+            self._client.update_shared_settings({
+                "wake_word": self.wake_input.text().strip(),
+                "voice_speed": float(self.speed_input.text().strip() or "1.0"),
+                "voice": self.voice_input.text().strip(),
+            })
+        except (BackendConnectionError, ValueError) as e:
+            app_logger.warning(f"Could not save shared settings: {e}")
         if self._on_save:
             self._on_save(url)
+
+    def _load_shared_settings(self) -> None:
+        try:
+            data = self._client.get_shared_settings()
+            self.wake_input.setText(str(data.get("wake_word", "hey_arena")))
+            self.speed_input.setText(str(data.get("voice_speed", 1.0)))
+            self.voice_input.setText(str(data.get("voice", "en_US-lessac-medium")))
+        except BackendConnectionError as e:
+            app_logger.warning(f"Could not load shared settings: {e}")
 
     def _load_models(self) -> None:
         try:
