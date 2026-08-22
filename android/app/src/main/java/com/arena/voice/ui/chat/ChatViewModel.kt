@@ -8,12 +8,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.arena.voice.api.UploadClient
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
@@ -50,7 +52,10 @@ class ChatViewModel @Inject constructor(
     }
 
     fun connect() {
-        webSocketClient.connectToSavedServer()
+        viewModelScope.launch {
+            webSocketClient.connectToSavedServer()
+            _isConnected.value = webSocketClient.isConnected()
+        }
     }
 
     fun disconnect() {

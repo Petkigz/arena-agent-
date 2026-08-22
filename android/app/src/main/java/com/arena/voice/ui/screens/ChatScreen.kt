@@ -12,7 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Sparkles
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arena.voice.ui.chat.ChatViewModel
@@ -133,7 +134,7 @@ fun ChatScreen(
 
             // Beanie (✨) — toggles the orb in place of messages
             IconButton(onClick = { beanieActive = !beanieActive }) {
-                Icon(Icons.Default.Sparkles, contentDescription = "Beanie")
+                Icon(Icons.Default.AutoAwesome, contentDescription = "Beanie")
             }
 
             // Mic

@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import android.util.Log
 import com.arena.voice.util.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
