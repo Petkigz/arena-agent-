@@ -1,12 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { KnowledgeGraphView } from '../../components/knowledge/KnowledgeGraphView';
 import { MemoryBrowser } from '../../components/memory/MemoryBrowser';
 import { ConversationHistory } from '../../components/exploration/ConversationHistory';
 import { LearningPatterns } from '../../components/exploration/LearningPatterns';
 import { useMemoryBrowserStore, useConversationStore, useKnowledgeGraphStore } from '../../stores';
+import type { KnowledgeNode, KnowledgeEdge, NodeType, EdgeType } from '../../stores/knowledgeGraphStore';
+import { fetchKnowledgeGraph } from '../../services/api';
 import { Brain, Database, MessageCircle, TrendingUp } from 'lucide-react';
 
 type TabType = 'knowledge' | 'memory' | 'conversations' | 'patterns';
+
+// Map backend entity_type / predicate onto the frontend's graph vocabulary.
+function mapNodeType(t: string): NodeType {
+  switch (t) {
+    case 'file': return 'file';
+    case 'concept': return 'concept';
+    case 'memory': return 'memory';
+    case 'conversation': return 'conversation';
+    default: return 'entity';
+  }
+}
+
+function mapEdgeType(p: string): EdgeType {
+  switch (p) {
+    case 'depends_on': return 'depends_on';
+    case 'references': return 'references';
+    case 'created_from': return 'created_from';
+    default: return 'relates_to';
+  }
+}
+
+function clamp1to10(n: number): number {
+  return Math.max(1, Math.min(10, Math.round(n)));
+}
 
 export function PansophyPage() {
   const [activeTab, setActiveTab] = useState<TabType>('knowledge');
@@ -14,6 +40,42 @@ export function PansophyPage() {
   const memories = useMemoryBrowserStore((s) => s.memories);
   const conversations = useConversationStore((s) => s.conversations);
   const knowledgeNodes = useKnowledgeGraphStore((s) => s.nodes);
+  const importGraph = useKnowledgeGraphStore((s) => s.importGraph);
+
+  // Load the knowledge graph from the backend into the store on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetchKnowledgeGraph().then((graph) => {
+      if (cancelled || !graph) return;
+      const nodes: KnowledgeNode[] = graph.entities.map((e) => ({
+        id: e.id,
+        type: mapNodeType(e.type),
+        label: e.name,
+        description: e.type,
+        metadata: {
+          createdAt: e.first_seen,
+          updatedAt: e.last_seen,
+          importance: clamp1to10(e.confidence * 10),
+          tags: [e.type],
+        },
+      }));
+      const edges: KnowledgeEdge[] = graph.relationships.map((r) => ({
+        id: r.id,
+        source: r.subject_id,
+        target: r.object_id,
+        type: mapEdgeType(r.predicate),
+        label: r.predicate,
+        metadata: {
+          createdAt: r.created_at,
+          weight: clamp1to10(r.confidence * 10),
+        },
+      }));
+      importGraph(nodes, edges);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [importGraph]);
 
   const tabs = [
     { id: 'knowledge' as TabType, label: 'Knowledge Graph', icon: Brain },

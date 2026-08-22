@@ -306,3 +306,44 @@ export async function listFiles(conversationId?: string): Promise<ApiResponse<{
     return { success: false, error: String(error) };
   }
 }
+
+export interface KnowledgeEntity {
+  id: string;
+  name: string;
+  type: string;
+  confidence: number;
+  first_seen: string;
+  last_seen: string;
+  attributes?: Record<string, unknown>;
+}
+
+export interface KnowledgeRelationship {
+  id: string;
+  subject_id: string;
+  predicate: string;
+  object_id: string;
+  confidence: number;
+  created_at: string;
+  last_confirmed: string;
+}
+
+/**
+ * Fetch the world-model knowledge graph (entities + relationships) from the
+ * backend, so the web Pansophy shows the same graph as the desktop/Android.
+ */
+export async function fetchKnowledgeGraph(): Promise<{
+  entities: KnowledgeEntity[];
+  relationships: KnowledgeRelationship[];
+} | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/knowledge/graph`, { headers: apiKeyHeader() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      entities: data?.entities ?? [],
+      relationships: data?.relationships ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
