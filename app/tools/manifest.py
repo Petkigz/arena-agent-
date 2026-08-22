@@ -98,6 +98,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     from app.tools.universal_filesystem import UniversalFilesystem
     from app.tools.universal_media_learner import UniversalMediaLearner
     from app.tools.vision_analyzer import VisionAnalyzerTool
+    from app.tools.object_detector import ObjectDetectorTool
     from app.tools.web_agent import WebAgent
     from app.tools.web_research import WebResearcher
     from app.tools.win32_ghost_operator import Win32GhostOperator
@@ -180,6 +181,12 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(VisionAnalyzerTool.analyze_screen_image, "image_path"))
     add("ocr_read", "vision", 0, "Extract text from an image",
         _wrap(OCRReaderTool.extract_text_from_image, "image_path"))
+    add("detect_objects", "vision", 0, "Detect objects in an image (YOLO/SSD/face fallback) + auto-grounding",
+        _wrap(ObjectDetectorTool.detect_objects, "image_path", "conf_threshold"))
+    add("detect_faces", "vision", 0, "Detect faces in an image (Haar cascade)",
+        _wrap(ObjectDetectorTool.detect_faces, "image_path"))
+    add("analyze_image_grounded", "vision", 0, "Detect objects + create language groundings (perception→grounding loop)",
+        _wrap(ObjectDetectorTool.analyze_image_grounded, "image_path", "auto_create_groundings"))
 
     # ── Location ────────────────────────────────────────────────────────────
     add("resolve_location", "location", 0, "Resolve geographic location",

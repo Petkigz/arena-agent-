@@ -51,16 +51,13 @@ export function ChatPage() {
           addMessage(message);
         }
       } else if (event.type === 'message_ack') {
-        // Update optimistic message status to 'sent'
+        // B10 fix: mark all pending temp- sending as sent (server ack has no message_id)
         const { conversation_id } = event.data as { conversation_id: string; status: string };
         if (conversation_id === currentConversation.id) {
-          const msgs = currentConversation.messages;
-          const sending = msgs.find(
+          const sending = currentConversation.messages.filter(
             (m) => m.id.startsWith('temp-') && m.status === 'sending'
           );
-          if (sending) {
-            updateMessage(sending.id, { status: 'sent' as const });
-          }
+          sending.forEach((msg) => updateMessage(msg.id, { status: 'sent' as const }));
         }
       } else if (event.type === 'message_token') {
         // Streaming token support

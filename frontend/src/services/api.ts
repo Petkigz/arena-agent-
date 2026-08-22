@@ -324,6 +324,13 @@ export interface VisionResult {
   screen_changed?: boolean;
   note?: string;
   error?: string;
+  detections?: Array<{ label: string; confidence: number; bbox?: { x: number; y: number; width: number; height: number }; center?: { x: number; y: number } }>;
+  faces?: Array<{ label: string; confidence: number; bbox?: { x: number; y: number; width: number; height: number } }>;
+  count?: number;
+  engine?: string;
+  detection_engine?: string;
+  groundings_created?: string[];
+  groundings_count?: number;
 }
 
 /**
@@ -423,6 +430,57 @@ export async function analyzeImage(
     return await res.json();
   } catch (error) {
     return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * POST /vision/detect-objects — detect objects + auto-create groundings (P1-1 AGI).
+ */
+export async function detectObjects(imagePath: string, confThreshold = 0.5, autoCreateGroundings = true): Promise<VisionResult & { detections?: Array<{ label: string; confidence: number; bbox: { x: number; y: number; width: number; height: number } }>; groundings_created?: string[]; engine?: string } > {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/detect-objects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ image_path: imagePath, conf_threshold: confThreshold, auto_create_groundings: autoCreateGroundings }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `Detection failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function detectFaces(imagePath: string): Promise<VisionResult & { faces?: Array<{ label: string; confidence: number; bbox: { x: number; y: number; width: number; height: number } }>; count?: number }> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/detect-faces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ image_path: imagePath }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `Face detection failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function listGroundings(symbol?: string, modality?: string): Promise<{ groundings: Array<{ symbol: string; modality: string; confidence: number; sensory_experience: string }>; count: number; summary?: Record<string, unknown> } | null> {
+  try {
+    const qs = new URLSearchParams();
+    if (symbol) qs.set('symbol', symbol);
+    if (modality) qs.set('modality', modality);
+    qs.set('limit', '100');
+    const res = await fetch(`${API_BASE_URL}/vision/groundings?${qs.toString()}`, { headers: apiKeyHeader() });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
   }
 }
 

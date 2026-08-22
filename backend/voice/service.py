@@ -243,6 +243,9 @@ class VoiceService:
 
     def ingest_remote_audio(self, data: bytes) -> None:
         """Feed a binary PCM frame (from the phone) into the utterance buffer."""
+        # V4 fix: respect voice_enabled=False even for remote (phone) audio
+        if get_settings().get("voice_enabled") is False:
+            return
         self.remote_audio.ingest(data)
 
     def _on_remote_utterance(self, audio: np.ndarray) -> None:
@@ -400,7 +403,13 @@ class VoiceService:
         })
 
         try:
-            result = await asyncio.to_thread(synthesize_piper, text, None, 1.0, 16000)
+            # V3 fix: honor saved voice_speed for remote/phone path, not hardcoded 1.0
+            try:
+                speed = float(get_settings().get("voice_speed") or 1.0)
+            except Exception:
+                speed = 1.0
+            voice_id = str(get_settings().get("voice") or "") or None
+            result = await asyncio.to_thread(synthesize_piper, text, voice_id, speed, 16000)
             if result is not None:
                 audio, _sr = result
                 pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()

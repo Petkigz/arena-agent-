@@ -34,6 +34,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const playbackContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelRafRef = useRef<number | null>(null);
@@ -91,7 +92,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
     levelRafRef.current = requestAnimationFrame(loop);
   }, []);
 
-  // Play next buffer from queue
+  // Play next buffer from queue — uses playbackContextRef so mic context is never overwritten (B8)
   const playNextBuffer = useCallback(() => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false;
@@ -99,7 +100,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
     }
 
     isPlayingRef.current = true;
-    const audioContext = audioContextRef.current;
+    const audioContext = playbackContextRef.current;
     if (!audioContext) return;
 
     const buffer = audioQueueRef.current.shift()!;
@@ -113,14 +114,14 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
   // Keep ref in sync
   playNextBufferRef.current = playNextBuffer;
 
-  // Play audio chunk from TTS
+  // Play audio chunk from TTS — separate playback context so mic analyser stays intact (B8)
   const playAudioChunk = useCallback(async (audioData: ArrayBuffer) => {
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+      if (!playbackContextRef.current) {
+        playbackContextRef.current = new AudioContext({ sampleRate: 16000 });
       }
 
-      const audioContext = audioContextRef.current;
+      const audioContext = playbackContextRef.current;
 
       // Convert ArrayBuffer to AudioBuffer
       // Assuming 16-bit PCM, mono
@@ -234,7 +235,7 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       setError(message);
       onError?.(message);
     }
-  }, [conversationId, onError]);
+  }, [conversationId, onError, noiseSuppression, startLevelLoop]);
 
   // Stop listening
   const stopListening = useCallback(() => {
@@ -250,10 +251,15 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       processorRef.current = null;
     }
 
-    // Stop audio context
+    // Stop mic audio context
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
       audioContextRef.current = null;
+    }
+    // Stop playback context
+    if (playbackContextRef.current && playbackContextRef.current.state !== 'closed') {
+      playbackContextRef.current.close();
+      playbackContextRef.current = null;
     }
 
     analyserRef.current = null;

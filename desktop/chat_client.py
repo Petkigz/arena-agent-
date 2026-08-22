@@ -41,18 +41,37 @@ class DesktopChatClient:
         return self._connected
 
     def connect(self) -> bool:
+        """Connect with multi-version WS support (B12 fix: websockets>=14 changed API)."""
+        self._ws = None
         try:
-            import websockets
-            self._ws = websockets.connect(self.ws_url).__enter__()
-            self._connected = True
-            self._send({"type": "join_conversation", "conversation_id": self.conversation_id})
-            self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
-            self._recv_thread.start()
-            if self.on_connected:
-                self.on_connected()
-            return True
+            # Try websockets.sync.client (websockets >=12, preferred)
+            try:
+                from websockets.sync.client import connect as ws_connect  # type: ignore
+                self._ws = ws_connect(self.ws_url)
+                self._connected = True
+            except ImportError:
+                # Try websocket-client library (sync, alternative)
+                try:
+                    import websocket  # type: ignore
+                    self._ws = websocket.create_connection(self.ws_url)
+                    self._connected = True
+                except ImportError:
+                    # Fallback: legacy websockets <14 with __enter__
+                    import websockets  # type: ignore
+                    self._ws = websockets.connect(self.ws_url).__enter__()
+                    self._connected = True
+
+            if self._connected:
+                self._send({"type": "join_conversation", "conversation_id": self.conversation_id})
+                self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
+                self._recv_thread.start()
+                if self.on_connected:
+                    self.on_connected()
+                return True
+            return False
         except Exception as e:  # noqa: BLE001
             self._connected = False
+            self._ws = None
             if self.on_error:
                 self.on_error(f"Could not connect chat: {e}")
             return False

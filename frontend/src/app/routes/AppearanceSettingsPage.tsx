@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useAppearanceSettingsStore } from '../../stores';
 import { ArrowLeft, Palette, Type, Monitor, Layout, Bell } from 'lucide-react';
+import { getSharedSettings, updateSharedSettings } from '../../services/api';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -45,6 +47,24 @@ export function AppearanceSettingsPage() {
     updateNotificationSettings,
   } = useAppearanceSettingsStore();
 
+  // F2 fix: sync backend theme (single source of truth) so web/desktop/Android stay in sync
+  useEffect(() => {
+    let cancelled = false;
+    getSharedSettings().then((s) => {
+      if (cancelled || !s) return;
+      const backendTheme = (s as any).theme;
+      if (backendTheme === 'dark' || backendTheme === 'light' || backendTheme === 'system') {
+        if (backendTheme !== theme) {
+          setTheme(backendTheme as any);
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="h-full overflow-y-auto bg-background-primary">
       <div className="max-w-4xl mx-auto px-6 py-8">
@@ -74,7 +94,10 @@ export function AppearanceSettingsPage() {
                 {(['dark', 'light', 'system'] as const).map((t) => (
                   <button
                     key={t}
-                    onClick={() => setTheme(t)}
+                    onClick={() => {
+                      setTheme(t);
+                      updateSharedSettings({ theme: t } as any).catch(() => {});
+                    }}
                     className={`px-4 py-3 rounded border-2 transition-all ${
                       theme === t
                         ? 'border-accent-primary bg-accent-primary/10'

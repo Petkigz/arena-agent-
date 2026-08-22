@@ -432,21 +432,24 @@ class VisionWorker(QThread):
         self._prompt_focus = prompt_focus
 
     def run(self) -> None:
+        # D2 fix: create per-thread client so httpx.Client is not shared across QThreads (thread-safety)
+        from desktop.backend_client import ArenaBackendClient
+        client = ArenaBackendClient(base_url=self._client.base_url, timeout=self._client.timeout)
         try:
             if self._mode == "capture":
-                res = self._client.capture_screen()
+                res = client.capture_screen()
             elif self._mode == "capture_analyze":
-                res = self._client.capture_and_analyze(self._prompt_focus)
+                res = client.capture_and_analyze(self._prompt_focus)
             elif self._mode == "ocr":
-                res = self._client.ocr_image(self._image_path)
+                res = client.ocr_image(self._image_path)
             elif self._mode == "analyze":
-                res = self._client.analyze_image(self._image_path, self._prompt_focus)
+                res = client.analyze_image(self._image_path, self._prompt_focus)
             elif self._mode == "analyze_upload":
-                up = self._client.upload_image_file(self._upload_path)
+                up = client.upload_image_file(self._upload_path)
                 if not up.get("success"):
                     self.error.emit(f"Upload failed: {up.get('error', 'unknown')}")
                     return
-                res = self._client.analyze_image(up.get("file_path", ""), self._prompt_focus)
+                res = client.analyze_image(up.get("file_path", ""), self._prompt_focus)
                 res["image_url"] = up.get("file_url", "")
                 res["file_name"] = up.get("file_name", "")
             else:
@@ -457,7 +460,7 @@ class VisionWorker(QThread):
             url = res.get("image_url") or res.get("file_url")
             if url:
                 try:
-                    data = self._client.fetch_image_bytes(url)
+                    data = client.fetch_image_bytes(url)
                     img = QImage.fromData(data)
                     if not img.isNull():
                         self.preview.emit(img)
@@ -468,6 +471,11 @@ class VisionWorker(QThread):
             self.error.emit(str(e))
         except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 class CameraThread(QThread):
@@ -1293,10 +1301,25 @@ class VisionPage(QWidget):
             self.analysis_text.setPlainText(f"⚠ {res.get('error', 'Analysis failed')}")
             return
         self.ocr_text.setPlainText(res.get("ocr_text") or res.get("extracted_text") or "(no OCR text)")
-        if res.get("screen_changed") is False and res.get("note"):
-            self.analysis_text.setPlainText(res.get("note", ""))
+        # P1-1: show grounded detections
+        dets = res.get("detections") or res.get("faces") or []
+        if dets:
+            det_lines = [f"• {d.get('label')} conf {d.get('confidence',0):.2f} bbox {d.get('bbox')}" for d in dets[:20]]
+            det_text = "\n".join(det_lines)
+            groundings = res.get("groundings_created") or []
+            if groundings:
+                det_text += f"\n\nGroundings created: {len(groundings)} (engine: {res.get('detection_engine') or res.get('engine','')})"
+            # Prepend detections to analysis
+            base_analysis = res.get("ai_analysis") or res.get("analysis") or "(no analysis)"
+            if res.get("screen_changed") is False and res.get("note"):
+                self.analysis_text.setPlainText(f"{res.get('note','')}\n\n{det_text}")
+            else:
+                self.analysis_text.setPlainText(f"{det_text}\n\n{base_analysis}")
         else:
-            self.analysis_text.setPlainText(res.get("ai_analysis") or res.get("analysis") or "(no analysis)")
+            if res.get("screen_changed") is False and res.get("note"):
+                self.analysis_text.setPlainText(res.get("note", ""))
+            else:
+                self.analysis_text.setPlainText(res.get("ai_analysis") or res.get("analysis") or "(no analysis)")
 
     @Slot(QImage)
     def _on_preview(self, img: QImage) -> None:

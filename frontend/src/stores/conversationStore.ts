@@ -103,14 +103,16 @@ export const useConversationStore = create<ConversationState>()(
         const { currentConversation } = get();
         if (!currentConversation) return;
 
-        // Update the optimistic message status to 'sent'
+        // B10 fix: ack by temp-id, not content (same text sent twice would ack wrong).
+        // Mark all temp- sending messages as sent — server ack doesn't include message_id,
+        // so we mark all pending optimistics. The streaming token will create the assistant reply.
         set((state) => {
           if (!state.currentConversation) return state;
           return {
             currentConversation: {
               ...state.currentConversation,
               messages: state.currentConversation.messages.map((msg) =>
-                msg.id.startsWith('temp-') && msg.content === content
+                msg.id.startsWith('temp-') && msg.status === 'sending'
                   ? { ...msg, status: 'sent' as const } as Message
                   : msg
               ),
@@ -158,10 +160,13 @@ export const useConversationStore = create<ConversationState>()(
       hydrateFromServer: (previews) =>
         set((state) => {
           const existingById = new Map(state.conversations.map((c) => [c.id, c]));
+          const previewIds = new Set(previews.map((p) => p.id));
+          // Keep local conversations that are not in server previews (offline-created)
+          const localOnly = state.conversations.filter((c) => !previewIds.has(c.id));
           const conversations: Conversation[] = previews.map((p) => {
             const existing = existingById.get(p.id);
             return existing
-              ? existing
+              ? { ...existing, title: p.title || existing.title }
               : {
                   id: p.id,
                   title: p.title || 'New Conversation',
@@ -170,7 +175,8 @@ export const useConversationStore = create<ConversationState>()(
                   updatedAt: p.updatedAt || new Date().toISOString(),
                 };
           });
-          return { conversations };
+          // Merge: server previews first, then local-only (preserves offline work) — fixes B11
+          return { conversations: [...conversations, ...localOnly] };
         }),
 
       hydrateMessages: (conversationId, messages) =>

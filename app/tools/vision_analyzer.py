@@ -18,8 +18,13 @@ class VisionAnalyzerTool:
         skip_delta_check: bool = False,
     ) -> Dict[str, Any]:
         """
-        Combines Tesseract OCR text extraction and Qwen local LLM analysis to understand
-        active application windows, error messages, code UI, charts, or open forms.
+        Combines Tesseract OCR text extraction, object detection (YOLO/SSD/face),
+        and Qwen local LLM analysis to understand active application windows,
+        error messages, code UI, charts, or open forms.
+
+        P1-1 AGI: Now also runs object detection + face detection and auto-creates
+        language groundings so words like 'person', 'chair', 'face' become grounded
+        to real visual features (perception→grounding loop).
 
         `skip_delta_check=True` analyzes the given image unconditionally (used for
         user-uploaded images via /vision/analyze). When False (the screen-observation
@@ -51,11 +56,34 @@ class VisionAnalyzerTool:
         ocr_res = OCRReaderTool.extract_text_from_image(str(image_path))
         extracted_text = ocr_res.get("extracted_text", "")
 
+        # Step 2b: P1-1 — Object + face detection + auto-grounding (closes perception→grounding loop)
+        detections = []
+        groundings_created = []
+        detection_engine = "none"
+        try:
+            from app.tools.object_detector import ObjectDetectorTool
+            det_res = ObjectDetectorTool.analyze_image_grounded(str(image_path), auto_create_groundings=True)
+            if det_res.get("success"):
+                detections = det_res.get("detections", [])
+                groundings_created = det_res.get("groundings_created", [])
+                detection_engine = det_res.get("engine", "unknown")
+            else:
+                app_logger.info(f"Object detection degraded: {det_res.get('error')}")
+        except Exception as e:
+            app_logger.warning(f"Object detection integration failed (best-effort): {e}")
+
         focus_str = f" Focus specifically on: '{prompt_focus}'." if prompt_focus else ""
+
+        # Build detection summary for LLM
+        det_summary = ""
+        if detections:
+            det_lines = [f"- {d.get('label')} (conf {d.get('confidence',0):.2f}) at {d.get('bbox')}" for d in detections[:20]]
+            det_summary = "\nDetected objects (grounded to vision):\n" + "\n".join(det_lines) + "\n"
 
         system_prompt = (
             "You are an AI desktop vision analyst. Your job is to analyze desktop "
-            "screenshots, active application states, UI controls, and error messages."
+            "screenshots, active application states, UI controls, and error messages. "
+            "You have access to grounded object detections (real visual features, not hallucinated)."
         )
 
         user_prompt = f"""
@@ -65,11 +93,12 @@ Extracted OCR Screen Text:
 \"\"\"
 {extracted_text if extracted_text else '[No OCR text extracted directly from image - analyze general screen context]' }
 \"\"\"
-
+{det_summary}
 Please provide:
 1. **Active Application & Window Overview**: What application or window is open?
 2. **Key Visible Information / Error Messages**: Core text, code, or dialog messages visible.
-3. **Actionable Assistant Next Step**: What action should the user or assistant take based on this screen state?
+3. **Detected Objects**: What objects/faces were grounded (from detection, not hallucinated)?
+4. **Actionable Assistant Next Step**: What action should the user or assistant take based on this screen state?
 """
 
         messages = [
@@ -91,11 +120,14 @@ Please provide:
                 "image_name": image_path.name,
                 "file_path": str(image_path),
                 "ocr_text": extracted_text,
+                "detections": detections,
+                "detection_engine": detection_engine,
+                "groundings_created": groundings_created,
                 "ai_analysis": ai_analysis
             }
 
             if auto_save_memory and ai_analysis:
-                mem_content = f"👁️ [DESKTOP VISION OBSERVATION :: {image_path.name}]\n\n{ai_analysis}"
+                mem_content = f"👁️ [DESKTOP VISION OBSERVATION :: {image_path.name}]\n\n{ai_analysis}\n\nDetections: {detections}"
                 mem_id = KnowledgeIndexer.index_doc_knowledge(
                     {"success": True, "file_name": image_path.name, "file_path": str(image_path)},
                     mem_content,
@@ -112,5 +144,6 @@ Please provide:
                 "image_name": image_path.name,
                 "file_path": str(image_path),
                 "ocr_text": extracted_text,
+                "detections": detections,
                 "ai_analysis": ""
             }

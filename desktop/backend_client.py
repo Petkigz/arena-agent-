@@ -133,6 +133,28 @@ class ArenaBackendClient:
         """POST /vision/ocr — extract text from an image already on the host."""
         return self._post_json("/vision/ocr", {"image_path": image_path})
 
+    def detect_objects(self, image_path: str, conf_threshold: float = 0.5, auto_create_groundings: bool = True) -> Dict[str, Any]:
+        """POST /vision/detect-objects — detect objects + auto-grounding (P1-1)."""
+        return self._post_json("/vision/detect-objects", {
+            "image_path": image_path,
+            "conf_threshold": conf_threshold,
+            "auto_create_groundings": auto_create_groundings,
+        })
+
+    def detect_faces(self, image_path: str) -> Dict[str, Any]:
+        """POST /vision/detect-faces — face detection."""
+        return self._post_json("/vision/detect-faces", {"image_path": image_path})
+
+    def list_groundings(self, symbol: str = "", modality: str = "", limit: int = 100) -> Dict[str, Any]:
+        """GET /vision/groundings — list perceptual groundings."""
+        qs = []
+        if symbol:
+            qs.append(f"symbol={symbol}")
+        if modality:
+            qs.append(f"modality={modality}")
+        qs.append(f"limit={limit}")
+        return self._get_json(f"/vision/groundings?{'&'.join(qs)}")
+
     def analyze_image(self, image_path: str, prompt_focus: Optional[str] = None,
                       auto_save_memory: bool = True) -> Dict[str, Any]:
         """POST /vision/analyze — OCR + LLM analysis of an image on the host."""

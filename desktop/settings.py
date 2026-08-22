@@ -20,6 +20,24 @@ DEFAULTS: Dict[str, Any] = {
 }
 
 
+def _normalize_value(key: str, value: Any) -> Any:
+    """B13 fix: QSettings may return string 'true'/'false' for bool defaults.
+    Normalize so bool('false') != True."""
+    default = DEFAULTS.get(key)
+    if isinstance(default, bool):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        return bool(value)
+    if isinstance(default, float):
+        try:
+            return float(value)
+        except Exception:
+            return default
+    return value
+
+
 class DesktopSettings:
     """Key/value settings persisted via QSettings (or in-memory in tests)."""
 
@@ -42,7 +60,8 @@ class DesktopSettings:
         if self._qs is None and not self._has_qt():
             return DEFAULTS[key]
         try:
-            return self._settings().value(key, DEFAULTS[key])
+            raw = self._settings().value(key, DEFAULTS[key])
+            return _normalize_value(key, raw)
         except Exception:
             return DEFAULTS[key]
 

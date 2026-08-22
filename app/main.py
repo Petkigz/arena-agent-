@@ -1109,6 +1109,50 @@ def capture_and_analyze_screen_endpoint(prompt_focus: Optional[str] = Query(None
     analysis_res["image_url"] = cap_res["image_url"]
     return analysis_res
 
+# P1-1 AGI: Perception → Grounding — object/face detection endpoints
+class VisionDetectRequest(BaseModel):
+    image_path: str
+    conf_threshold: float = 0.5
+    auto_create_groundings: bool = True
+
+@router.post("/vision/detect-objects")
+def vision_detect_objects_endpoint(req: VisionDetectRequest):
+    """Detect objects + auto-create language groundings (perception→grounding loop)."""
+    try:
+        from app.tools.object_detector import ObjectDetectorTool
+        if req.auto_create_groundings:
+            return ObjectDetectorTool.analyze_image_grounded(req.image_path, auto_create_groundings=True)
+        return ObjectDetectorTool.detect_objects(req.image_path, conf_threshold=req.conf_threshold)
+    except Exception as e:
+        app_logger.error(f"Object detection endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/vision/detect-faces")
+def vision_detect_faces_endpoint(req: VisionOCRRequest):
+    """Detect faces in an image."""
+    try:
+        from app.tools.object_detector import ObjectDetectorTool
+        return ObjectDetectorTool.detect_faces(req.image_path)
+    except Exception as e:
+        app_logger.error(f"Face detection endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/vision/groundings")
+def list_groundings_endpoint(symbol: Optional[str] = Query(None), modality: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=500)):
+    """List language groundings (perceptual) — shows how words are grounded to vision."""
+    try:
+        from app.cognition.runtime import CognitiveRuntime
+        runtime = CognitiveRuntime.get_instance()
+        groundings = runtime.language_grounding.get_perceptual_groundings(symbol=symbol, modality=modality, limit=limit)
+        return {
+            "groundings": [g.to_dict() for g in groundings],
+            "count": len(groundings),
+            "summary": runtime.language_grounding.get_grounding_summary(),
+        }
+    except Exception as e:
+        app_logger.error(f"Groundings list failed: {e}")
+        return {"groundings": [], "count": 0, "error": str(e)}
+
 # 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
 @router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):

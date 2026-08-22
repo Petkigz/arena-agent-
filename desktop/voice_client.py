@@ -81,9 +81,20 @@ class DesktopVoiceClient:
         if self._capturing:
             return True
 
+        self._ws = None
         try:
-            import websockets
-            self._ws = websockets.connect(self.ws_url).__enter__()
+            # B12 fix: multi-version WS support (sync client for websockets>=14)
+            try:
+                from websockets.sync.client import connect as ws_connect  # type: ignore
+                self._ws = ws_connect(self.ws_url)
+            except ImportError:
+                try:
+                    import websocket  # type: ignore
+                    self._ws = websocket.create_connection(self.ws_url)
+                except ImportError:
+                    import websockets  # type: ignore
+                    self._ws = websockets.connect(self.ws_url).__enter__()
+
             self._send({"type": "join_conversation", "conversation_id": self.conversation_id})
             # Tell the backend to start the voice pipeline so the streamed PCM
             # (remote_audio path) is actually processed (sets current_conversation_id).

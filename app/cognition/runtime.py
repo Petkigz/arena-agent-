@@ -1248,6 +1248,52 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Language grounding integration failed: {e}")
 
+        # P1-1 AGI: Perception → Grounding loop — if a recent screenshot exists,
+        # run object/face detection and auto-create perceptual groundings so words
+        # like 'person', 'face', 'chair' become grounded to real visual features.
+        # Best-effort, rate-limited (max once per 60s to save CPU), never raises.
+        try:
+            from pathlib import Path
+            import time as _time
+            from app.tools.object_detector import ObjectDetectorTool
+
+            # Rate limit: don't run detection every cycle (CPU heavy)
+            now = _time.time()
+            last = getattr(self, "_last_grounding_detection_ts", 0)
+            if now - last >= 60:
+                screenshots_dir = settings.DATA_DIR / "workspace" / "screenshots"
+                if screenshots_dir.exists():
+                    latest = None
+                    latest_mtime = 0
+                    for p in screenshots_dir.glob("*.png"):
+                        try:
+                            mtime = p.stat().st_mtime
+                            if mtime > latest_mtime:
+                                latest_mtime = mtime
+                                latest = p
+                        except Exception:
+                            continue
+                    if latest and (_time.time() - latest_mtime) < 300:  # only if recent (<5 min)
+                        det_res = ObjectDetectorTool.analyze_image_grounded(str(latest), auto_create_groundings=True)
+                        if det_res.get("success") and det_res.get("detections"):
+                            self.blackboard.set(
+                                "grounded_detections",
+                                {
+                                    "image": str(latest),
+                                    "detections": det_res.get("detections", []),
+                                    "groundings_created": det_res.get("groundings_created", []),
+                                    "engine": det_res.get("engine", "unknown"),
+                                },
+                                source="object_detector",
+                            )
+                            app_logger.info(
+                                f"Grounded detections: {len(det_res.get('detections', []))} objects from {latest.name} "
+                                f"→ {len(det_res.get('groundings_created', []))} groundings"
+                            )
+                self._last_grounding_detection_ts = now
+        except Exception as e:
+            app_logger.warning(f"Perception→grounding loop failed (best-effort): {e}")
+
     def process_cognitive_cycle(
         self,
         user_text: str,

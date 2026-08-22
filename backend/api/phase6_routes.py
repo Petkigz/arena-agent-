@@ -56,51 +56,51 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
     
     Returns:
         Dict with 'mime_type', 'category', 'extension', 'confidence'
+    
+    P1 fix B6: previously used dict with duplicate keys (RIFF for webp/wav,
+    PK for zip/docx) — last wins, breaking detection. Now uses ordered list
+    of signatures so all are checked.
     """
-    # Magic byte signatures
-    signatures = {
+    # Magic byte signatures — ORDERED LIST, not dict, so duplicates are preserved
+    # and checked in priority order (longest first for specificity)
+    signatures: List[tuple[bytes, tuple[str, str, str]]] = [
+        # Code/Text - check for Python shebang first (longest, most specific)
+        (b'#!/usr/bin/env python3', ('text/x-python', 'code', '.py')),
+        (b'#!/usr/bin/env python', ('text/x-python', 'code', '.py')),
+        (b'#!/usr/bin/python3', ('text/x-python', 'code', '.py')),
+        (b'#!/usr/bin/python', ('text/x-python', 'code', '.py')),
+        (b'#!/', ('text/x-shellscript', 'code', '.sh')),
+        (b'<?php', ('text/x-php', 'code', '.php')),
+        # Video (longer signatures first)
+        (b'\x00\x00\x00\x18ftypmp4', ('video/mp4', 'video', '.mp4')),
+        (b'\x00\x00\x00\x1Cftypmp4', ('video/mp4', 'video', '.mp4')),
+        (b'\x00\x00\x00\x20ftypisom', ('video/mp4', 'video', '.mp4')),
         # Images
-        b'\xFF\xD8\xFF': ('image/jpeg', 'image', '.jpg'),
-        b'\x89PNG\r\n\x1a\n': ('image/png', 'image', '.png'),
-        b'GIF87a': ('image/gif', 'image', '.gif'),
-        b'GIF89a': ('image/gif', 'image', '.gif'),
-        b'RIFF': ('image/webp', 'image', '.webp'),  # Also used by WAV/AVI
-        
+        (b'\x89PNG\r\n\x1a\n', ('image/png', 'image', '.png')),
+        (b'GIF87a', ('image/gif', 'image', '.gif')),
+        (b'GIF89a', ('image/gif', 'image', '.gif')),
+        (b'\xFF\xD8\xFF', ('image/jpeg', 'image', '.jpg')),
         # Documents
-        b'%PDF': ('application/pdf', 'document', '.pdf'),
-        b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1': ('application/msword', 'document', '.doc'),
-        b'PK\x03\x04': ('application/zip', 'archive', '.zip'),  # Also DOCX, XLSX, etc.
-        
-        # Video
-        b'\x00\x00\x00\x18ftypmp4': ('video/mp4', 'video', '.mp4'),
-        b'\x00\x00\x00\x1Cftypmp4': ('video/mp4', 'video', '.mp4'),
-        b'\x00\x00\x00\x20ftypisom': ('video/mp4', 'video', '.mp4'),
-        b'\x1A\x45\xDF\xA3': ('video/webm', 'video', '.webm'),
-        b'moov': ('video/quicktime', 'video', '.mov'),
-        
+        (b'%PDF', ('application/pdf', 'document', '.pdf')),
+        (b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1', ('application/msword', 'document', '.doc')),
         # Audio
-        b'ID3': ('audio/mpeg', 'audio', '.mp3'),
-        b'\xFF\xFB': ('audio/mpeg', 'audio', '.mp3'),
-        b'\xFF\xF3': ('audio/mpeg', 'audio', '.mp3'),
-        b'\xFF\xF2': ('audio/mpeg', 'audio', '.mp3'),
-        b'RIFF': ('audio/wav', 'audio', '.wav'),
-        b'OggS': ('audio/ogg', 'audio', '.ogg'),
-        b'fLaC': ('audio/flac', 'audio', '.flac'),
-        
+        (b'ID3', ('audio/mpeg', 'audio', '.mp3')),
+        (b'OggS', ('audio/ogg', 'audio', '.ogg')),
+        (b'fLaC', ('audio/flac', 'audio', '.flac')),
+        (b'\xFF\xFB', ('audio/mpeg', 'audio', '.mp3')),
+        (b'\xFF\xF3', ('audio/mpeg', 'audio', '.mp3')),
+        (b'\xFF\xF2', ('audio/mpeg', 'audio', '.mp3')),
         # Archives
-        b'PK\x03\x04': ('application/zip', 'archive', '.zip'),
-        b'Rar!\x1A\x07': ('application/x-rar-compressed', 'archive', '.rar'),
-        b'\x1F\x8B': ('application/gzip', 'archive', '.gz'),
-        b'7z\xBC\xAF\x27\x1C': ('application/x-7z-compressed', 'archive', '.7z'),
-        
-        # Code/Text - check for Python shebang first
-        b'#!/usr/bin/env python3': ('text/x-python', 'code', '.py'),
-        b'#!/usr/bin/env python': ('text/x-python', 'code', '.py'),
-        b'#!/usr/bin/python3': ('text/x-python', 'code', '.py'),
-        b'#!/usr/bin/python': ('text/x-python', 'code', '.py'),
-        b'#!/': ('text/x-shellscript', 'code', '.sh'),
-        b'<?php': ('text/x-php', 'code', '.php'),
-    }
+        (b'PK\x03\x04', ('application/zip', 'archive', '.zip')),  # Also DOCX, XLSX, PPTX — extension fallback disambiguates
+        (b'Rar!\x1A\x07', ('application/x-rar-compressed', 'archive', '.rar')),
+        (b'\x1F\x8B', ('application/gzip', 'archive', '.gz')),
+        (b'7z\xBC\xAF\x27\x1C', ('application/x-7z-compressed', 'archive', '.7z')),
+        # RIFF is ambiguous (WEBP/WAV/AVI) — check via filename extension later, not magic alone
+        # We keep WAV as fallback for RIFF, but WEBP will be resolved via extension
+        (b'RIFF', ('audio/wav', 'audio', '.wav')),
+        (b'moov', ('video/quicktime', 'video', '.mov')),
+        (b'\x1A\x45\xDF\xA3', ('video/webm', 'video', '.webm')),
+    ]
     
     # Check magic bytes (first 32 bytes to accommodate longer shebangs)
     header = content[:32]
@@ -109,7 +109,7 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
     detected_ext = None
     confidence = 'low'
     
-    for signature, (mime_type, category, ext) in signatures.items():
+    for signature, (mime_type, category, ext) in signatures:
         if header.startswith(signature):
             detected_type = mime_type
             detected_category = category
