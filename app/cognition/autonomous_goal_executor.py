@@ -516,12 +516,63 @@ class AutonomousGoalExecutor:
             app_logger.info(
                 f"Step {step.status.value}: {step.description[:50]} (confidence: {step.confidence:.2f})"
             )
+
+            # P1-2 AGI: Causal learning from execution — record cause→effect
+            # Every COMPLETED step that produces evidence strengthens the causal edge
+            # action_type → produces_evidence. FAILED weakens it. This is how the agent
+            # learns 'if I do X, Y happens' from its own experience.
+            if cognitive_runtime and hasattr(cognitive_runtime, "causal_inference"):
+                try:
+                    ci = cognitive_runtime.causal_inference
+                    # Determine effect name: first produces_evidence or success_criteria or description
+                    effect_names = []
+                    if step.produces_evidence:
+                        effect_names.extend(step.produces_evidence)
+                    if step.success_criteria:
+                        effect_names.extend(step.success_criteria[:1])
+                    if not effect_names:
+                        effect_names = [step.description[:40]]
+
+                    for eff in effect_names[:2]:  # max 2 effects per step
+                        ci.learn_from_execution(
+                            cause_name=step.description[:60] if step.task_type.value == "analysis" else step.task_type.value,
+                            effect_name=eff,
+                            success=(step.status == ExecutionStatus.COMPLETED),
+                            evidence=[f"step_id={step.step_id}", f"goal_id={step.goal_id}", f"status={step.status.value}"],
+                            mechanism=f"Autonomous execution: {step.description[:80]}",
+                        )
+                        # Also record generic action_type → effect for skill transfer
+                        try:
+                            ci.learn_from_execution(
+                                cause_name=step.task_type.value,
+                                effect_name=eff,
+                                success=(step.status == ExecutionStatus.COMPLETED),
+                                evidence=[f"task_type={step.task_type.value}"],
+                            )
+                        except Exception:
+                            pass
+                except Exception as e:
+                    app_logger.warning(f"Causal learning from execution failed (best-effort): {e}")
             
         except Exception as e:
             step.status = ExecutionStatus.FAILED
             step.error = str(e)
             step.completed_at = _now()
             app_logger.error(f"Step failed: {step.description[:50]} - {e}")
+
+            # Even failed steps are learning signals
+            if cognitive_runtime and hasattr(cognitive_runtime, "causal_inference"):
+                try:
+                    ci = cognitive_runtime.causal_inference
+                    eff = (step.produces_evidence[0] if step.produces_evidence else step.description[:40])
+                    ci.learn_from_execution(
+                        cause_name=step.task_type.value,
+                        effect_name=eff,
+                        success=False,
+                        evidence=[f"failed: {e}", f"step_id={step.step_id}"],
+                    )
+                except Exception:
+                    pass
         
         return step
     

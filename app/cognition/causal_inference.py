@@ -456,12 +456,102 @@ class CausalInferenceEngine:
         
         self.graph.add_edge(edge)
         
-        app_logger.info(f"Added causal relationship: {cause_name} → {effect_name} (type: {relation_type.value}, strength: {strength:.2f})")
+        # If edge already exists, update strength via Bayesian moving average (P1-2 AGI: causal learning)
+        if edge_id in self.graph.edges:
+            existing = self.graph.edges[edge_id]
+            # Bayesian update: treat strength as probability of effect given cause
+            # Use simple exponential moving average with confidence weighting
+            old_strength = existing.strength
+            old_conf = existing.confidence
+            # Weight new evidence by its confidence
+            new_strength_combined = (old_strength * old_conf + strength * confidence) / (old_conf + confidence) if (old_conf + confidence) > 0 else strength
+            new_conf_combined = min(1.0, old_conf + 0.05)  # confidence grows with evidence, capped
+            existing.strength = new_strength_combined
+            existing.confidence = new_conf_combined
+            existing.evidence.extend(evidence or [])
+            # Keep mechanism if new one provided
+            if mechanism:
+                existing.mechanism = mechanism
+            app_logger.info(f"Updated causal relationship: {cause_name} → {effect_name} (strength: {old_strength:.2f} → {new_strength_combined:.2f}, conf: {new_conf_combined:.2f})")
+        else:
+            app_logger.info(f"Added causal relationship: {cause_name} → {effect_name} (type: {relation_type.value}, strength: {strength:.2f})")
         
         # Save graph
         self._save_graph()
         
         return edge_id
+
+    def learn_from_execution(
+        self,
+        cause_name: str,
+        effect_name: str,
+        success: bool,
+        evidence: List[str] = None,
+        mechanism: str = "",
+    ) -> str:
+        """
+        P1-2 AGI: Learn causal relationship from actual execution outcome.
+
+        Called after an action executes and produces evidence (or fails).
+        Strength is updated via Bayesian:
+        - success=True → strengthen edge (effect observed)
+        - success=False → weaken edge (effect not observed)
+
+        This is how the system learns 'if I do X, Y happens' from its own experience,
+        not just hand-coded edges.
+        """
+        # Map success to strength delta
+        if success:
+            strength = 0.9
+            confidence = 0.8
+        else:
+            strength = 0.2
+            confidence = 0.6
+
+        return self.add_causal_relationship(
+            cause_name=cause_name,
+            effect_name=effect_name,
+            relation_type=CausalRelationType.DIRECT_CAUSE,
+            strength=strength,
+            confidence=confidence,
+            evidence=evidence or [],
+            mechanism=mechanism or f"Learned from {'successful' if success else 'failed'} execution of {cause_name} → {effect_name}",
+        )
+
+    def learn_from_surprisal(
+        self,
+        cause_name: str,
+        effect_name: str,
+        surprisal: float,
+        evidence: List[str] = None,
+    ) -> str:
+        """
+        P1-2: Update causal edge based on prediction surprisal.
+
+        Low surprisal (prediction matched reality) → strengthen
+        High surprisal (prediction error) → weaken and flag for investigation
+        """
+        # Surprisal is 0..1 (0 = perfect prediction, 1 = totally surprising)
+        # Invert: low surprisal → high strength
+        if surprisal < 0.3:
+            strength = 0.85
+            confidence = 0.75
+        elif surprisal < 0.6:
+            strength = 0.6
+            confidence = 0.6
+        else:
+            strength = 0.3
+            confidence = 0.5
+
+        return self.add_causal_relationship(
+            cause_name=cause_name,
+            effect_name=effect_name,
+            relation_type=CausalRelationType.DIRECT_CAUSE,
+            strength=strength,
+            confidence=confidence,
+            evidence=evidence or [f"surprisal={surprisal:.2f}"],
+            mechanism=f"Surprisal-based update: {surprisal:.2f}",
+        )
     
     def predict_intervention(
         self,

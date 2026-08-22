@@ -210,7 +210,7 @@ class PeriodicAutonomousCycle:
             app_logger.info(f"Cycle {cycle.cycle_id}: {len(observations)} observation(s)")
             
             # Step 2: Generate goals — evidence-driven (structured signals) first,
-            # then keyword fallback for any free-text observations.
+            # then information-gain curiosity, then keyword fallback.
             all_goals = []
             try:
                 signals = self._observe_signals(cognitive_runtime)
@@ -219,6 +219,19 @@ class PeriodicAutonomousCycle:
                 cycle.goals_generated += len(signal_goals)
             except Exception as e:
                 app_logger.warning(f"Signal-driven goal generation failed (falling back): {e}")
+
+            # P1-4 AGI: Information-gain curiosity — goals that maximize learning
+            try:
+                if cognitive_runtime:
+                    info_goals = self.goal_generator.generate_goals_from_information_gain(
+                        world_model=cognitive_runtime.world,
+                        language_grounding=cognitive_runtime.language_grounding,
+                        causal_engine=cognitive_runtime.causal_inference,
+                    )
+                    all_goals.extend(info_goals)
+                    cycle.goals_generated += len(info_goals)
+            except Exception as e:
+                app_logger.warning(f"Information-gain goal generation failed: {e}")
 
             for observation in observations[:5]:  # Limit to top 5 observations
                 goals = self.goal_generator.generate_goals_from_observation(observation)
@@ -372,6 +385,10 @@ class PeriodicAutonomousCycle:
         goal generation can use the evidence-driven path (generate_goals_from_signals)
         instead of keyword matching. Reads the same sources as _observe_environment
         but returns raw values keyed by signal name.
+
+        P1-4 AGI: Now also emits information-gain signals (unknown entities,
+        low-confidence groundings, weak causal edges, unexplored files) so the
+        agent generates curiosity-driven goals that maximize learning.
         """
         signals: Dict[str, Any] = {}
         try:
@@ -390,6 +407,65 @@ class PeriodicAutonomousCycle:
                 signals["stale_beliefs"] = list(self.reflection_engine.self_model.weak_areas[:3])
         except Exception as e:
             app_logger.warning(f"Signal observation (self-model) failed: {e}")
+
+        # P1-4: Information gain signals
+        if cognitive_runtime:
+            # Unknown / low-confidence entities from WorldModel
+            try:
+                entities = cognitive_runtime.world.find_entities()[:50]
+                unknown = [ent.name for ent in entities if ent.confidence < 0.5]
+                if unknown:
+                    signals["unknown_entities"] = unknown[:5]
+            except Exception as e:
+                app_logger.warning(f"Signal observation (unknown entities) failed: {e}")
+
+            # Low confidence groundings from LanguageGrounding
+            try:
+                lg_summary = cognitive_runtime.language_grounding.get_grounding_summary()
+                if lg_summary.get("total_perceptual_groundings", 0) < 10:
+                    signals["low_grounding_count"] = lg_summary.get("total_perceptual_groundings", 0)
+                if lg_summary.get("average_perceptual_confidence", 1.0) < 0.6:
+                    # Get low confidence symbols
+                    groundings = cognitive_runtime.language_grounding.get_perceptual_groundings(limit=20)
+                    low_conf = [g.symbol for g in groundings if g.confidence < 0.5]
+                    if low_conf:
+                        signals["low_confidence_groundings"] = low_conf[:3]
+            except Exception as e:
+                app_logger.warning(f"Signal observation (groundings) failed: {e}")
+
+            # Weak causal edges
+            try:
+                weak = []
+                for edge in cognitive_runtime.causal_inference.graph.edges.values():
+                    if edge.confidence < 0.4:
+                        src = cognitive_runtime.causal_inference.graph.nodes.get(edge.source_id)
+                        tgt = cognitive_runtime.causal_inference.graph.nodes.get(edge.target_id)
+                        if src and tgt:
+                            weak.append(f"{src.name} → {tgt.name}")
+                if weak:
+                    signals["weak_causal_edges"] = weak[:3]
+            except Exception as e:
+                app_logger.warning(f"Signal observation (weak causal) failed: {e}")
+
+            # Unexplored files (recent files in workspace not yet indexed)
+            try:
+                from pathlib import Path
+                from app.config import settings
+                workspace = settings.DATA_DIR / "workspace"
+                if workspace.exists():
+                    # Find files modified in last 24h not yet in memory
+                    recent = []
+                    for p in workspace.rglob("*"):
+                        if p.is_file():
+                            try:
+                                if (time.time() - p.stat().st_mtime) < 86400:
+                                    recent.append(str(p.name))
+                            except Exception:
+                                continue
+                    if recent:
+                        signals["unexplored_files"] = recent[:5]
+            except Exception as e:
+                app_logger.warning(f"Signal observation (unexplored files) failed: {e}")
 
         return signals
     

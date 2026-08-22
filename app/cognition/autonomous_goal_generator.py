@@ -416,9 +416,138 @@ class AutonomousGoalGenerator:
             )
             generated.append(goal)
 
+        # 6. P1-4 AGI: Information gain — curiosity-driven goals for unknown entities
+        # Human intelligence is driven by curiosity: explore what is unknown or poorly grounded
+        unknown_entities = signals.get("unknown_entities") or signals.get("ungrounded_symbols") or []
+        if isinstance(unknown_entities, list):
+            for entity in unknown_entities[:3]:
+                goal = self._create_curiosity_goal(
+                    f"information gap: unknown entity '{entity}' — investigate to ground it",
+                    {"signal": "information_gain", "entity": entity},
+                )
+                goal.priority = GoalPriority.NORMAL
+                goal.value_score = 0.75
+                generated.append(goal)
+
+        # 7. Low confidence groundings → re-ground
+        low_conf_groundings = signals.get("low_confidence_groundings") or []
+        if isinstance(low_conf_groundings, list):
+            for g in low_conf_groundings[:2]:
+                goal = self._create_information_gap_goal(
+                    f"low confidence grounding '{g}' — re-observe to strengthen grounding",
+                    {"signal": "low_confidence_grounding", "grounding": g},
+                )
+                generated.append(goal)
+
+        # 8. Unexplored files → curiosity (learn from new data)
+        unexplored = signals.get("unexplored_files") or []
+        if isinstance(unexplored, list) and unexplored:
+            goal = self._create_curiosity_goal(
+                f"unexplored files: {len(unexplored)} new files — index and learn",
+                {"signal": "unexplored_files", "count": len(unexplored)},
+            )
+            generated.append(goal)
+
+        # 9. Prediction error clusters → investigate
+        error_clusters = signals.get("prediction_error_clusters") or []
+        if isinstance(error_clusters, list):
+            for cluster in error_clusters[:2]:
+                goal = self._create_curiosity_goal(
+                    f"prediction error cluster '{cluster}' — high surprisal, investigate causal mismatch",
+                    {"signal": "prediction_error_cluster", "cluster": cluster},
+                )
+                generated.append(goal)
+
+        # 10. Causal weak edges → strengthen via targeted exploration
+        weak_causal = signals.get("weak_causal_edges") or []
+        if isinstance(weak_causal, list):
+            for edge in weak_causal[:2]:
+                goal = self._create_information_gap_goal(
+                    f"weak causal edge '{edge}' — needs more evidence via intervention",
+                    {"signal": "weak_causal_edge", "edge": edge},
+                )
+                generated.append(goal)
+
         for goal in generated:
             self.add_goal(goal)
             app_logger.info(f"Generated goal from signals: {goal.title} (source: {goal.source.value})")
+
+        return generated
+
+    def generate_goals_from_information_gain(self, world_model=None, language_grounding=None, causal_engine=None) -> List[AutonomousGoal]:
+        """
+        P1-4 AGI: Generate curiosity-driven goals that maximize expected information gain.
+
+        Human intelligence explores what is unknown or uncertain. This method scans:
+        - WorldModel for entities with low confidence or no recent observations
+        - LanguageGrounding for symbols with no grounding or low confidence
+        - Causal graph for weak edges (low confidence) that need more evidence
+
+        Returns goals that would most reduce uncertainty.
+        """
+        generated: List[AutonomousGoal] = []
+
+        # Scan WorldModel for unknown/low-confidence entities
+        try:
+            if world_model:
+                # Find entities with low confidence or stale
+                all_entities = world_model.find_entities()[:50]
+                unknown = []
+                for ent in all_entities:
+                    if ent.confidence < 0.5:
+                        unknown.append(ent.name)
+                if unknown:
+                    for name in unknown[:3]:
+                        goal = self._create_curiosity_goal(
+                            f"information gap: entity '{name}' low confidence ({[e.confidence for e in all_entities if e.name==name][0]:.2f}) — investigate",
+                            {"signal": "information_gain", "entity": name},
+                        )
+                        generated.append(goal)
+        except Exception as e:
+            app_logger.warning(f"Info-gain scan world_model failed: {e}")
+
+        # Scan LanguageGrounding for ungrounded symbols
+        try:
+            if language_grounding:
+                summary = language_grounding.get_grounding_summary()
+                # If total groundings < 10, we have many ungrounded symbols — generate exploration goals
+                total = summary.get("total_perceptual_groundings", 0)
+                if total < 10:
+                    goal = self._create_curiosity_goal(
+                        f"low grounding count ({total}) — explore environment to ground more symbols (perception→grounding loop)",
+                        {"signal": "low_grounding_count", "total": total},
+                    )
+                    generated.append(goal)
+                # Low confidence groundings
+                if summary.get("average_perceptual_confidence", 1.0) < 0.6:
+                    goal = self._create_information_gap_goal(
+                        f"average grounding confidence low ({summary.get('average_perceptual_confidence',0):.2f}) — re-observe",
+                        {"signal": "low_grounding_confidence"},
+                    )
+                    generated.append(goal)
+        except Exception as e:
+            app_logger.warning(f"Info-gain scan language_grounding failed: {e}")
+
+        # Scan Causal graph for weak edges
+        try:
+            if causal_engine:
+                weak = []
+                for edge in causal_engine.graph.edges.values():
+                    if edge.confidence < 0.4:
+                        weak.append(f"{causal_engine.graph.nodes[edge.source_id].name} → {causal_engine.graph.nodes[edge.target_id].name}")
+                if weak:
+                    for edge_desc in weak[:2]:
+                        goal = self._create_information_gap_goal(
+                            f"weak causal edge '{edge_desc}' — needs intervention evidence",
+                            {"signal": "weak_causal_edge", "edge": edge_desc},
+                        )
+                        generated.append(goal)
+        except Exception as e:
+            app_logger.warning(f"Info-gain scan causal failed: {e}")
+
+        for goal in generated:
+            self.add_goal(goal)
+            app_logger.info(f"Generated curiosity goal (info-gain): {goal.title}")
 
         return generated
 

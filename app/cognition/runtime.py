@@ -465,10 +465,76 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Consolidation: episodic consolidation failed: {e}")
 
+        # P1-3 AGI: Causal consolidation — prune weak edges, keep strong ones
+        try:
+            summary["causal_pruned"] = 0
+            summary["causal_strengthened"] = 0
+            # Simple heuristic: edges with confidence <0.3 and strength <0.3 are weak
+            # We don't delete, but we log and could decay them
+            graph_summary = self.causal_inference.get_causal_graph_summary()
+            weak_edges = []
+            for edge in self.causal_inference.graph.edges.values():
+                if edge.confidence < 0.3 and edge.strength < 0.3:
+                    weak_edges.append(edge.edge_id)
+            summary["causal_weak_edges"] = len(weak_edges)
+            summary["causal_total"] = graph_summary.get("num_edges", 0)
+            summary["causal_nodes"] = graph_summary.get("num_nodes", 0)
+        except Exception as e:
+            app_logger.warning(f"Consolidation: causal consolidation failed: {e}")
+
+        # P1-3: Memory association — find co-occurring entities and create relationships
+        try:
+            from collections import defaultdict
+            # Find recent observations and group by time window (1 hour)
+            obs = self.world.recent_observations(limit=100)
+            # Group by hour
+            by_hour = defaultdict(list)
+            for o in obs:
+                try:
+                    # Extract hour from timestamp (simple: first 13 chars of ISO)
+                    hour_key = o.timestamp[:13] if hasattr(o, "timestamp") else "unknown"
+                    by_hour[hour_key].append(o)
+                except Exception:
+                    continue
+            associations = 0
+            for hour, obs_list in by_hour.items():
+                subjects = list(set(o.subject for o in obs_list))
+                if len(subjects) >= 2:
+                    # Create relationships between co-occurring subjects
+                    for i in range(min(3, len(subjects))):
+                        for j in range(i+1, min(4, len(subjects))):
+                            try:
+                                self.world.add_relationship(
+                                    subject_id=subjects[i],
+                                    predicate="co_occurs_with",
+                                    object_id=subjects[j],
+                                    confidence=0.6,
+                                )
+                                associations += 1
+                            except Exception:
+                                # Fallback: try via world_ingest
+                                try:
+                                    self.world_ingest.ingest(
+                                        subject=subjects[i],
+                                        predicate="co_occurs_with",
+                                        value=subjects[j],
+                                        source="memory_association",
+                                        observation_type="inferred",
+                                        confidence=0.6,
+                                    )
+                                    associations += 1
+                                except Exception:
+                                    pass
+            summary["associations_created"] = associations
+        except Exception as e:
+            app_logger.warning(f"Consolidation: memory association failed: {e}")
+
         app_logger.info(
             f"Memory consolidation: {summary['beliefs_changed']} beliefs decayed, "
             f"{summary['pruned_memories']} memories pruned, "
-            f"{summary['consolidated']} consolidated."
+            f"{summary['consolidated']} consolidated, "
+            f"{summary.get('associations_created',0)} associations, "
+            f"causal {summary.get('causal_total',0)} edges ({summary.get('causal_weak_edges',0)} weak)."
         )
         return summary
 
@@ -1781,6 +1847,31 @@ class CognitiveRuntime:
 
         surprisal = self.prediction.evaluate_surprisal(pred, actual_state)
         trace.prediction_surprisal = surprisal
+
+        # P1-2 AGI: Causal learning from surprisal — low surprisal strengthens cause→effect,
+        # high surprisal weakens and flags for investigation. This is how the agent learns
+        # predictive models from its own prediction errors.
+        try:
+            # Determine effect: first success criteria or executed action or goal type
+            effect_name = "goal_verified" if verify_res.verified_success else "goal_unverified"
+            if executed_actions:
+                effect_name = executed_actions[0][:60]
+            # Also learn action_type → outcome
+            self.causal_inference.learn_from_surprisal(
+                cause_name=fine_action_type,
+                effect_name=effect_name,
+                surprisal=surprisal,
+                evidence=[f"intent={query_pred}", f"verified={verify_res.verified_success}", f"surprisal={surprisal:.2f}"],
+            )
+            # Learn intent → outcome as well
+            self.causal_inference.learn_from_execution(
+                cause_name=f"intent:{query_pred}",
+                effect_name=effect_name,
+                success=verify_res.verified_success,
+                evidence=[f"surprisal={surprisal:.2f}", f"action={fine_action_type}"],
+            )
+        except Exception as e:
+            app_logger.warning(f"Causal surprisal learning failed (best-effort): {e}")
 
         # Reflection & Memory Learning
         lesson_text = ""
