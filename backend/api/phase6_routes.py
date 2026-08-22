@@ -455,6 +455,7 @@ class CodeExecutionResponse(BaseModel):
     error: Optional[str] = None
     executionTime: float  # milliseconds
     timestamp: str
+    isolated: Optional[bool] = None  # False = ran in a plain temp dir (no container/VM)
 
 
 # SECURITY: hard caps for the code-execution feature.
@@ -534,7 +535,8 @@ async def execute_code(request: CodeExecutionRequest, req: Request):
             output=output,
             error=error,
             executionTime=execution_time,
-            timestamp=end_time.isoformat()
+            timestamp=end_time.isoformat(),
+            isolated=exec_result.get("isolated"),
         )
 
     except HTTPException:

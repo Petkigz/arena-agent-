@@ -19,6 +19,7 @@ export interface ExecutionResult {
   error?: string;
   executionTime: number; // ms
   timestamp: string;
+  isolated?: boolean; // false = ran in a plain temp dir (no container/VM)
 }
 
 export interface SandboxSession {

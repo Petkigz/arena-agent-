@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, Clock, Terminal } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Terminal, AlertTriangle } from 'lucide-react';
 import type { ExecutionResult } from '../../stores/codeStore';
 
 interface ExecutionResultsProps {
@@ -6,7 +6,7 @@ interface ExecutionResultsProps {
 }
 
 export function ExecutionResults({ result }: ExecutionResultsProps) {
-  const { success, output, error, executionTime, timestamp } = result;
+  const { success, output, error, executionTime, timestamp, isolated } = result;
 
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-background-surface">
@@ -36,6 +36,14 @@ export function ExecutionResults({ result }: ExecutionResultsProps) {
           </div>
         </div>
       </div>
+
+      {/* Isolation warning */}
+      {isolated === false && (
+        <div className="flex items-start gap-2 px-4 py-2 bg-accent-warning/10 border-b border-accent-warning/30 text-accent-warning text-xs">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Ran without isolation (a plain temp directory, not a container/VM). Install Docker or WSL2 for a real sandbox.</span>
+        </div>
+      )}
 
       {/* Output */}
       <div className="p-4 space-y-3">

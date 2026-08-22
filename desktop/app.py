@@ -745,6 +745,10 @@ class CodePage(QWidget):
         try:
             res = self._client.execute_code(code, "python")
             out = res.get("output") or res.get("stdout") or res.get("result") or str(res)
+            if res.get("isolated") is False:
+                out = "⚠ Ran without isolation (a plain temp dir, not a container/VM). Install Docker or WSL2.\n\n" + str(out)
+            if res.get("error"):
+                out = str(out) + "\n\nError: " + str(res["error"])
             self.output.setPlainText(str(out))
         except BackendConnectionError as e:
             self.output.setPlainText(f"⚠ {e}")

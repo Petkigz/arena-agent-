@@ -209,6 +209,7 @@ export async function executeCode(
   error?: string;
   executionTime: number;
   timestamp: string;
+  isolated?: boolean;
 }>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/code/execute`, {
