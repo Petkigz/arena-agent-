@@ -149,7 +149,7 @@ export function ChatInput({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Message Arena..."
+              placeholder="Message Beanie..."
               disabled={disabled}
               rows={1}
               aria-label="Type your message"

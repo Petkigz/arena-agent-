@@ -60,7 +60,7 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
       exit="exit"
       layout
       role="article"
-      aria-label={`${isUser ? 'You' : 'Arena'} said at ${formattedTime}`}
+      aria-label={`${isUser ? 'You' : 'Beanie'} said at ${formattedTime}`}
       className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
     >
       {/* Avatar — the user keeps a simple glyph; the assistant is Beanie's orb */}

@@ -6,8 +6,9 @@ import { cn } from '../../utils/cn';
 import { Button } from '../ui/Button';
 import { ConversationFilters } from '../chat/ConversationFilters';
 import { ConversationItem } from '../chat/ConversationItem';
-import { useConversationStore, useLayoutStore } from '../../stores';
+import { useConversationStore, useLayoutStore, usePresenceStore } from '../../stores';
 import { webSocketService } from '../../services/websocket';
+import { ReactiveBeanieOrb } from '../presence/ReactiveBeanieOrb';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
@@ -23,6 +24,7 @@ export function Sidebar() {
   const { conversations, currentConversation, createConversation, setCurrentConversation, removeConversation } =
     useConversationStore();
   const { sidebarCollapsed, toggleSidebar } = useLayoutStore();
+  const { presence } = usePresenceStore();
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
     webSocketService.status
@@ -77,17 +79,16 @@ export function Sidebar() {
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Presence indicator with real connection status */}
+      {/* Beanie presence orb with real connection status */}
       <div className="p-4 border-b border-background-surface" data-tutorial="presence-orb">
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full bg-accent-primary animate-pulse-slow flex-shrink-0"
-            role="img"
-            aria-label="Arena presence indicator"
+          <ReactiveBeanieOrb
+            status={connectionStatus === 'disconnected' ? 'offline' : presence.status}
+            size="sm"
           />
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-text-primary">Arena</h2>
+              <h2 className="font-semibold text-text-primary">Beanie</h2>
               <div className="flex items-center gap-1.5" role="status" aria-live="polite" aria-atomic="true">
                 <span className={`w-2 h-2 rounded-full ${status.color}`} aria-hidden="true" />
                 <p className="text-xs text-text-muted">{status.label}</p>
