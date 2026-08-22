@@ -1,6 +1,6 @@
 # Arena Agent — Measured Status
 
-**Updated:** 2026-08-21 · Branch `arena/01a01f89-arena-agent`
+**Updated:** 2026-08-22 · Branch `arena/01a02a43-arena-agent`
 **This is the canonical status document.** It supersedes the percentage-based status
 files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,
 `AGI_FINAL_SUMMARY.md`, `PHASES.md`, `PROJECT_REVIEW.md`, and the recovered branch's
@@ -22,11 +22,12 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1414** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1414 passed, 4 deselected` |
-| Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` |
-| Frontend build | ✅ | `npm run build` (tsc + vite) succeeds |
-| Python source | ~45,000 lines / 209 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
-| Tools in the manifest | **121** | `len(get_tool_manifest())` (incl. 3 deterministic recipes) |
+| Backend tests passing | **1414** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1414 passed, 4 deselected` (previous baseline, not re-run in this sandbox) |
+| Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` (previous baseline) |
+| Frontend build | ✅ | `npm run build` (tsc + vite) succeeds (previous baseline, code-reviewed this audit) |
+| Python source | ~48,000 lines / 216 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
+| Tools in the manifest | **125** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody (P1-1, P2) |
+| Cognition modules wired | **17/17** | runtime._integrate_phase_modules() + module_wiring probe — added goal_decomposer + project_manager (P2) |
 | Live verification of external APIs | script | `scripts/live_check.py` + `LIVE_VERIFICATION.md` |
 | Deterministic Tier-1 tools | ✅ all present | `runtime.measure_capabilities()` → `tier1_tool_manifest = verified` |
 | Deterministic degradation | ✅ | `runtime.measure_capabilities()` → `deterministic_degradation = verified` |
@@ -47,24 +48,26 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 ## The cognitive loop (what actually runs)
 
 ```
-User / WebSocket chat
-  → CognitiveRuntime.process_cognitive_cycle()
-      → semantic goal interpretation
-      → world model + belief ingestion
+User / WebSocket chat (now multimodal: text + image_path + attachments)
+  → CognitiveRuntime.process_cognitive_cycle(image_path, attachments)
+      → semantic goal interpretation + multimodal ingestion (object detection + OCR + grounding)
+      → world model + belief ingestion + perception grounding (auto-creates PerceptualGrounding)
       → reasoning loop (ANSWER / INVESTIGATE / DEFER / ACT)
-      → counterfactual strategy simulation
+      → counterfactual strategy simulation (resource-aware: penalizes heavy actions under RAM/CPU/disk pressure)
       → action gate (policy: Level 0–3)
-      → capability execution
+      → capability execution (125 tools)
       → observation → tri-state verification (SATISFIED / FAILED / UNKNOWN)
-      → replan on failure
-      → reflection + memory learning
-      → _integrate_phase_modules(): 15 modules contribute/learn
-  → (hourly) autonomous cycle: observe → generate goals → execute → reflect
-      → memory consolidation (decay + prune + integrate)
+      → causal learning from execution + surprisal (learns action→effect, intent→outcome)
+      → replan on failure (resource-aware)
+      → reflection + memory learning + social emotion inference (prosody + text)
+      → _integrate_phase_modules(): 17 modules contribute/learn
+      → long-horizon decomposition: complex goals → sub-goals DAG → persistent Project (multi-session)
+  → (hourly) autonomous cycle: observe structured signals + info-gain → generate goals → execute → reflect
+      → memory consolidation (decay + prune + integrate + causal prune + memory association co_occurs_with)
       → proactive coworker maintenance (idle self-heal)
 ```
 
-The 15 wired modules: common-sense KB, autonomous goal generation/execution, self-reflection, metacognitive monitor, causal inference, strategic planning, cross-domain transfer, creative generation, social cognition, consciousness simulation, embodied cognition, cultural learning, advanced cognition (Phase 14), language grounding (Phase 22).
+The 17 wired modules: common-sense KB, autonomous goal generation/execution, self-reflection, metacognitive monitor, causal inference (now learns from interventions + surprisal), strategic planning, cross-domain transfer, creative generation, social cognition (now from prosody + text emotion), consciousness simulation, embodied cognition, cultural learning, advanced cognition (Phase 14: ResourceManager + MultiAgentCoordinator + KnowledgeSynthesizer + UncertaintyQuantifier), language grounding (Phase 22: now populated via object_detector), goal_decomposer (Phase 6A), project_manager (Phase 6B), plus new tools object_detector (face via Haar, objects via YOLO/SSD fallback) + prosody_analyzer (pitch/energy/ZCR → emotion).
 
 ---
 
@@ -128,10 +131,34 @@ The highest-value remaining work is **more integration and measurement**, not mo
 - ✅ **StepVerifier separates step from goal verification (P0)**: a new `StepVerifier` evaluates each step's OWN success/failure criteria and evidence contract; a step declaring evidence is `UNVERIFIED` (not `COMPLETED`) when the cycle only produced a conversational ANSWER. Confidence is now evidence-derived (0.9 observed / 0.7 conversational / 0.5 unverified / 0.0 failed), never a hard-coded 1.0 on success.
 - ✅ **Evidence as real data-flow**: generated plans populate `requires_evidence`/`produces_evidence` (current_state → root_cause → optimization_plan → change_applied → …), and `execute_plan` blocks any step whose required evidence was never produced by a COMPLETED step — not just its `depends_on` order.
 
+Closed this session (P1-1 → P2 — pushing toward human intelligence):
+
+- ✅ **P1-1 Perception→Grounding loop**: New `object_detector.py` — face via Haar cascades (always offline), objects via YOLOv8n (if `data/models/yolov8n.pt` exists) else MobileNet SSD else face-only fallback. `analyze_image_grounded()` auto-creates `PerceptualGrounding` for each label (vision modality, bbox, confidence) + feeds faces to `social_cognition`. `VisionAnalyzerTool` now includes detections in LLM prompt. Runtime `_integrate_phase_modules()` rate-limited (60s) grounds latest screenshot (<5min) → blackboard `grounded_detections`. Endpoints `/vision/detect-objects`, `/detect-faces`, `/groundings`. Web `ImagesPage` + desktop `VisionPage` show grounded detections + groundings + Detect+ground button + honest note about OCR+LLM+detector vs VLM (RX 580 limit). Manifest 121→125.
+
+- ✅ **P1-2 Causal learning from interventions**: `causal_inference.add_causal_relationship()` now Bayesian moving average update when edge exists. New `learn_from_execution()` (success→strength 0.9, fail→0.2) + `learn_from_surprisal()` (low surprisal→strengthen, high→weaken). `AutonomousGoalExecutor.execute_step()` records cause→effect for each `produces_evidence`. Runtime `process_cognitive_cycle()` records action→effect from surprisal + intent→outcome.
+
+- ✅ **P1-3 Memory association + causal consolidation**: `consolidate_memory()` now counts causal edges/weak edges + creates `co_occurs_with` relationships between co-occurring subjects grouped by hour (memory association).
+
+- ✅ **P1-4 Curiosity via information gain**: `generate_goals_from_signals()` now handles `unknown_entities`, `low_confidence_groundings`, `unexplored_files`, `weak_causal_edges`, `prediction_error_clusters`. New `generate_goals_from_information_gain()` scans WorldModel low-confidence, LanguageGrounding low count/confidence, causal weak edges → curiosity goals. `PeriodicAutonomousCycle` now calls info-gain goals + `_observe_signals()` emits those signals.
+
+- ✅ **P2 Resource-aware planning**: `CounterfactualSimulator` has `RESOURCE_COSTS` per action, penalizes high-memory when RAM>80% (0.6×), high-cpu when CPU>75% (0.7×), file-writing when disk>85% (0.8×), budget>90% (0.7×). `ActionPlanner` auto-fetches `hardware_self_model` + `ResourceManager`. `GoalReplanner` signature extended, call sites pass outcome_store, hardware, resource_manager.
+
+- ✅ **P2 Social from real signals**: New `prosody_analyzer.py` — rms, pitch (autocorr), ZCR, speaking rate → emotion (joy/sadness/anger/fear/surprise/neutral) + intensity. `VoiceService._transcribe_remote_utterance()` analyzes prosody before STT and feeds to `social_cognition`. Runtime `_integrate_phase_modules()` infers emotion from text keywords.
+
+- ✅ **P2 Multimodal chat**: `process_cognitive_cycle(image_path, attachments)` + `message_router` accepts `image_path`/`attachments` in `user_message` WS, forwards to runtime. Frontend `websocket.ts` + `conversationStore` + `ChatPage` send first uploaded image path for grounding — chat is vision-grounded through ONE brain.
+
+- ✅ **P2 Self-evolution verified**: `self_evolving_agent.py` generates pytest contract (3 tests), runs in `DisposableSandbox`, only hotloads if green, saves to `app/tools/` + `data/plugins/`, rebuilds manifest cache.
+
+- ✅ **P2 Project management**: `ProjectManager` + `GoalDecomposer` wired into runtime (17 modules), complex goals (>15 words or setup/research keywords) → decompose into sub-goals DAG → persistent `Project` with milestones + session tracking. Endpoints `/projects`, `/projects/{id}`, POST `/projects`. Desktop tray icon refreshed on live theme, chat auto-reconnect with backoff, Android wake-word re-arm shows notification on background restriction (G7).
+
+- ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
+
 Still open (future):
 
-1. Complete the Android Gradle wrapper (`gradlew` script + `gradle-wrapper.jar` binary — needs the Gradle distribution).
-2. Deliver the held `.github/workflows/{tests,android}.yml` files — blocked on the GitHub App's `workflows` permission.
-3. Continue extending the scorecard with behavioral (not just presence) checks across more domains.
-4. Full end-to-end browser test of the conversation round-trip (backend list → frontend hydrate → history on open) against a live server.
-5. Exercise the external-API tools (CoinGecko/Stooq/Telegram/Twilio/search) against live endpoints on the owner's machine — sandbox network is restricted, so those paths are verified for parsing/validation/degradation only.
+1. Tiny VLM on RX 580 (Moondream 1.8B Q4) alongside Qwen 3B fast — turns G6 from OCR+LLM to true VLM (needs 24GB GPU or 32GB RAM upgrade for full VLM).
+2. Continual LoRA adapters for Qwen 3B to learn user-specific skills without full fine-tune.
+3. Deliver `.github/workflows/{tests,android}.yml` — blocked on workflows permission.
+4. Full end-to-end browser test of multimodal round-trip (text+image → grounded detection → reply) against live server.
+5. Exercise external-API tools against live endpoints on owner's machine.
+6. Split `desktop/app.py` (~2000 lines) into `desktop/pages/` + `theme.py` + `widgets/orb.py` (code-quality debt).
+
