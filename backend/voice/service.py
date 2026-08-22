@@ -12,7 +12,28 @@ from backend.voice.stt import SpeechToTextService
 from backend.websocket_server import ws_manager
 import backend.message_router as message_router_module
 from app.perception.piper_voice import synthesize_piper
+from app.settings_store import get_settings
 from app.utils.logger import app_logger
+
+
+# Map user-facing wake-word phrases onto the Picovoice keyword models actually
+# installed for the PC-side pipeline. Phrases outside this map fall back to the
+# default model (the Android app's SpeechRecognizer accepts arbitrary text, but
+# the PC pipeline can only recognize the keywords it has models for).
+_WAKE_WORD_MAP = {
+    "hey_arena": "hey_jarvis",
+    "hey_lumi": "hey_jarvis",
+    "hey_jarvis": "hey_jarvis",
+    "hey_mycroft": "hey_mycroft",
+    "alexa": "alexa",
+}
+
+
+def _map_wake_word(wake_word: Optional[str]) -> str:
+    """Resolve a user wake-word phrase to a Picovoice model name."""
+    if not wake_word:
+        return "hey_jarvis"
+    return _WAKE_WORD_MAP.get(wake_word.strip().lower(), "hey_jarvis")
 
 
 class VoiceService:
@@ -35,7 +56,23 @@ class VoiceService:
             return
 
         self.current_conversation_id = conversation_id
+
+        # Apply persisted settings (voice + speed + wake word) so the pipeline
+        # starts with the user's choices, not the defaults. Previously these were
+        # only applied by update_settings() *after* the pipeline was already
+        # running, so a fresh start ignored them.
+        shared = get_settings()
+        tts_voice = str(shared.get("voice") or "en_US-lessac-medium")
+        try:
+            tts_speed = float(shared.get("voice_speed") or 1.0)
+        except (TypeError, ValueError):
+            tts_speed = 1.0
+        wake_model = _map_wake_word(shared.get("wake_word"))
+
         self.pipeline = VoicePipeline(
+            wake_word=wake_model,
+            tts_voice=tts_voice,
+            tts_speed=tts_speed,
             on_wake_word=self._handle_wake_word,
             on_transcript=self._handle_transcript,
             on_state_change=self._handle_state_change,
@@ -83,14 +120,7 @@ class VoiceService:
         # Update wake word
         if "wakeWord" in settings:
             wake_word = settings["wakeWord"]
-            # Map frontend wake words to backend model names
-            wake_word_map = {
-                "hey_arena": "hey_jarvis",
-                "hey_lumi": "hey_jarvis",
-                "hey_mycroft": "hey_mycroft",
-                "alexa": "alexa",
-            }
-            model_name = wake_word_map.get(wake_word, "hey_jarvis")
+            model_name = _map_wake_word(wake_word)
             await self.pipeline.update_wake_word(model_name)
             app_logger.info(f"Updated wake word to {wake_word} (model: {model_name})")
 

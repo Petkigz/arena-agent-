@@ -182,6 +182,51 @@ class TestVoiceService:
             mock_instance.stop.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_start_applies_persisted_settings(self, service):
+        """start() must pass the saved voice/speed/wake-word into the pipeline
+        (regression: G1 — a fresh start previously ignored them)."""
+        with patch('backend.voice.service.VoicePipeline') as mock_pipeline, \
+             patch('backend.voice.service.get_settings') as mock_get:
+            mock_get.return_value = {
+                "voice": "en_GB-alan-medium",
+                "voice_speed": 1.4,
+                "wake_word": "alexa",
+            }
+            mock_instance = AsyncMock()
+            mock_pipeline.return_value = mock_instance
+
+            await service.start("conv_123")
+
+            _, kwargs = mock_pipeline.call_args
+            assert kwargs["tts_voice"] == "en_GB-alan-medium"
+            assert kwargs["tts_speed"] == 1.4
+            assert kwargs["wake_word"] == "alexa"  # mapped through _map_wake_word
+
+    @pytest.mark.asyncio
+    async def test_start_uses_defaults_when_settings_missing(self, service):
+        """start() falls back to sane defaults when the store has no values."""
+        with patch('backend.voice.service.VoicePipeline') as mock_pipeline, \
+             patch('backend.voice.service.get_settings') as mock_get:
+            mock_get.return_value = {}
+            mock_instance = AsyncMock()
+            mock_pipeline.return_value = mock_instance
+
+            await service.start("conv_123")
+
+            _, kwargs = mock_pipeline.call_args
+            assert kwargs["tts_voice"] == "en_US-lessac-medium"
+            assert kwargs["tts_speed"] == 1.0
+            assert kwargs["wake_word"] == "hey_jarvis"
+
+    def test_map_wake_word(self):
+        from backend.voice.service import _map_wake_word
+        assert _map_wake_word("hey_arena") == "hey_jarvis"
+        assert _map_wake_word("alexa") == "alexa"
+        assert _map_wake_word("hey_mycroft") == "hey_mycroft"
+        assert _map_wake_word("some custom phrase") == "hey_jarvis"  # unknown → default
+        assert _map_wake_word(None) == "hey_jarvis"
+
+    @pytest.mark.asyncio
     async def test_update_settings(self, service):
         """Test settings update."""
         with patch('backend.voice.service.VoicePipeline') as mock_pipeline:

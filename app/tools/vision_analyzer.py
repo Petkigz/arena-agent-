@@ -14,28 +14,38 @@ class VisionAnalyzerTool:
         image_path_str: str, 
         prompt_focus: Optional[str] = None,
         complexity: str = "main",
-        auto_save_memory: bool = True
+        auto_save_memory: bool = True,
+        skip_delta_check: bool = False,
     ) -> Dict[str, Any]:
         """
         Combines Tesseract OCR text extraction and Qwen local LLM analysis to understand
         active application windows, error messages, code UI, charts, or open forms.
+
+        `skip_delta_check=True` analyzes the given image unconditionally (used for
+        user-uploaded images via /vision/analyze). When False (the screen-observation
+        path, /vision/capture-and-analyze), a screen-delta check first deduplicates
+        identical frames to save VRAM.
         """
         image_path = Path(image_path_str)
         if not image_path.is_absolute():
             image_path = settings.BASE_DIR / image_path
 
-        # Step 1: Run Screen Delta Check to prevent redundant VLM runs on identical frames
-        cap_delta = ScreenCaptureTool.capture_screen_delta()
-        if not cap_delta.get("screen_changed", True):
-            app_logger.info("Screen unchanged (<5% delta); returning cached visual observation to save VRAM.")
-            return {
-                "success": True,
-                "screen_changed": False,
-                "image_name": image_path.name,
-                "file_path": str(image_path),
-                "ai_analysis": "Desktop screen state is unchanged from previous observation frame. VLM inference skipped to conserve RX 580 VRAM.",
-                "note": "Skipped redundant VLM run on identical screen frame."
-            }
+        # Step 1: (screen-observation only) dedupe identical frames before spending
+        # VRAM on a redundant inference. This must NOT run when analyzing an explicit
+        # user-supplied image — the delta is computed against a fresh screen capture,
+        # which is unrelated to the image being analyzed.
+        if not skip_delta_check:
+            cap_delta = ScreenCaptureTool.capture_screen_delta()
+            if not cap_delta.get("screen_changed", True):
+                app_logger.info("Screen unchanged (<5% delta); returning cached visual observation to save VRAM.")
+                return {
+                    "success": True,
+                    "screen_changed": False,
+                    "image_name": image_path.name,
+                    "file_path": str(image_path),
+                    "ai_analysis": "Desktop screen state is unchanged from previous observation frame. VLM inference skipped to conserve RX 580 VRAM.",
+                    "note": "Skipped redundant VLM run on identical screen frame."
+                }
 
         # Step 2: Run OCR Text Extraction
         ocr_res = OCRReaderTool.extract_text_from_image(str(image_path))

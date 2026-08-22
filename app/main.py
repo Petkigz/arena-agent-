@@ -1079,10 +1079,13 @@ def vision_ocr_endpoint(req: VisionOCRRequest):
 
 @router.post("/vision/analyze")
 def vision_analyze_endpoint(req: VisionAnalyzeRequest):
+    # Analyzing an explicit (user-uploaded) image — never apply the screen-delta
+    # dedup, which would wrongly skip analysis when the live screen is unchanged.
     return VisionAnalyzerTool.analyze_screen_image(
         req.image_path, 
         prompt_focus=req.prompt_focus, 
-        auto_save_memory=req.auto_save_memory
+        auto_save_memory=req.auto_save_memory,
+        skip_delta_check=True,
     )
 
 @router.post("/vision/capture-and-analyze")
