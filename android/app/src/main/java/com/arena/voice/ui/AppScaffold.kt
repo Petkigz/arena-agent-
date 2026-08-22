@@ -99,6 +99,7 @@ fun AppScaffold(
                             restoreState = true
                         }
                     },
+                    voiceStatus = presenceStatus,
                 )
             }
             composable(AppTab.TOOLS.route) {

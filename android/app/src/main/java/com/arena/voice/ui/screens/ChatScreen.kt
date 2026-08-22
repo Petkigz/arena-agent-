@@ -43,6 +43,7 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
     onVoiceToggle: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    voiceStatus: PresenceStatus = PresenceStatus.IDLE,
 ) {
     val messages = viewModel.messages
     val conversations = viewModel.conversations
@@ -205,6 +206,38 @@ fun ChatScreen(
                 ) {
                     items(messages, key = { it.id }) { msg ->
                         MessageBubble(msg)
+                    }
+                }
+            }
+
+            // ── Floating voice indicator (listening / thinking / speaking) ──
+            val voiceLabel = when (voiceStatus) {
+                PresenceStatus.LISTENING -> "Listening…"
+                PresenceStatus.THINKING -> "Thinking…"
+                PresenceStatus.SPEAKING -> "Speaking…"
+                else -> null
+            }
+            if (voiceLabel != null) {
+                val voiceColor = when (voiceStatus) {
+                    PresenceStatus.LISTENING -> Color(0xFF10B981)
+                    PresenceStatus.THINKING -> Color(0xFFF59E0B)
+                    PresenceStatus.SPEAKING -> Color(0xFF8B5CF6)
+                    else -> Color(0xFF10B981)
+                }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier
+                            .background(Color(0xFF1E293B), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .background(voiceColor, CircleShape),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(voiceLabel, color = Color(0xFFF1F5F9), fontSize = 13.sp)
                     }
                 }
             }

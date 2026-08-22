@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
-import { BeanieOrbPanel } from '../../components/beanie';
+import { BeanieOrbPanel, ListeningIndicator } from '../../components/beanie';
 import { ReactiveBeanieOrb } from '../../components/presence';
 import { EmptyState } from '../../components/ui';
 import { MessageCircle, Share2 } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
-import { webSocketService } from '../../services/websocket';
+import { webSocketService, type VoiceState } from '../../services/websocket';
 import * as api from '../../services/api';
 import type { Message, ActionStep } from '../../types';
 import type { Attachment } from '../../stores/multiModalStore';
@@ -23,6 +23,17 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [beanieActive, setBeanieActive] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+
+  // Track the voice pipeline state so the floating listening indicator reflects it.
+  useEffect(() => {
+    const unsubscribe = webSocketService.subscribe((event) => {
+      if (event.type === 'voice_state') {
+        setVoiceState(event.data.state as VoiceState);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -201,7 +212,9 @@ export function ChatPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="relative h-full flex flex-col">
+      {/* Floating voice-state indicator (listening / thinking / speaking) */}
+      <ListeningIndicator state={voiceState} />
       {/* Header */}
       <div className="flex-shrink-0 px-6 py-4 border-b border-background-surface bg-background-primary">
         <div className="flex items-center justify-between">

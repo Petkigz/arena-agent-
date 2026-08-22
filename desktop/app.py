@@ -480,6 +480,12 @@ class ChatPage(QWidget):
         self.message_area.setStyleSheet(_textarea_style())
         right.addWidget(self.message_area, stretch=1)
 
+        # Floating voice-state banner (hidden unless listening/thinking/speaking).
+        self.voice_banner = QLabel()
+        self.voice_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.voice_banner.hide()
+        right.addWidget(self.voice_banner)
+
         composer = QHBoxLayout()
         self.input = QLineEdit()
         self.input.setPlaceholderText("Message Beanie…")
@@ -534,6 +540,34 @@ class ChatPage(QWidget):
             self.messages.append(("assistant", self._streaming))
             self._streaming = ""
         self._render()
+
+    def set_voice_status(self, status: str) -> None:
+        """Show/hide the floating voice-state banner."""
+        labels = {
+            "listening": "Listening…",
+            "recording": "Listening…",
+            "processing": "Thinking…",
+            "thinking": "Thinking…",
+            "speaking": "Speaking…",
+        }
+        colors = {
+            "listening": "#10B981",
+            "recording": "#10B981",
+            "processing": "#F59E0B",
+            "thinking": "#F59E0B",
+            "speaking": "#8B5CF6",
+        }
+        if status not in labels:
+            self.voice_banner.hide()
+            return
+        label = labels[status]
+        color = colors[status]
+        self.voice_banner.setText(f'<span style="color:{color};">●</span>  {label}')
+        self.voice_banner.setStyleSheet(
+            f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 16px; padding: 6px 14px;"
+        )
+        self.voice_banner.show()
 
     # ── render ──────────────────────────────────────────────────────────────
     def _render(self) -> None:
@@ -974,6 +1008,7 @@ class MainWindow(QMainWindow):
     def _send_message(self, content: str) -> None:
         self.chat.append_message("user", content)
         self.beanie.set_status("thinking")
+        self.chat.set_voice_status("thinking")
         self.beanie.set_message("Thinking…")
         self.chat_client.send_user_message(self.current_conv_id, content)
 
@@ -982,6 +1017,7 @@ class MainWindow(QMainWindow):
         self.chat.stream_token(token, done)
         if done:
             self.beanie.set_status("idle")
+            self.chat.set_voice_status("idle")
             self.beanie.set_message("I'm here.")
 
     @Slot(list)
@@ -1032,6 +1068,7 @@ class MainWindow(QMainWindow):
         if self.voice.start():
             self._listening = True
             self.beanie.set_status("listening")
+            self.chat.set_voice_status("listening")
             self.beanie.set_message("Listening…")
             if self.settings.get("notifications_enabled"):
                 self.tray.showMessage("Arena", "Listening… say 'Hey Arena'.", QSystemTrayIcon.MessageIcon.Information, 2000)
@@ -1041,6 +1078,7 @@ class MainWindow(QMainWindow):
             self.voice.stop()
             self._listening = False
             self.beanie.set_status("idle")
+            self.chat.set_voice_status("idle")
             self.beanie.set_message("I'm here.")
 
     # ── Voice callbacks ─────────────────────────────────────────────────────
@@ -1048,11 +1086,13 @@ class MainWindow(QMainWindow):
         if is_final and text.strip():
             self.chat.append_message("user", text.strip())
             self.beanie.set_status("thinking")
+            self.chat.set_voice_status("thinking")
             self.beanie.set_message("Thinking…")
 
     def _on_voice_reply(self, text: str) -> None:
         self.chat.append_message("assistant", text)
         self.beanie.set_status("speaking")
+        self.chat.set_voice_status("speaking")
         self.beanie.set_message("Speaking…")
         self._speak(text)
         if self.settings.get("notifications_enabled") and not self.isVisible():
@@ -1078,6 +1118,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self.beanie.set_status("idle")
+        self.chat.set_voice_status("idle")
         self.beanie.set_message("I'm here.")
 
     def closeEvent(self, event) -> None:
