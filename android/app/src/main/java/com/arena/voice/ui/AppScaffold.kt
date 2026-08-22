@@ -22,6 +22,7 @@ import com.arena.voice.ui.screens.ChatScreen
 import com.arena.voice.ui.screens.FilesScreen
 import com.arena.voice.ui.screens.PansophyScreen
 import com.arena.voice.ui.screens.PresenceStatus
+import com.arena.voice.ui.screens.ProjectsScreen
 import com.arena.voice.ui.screens.SettingsScreen
 import com.arena.voice.ui.screens.VisionScreen
 
@@ -31,6 +32,7 @@ enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     PANSOPHY("pansophy", "Pansophy", Icons.Default.Brain),
     FILES("files", "Files", Icons.Default.Folder),
     IMAGES("images", "Images", Icons.Default.Image),
+    PROJECTS("projects", "Projects", Icons.Default.Folder),
     SETTINGS("settings", "Settings", Icons.Default.Settings),
 }
 
@@ -113,6 +115,9 @@ fun AppScaffold(
             }
             composable(AppTab.IMAGES.route) {
                 VisionScreen()
+            }
+            composable(AppTab.PROJECTS.route) {
+                ProjectsScreen()
             }
             composable(AppTab.SETTINGS.route) {
                 SettingsScreen(

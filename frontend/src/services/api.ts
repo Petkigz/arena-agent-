@@ -601,6 +601,56 @@ export interface KnowledgeRelationship {
   last_confirmed: string;
 }
 
+export interface BackendProject {
+  project_id: string;
+  name: string;
+  description: string;
+  status: string;
+  priority: string;
+  progress_percent: number;
+  milestones_total: number;
+  milestones_reached: number;
+  total_sessions: number;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listBackendProjects(): Promise<BackendProject[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects`, { headers: apiKeyHeader() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.projects) ? data.projects as BackendProject[] : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getBackendProject(projectId: string): Promise<{ project: BackendProject; resume_context?: Record<string, unknown>; decomposition?: Record<string, unknown> } | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}`, { headers: apiKeyHeader() });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function createBackendProject(name: string, description = "", priority = "normal", milestones?: string[], tags?: string[]): Promise<{ project_id: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ name, description, priority, milestones, tags }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch the world-model knowledge graph (entities + relationships) from the
  * backend, so the web Pansophy shows the same graph as the desktop/Android.

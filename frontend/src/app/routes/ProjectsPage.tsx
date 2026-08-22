@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjectStore } from '../../stores';
 import { ProjectCard } from '../../components/projects/ProjectCard';
 import { Button } from '../../components/ui/Button';
@@ -7,7 +7,13 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { Plus, FolderKanban, Search } from 'lucide-react';
 
 export function ProjectsPage() {
-  const { projects, createProject } = useProjectStore();
+  const { projects, createProject, hydrateFromBackend, createProjectBackend } = useProjectStore();
+
+  // Hydrate from backend (single source of truth) so projects created via cognitive runtime appear
+  useEffect(() => {
+    hydrateFromBackend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'archived' | 'on-hold'>('all');
@@ -27,10 +33,14 @@ export function ProjectsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!newProject.name.trim()) return;
 
-    createProject(newProject);
+    // Try backend first (persistent project), fallback to local store
+    const backendId = await createProjectBackend(newProject.name, newProject.description, newProject.status, [], []);
+    if (!backendId) {
+      createProject(newProject);
+    }
     setShowCreateModal(false);
     setNewProject({
       name: '',

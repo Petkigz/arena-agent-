@@ -118,4 +118,15 @@ class ApiClient @Inject constructor(
                 null
             }
         }
+
+    // ── projects (P2 AGI: long-horizon + multi-session) ──────────────────────
+    suspend fun getBackendProjectsRaw(): String? = call("/projects")
+    suspend fun getBackendProjectRaw(projectId: String): String? = call("/projects/${java.net.URLEncoder.encode(projectId, "UTF-8")}")
+    suspend fun createBackendProjectRaw(name: String, description: String = ""): String? =
+        call("/projects", "POST", JSONObject().put("name", name).put("description", description).toString())
+
+    // ── LoRA + VLM status ────────────────────────────────────────────────────
+    suspend fun getVlmStatus(): String? = call("/vision/vlm-status")
+    suspend fun getLoras(): String? = call("/loras")
+    suspend fun getLoraStatus(): String? = call("/loras/status")
 }

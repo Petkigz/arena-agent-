@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { listBackendProjects, createBackendProject } from '../services/api';
 
 export interface ProjectTask {
   id: string;
@@ -81,6 +82,8 @@ interface ProjectStoreState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   getProjectProgress: (projectId: string) => number;
+  hydrateFromBackend: () => Promise<void>;
+  createProjectBackend: (name: string, description?: string, priority?: string, milestones?: string[], tags?: string[]) => Promise<string | null>;
 }
 
 export const useProjectStore = create<ProjectStoreState>()(
@@ -324,6 +327,69 @@ export const useProjectStore = create<ProjectStoreState>()(
 
         const completedTasks = project.tasks.filter((t) => t.status === 'done').length;
         return Math.round((completedTasks / project.tasks.length) * 100);
+      },
+
+      hydrateFromBackend: async () => {
+        try {
+          const backendProjects = await listBackendProjects();
+          if (!backendProjects.length) return;
+          set((state) => {
+            const existingById = new Map(state.projects.map((p) => [p.id, p]));
+            const merged: Project[] = backendProjects.map((bp) => {
+              const existing = existingById.get(bp.project_id) || existingById.get(bp.project_id.replace('proj-','')) as any;
+              if (existing) {
+                return { ...existing, name: bp.name, description: bp.description, status: (bp.status as any) || existing.status, progress: Math.round(bp.progress_percent), updatedAt: bp.updated_at };
+              }
+              return {
+                id: bp.project_id,
+                name: bp.name,
+                description: bp.description,
+                color: '#3b82f6',
+                status: (bp.status as any) || 'active',
+                progress: Math.round(bp.progress_percent),
+                tasks: [],
+                files: [],
+                conversations: [],
+                tags: bp.tags,
+                createdAt: bp.created_at,
+                updatedAt: bp.updated_at,
+              };
+            });
+            // Keep local-only
+            const backendIds = new Set(backendProjects.map((bp) => bp.project_id));
+            const localOnly = state.projects.filter((p) => !backendIds.has(p.id));
+            return { projects: [...merged, ...localOnly] };
+          });
+        } catch {}
+      },
+
+      createProjectBackend: async (name, description, priority, milestones, tags) => {
+        try {
+          const res = await createBackendProject(name, description || '', priority || 'normal', milestones, tags);
+          if (res?.project_id) {
+            // Optimistically add
+            const now = new Date().toISOString();
+            const proj: Project = {
+              id: res.project_id,
+              name,
+              description,
+              color: '#3b82f6',
+              status: 'active',
+              progress: 0,
+              tasks: [],
+              files: [],
+              conversations: [],
+              tags,
+              createdAt: now,
+              updatedAt: now,
+            };
+            set((state) => ({ projects: [proj, ...state.projects] }));
+            return res.project_id;
+          }
+          return null;
+        } catch {
+          return null;
+        }
       },
     }),
     {

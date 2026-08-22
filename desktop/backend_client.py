@@ -163,6 +163,38 @@ class ArenaBackendClient:
         """POST /vision/vlm-analyze — true VLM with fallback."""
         return self._post_json("/vision/vlm-analyze", {"image_path": image_path, "prompt_focus": prompt})
 
+    # Projects (P2 AGI: long-horizon + multi-session)
+    def list_projects(self) -> Dict[str, Any]:
+        """GET /projects — list persistent projects."""
+        return self._get_json("/projects")
+
+    def get_project(self, project_id: str) -> Dict[str, Any]:
+        """GET /projects/{id} — get project + resume context."""
+        return self._get_json(f"/projects/{project_id}")
+
+    def create_project(self, name: str, description: str = "", priority: str = "normal", milestones: list = None, tags: list = None) -> Dict[str, Any]:
+        """POST /projects — create persistent project."""
+        return self._post_json("/projects", {
+            "name": name,
+            "description": description,
+            "priority": priority,
+            "milestones": milestones or [],
+            "tags": tags or [],
+        })
+
+    # LoRA
+    def list_loras(self) -> Dict[str, Any]:
+        """GET /loras — list LoRA adapters."""
+        return self._get_json("/loras")
+
+    def lora_status(self) -> Dict[str, Any]:
+        """GET /loras/status — LoRA system status."""
+        return self._get_json("/loras/status")
+
+    def activate_lora(self, adapter_name: str) -> Dict[str, Any]:
+        """POST /loras/activate — activate adapter."""
+        return self._post_json("/loras/activate", {"adapter_name": adapter_name})
+
     def analyze_image(self, image_path: str, prompt_focus: Optional[str] = None,
                       auto_save_memory: bool = True) -> Dict[str, Any]:
         """POST /vision/analyze — OCR + LLM analysis of an image on the host."""
