@@ -12,23 +12,15 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * Wake word detection service.
+ * Local wake-word service for Beanie.
  *
- * Note: This uses a simulated wake word detector for demonstration.
- * To use Porcupine (Picovoice), you need:
- * 1. A Picovoice access key (sign up at https://console.picovoice.ai/)
- * 2. Add the access key to res/values/strings.xml as pv_access_key
- * 3. Create a custom wake word model (.ppn file) or use built-in keywords
- * 4. Add Porcupine dependency to build.gradle
- *
- * Without Porcupine, this service uses a simple energy-based detection
- * as a fallback for development purposes.
+ * The service boundary is ready for a native offline wake-word engine. The
+ * current fallback is intentionally marked as development-only; it must not
+ * be presented as real wake-word detection in production.
  */
 @AndroidEntryPoint
 class WakeWordService : Service() {
-
-    @Inject
-    lateinit var webSocketClient: VoiceWebSocketClient
+    @Inject lateinit var webSocketClient: VoiceWebSocketClient
 
     private var isListening = false
     private var simulationThread: Thread? = null
@@ -37,7 +29,7 @@ class WakeWordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "WakeWordService created")
+        Log.d(TAG, "Beanie WakeWordService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,132 +42,91 @@ class WakeWordService : Service() {
 
     private fun startListening() {
         if (isListening) return
-
         try {
-            // Create notification for foreground service
-            val notification = createNotification()
-            startForeground(NOTIFICATION_ID, notification)
-
+            startForeground(NOTIFICATION_ID, createNotification())
             isListening = true
-
-            // Try to use Porcupine if available
             if (tryStartPorcupine()) {
-                Log.i(TAG, "Porcupine wake word detection started")
+                Log.i(TAG, "Native wake-word engine started")
             } else {
-                // Fallback: simulated wake word for development
-                Log.w(TAG, "Porcupine not available, using simulated wake word detection")
-                startSimulatedDetection()
+                Log.w(TAG, "No configured native wake-word engine; using development fallback")
+                startDevelopmentFallback()
             }
-
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start wake word detection: ${e.message}")
+            Log.e(TAG, "Failed to start wake-word detection: ${e.message}")
             stopSelf()
         }
     }
 
     private fun tryStartPorcupine(): Boolean {
         return try {
-            // Check if Porcupine is available via reflection
-            val porcupineClass = Class.forName("ai.picovoice.porcupine.PorcupineManager")
-
-            // Try to get access key
+            Class.forName("ai.picovoice.porcupine.PorcupineManager")
             val accessKeyResId = resources.getIdentifier("pv_access_key", "string", packageName)
-            if (accessKeyResId == 0) {
-                Log.w(TAG, "No Porcupine access key found in resources")
-                return false
-            }
-
+            if (accessKeyResId == 0) return false
             val accessKey = getString(accessKeyResId)
-            if (accessKey.isBlank() || accessKey == "YOUR_ACCESS_KEY_HERE") {
-                Log.w(TAG, "Porcupine access key not configured")
-                return false
-            }
+            if (accessKey.isBlank() || accessKey == "YOUR_ACCESS_KEY_HERE") return false
 
-            // If we get here, Porcupine is available and configured
-            // In a real implementation, you'd initialize PorcupineManager here
-            Log.i(TAG, "Porcupine available but full integration requires .ppn model file")
-            false // Fall back to simulation for now
-
-        } catch (e: ClassNotFoundException) {
-            Log.d(TAG, "Porcupine SDK not installed")
+            // The actual Porcupine manager should be initialized here once the
+            // selected offline Beanie keyword model is committed to the app.
+            Log.i(TAG, "Wake-word SDK detected but keyword runtime is not configured")
+            false
+        } catch (_: ClassNotFoundException) {
             false
         } catch (e: Exception) {
-            Log.w(TAG, "Porcupine initialization failed: ${e.message}")
+            Log.w(TAG, "Wake-word initialization failed: ${e.message}")
             false
         }
     }
 
-    private fun startSimulatedDetection() {
-        // Simple simulation: periodically "detect" wake word for testing
-        // In production, replace with actual audio processing
+    private fun startDevelopmentFallback() {
         simulationThread = Thread {
-            Log.i(TAG, "Simulated wake word detection started (for development only)")
-
+            Log.w(TAG, "Development wake-word fallback active; not a production detector")
             while (isListening) {
                 try {
-                    Thread.sleep(30000) // Check every 30 seconds for simulation
-
-                    if (isListening) {
-                        // Simulate wake word detection
-                        Log.i(TAG, "Simulated wake word detected!")
-                        onWakeWordDetected()
-                    }
-                } catch (e: InterruptedException) {
+                    Thread.sleep(30000)
+                    if (isListening) onWakeWordDetected()
+                } catch (_: InterruptedException) {
                     break
                 }
             }
-        }
-        simulationThread?.start()
+        }.also { it.start() }
     }
 
     private fun stopListening() {
         if (!isListening) return
-
         isListening = false
-
-        // Stop simulation thread
         simulationThread?.interrupt()
         simulationThread = null
-
         stopForeground(STOP_FOREGROUND_REMOVE)
-
-        Log.i(TAG, "Wake word detection stopped")
         stopSelf()
     }
 
     private fun onWakeWordDetected() {
-        Log.i(TAG, "Wake word detected!")
-
-        // Notify WebSocket client
+        Log.i(TAG, "Beanie wake word detected")
         webSocketClient.onWakeWordDetected()
-
-        // Start voice recording service
         val recordingIntent = Intent(this, VoiceRecordingService::class.java).apply {
             action = VoiceRecordingService.ACTION_START
         }
         startService(recordingIntent)
     }
 
-    private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, ArenaVoiceApp.WAKE_WORD_CHANNEL_ID)
-            .setContentTitle("Arena Voice")
-            .setContentText("Listening for wake word...")
+    private fun createNotification(): Notification =
+        NotificationCompat.Builder(this, ArenaVoiceApp.WAKE_WORD_CHANNEL_ID)
+            .setContentTitle("Beanie")
+            .setContentText("Listening for Beanie's wake word")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
-    }
 
     override fun onDestroy() {
         stopListening()
         super.onDestroy()
-        Log.d(TAG, "WakeWordService destroyed")
+        Log.d(TAG, "Beanie WakeWordService destroyed")
     }
 
     companion object {
         private const val TAG = "WakeWordService"
         private const val NOTIFICATION_ID = 1001
-
         const val ACTION_START = "com.arena.voice.action.START_WAKE_WORD"
         const val ACTION_STOP = "com.arena.voice.action.STOP_WAKE_WORD"
     }
