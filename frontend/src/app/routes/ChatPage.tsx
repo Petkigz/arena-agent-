@@ -121,12 +121,16 @@ export function ChatPage() {
   }
 
   return (
-    <div className="h-full flex flex-col relative">
-      <div className="flex-shrink-0 px-6 py-4 border-b border-background-surface bg-background-primary">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-text-primary">{currentConversation.title}</h1>
-            {currentConversation.projectId && <p className="text-sm text-text-muted mt-0.5">Project: {currentConversation.projectId}</p>}
+    <div className="h-full flex flex-col relative bg-background-primary">
+      {/* ChatGPT-style conversation header: Beanie is the assistant identity; the chat title is secondary. */}
+      <div className="flex-shrink-0 px-5 md:px-7 py-3 border-b border-background-surface bg-background-primary">
+        <div className="flex items-center justify-between max-w-5xl mx-auto w-full">
+          <div className="flex items-center gap-3 min-w-0">
+            <PresenceOrb status={presenceStatus} size="sm" activity={audioLevel} />
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-text-primary">Beanie</h1>
+              <p className="text-xs text-text-muted truncate">{currentConversation.title}{currentConversation.projectId ? ` · ${currentConversation.projectId}` : ''}</p>
+            </div>
           </div>
           <button onClick={() => setShowShareMenu(true)} className="p-2 text-text-muted hover:text-text-primary hover:bg-background-secondary rounded-lg transition-colors" title="Share conversation" aria-label="Share conversation">
             <Share2 className="w-5 h-5" />
@@ -137,30 +141,36 @@ export function ChatPage() {
       {currentConversation.messages.length === 0 ? (
         <div className="flex-1 flex items-center justify-center px-6 py-4" role="region" aria-label="Messages">
           <div className="flex flex-col items-center text-center">
-            <PresenceOrb status={presenceStatus} size="md" activity={audioLevel} className="mb-1" />
-            <EmptyState icon={<MessageCircle className="w-8 h-8" />} title="Start a conversation" description="Send a message or use voice input to begin" />
+            <PresenceOrb status={presenceStatus} size="lg" activity={audioLevel} className="mb-3" />
+            <h2 className="text-2xl font-semibold text-text-primary mb-1">How can Beanie help?</h2>
+            <p className="text-sm text-text-muted">Send a message or use voice input to begin.</p>
           </div>
         </div>
       ) : currentConversation.messages.length > 50 ? (
-        <VirtualMessageList messages={currentConversation.messages} onRetry={handleRetry} onDelete={handleDelete} className="px-6" />
+        <VirtualMessageList messages={currentConversation.messages} onRetry={handleRetry} onDelete={handleDelete} className="px-4 md:px-8" />
       ) : (
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions">
-          {currentConversation.messages.map((message) => <MessageBubble key={message.id} message={message} onRetry={handleRetry} onDelete={handleDelete} />)}
-          <div ref={messagesEndRef} />
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-5" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {currentConversation.messages.map((message) => <MessageBubble key={message.id} message={message} onRetry={handleRetry} onDelete={handleDelete} />)}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
       )}
 
       {isListening && (
         <div className="absolute left-1/2 bottom-24 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="rounded-2xl bg-background-primary/90 backdrop-blur-md border border-background-surface shadow-2xl px-4 py-1.5 flex items-center gap-2">
+          <div className="rounded-2xl bg-background-primary/90 backdrop-blur-md border border-background-surface shadow-2xl px-4 py-2 flex items-center gap-2">
             <PresenceOrb status={presenceStatus} size="xs" activity={audioLevel} />
-            <span className="text-xs text-text-secondary">{voiceState === 'speaking' ? 'Beanie is speaking...' : voiceState === 'thinking' || voiceState === 'processing' ? 'Beanie is thinking...' : 'Listening...'}</span>
+            <span className="text-xs text-text-secondary">Listening to you…</span>
           </div>
         </div>
       )}
 
-      <div className="flex-shrink-0">
-        <ChatInput onSendMessage={handleSendMessage} onVoiceStart={startListening} onVoiceStop={stopListening} isListening={isListening} disabled={!webSocketService.isConnected} />
+      <div className="flex-shrink-0 px-3 md:px-6 pb-3 bg-background-primary">
+        <div className="max-w-4xl mx-auto">
+          <ChatInput onSendMessage={handleSendMessage} onVoiceStart={startListening} onVoiceStop={stopListening} isListening={isListening} disabled={!webSocketService.isConnected} />
+          <p className="text-[10px] text-center text-text-muted mt-2">Beanie can make mistakes. Verify important information.</p>
+        </div>
       </div>
 
       {currentConversation && <ConversationShareMenu conversation={currentConversation} isOpen={showShareMenu} onClose={() => setShowShareMenu(false)} />}
