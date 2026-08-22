@@ -1,0 +1,160 @@
+"""ChatPage — extracted."""
+
+from __future__ import annotations
+
+from typing import List, Optional
+
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget, QFrame
+
+from desktop.backend_client import ArenaBackendClient, BackendConnectionError
+from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT
+from desktop.styles import _button_style, _input_style
+from desktop.pages.message_bubble import MessageBubble
+from desktop.widgets.orb import PresenceOrbWidget
+
+class ChatPage(QWidget):
+    """ChatGPT-style conversation: message bubbles + composer (sidebar lives in MainWindow).
+
+    Messages are individual widgets in a scroll area, so assistant bubbles show
+    the animated presence orb inline instead of an HTML "● Beanie" text label.
+    """
+
+    def __init__(self, on_send, on_voice, parent=None):
+        super().__init__(parent)
+        self._on_send = on_send
+        self._on_voice = on_voice
+
+        self._bubbles: List[MessageBubble] = []
+        self._streaming_bubble: Optional[MessageBubble] = None
+        self._streaming = ""
+
+        right = QVBoxLayout(self)
+        right.setContentsMargins(16, 16, 16, 12)
+        right.setSpacing(8)
+
+        # Scrollable message list (widget-based, so orbs animate in place).
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet(f"background: {BG_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+
+        self.container = QWidget()
+        self.container.setStyleSheet(f"background: {BG_PRIMARY};")
+        self.list_layout = QVBoxLayout(self.container)
+        self.list_layout.setContentsMargins(12, 12, 12, 12)
+        self.list_layout.setSpacing(6)
+        self.list_layout.addStretch(1)  # push bubbles to the top; new ones insert above it
+        self.scroll.setWidget(self.container)
+        right.addWidget(self.scroll, stretch=1)
+
+        # Floating voice-state banner (hidden unless listening/thinking/speaking).
+        self.voice_banner = QLabel()
+        self.voice_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.voice_banner.hide()
+        right.addWidget(self.voice_banner)
+
+        composer = QHBoxLayout()
+        self.input = QLineEdit()
+        self.input.setPlaceholderText("Message Beanie…")
+        self.input.setStyleSheet(_input_style())
+        self.input.returnPressed.connect(self._submit)
+        composer.addWidget(self.input, stretch=1)
+
+        self.mic_btn = QPushButton("🎙")
+        self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.mic_btn.clicked.connect(self._on_voice)
+        composer.addWidget(self.mic_btn)
+
+        self.send_btn = QPushButton("Send")
+        self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.send_btn.clicked.connect(self._submit)
+        composer.addWidget(self.send_btn)
+
+        right.addLayout(composer)
+
+    # ── events ──────────────────────────────────────────────────────────────
+    def _submit(self) -> None:
+        content = self.input.text().strip()
+        if content:
+            self._on_send(content)
+            self.input.clear()
+
+    def clear_messages(self) -> None:
+        for bubble in self._bubbles:
+            bubble.deleteLater()
+        if self._streaming_bubble is not None:
+            self._streaming_bubble.deleteLater()
+        self._bubbles = []
+        self._streaming_bubble = None
+        self._streaming = ""
+
+    def append_message(self, role: str, content: str) -> None:
+        bubble = MessageBubble(role, content)
+        self._bubbles.append(bubble)
+        self._insert_bubble(bubble)
+
+    def stream_token(self, token: str, done: bool) -> None:
+        if self._streaming_bubble is None:
+            self._streaming_bubble = MessageBubble("assistant", "")
+            self._streaming_bubble.set_status("thinking")
+            self._insert_bubble(self._streaming_bubble)
+        self._streaming += token
+        self._streaming_bubble.set_text(self._streaming)
+        if done:
+            self._streaming_bubble.set_status("idle")
+            self._bubbles.append(self._streaming_bubble)
+            self._streaming_bubble = None
+            self._streaming = ""
+        self._scroll_to_bottom()
+
+    def refresh_theme(self) -> None:
+        self.scroll.setStyleSheet(f"background: {BG_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+        self.container.setStyleSheet(f"background: {BG_PRIMARY};")
+        self.input.setStyleSheet(_input_style())
+        self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        for bubble in self._bubbles:
+            bubble.refresh_theme()
+        if self._streaming_bubble is not None:
+            self._streaming_bubble.refresh_theme()
+
+    def set_voice_status(self, status: str) -> None:
+        """Show/hide the floating voice-state banner."""
+        labels = {
+            "listening": "Listening…",
+            "recording": "Listening…",
+            "processing": "Thinking…",
+            "thinking": "Thinking…",
+            "speaking": "Speaking…",
+        }
+        colors = {
+            "listening": "#10B981",
+            "recording": "#10B981",
+            "processing": "#F59E0B",
+            "thinking": "#F59E0B",
+            "speaking": "#8B5CF6",
+        }
+        if status not in labels:
+            self.voice_banner.hide()
+            return
+        label = labels[status]
+        color = colors[status]
+        self.voice_banner.setText(f'<span style="color:{color};">●</span>  {label}')
+        self.voice_banner.setStyleSheet(
+            f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 16px; padding: 6px 14px;"
+        )
+        self.voice_banner.show()
+
+    # ── internals ───────────────────────────────────────────────────────────
+    def _insert_bubble(self, bubble: MessageBubble) -> None:
+        # Insert above the trailing stretch (which sits at the last index).
+        self.list_layout.insertWidget(self.list_layout.count() - 1, bubble)
+
+    def _scroll_to_bottom(self) -> None:
+        # Defer to the next event-loop tick so the layout has settled first.
+        QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(
+            self.scroll.verticalScrollBar().maximum()))
+

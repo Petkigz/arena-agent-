@@ -1,8 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useModelSettingsStore, type ModelConfig } from '../../stores';
-import { ArrowLeft, Brain, Mic, Volume2, Gauge, Zap, Cpu, Shield, RotateCcw, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Brain, Mic, Volume2, Gauge, Zap, Cpu, Shield, RotateCcw, CheckCircle, XCircle, Layers } from 'lucide-react';
+import { getSharedSettings } from '../../services/api';
+
+interface LoraAdapter {
+  name: string;
+  base_model: string;
+  size_mb: number;
+  training_info?: { skill_name?: string };
+}
+
+interface LoraStatus {
+  adapters_count: number;
+  adapters: LoraAdapter[];
+  active?: string;
+  datasets: string[];
+  note?: string;
+}
 
 export function ModelSettingsPage() {
   const navigate = useNavigate();
@@ -25,6 +41,21 @@ export function ModelSettingsPage() {
 
   const [testingModel, setTestingModel] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, ReturnType<typeof validateModelConfig>>>({});
+  const [loraStatus, setLoraStatus] = useState<LoraStatus | null>(null);
+  const [vlmStatus, setVlmStatus] = useState<{ available: boolean; model_id?: string; engine?: string; note?: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Fetch LoRA status
+    fetch('/loras/status').then((r) => r.ok ? r.json() : null).then((data) => {
+      if (!cancelled && data) setLoraStatus(data);
+    }).catch(() => {});
+    // Fetch VLM status
+    fetch('/vision/vlm-status').then((r) => r.ok ? r.json() : null).then((data) => {
+      if (!cancelled && data) setVlmStatus(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const handleTestModel = async (type: 'llm' | 'stt' | 'tts', model: ModelConfig) => {
     setTestingModel(model.id);
@@ -225,6 +256,91 @@ export function ModelSettingsPage() {
               )
             )}
           </div>
+        </section>
+
+        {/* LoRA Continual Learning (P2 AGI) */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Layers className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Continual Learning — LoRA Adapters</h2>
+          </div>
+          <p className="text-sm text-text-secondary mb-4">
+            LoRA enables the agent to get better at tasks it has seen before without catastrophic forgetting — a key human intelligence capability. Adapters live in <code>data/loras/</code> and are discovered automatically.
+          </p>
+          <Card className="space-y-4">
+            {loraStatus ? (
+              <>
+                <div className="text-sm text-text-primary">
+                  <span className="font-medium">Active:</span> {loraStatus.active || '(none — base model)'}
+                </div>
+                <div className="text-sm text-text-secondary">
+                  {loraStatus.adapters_count} adapter(s) — datasets: {loraStatus.datasets.join(', ') || '(none)'}
+                </div>
+                {loraStatus.adapters.length ? (
+                  <ul className="space-y-2">
+                    {loraStatus.adapters.map((a) => (
+                      <li key={a.name} className="flex items-center justify-between p-2 bg-background-surface rounded">
+                        <div>
+                          <span className="font-medium">{a.name}</span>
+                          <span className="text-xs text-text-muted ml-2">{a.base_model} — {a.size_mb} MB {a.training_info?.skill_name ? `(skill: ${a.training_info.skill_name})` : ''}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              fetch('/loras/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adapter_name: a.name }) })
+                                .then(() => fetch('/loras/status').then((r) => r.json()).then(setLoraStatus));
+                            }}
+                            className="px-2 py-1 text-xs bg-accent-primary text-white rounded"
+                          >
+                            Activate
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-text-muted">No adapters yet. Prepare dataset via POST /loras/dataset then POST /loras/train-job, or run scripts/train_lora.py</p>
+                )}
+                {loraStatus.active && (
+                  <button
+                    onClick={() => {
+                      fetch('/loras/deactivate', { method: 'POST' }).then(() => fetch('/loras/status').then((r) => r.json()).then(setLoraStatus));
+                    }}
+                    className="px-3 py-1.5 text-sm bg-background-surface text-text-secondary rounded"
+                  >
+                    Deactivate (use base model)
+                  </button>
+                )}
+                {loraStatus.note && <p className="text-xs text-text-muted">{loraStatus.note}</p>}
+              </>
+            ) : (
+              <p className="text-xs text-text-muted">Loading LoRA status… (backend may be offline)</p>
+            )}
+          </Card>
+        </section>
+
+        {/* VLM Status (P2 AGI: true visual understanding) */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Brain className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Vision — VLM Status</h2>
+          </div>
+          <p className="text-sm text-text-secondary mb-4">
+            True VLM (Moondream2 / Llava-Phi) with OCR+LLM fallback. RX 580 8GB can hold Moondream2 1.8B Q4 alongside Qwen 3B fast. Honest status.
+          </p>
+          <Card className="space-y-2">
+            {vlmStatus ? (
+              <>
+                <div className="text-sm">
+                  <span className="font-medium">Available:</span> {vlmStatus.available ? '✅ Yes' : '❌ No (fallback OCR+LLM)'}
+                </div>
+                <div className="text-xs text-text-muted">Engine: {vlmStatus.engine} — Model: {vlmStatus.model_id}</div>
+                {vlmStatus.note && <p className="text-xs text-text-muted">{vlmStatus.note}</p>}
+              </>
+            ) : (
+              <p className="text-xs text-text-muted">Loading VLM status…</p>
+            )}
+          </Card>
         </section>
 
         {/* Confidence Thresholds */}
