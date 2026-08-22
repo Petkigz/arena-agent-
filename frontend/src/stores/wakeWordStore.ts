@@ -1,4 +1,5 @@
 import { logger } from '../services/logger';
+import { apiKeyHeader } from '../services/api';
 import { create } from 'zustand';
 import { notifications } from '../services/notifications';
 
@@ -69,7 +70,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
 
   fetchModels: async () => {
     try {
-      const response = await fetch(API_BASE_URL + '/api/wakeword/models');
+      const response = await fetch(API_BASE_URL + '/api/wakeword/models', { headers: apiKeyHeader() });
       if (!response.ok) throw new Error('Failed to fetch models');
 
       const models = await response.json();
@@ -92,7 +93,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
     try {
       const response = await fetch(API_BASE_URL + '/api/wakeword/train', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify({
           wake_word: wakeWord,
           samples,
@@ -127,6 +128,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE_URL}/api/wakeword/models/${modelId}/activate`, {
         method: 'POST',
+        headers: apiKeyHeader(),
       });
 
       if (!response.ok) throw new Error('Failed to activate model');
@@ -151,6 +153,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE_URL}/api/wakeword/models/${modelId}`, {
         method: 'DELETE',
+        headers: apiKeyHeader(),
       });
 
       if (!response.ok) throw new Error('Failed to delete model');
@@ -169,7 +172,7 @@ export const useWakeWordStore = create<WakeWordStoreState>((set, get) => ({
 
   fetchActiveModel: async () => {
     try {
-      const response = await fetch(API_BASE_URL + '/api/wakeword/active');
+      const response = await fetch(API_BASE_URL + '/api/wakeword/active', { headers: apiKeyHeader() });
       if (!response.ok) throw new Error('Failed to fetch active model');
 
       const result = await response.json();

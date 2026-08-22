@@ -5,6 +5,20 @@ import { logger } from './logger';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+/**
+ * The API key the WebSocket uses (VITE_API_KEY), reused for HTTP so every
+ * request is authenticated the same way when ARENA_API_KEY is enabled on the
+ * backend. When unset (localhost default), this is an empty string and no
+ * header is sent — matching the backend's auth-disabled mode.
+ */
+function apiKeyHeader(): Record<string, string> {
+  const apiKey = import.meta.env.VITE_API_KEY;
+  return apiKey ? { 'X-API-Key': apiKey } : {};
+}
+
+/** Exported for other API-calling modules (e.g. wakeWordStore) to stay in sync. */
+export { apiKeyHeader };
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -61,6 +75,10 @@ export async function uploadFile(
       });
 
       xhr.open('POST', `${API_BASE_URL}/api/files/upload`);
+      // Harden: pass the same API key the WebSocket uses, so uploads keep
+      // working when ARENA_API_KEY is enabled on the backend.
+      const headers = apiKeyHeader();
+      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
       xhr.send(formData);
     });
   } catch (error) {
@@ -73,7 +91,9 @@ export async function uploadFile(
  */
 export async function downloadFile(fileId: string): Promise<Blob | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`);
+    const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
+      headers: apiKeyHeader(),
+    });
     if (!response.ok) {
       throw new Error(`Download failed: ${response.statusText}`);
     }
@@ -91,6 +111,7 @@ export async function deleteFile(fileId: string): Promise<ApiResponse<void>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
       method: 'DELETE',
+      headers: apiKeyHeader(),
     });
 
     if (!response.ok) {
@@ -123,6 +144,7 @@ export async function executeCode(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...apiKeyHeader(),
       },
       body: JSON.stringify({ code, language, timeout }),
     });
@@ -159,6 +181,7 @@ export async function analyzeAttachment(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...apiKeyHeader(),
       },
       body: JSON.stringify({ fileId, analysisType, promptFocus }),
     });
@@ -197,7 +220,9 @@ export async function listFiles(conversationId?: string): Promise<ApiResponse<{
       ? `${API_BASE_URL}/api/files?conversationId=${conversationId}`
       : `${API_BASE_URL}/api/files`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: apiKeyHeader(),
+    });
 
     if (!response.ok) {
       const error = await response.json();
