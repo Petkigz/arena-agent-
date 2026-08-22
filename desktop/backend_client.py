@@ -116,6 +116,23 @@ class ArenaBackendClient:
             "max_results": max_results,
         })
 
+    # ── knowledge / memory (Pansophy) ───────────────────────────────────────
+    def list_memories(self, category: Optional[str] = None) -> list:
+        """GET /memories → list of memory dicts."""
+        path = "/memories" + (f"?category={category}" if category else "")
+        data = self._get_json(path)
+        return data if isinstance(data, list) else []
+
+    # ── models (Settings) ───────────────────────────────────────────────────
+    def list_models(self) -> Dict[str, Any]:
+        """GET /models → LM Studio model info."""
+        return self._get_json("/models")
+
+    # ── code execution ──────────────────────────────────────────────────────
+    def execute_code(self, code: str, language: str = "python") -> Dict[str, Any]:
+        """POST /code/execute."""
+        return self._post_json("/code/execute", {"code": code, "language": language})
+
     # ── helpers ─────────────────────────────────────────────────────────────
     def _get_json(self, path: str) -> Dict[str, Any]:
         try:

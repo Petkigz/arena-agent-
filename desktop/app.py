@@ -485,8 +485,12 @@ class LeftSidebar(QFrame):
         self.conv_list.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.conv_list, stretch=1)
 
-        # Navigation (mirrors the web sidebar: Chats / Files / …)
-        for label, key in [("Chats", "chat"), ("Files", "tools"), ("Beanie", "beanie")]:
+        # Navigation (mirrors the web sidebar: Chats / Pansophy / Files / Code / Settings)
+        for label, key in [
+            ("Chats", "chat"), ("Pansophy", "pansophy"), ("Files", "files"),
+            ("Code", "code"), ("Settings", "settings"),
+            ("Beanie", "beanie"), ("Tools", "tools"),
+        ]:
             btn = QPushButton(label)
             btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
             btn.clicked.connect(lambda _=False, k=key: on_nav(k))
@@ -540,6 +544,193 @@ class ContextPanel(QFrame):
 
     def set_text(self, text: str) -> None:
         self.body.setText(text)
+
+
+class FilesPage(QWidget):
+    """File search — mirrors the web Files page."""
+
+    def __init__(self, client: ArenaBackendClient, parent=None):
+        super().__init__(parent)
+        self._client = client
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Files")
+        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        row = QHBoxLayout()
+        self.input = QLineEdit()
+        self.input.setPlaceholderText("Search files…")
+        self.input.setStyleSheet(_input_style())
+        self.input.returnPressed.connect(self._search)
+        row.addWidget(self.input, 1)
+        btn = QPushButton("Search")
+        btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        btn.clicked.connect(self._search)
+        row.addWidget(btn)
+        layout.addLayout(row)
+
+        self.results = QListWidget()
+        self.results.setStyleSheet(
+            f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+        )
+        layout.addWidget(self.results, 1)
+
+    def _search(self) -> None:
+        q = self.input.text().strip()
+        if not q:
+            return
+        self.results.clear()
+        try:
+            res = self._client.search_files(q)
+            results = res if isinstance(res, list) else res.get("results", [])
+            for item in results[:100]:
+                self.results.addItem(str(item.get("name") or item.get("path") or item))
+            if not results:
+                self.results.addItem("(no results)")
+        except BackendConnectionError as e:
+            self.results.addItem(f"⚠ {e}")
+
+
+class PansophyPage(QWidget):
+    """Knowledge / memory — mirrors the web Pansophy page (list view)."""
+
+    def __init__(self, client: ArenaBackendClient, parent=None):
+        super().__init__(parent)
+        self._client = client
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Pansophy")
+        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        refresh = QPushButton("Refresh")
+        refresh.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        refresh.clicked.connect(self._load)
+        layout.addWidget(refresh)
+
+        self.list = QListWidget()
+        self.list.setStyleSheet(
+            f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+        )
+        layout.addWidget(self.list, 1)
+        self._load()
+
+    def _load(self) -> None:
+        self.list.clear()
+        try:
+            memories = self._client.list_memories()
+            for m in memories[:200]:
+                text = m.get("title") or m.get("content") or str(m)
+                self.list.addItem(str(text))
+            if self.list.count() == 0:
+                self.list.addItem("(no memories yet)")
+        except BackendConnectionError as e:
+            self.list.addItem(f"⚠ {e}")
+
+
+class SettingsPage(QWidget):
+    """Settings: server URL + API key + models."""
+
+    def __init__(self, settings: DesktopSettings, client: ArenaBackendClient, on_save, parent=None):
+        super().__init__(parent)
+        self._settings = settings
+        self._client = client
+        self._on_save = on_save
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Settings")
+        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        url_label = QLabel("Server URL")
+        url_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        layout.addWidget(url_label)
+        self.url_input = QLineEdit(settings.get("server_url"))
+        self.url_input.setStyleSheet(_input_style())
+        layout.addWidget(self.url_input)
+
+        save = QPushButton("Save")
+        save.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        save.clicked.connect(self._save)
+        layout.addWidget(save)
+
+        models_label = QLabel("Models (LM Studio)")
+        models_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        layout.addWidget(models_label)
+        self.models_text = QLabel("Loading…")
+        self.models_text.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 13px;")
+        self.models_text.setWordWrap(True)
+        layout.addWidget(self.models_text)
+
+        layout.addStretch(1)
+        self._load_models()
+
+    def _save(self) -> None:
+        url = self.url_input.text().strip()
+        self._settings.set("server_url", url)
+        if self._on_save:
+            self._on_save(url)
+
+    def _load_models(self) -> None:
+        try:
+            data = self._client.list_models()
+            loaded = data.get("loaded_models") or data.get("available_models") or []
+            text = "\n".join(loaded[:20]) if loaded else "No models reported."
+            self.models_text.setText(text)
+        except BackendConnectionError as e:
+            self.models_text.setText(f"⚠ {e}")
+
+
+class CodePage(QWidget):
+    """Code execution — mirrors the web Code page (uses the backend sandbox)."""
+
+    def __init__(self, client: ArenaBackendClient, parent=None):
+        super().__init__(parent)
+        self._client = client
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Code")
+        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(title)
+
+        self.code = QTextEdit()
+        self.code.setPlaceholderText("Enter Python code…")
+        self.code.setStyleSheet(_textarea_style())
+        layout.addWidget(self.code, 1)
+
+        run = QPushButton("Run")
+        run.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        run.clicked.connect(self._run)
+        layout.addWidget(run)
+
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setStyleSheet(_textarea_style())
+        self.output.setFixedHeight(140)
+        layout.addWidget(self.output)
+
+    def _run(self) -> None:
+        code = self.code.toPlainText().strip()
+        if not code:
+            return
+        self.output.setPlainText("Running…")
+        try:
+            res = self._client.execute_code(code, "python")
+            out = res.get("output") or res.get("stdout") or res.get("result") or str(res)
+            self.output.setPlainText(str(out))
+        except BackendConnectionError as e:
+            self.output.setPlainText(f"⚠ {e}")
 
 
 class ChatPage(QWidget):
@@ -932,6 +1123,10 @@ class MainWindow(QMainWindow):
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
         self.chat = ChatPage(on_send=self._send_message, on_voice=self._toggle_talk)
+        self.pansophy = PansophyPage(self.client)
+        self.files = FilesPage(self.client)
+        self.code = CodePage(self.client)
+        self.settings_page = SettingsPage(self.settings, self.client, on_save=self._on_save_server_url)
         self.tools = ToolsPage(self.client)
 
         # Cross-thread: capture thread emits → orb.set_level runs on GUI thread.
@@ -948,9 +1143,13 @@ class MainWindow(QMainWindow):
 
         # Center stack (Chat is the default view)
         self.stack = QStackedWidget()
-        self.stack.addWidget(self.chat)     # index 0
-        self.stack.addWidget(self.beanie)   # index 1
-        self.stack.addWidget(self.tools)    # index 2
+        self.stack.addWidget(self.chat)         # index 0
+        self.stack.addWidget(self.pansophy)     # index 1
+        self.stack.addWidget(self.files)        # index 2
+        self.stack.addWidget(self.code)         # index 3
+        self.stack.addWidget(self.settings_page)  # index 4
+        self.stack.addWidget(self.beanie)       # index 5
+        self.stack.addWidget(self.tools)        # index 6
         self.stack.setCurrentIndex(0)
 
         # Right context panel
@@ -1029,10 +1228,19 @@ class MainWindow(QMainWindow):
 
     # ── Navigation ──
     def _nav_to_key(self, key: str) -> None:
-        index = {"chat": 0, "beanie": 1, "tools": 2}.get(key, 0)
+        index = {
+            "chat": 0, "pansophy": 1, "files": 2, "code": 3,
+            "settings": 4, "beanie": 5, "tools": 6,
+        }.get(key, 0)
         self.stack.setCurrentIndex(index)
         if key == "tools":
             self.tools.refresh_status()
+
+    def _on_save_server_url(self, url: str) -> None:
+        self.tray.showMessage(
+            "Beanie", f"Server URL saved: {url}\nRestart the app to reconnect.",
+            QSystemTrayIcon.MessageIcon.Information, 3000,
+        )
 
     def _set_status(self, status: str) -> None:
         """Update the orb on both the Beanie page and the sidebar."""
