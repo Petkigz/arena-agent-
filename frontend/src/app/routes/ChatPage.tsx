@@ -4,6 +4,7 @@ import { EmptyState } from '../../components/ui';
 import { PresenceOrb } from '../../components/presence/PresenceOrb';
 import { MessageCircle, Share2 } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
+import { useVoice } from '../../hooks/useVoice';
 import { webSocketService } from '../../services/websocket';
 import * as api from '../../services/api';
 import type { Message, ActionStep } from '../../types';
@@ -14,44 +15,6 @@ export function ChatPage() {
   const { currentConversation, conversations, sendMessage, addMessage, updateMessage, removeMessage } = useConversationStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const [voiceActive, setVoiceActive] = useState(false);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentConversation?.messages]);
-
-  useEffect(() => {
-    const unsubscribe = webSocketService.subscribe((event) => {
-      if (!currentConversation) return;
-
-      if (event.type === 'message') {
-        const message = event.data as Message;
-        if (!message.conversationId || message.conversationId === currentConversation.id) addMessage(message);
-      } else if (event.type === 'message_ack') {
-        const { conversation_id } = event.data as { conversation_id: string; status: string };
-        if (conversation_id === currentConversation.id) {
-          const sending = currentConversation.messages.find((m) => m.id.startsWith('temp-') && m.status === 'sending');
-          if (sending) updateMessage(sending.id, { status: 'sent' as const });
-        }
-      } else if (event.type === 'message_token') {
-        const { conversation_id, message_id, token, done } = event.data as { conversation_id: string; message_id: string; token: string; done: boolean };
-        if (conversation_id !== currentConversation.id) return;
-        const existing = currentConversation.messages.find((m) => m.id === message_id);
-        if (existing) {
-          updateMessage(message_id, { content: existing.content + token, status: done ? 'complete' as const : 'streaming' as const });
-        } else {
-          addMessage({ id: message_id, role: 'assistant', content: token, timestamp: new Date().toISOString(), status: done ? 'complete' as const : 'streaming' as const });
-        }
-      } else if (event.type === 'action_step') {
-        const step = event.data as ActionStep & { message_id: string };
-        const message = currentConversation.messages.find((m) => m.id === step.message_id);
-        if (message && message.actionSteps) {
-          updateMessage(step.message_id, { actionSteps: message.actionSteps.map((s) => s.id === step.id ? { ...s, ...step } : s) });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [currentConversation, conversations, addMessage, updateMessage]);
 
   const handleSendMessage = useCallback(async (content: string, attachments?: Attachment[]) => {
     if (!currentConversation) return;
@@ -88,6 +51,52 @@ export function ChatPage() {
     sendMessage(content);
   }, [currentConversation, addMessage, sendMessage]);
 
+  const handleVoiceTranscript = useCallback((text: string, isFinal: boolean) => {
+    if (isFinal && text.trim()) void handleSendMessage(text.trim());
+  }, [handleSendMessage]);
+
+  const conversationId = currentConversation?.id ?? '';
+  const { voiceState, isListening, startListening, stopListening, audioLevel } = useVoice({
+    conversationId,
+    onTranscript: handleVoiceTranscript,
+    onError: (message) => toast.error(message),
+  });
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentConversation?.messages]);
+
+  useEffect(() => {
+    const unsubscribe = webSocketService.subscribe((event) => {
+      if (!currentConversation) return;
+
+      if (event.type === 'message') {
+        const message = event.data as Message;
+        if (!message.conversationId || message.conversationId === currentConversation.id) addMessage(message);
+      } else if (event.type === 'message_ack') {
+        const { conversation_id } = event.data as { conversation_id: string; status: string };
+        if (conversation_id === currentConversation.id) {
+          const sending = currentConversation.messages.find((m) => m.id.startsWith('temp-') && m.status === 'sending');
+          if (sending) updateMessage(sending.id, { status: 'sent' as const });
+        }
+      } else if (event.type === 'message_token') {
+        const { conversation_id, message_id, token, done } = event.data as { conversation_id: string; message_id: string; token: string; done: boolean };
+        if (conversation_id !== currentConversation.id) return;
+        const existing = currentConversation.messages.find((m) => m.id === message_id);
+        if (existing) {
+          updateMessage(message_id, { content: existing.content + token, status: done ? 'complete' as const : 'streaming' as const });
+        } else {
+          addMessage({ id: message_id, role: 'assistant', content: token, timestamp: new Date().toISOString(), status: done ? 'complete' as const : 'streaming' as const });
+        }
+      } else if (event.type === 'action_step') {
+        const step = event.data as ActionStep & { message_id: string };
+        const message = currentConversation.messages.find((m) => m.id === step.message_id);
+        if (message?.actionSteps) updateMessage(step.message_id, { actionSteps: message.actionSteps.map((s) => s.id === step.id ? { ...s, ...step } : s) });
+      }
+    });
+    return unsubscribe;
+  }, [currentConversation, conversations, addMessage, updateMessage]);
+
   const handleRetry = useCallback((messageId: string) => {
     if (!currentConversation) return;
     const message = currentConversation.messages.find((m) => m.id === messageId);
@@ -99,17 +108,13 @@ export function ChatPage() {
 
   const handleDelete = useCallback((messageId: string) => removeMessage(messageId), [removeMessage]);
 
-  const handleVoiceStart = useCallback(() => {
-    if (!currentConversation) return;
-    setVoiceActive(true);
-    webSocketService.startVoiceInput(currentConversation.id);
-  }, [currentConversation]);
-
-  const handleVoiceStop = useCallback(() => {
-    if (!currentConversation) return;
-    setVoiceActive(false);
-    webSocketService.stopVoiceInput(currentConversation.id);
-  }, [currentConversation]);
+  const presenceStatus = voiceState === 'listening' || voiceState === 'recording'
+    ? 'listening'
+    : voiceState === 'speaking'
+      ? 'speaking'
+      : voiceState === 'thinking' || voiceState === 'processing'
+        ? 'working'
+        : 'idle';
 
   if (!currentConversation) {
     return <div className="h-full flex items-center justify-center"><EmptyState icon={<MessageCircle className="w-16 h-16" />} title="No conversation selected" description="Start a new conversation or select one from the sidebar" /></div>;
@@ -132,7 +137,7 @@ export function ChatPage() {
       {currentConversation.messages.length === 0 ? (
         <div className="flex-1 flex items-center justify-center px-6 py-4" role="region" aria-label="Messages">
           <div className="flex flex-col items-center text-center">
-            <PresenceOrb status={voiceActive ? 'listening' : 'idle'} size="md" className="mb-2" />
+            <PresenceOrb status={presenceStatus} size="md" activity={audioLevel} className="mb-1" />
             <EmptyState icon={<MessageCircle className="w-8 h-8" />} title="Start a conversation" description="Send a message or use voice input to begin" />
           </div>
         </div>
@@ -145,17 +150,17 @@ export function ChatPage() {
         </div>
       )}
 
-      {voiceActive && (
+      {isListening && (
         <div className="absolute left-1/2 bottom-24 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="rounded-full bg-background-primary/90 backdrop-blur-md border border-background-surface shadow-2xl px-5 py-2 flex items-center gap-2">
-            <PresenceOrb status="listening" size="xs" activity={0.7} />
-            <span className="text-xs text-text-secondary">Listening to you...</span>
+          <div className="rounded-2xl bg-background-primary/90 backdrop-blur-md border border-background-surface shadow-2xl px-4 py-1.5 flex items-center gap-2">
+            <PresenceOrb status={presenceStatus} size="xs" activity={audioLevel} />
+            <span className="text-xs text-text-secondary">{voiceState === 'speaking' ? 'Beanie is speaking...' : voiceState === 'thinking' || voiceState === 'processing' ? 'Beanie is thinking...' : 'Listening...'}</span>
           </div>
         </div>
       )}
 
       <div className="flex-shrink-0">
-        <ChatInput onSendMessage={handleSendMessage} onVoiceStart={handleVoiceStart} onVoiceStop={handleVoiceStop} isListening={voiceActive} disabled={!webSocketService.isConnected} />
+        <ChatInput onSendMessage={handleSendMessage} onVoiceStart={startListening} onVoiceStop={stopListening} isListening={isListening} disabled={!webSocketService.isConnected} />
       </div>
 
       {currentConversation && <ConversationShareMenu conversation={currentConversation} isOpen={showShareMenu} onClose={() => setShowShareMenu(false)} />}
