@@ -308,6 +308,146 @@ export async function listFiles(conversationId?: string): Promise<ApiResponse<{
   }
 }
 
+export interface VisionResult {
+  success: boolean;
+  image_name?: string;
+  file_name?: string;
+  file_path?: string;
+  image_url?: string;
+  file_url?: string;
+  width?: number;
+  height?: number;
+  ocr_text?: string;
+  extracted_text?: string;
+  ai_analysis?: string;
+  analysis?: string;
+  screen_changed?: boolean;
+  note?: string;
+  error?: string;
+}
+
+/**
+ * Resolve a backend-relative image URL (/static/…) into an absolute URL the
+ * <img> tag can load. Absolute URLs pass through unchanged.
+ */
+export function resolveStaticUrl(url: string): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+/**
+ * POST /vision/capture — capture the host desktop screen (native sight).
+ */
+export async function captureScreen(): Promise<VisionResult> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `Capture failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * POST /vision/capture-and-analyze — capture the host screen then OCR + LLM-analyse it.
+ */
+export async function captureAndAnalyzeScreen(promptFocus?: string): Promise<VisionResult> {
+  try {
+    const qs = promptFocus?.trim()
+      ? `?prompt_focus=${encodeURIComponent(promptFocus.trim())}`
+      : '';
+    const res = await fetch(`${API_BASE_URL}/vision/capture-and-analyze${qs}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `Analysis failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * POST /vision/ocr — extract text from an image already on the host.
+ */
+export async function ocrImage(imagePath: string): Promise<VisionResult> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/ocr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ image_path: imagePath }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `OCR failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * POST /vision/analyze — OCR + LLM analysis of an image on the host.
+ */
+export async function analyzeImage(
+  imagePath: string,
+  promptFocus?: string
+): Promise<VisionResult> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({
+        image_path: imagePath,
+        prompt_focus: promptFocus?.trim() || null,
+        auto_save_memory: true,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `Analysis failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * POST /mobile/camera — upload an image file (multipart) for analysis.
+ */
+export async function uploadImageForVision(file: File): Promise<VisionResult> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/mobile/camera`, {
+      method: 'POST',
+      headers: apiKeyHeader(),
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err.detail || `Upload failed (${res.status})` };
+    }
+    return await res.json();
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
 export interface KnowledgeEntity {
   id: string;
   name: string;

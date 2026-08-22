@@ -24,6 +24,7 @@ const ChatPage = lazy(() => import('./app/routes/ChatPage').then(m => ({ default
 const PansophyPage = lazy(() => import('./app/routes/PansophyPage').then(m => ({ default: m.PansophyPage })));
 const FilesPage = lazy(() => import('./app/routes/FilesPage').then(m => ({ default: m.FilesPage })));
 const CodeExecutionPage = lazy(() => import('./app/routes/CodeExecutionPage').then(m => ({ default: m.CodeExecutionPage })));
+const ImagesPage = lazy(() => import('./app/routes/ImagesPage').then(m => ({ default: m.ImagesPage })));
 const SettingsPage = lazy(() => import('./app/routes/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const VoiceSettingsPage = lazy(() => import('./app/routes/VoiceSettingsPage').then(m => ({ default: m.VoiceSettingsPage })));
 const ModelSettingsPage = lazy(() => import('./app/routes/ModelSettingsPage').then(m => ({ default: m.ModelSettingsPage })));
@@ -124,6 +125,7 @@ function AppContent() {
             <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
             <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
             <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
+            <Route path="/images" element={<PageErrorBoundary pageName="ImagesPage"><ImagesPage /></PageErrorBoundary>} />
             <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
             <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
@@ -141,6 +143,7 @@ function AppContent() {
             <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
             <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
             <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
+            <Route path="/images" element={<PageErrorBoundary pageName="ImagesPage"><ImagesPage /></PageErrorBoundary>} />
             <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
             <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />

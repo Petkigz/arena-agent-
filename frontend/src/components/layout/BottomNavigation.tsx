@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { MessageCircle, Brain, User } from 'lucide-react';
+import { MessageCircle, Brain, User, Image } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
@@ -8,6 +8,7 @@ export function BottomNavigation() {
     { to: '/beanie', icon: User, label: 'Beanie' },
     { to: '/chat', icon: MessageCircle, label: 'Chat' },
     { to: '/pansophy', icon: Brain, label: 'Pansophy' },
+    { to: '/images', icon: Image, label: 'Images' },
   ];
 
   return (

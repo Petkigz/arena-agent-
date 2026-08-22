@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { MessageCircle, Brain, Settings, Plus, File, Code, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MessageCircle, Brain, Settings, Plus, File, Code, Image, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/Button';
@@ -63,6 +63,7 @@ export function Sidebar() {
     { to: '/pansophy', icon: Brain, label: 'Pansophy' },
     { to: '/files', icon: File, label: 'Files' },
     { to: '/code', icon: Code, label: 'Code' },
+    { to: '/images', icon: Image, label: 'Images' },
     { to: '/settings', icon: Settings, label: 'Settings' },
   ], []);
 
