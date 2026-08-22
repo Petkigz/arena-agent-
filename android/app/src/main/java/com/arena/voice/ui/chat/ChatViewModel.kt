@@ -35,6 +35,9 @@ class ChatViewModel @Inject constructor(
 
     val messages = mutableStateListOf<ChatMessage>()
 
+    /** Conversation list for the sidebar: (id, title). */
+    val conversations = mutableStateListOf<Pair<String, String>>()
+
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
@@ -75,6 +78,16 @@ class ChatViewModel @Inject constructor(
         webSocketClient.createConversation()
     }
 
+    fun loadConversations() {
+        webSocketClient.listConversations()
+    }
+
+    fun selectConversation(id: String) {
+        if (id == conversationId) return
+        conversationId = id
+        requestHistory()
+    }
+
     fun requestHistory() {
         messages.clear()
         webSocketClient.requestHistory(conversationId)
@@ -107,8 +120,9 @@ class ChatViewModel @Inject constructor(
     // ── WebSocket listener (chat) ───────────────────────────────────────────
     override fun onConnected() {
         _isConnected.value = true
-        // Bind to the default conversation, then pull its history.
+        // Bind to the default conversation, then pull its history + the list.
         webSocketClient.requestHistory(conversationId)
+        webSocketClient.listConversations()
     }
 
     override fun onDisconnected(reason: String) {
@@ -130,10 +144,12 @@ class ChatViewModel @Inject constructor(
         messages.clear()
     }
 
-    override fun onConversationList(ids: List<String>) {
-        // Basic support: pick the first conversation if none selected yet.
-        if (conversationId.isBlank() && ids.isNotEmpty()) {
-            conversationId = ids.first()
+    override fun onConversationList(conversations: List<Pair<String, String>>) {
+        this.conversations.clear()
+        this.conversations.addAll(conversations)
+        // Pick the first conversation if none selected yet.
+        if (conversationId.isBlank() && conversations.isNotEmpty()) {
+            conversationId = conversations.first().first
             webSocketClient.requestHistory(conversationId)
         }
     }

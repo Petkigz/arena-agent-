@@ -695,14 +695,15 @@ class MainWindow(QMainWindow):
         self.voice.on_transcript = self._on_voice_transcript
         self.voice.on_error = self._on_voice_error
         self.voice.on_level = self._on_voice_level
-        # Cross-thread: capture thread emits → beanie.set_level runs on GUI thread.
-        self._level_signal.connect(self.beanie.set_level)
         self._listening = False
 
         # Pages
         self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
         self.chat = ChatPage(on_send=self._send_message)
         self.tools = ToolsPage(self.client)
+
+        # Cross-thread: capture thread emits → beanie.set_level runs on GUI thread.
+        self._level_signal.connect(self.beanie.set_level)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.beanie)   # index 0

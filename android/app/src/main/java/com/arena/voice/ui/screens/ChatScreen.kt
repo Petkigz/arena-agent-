@@ -10,9 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +29,8 @@ import com.arena.voice.ui.chat.ChatMessage
 import kotlinx.coroutines.launch
 
 /**
- * ChatGPT-style chat: message list + composer [attach][textarea][mic][beanie][send].
+ * ChatGPT-style chat: a left conversation drawer (history + New chat), the
+ * central message list, and the composer [attach][textarea][beanie][mic][send].
  * Pressing the Beanie (✨) button replaces the message list with the floating orb.
  */
 @Composable
@@ -37,6 +39,7 @@ fun ChatScreen(
     onVoiceToggle: () -> Unit = {},
 ) {
     val messages = viewModel.messages
+    val conversations = viewModel.conversations
     val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
     val isStreaming by viewModel.isStreaming.collectAsStateWithLifecycle()
 
@@ -46,113 +49,162 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     // Scroll to bottom on new messages.
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
+    // Load the conversation sidebar once connected.
+    LaunchedEffect(Unit) {
+        viewModel.loadConversations()
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { scope.launch { viewModel.uploadFile(context, it) } }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // ── Header ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Chat", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
                 Text(
-                    if (isConnected) "Connected" else "Offline",
-                    fontSize = 12.sp,
-                    color = if (isConnected) Color(0xFF10B981) else Color(0xFF94A3B8),
+                    "Chats",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(16.dp),
                 )
+                NavigationDrawerItem(
+                    label = { Text("+ New Chat") },
+                    selected = false,
+                    onClick = {
+                        viewModel.newConversation()
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+                Divider(color = Color(0xFF334155), modifier = Modifier.padding(vertical = 8.dp))
+                LazyColumn {
+                    items(conversations, key = { it.first }) { (id, title) ->
+                        NavigationDrawerItem(
+                            label = { Text(title.ifBlank { "Conversation" }, maxLines = 1) },
+                            selected = id == viewModel.conversationId,
+                            onClick = {
+                                viewModel.selectConversation(id)
+                                scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                        )
+                    }
+                }
             }
-            IconButton(onClick = { viewModel.newConversation() }) {
-                Icon(Icons.Default.Add, contentDescription = "New conversation")
-            }
-        }
-
-        Divider(color = Color(0xFF334155))
-
-        // ── Body: Beanie orb OR message list ──
-        if (beanieActive) {
-            BeanieScreen(
-                presenceStatus = if (isStreaming) PresenceStatus.WORKING else PresenceStatus.IDLE,
-                statusMessage = if (isStreaming) "Thinking…" else "I'm here. Talk to me.",
-                isListening = false,
-                onToggleTalk = onVoiceToggle,
-            )
-        } else {
-            if (messages.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        },
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── Header ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                    Icon(Icons.Default.Menu, contentDescription = "Conversations")
+                }
+                Column(Modifier.weight(1f)) {
                     Text(
-                        "Start a conversation",
-                        color = Color(0xFF94A3B8),
-                        style = MaterialTheme.typography.bodyLarge,
+                        "Chat",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    )
+                    Text(
+                        if (isConnected) "Connected" else "Offline",
+                        fontSize = 12.sp,
+                        color = if (isConnected) Color(0xFF10B981) else Color(0xFF94A3B8),
                     )
                 }
+                IconButton(onClick = { viewModel.newConversation() }) {
+                    Icon(Icons.Default.Add, contentDescription = "New conversation")
+                }
+            }
+
+            Divider(color = Color(0xFF334155))
+
+            // ── Body: Beanie orb OR message list ──
+            if (beanieActive) {
+                BeanieScreen(
+                    presenceStatus = if (isStreaming) PresenceStatus.WORKING else PresenceStatus.IDLE,
+                    statusMessage = if (isStreaming) "Thinking…" else "I'm here. Talk to me.",
+                    isListening = false,
+                    onToggleTalk = onVoiceToggle,
+                )
             } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(messages, key = { it.id }) { msg ->
-                        MessageBubble(msg)
+                if (messages.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Start a conversation",
+                            color = Color(0xFF94A3B8),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(messages, key = { it.id }) { msg ->
+                            MessageBubble(msg)
+                        }
                     }
                 }
             }
-        }
 
-        // ── Composer ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            // Attach
-            IconButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
-                Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
-            }
-
-            // Text input
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Message Beanie...") },
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 4,
-            )
-
-            // Beanie (✨) — toggles the orb in place of messages
-            IconButton(onClick = { beanieActive = !beanieActive }) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = "Beanie")
-            }
-
-            // Mic
-            IconButton(onClick = onVoiceToggle) {
-                Icon(Icons.Default.Mic, contentDescription = "Voice input")
-            }
-
-            // Send
-            IconButton(
-                onClick = {
-                    if (input.isNotBlank()) {
-                        viewModel.sendMessage(input)
-                        input = ""
-                    }
-                },
-                enabled = input.isNotBlank() && isConnected,
+            // ── Composer ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Send")
+                // Attach
+                IconButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
+                    Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
+                }
+
+                // Text input
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Message Beanie...") },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4,
+                )
+
+                // Beanie (✨) — toggles the orb in place of messages
+                IconButton(onClick = { beanieActive = !beanieActive }) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = "Beanie")
+                }
+
+                // Mic
+                IconButton(onClick = onVoiceToggle) {
+                    Icon(Icons.Default.Mic, contentDescription = "Voice input")
+                }
+
+                // Send
+                IconButton(
+                    onClick = {
+                        if (input.isNotBlank()) {
+                            viewModel.sendMessage(input)
+                            input = ""
+                        }
+                    },
+                    enabled = input.isNotBlank() && isConnected,
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = "Send")
+                }
             }
         }
     }

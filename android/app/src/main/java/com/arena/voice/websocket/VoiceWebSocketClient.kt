@@ -246,15 +246,16 @@ class VoiceWebSocketClient @Inject constructor(
                     }
                     "conversation_list" -> {
                         val conversations = json.optJSONArray("conversations")
-                        val ids = mutableListOf<String>()
+                        val list = mutableListOf<Pair<String, String>>() // (id, title)
                         if (conversations != null) {
                             for (i in 0 until conversations.length()) {
                                 val c = conversations.optJSONObject(i)
                                 val id = c?.optString("id", c?.optString("conversation_id", ""))
-                                if (!id.isNullOrBlank()) ids.add(id)
+                                val title = c?.optString("title", "New Conversation") ?: "New Conversation"
+                                if (!id.isNullOrBlank()) list.add(id to title)
                             }
                         }
-                        listeners.forEach { it.onConversationList(ids) }
+                        listeners.forEach { it.onConversationList(list) }
                     }
                     "conversation_history" -> {
                         val convId = json.optString("conversation_id")
@@ -323,7 +324,7 @@ class VoiceWebSocketClient @Inject constructor(
         fun onActionStep(conversationId: String, messageId: String, label: String, status: String) {}
         fun onConversationJoined(conversationId: String) {}
         fun onConversationCreated(conversationId: String) {}
-        fun onConversationList(ids: List<String>) {}
+        fun onConversationList(conversations: List<Pair<String, String>>) {}
         fun onConversationHistory(conversationId: String, messages: List<Pair<String, String>>) {}
         fun onChatError(message: String) {}
     }
