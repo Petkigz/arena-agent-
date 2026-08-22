@@ -1,9 +1,49 @@
 import { ReactiveBeanieOrb } from '../../components/presence/ReactiveBeanieOrb';
-import { usePresenceStore } from '../../stores';
+import { usePresenceStore, useConversationStore } from '../../stores';
 import { Button } from '../../components/ui';
+import { useNavigate } from 'react-router-dom';
+import type { Message } from '../../types';
+
+const PROMPTS: Record<string, string> = {
+  continue_project: 'What were we working on? Continue the project.',
+  whats_new: "What's new in my system?",
+  research: 'Research the latest on my current project.',
+};
 
 export function BeaniePage() {
   const { presence, quickActions } = usePresenceStore();
+  const { sendMessage, addMessage, createConversation, currentConversation } = useConversationStore();
+  const navigate = useNavigate();
+
+  const handleQuickAction = async (action: string) => {
+    if (action === 'talk') {
+      navigate('/chat');
+      return;
+    }
+    const prompt = PROMPTS[action];
+    if (!prompt) return;
+
+    // Ensure a conversation exists so the prompt lands somewhere.
+    if (!currentConversation) {
+      await createConversation();
+    }
+    const conv = useConversationStore.getState().currentConversation;
+    if (!conv) {
+      navigate('/chat');
+      return;
+    }
+
+    const userMessage: Message = {
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content: prompt,
+      timestamp: new Date().toISOString(),
+      status: 'sending',
+    };
+    addMessage(userMessage);
+    sendMessage(prompt);
+    navigate('/chat');
+  };
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-6 bg-background-primary">
@@ -44,17 +84,22 @@ export function BeaniePage() {
         </div>
       )}
 
-      {/* Quick actions */}
+      {/* Quick actions — now open a conversation with the prompt */}
       <div className="w-full max-w-md grid grid-cols-2 gap-3 mb-8">
         {quickActions.map((action) => (
-          <Button key={action.id} variant="secondary" className="h-20">
+          <Button
+            key={action.id}
+            variant="secondary"
+            className="h-20"
+            onClick={() => handleQuickAction(action.action)}
+          >
             {action.label}
           </Button>
         ))}
       </div>
 
-      {/* Voice button */}
-      <Button size="lg" className="w-full max-w-md">
+      {/* Voice button — jumps into the chat where the orb/talk lives */}
+      <Button size="lg" className="w-full max-w-md" onClick={() => navigate('/chat')}>
         🎙 Talk to Beanie
       </Button>
     </div>
