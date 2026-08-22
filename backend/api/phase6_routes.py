@@ -109,13 +109,43 @@ def detect_file_type(content: bytes, filename: Optional[str] = None) -> Dict[str
     detected_ext = None
     confidence = 'low'
     
-    for signature, (mime_type, category, ext) in signatures:
-        if header.startswith(signature):
-            detected_type = mime_type
-            detected_category = category
-            detected_ext = ext
+    # Special handling for RIFF (ambiguous: WEBP/WAV/AVI) — check bytes 8-12
+    if header.startswith(b'RIFF'):
+        # RIFF....WEBP, RIFF....WAVE, RIFF....AVI
+        riff_type = header[8:12] if len(header) >= 12 else b''
+        if riff_type == b'WEBP':
+            detected_type = 'image/webp'
+            detected_category = 'image'
+            detected_ext = '.webp'
             confidence = 'high'
-            break
+        elif riff_type == b'WAVE':
+            detected_type = 'audio/wav'
+            detected_category = 'audio'
+            detected_ext = '.wav'
+            confidence = 'high'
+        elif riff_type == b'AVI ':
+            detected_type = 'video/x-msvideo'
+            detected_category = 'video'
+            detected_ext = '.avi'
+            confidence = 'high'
+        else:
+            # Default RIFF to WAV if unknown
+            detected_type = 'audio/wav'
+            detected_category = 'audio'
+            detected_ext = '.wav'
+            confidence = 'medium'
+
+    if not detected_type:
+        for signature, (mime_type, category, ext) in signatures:
+            # Skip generic RIFF entry — already handled above with disambiguation
+            if signature == b'RIFF':
+                continue
+            if header.startswith(signature):
+                detected_type = mime_type
+                detected_category = category
+                detected_ext = ext
+                confidence = 'high'
+                break
     
     # Fallback to filename extension
     if not detected_type and filename:

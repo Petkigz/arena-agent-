@@ -52,7 +52,56 @@ class VisionAnalyzerTool:
                     "note": "Skipped redundant VLM run on identical screen frame."
                 }
 
-        # Step 2: Run OCR Text Extraction
+        # Step 2: Try true VLM first (Moondream2 / Llava-Phi) if available — true visual understanding
+        # If not available, degrade to OCR+LLM (existing behavior). This is P2 VLM integration that is safe.
+        vlm_res = None
+        try:
+            from app.tools.vlm_analyzer import VlmAnalyzerTool
+            if VlmAnalyzerTool.is_available():
+                vlm_prompt = prompt_focus or "Describe this image in detail, including objects, text, UI elements, and what the user should do next."
+                vlm_res = VlmAnalyzerTool.analyze_image(str(image_path), prompt=vlm_prompt)
+                if vlm_res.get("success"):
+                    # Also run object detection for grounding (even with VLM)
+                    detections = []
+                    groundings_created = []
+                    detection_engine = vlm_res.get("engine", "vlm")
+                    try:
+                        from app.tools.object_detector import ObjectDetectorTool
+                        det_res = ObjectDetectorTool.analyze_image_grounded(str(image_path), auto_create_groundings=True)
+                        if det_res.get("success"):
+                            detections = det_res.get("detections", [])
+                            groundings_created = det_res.get("groundings_created", [])
+                    except Exception:
+                        pass
+
+                    res = {
+                        "success": True,
+                        "image_name": image_path.name,
+                        "file_path": str(image_path),
+                        "ocr_text": vlm_res.get("ocr_text", ""),
+                        "detections": detections,
+                        "detection_engine": detection_engine,
+                        "groundings_created": groundings_created,
+                        "ai_analysis": vlm_res.get("vlm_analysis", ""),
+                        "vlm_analysis": vlm_res.get("vlm_analysis", ""),
+                        "engine": vlm_res.get("engine", "vlm"),
+                    }
+                    if auto_save_memory and res.get("ai_analysis"):
+                        from app.tools.knowledge_indexer import KnowledgeIndexer
+                        mem_content = f"👁️ [VLM VISION :: {image_path.name}]\n\n{res['ai_analysis']}\n\nDetections: {detections}"
+                        mem_id = KnowledgeIndexer.index_doc_knowledge(
+                            {"success": True, "file_name": image_path.name, "file_path": str(image_path)},
+                            mem_content,
+                            category="desktop_vision"
+                        )
+                        res["memory_id"] = mem_id
+                    return res
+                else:
+                    app_logger.info(f"VLM degraded: {vlm_res.get('error')} — falling back to OCR+LLM")
+        except Exception as e:
+            app_logger.warning(f"VLM integration failed (best-effort, falling back to OCR+LLM): {e}")
+
+        # Step 2 fallback: Run OCR Text Extraction (existing behavior)
         ocr_res = OCRReaderTool.extract_text_from_image(str(image_path))
         extracted_text = ocr_res.get("extracted_text", "")
 

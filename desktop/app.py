@@ -365,13 +365,21 @@ class HealthWorker(QThread):
         self._client = client
 
     def run(self) -> None:
+        # Per-thread client for thread-safety (D2)
+        from desktop.backend_client import ArenaBackendClient
+        client = ArenaBackendClient(base_url=self._client.base_url, timeout=5.0)
         try:
-            if self._client.is_online():
+            if client.is_online():
                 self.online.emit()
             else:
                 self.offline.emit("Backend not healthy.")
         except BackendConnectionError as e:
             self.offline.emit(str(e))
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 class LocationWorker(QThread):
@@ -383,8 +391,11 @@ class LocationWorker(QThread):
         self._client = client
 
     def run(self) -> None:
+        # LocationService.resolve_location() is local (no HTTP), but keep pattern consistent
+        # and avoid sharing httpx.Client across threads if future impl uses HTTP
         try:
-            self.result.emit(self._client.resolve_location())
+            from app.tools.location_service import LocationService
+            self.result.emit(LocationService.resolve_location())
         except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
 

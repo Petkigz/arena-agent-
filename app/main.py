@@ -1248,6 +1248,27 @@ def list_groundings_endpoint(symbol: Optional[str] = Query(None), modality: Opti
         app_logger.error(f"Groundings list failed: {e}")
         return {"groundings": [], "count": 0, "error": str(e)}
 
+# VLM integration (P2 AGI: true visual understanding)
+@router.get("/vision/vlm-status")
+def vlm_status_endpoint():
+    """Check VLM availability — honest status (Moondream2/Llava)."""
+    try:
+        from app.tools.vlm_analyzer import VlmAnalyzerTool
+        return VlmAnalyzerTool.get_status()
+    except Exception as e:
+        app_logger.error(f"VLM status failed: {e}")
+        return {"available": False, "error": str(e), "engine": "none"}
+
+@router.post("/vision/vlm-analyze")
+def vlm_analyze_endpoint(req: VisionAnalyzeRequest):
+    """True VLM analysis with OCR+LLM fallback."""
+    try:
+        from app.tools.vlm_analyzer import VlmAnalyzerTool
+        return VlmAnalyzerTool.analyze_image(req.image_path, prompt=req.prompt_focus or "Describe this image in detail")
+    except Exception as e:
+        app_logger.error(f"VLM analyze failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
 @router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):

@@ -484,6 +484,30 @@ export async function listGroundings(symbol?: string, modality?: string): Promis
   }
 }
 
+export async function getVlmStatus(): Promise<{ available: boolean; model_id?: string; engine?: string; note?: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/vlm-status`, { headers: apiKeyHeader() });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function vlmAnalyze(imagePath: string, prompt?: string): Promise<VisionResult | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/vision/vlm-analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ image_path: imagePath, prompt_focus: prompt }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * POST /mobile/camera — upload an image file (multipart) for analysis.
  */

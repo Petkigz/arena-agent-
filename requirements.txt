@@ -50,3 +50,11 @@ opencv-python>=4.8.0
 
 # Native desktop window (optional — GUI client)
 # PySide6>=6.6.0
+
+# VLM integration (P2 AGI: true visual understanding) — optional, for true VLM
+# Moondream2 (1.8B) fits RX 580 8GB alongside Qwen 3B fast. Install on owner machine:
+# pip install transformers accelerate einops timm
+# transformers>=4.40.0
+# accelerate>=0.27.0
+# einops>=0.7.0
+# timm>=0.9.0

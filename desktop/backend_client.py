@@ -155,6 +155,14 @@ class ArenaBackendClient:
         qs.append(f"limit={limit}")
         return self._get_json(f"/vision/groundings?{'&'.join(qs)}")
 
+    def vlm_status(self) -> Dict[str, Any]:
+        """GET /vision/vlm-status — check VLM availability."""
+        return self._get_json("/vision/vlm-status")
+
+    def vlm_analyze(self, image_path: str, prompt: str = "") -> Dict[str, Any]:
+        """POST /vision/vlm-analyze — true VLM with fallback."""
+        return self._post_json("/vision/vlm-analyze", {"image_path": image_path, "prompt_focus": prompt})
+
     def analyze_image(self, image_path: str, prompt_focus: Optional[str] = None,
                       auto_save_memory: bool = True) -> Dict[str, Any]:
         """POST /vision/analyze — OCR + LLM analysis of an image on the host."""
