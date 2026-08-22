@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useModelSettingsStore, type ModelConfig } from '../../stores';
 import { ArrowLeft, Brain, Mic, Volume2, Gauge, Zap, Cpu, Shield, RotateCcw, CheckCircle, XCircle, Layers } from 'lucide-react';
-import { getSharedSettings } from '../../services/api';
+import { getSharedSettings, apiKeyHeader } from '../../services/api';
 
 interface LoraAdapter {
   name: string;
@@ -46,12 +46,13 @@ export function ModelSettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    // Fetch LoRA status
-    fetch('/loras/status').then((r) => r.ok ? r.json() : null).then((data) => {
+    const headers = apiKeyHeader();
+    // Fetch LoRA status — include API key so it works when ARENA_API_KEY enabled (security)
+    fetch('/loras/status', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && data) setLoraStatus(data);
     }).catch(() => {});
-    // Fetch VLM status
-    fetch('/vision/vlm-status').then((r) => r.ok ? r.json() : null).then((data) => {
+    // Fetch VLM status — include API key
+    fetch('/vision/vlm-status', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && data) setVlmStatus(data);
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -287,8 +288,8 @@ export function ModelSettingsPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              fetch('/loras/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adapter_name: a.name }) })
-                                .then(() => fetch('/loras/status').then((r) => r.json()).then(setLoraStatus));
+                              fetch('/loras/activate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() }, body: JSON.stringify({ adapter_name: a.name }) })
+                                .then(() => fetch('/loras/status', { headers: apiKeyHeader() }).then((r) => r.json()).then(setLoraStatus));
                             }}
                             className="px-2 py-1 text-xs bg-accent-primary text-white rounded"
                           >
@@ -304,7 +305,7 @@ export function ModelSettingsPage() {
                 {loraStatus.active && (
                   <button
                     onClick={() => {
-                      fetch('/loras/deactivate', { method: 'POST' }).then(() => fetch('/loras/status').then((r) => r.json()).then(setLoraStatus));
+                      fetch('/loras/deactivate', { method: 'POST', headers: apiKeyHeader() }).then(() => fetch('/loras/status', { headers: apiKeyHeader() }).then((r) => r.json()).then(setLoraStatus));
                     }}
                     className="px-3 py-1.5 text-sm bg-background-surface text-text-secondary rounded"
                   >

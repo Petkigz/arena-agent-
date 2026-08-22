@@ -65,12 +65,8 @@ class ObjectDetectorTool:
                         cls._face_cascade = cascade
                         app_logger.info(f"Face cascade loaded from {p}")
                         return cascade
-            # Fallback: let OpenCV try to load by name (may work if data path set)
-            cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-            if not cascade.empty():
-                cls._face_cascade = cascade
-                return cascade
-            app_logger.warning("Face cascade not found — face detection unavailable")
+            # B16 fix: don't try bare name without path (fails on many systems), just return None if candidates fail
+            app_logger.warning("Face cascade not found in candidates — face detection unavailable (install opencv with data)")
             return None
         except Exception as e:
             app_logger.warning(f"Could not load face cascade: {e}")

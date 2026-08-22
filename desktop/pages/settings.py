@@ -9,10 +9,15 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButt
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.settings import DesktopSettings
+try:
+    from app.utils.logger import app_logger
+    _HAS_APP_LOGGER = True
+except Exception:
+    app_logger = None
+    _HAS_APP_LOGGER = False
+
 from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT
 from desktop.styles import _button_style, _input_style
-from app.utils.logger import app_logger
-
 class SettingsPage(QWidget):
     """Full settings form (shared across web / desktop / Android via the backend).
 

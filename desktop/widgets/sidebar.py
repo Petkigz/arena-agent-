@@ -120,8 +120,11 @@ class LeftSidebar(QFrame):
     def set_conversations(self, conversations) -> None:
         self.conv_list.clear()
         for cid, title in conversations:
-            item = self.conv_list.addItem(title or "Conversation")
+            from PySide6.QtWidgets import QListWidgetItem
+            from PySide6.QtCore import Qt
+            item = QListWidgetItem(title or "Conversation")
             item.setData(Qt.ItemDataRole.UserRole, cid)
+            self.conv_list.addItem(item)
 
     def set_status(self, connected: bool) -> None:
         color = "#10B981" if connected else TEXT_MUTED

@@ -52,9 +52,18 @@ class VlmAnalyzerTool:
         # Env var takes precedence, then local dirs, then default HF id
         env_id = os.getenv("ARENA_VLM_MODEL", "").strip()
         if env_id:
+            # B14 fix: if direct .onnx path, return as is but note it needs dir for transformers
+            # For .onnx direct, we return the parent dir if it has config, else the env_id itself
+            p_env = Path(env_id)
+            if p_env.is_file() and p_env.suffix == ".onnx":
+                # Try parent dir if it looks like a model dir
+                parent = p_env.parent
+                if (parent / "config.json").exists() or any(parent.glob("*.safetensors")):
+                    return str(parent)
+                return str(p_env)  # will be handled as direct onnx in analyze (fallback)
             return env_id
 
-        # Check local dirs
+        # Check local dirs — check for model dir with config or safetensors
         candidates = [
             settings.DATA_DIR / "models" / "moondream2",
             settings.DATA_DIR / "models" / "moondream",
@@ -62,10 +71,16 @@ class VlmAnalyzerTool:
             Path("moondream2"),
         ]
         for p in candidates:
-            if p.exists() and (p.is_dir() and any(p.glob("*.safetensors")) or (p / "config.json").exists() or (p / "model.safetensors").exists()):
+            if not p.exists():
+                continue
+            try:
+                has_safetensors = any(p.glob("*.safetensors")) if p.is_dir() else False
+            except Exception:
+                has_safetensors = False
+            if p.is_dir() and (has_safetensors or (p / "config.json").exists() or (p / "model.safetensors").exists()):
                 return str(p)
 
-        # Default HF id (will download if internet available)
+        # Default HF id (will download if internet available and allowed)
         return "vikhyatk/moondream2"
 
     @classmethod
