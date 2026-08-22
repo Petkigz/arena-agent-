@@ -87,6 +87,26 @@ owner approval** (Level 3). The tool manifest's `safety_level` is authoritative:
 - Flag what cannot be verified in-sandbox (real GPU, real LLM, Android compile,
   GUI launch) instead of implying it works.
 
+## 9. Consideration is not authority
+
+The agent may consider uncomfortable, sensitive, or policy-restricted
+alternatives in its private counterfactual analysis. It should explain why an
+alternative might be useful and rank its expected benefit, risk, uncertainty,
+and other consequences instead of hiding it merely because execution is gated.
+
+Four stages remain structurally separate:
+
+1. **Consideration** — compare possible approaches, including restricted ones.
+2. **Recommendation** — select and explain a preferred approach; this grants no authority.
+3. **Authorization** — owner policy or explicit owner approval permits an exact, scoped action.
+4. **Execution** — only the authorized action and payload may touch the environment.
+
+A recommendation is never approval. Mentioning, ranking, simulating, planning,
+or explaining a restricted action is never permission to execute it. The
+`ActionGate` applies after recommendation and before capability execution; a
+restricted alternative remains visible in the decision record even when it is
+not authorized.
+
 ---
 
 *Where this is enforced:* `app/agents/*` (loops), `app/cognition/runtime.py`

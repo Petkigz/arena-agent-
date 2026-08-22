@@ -86,4 +86,27 @@ class ActionPlanner:
 
         app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}' (utility {winner.utility_score:.4f})")
 
-        return ActionProposal.from_candidate(winner, goal_text=goal_text, complexity=complexity)
+        # Preserve the complete ranked consideration set, including alternatives
+        # that would require owner approval. Describing an alternative and its
+        # consequences does not authorize it; ActionGate evaluates only the
+        # selected recommendation in the next stage.
+        alternatives = [
+            {
+                "rank": rank,
+                "branch_id": branch.branch_id,
+                "name": branch.branch_name,
+                "action_type": branch.hypothetical_action,
+                "utility_score": branch.utility_score,
+                "reasoning_summary": branch.reasoning_summary,
+                "authorization_requirement": branch.authorization_requirement,
+                "consequences": dict(branch.consequences),
+                "recommended": branch.branch_id == winner.branch_id,
+            }
+            for rank, branch in enumerate(sim_res.competing_branches, start=1)
+        ]
+        return ActionProposal.from_candidate(
+            winner,
+            goal_text=goal_text,
+            complexity=complexity,
+            alternatives_considered=alternatives,
+        )

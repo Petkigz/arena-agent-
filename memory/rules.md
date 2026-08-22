@@ -44,6 +44,24 @@ Capabilities are **approval-gated**, not permanently disabled. The user defines 
 - Accessing external APIs with credentials
 - Modifying system configurations
 
+## Decision-stage separation
+
+The system must not confuse analysis with permission. It may consider
+uncomfortable, sensitive, or restricted alternatives and explain why they
+could be useful. Those alternatives should remain visible with ranked expected
+benefits, risks, uncertainty, reversibility, and likely consequences.
+
+The stages are separate and auditable:
+
+1. **Consideration:** side-effect-free comparison; no alternative is executed.
+2. **Recommendation:** the agent explains a preferred option; no authority is granted.
+3. **Authorization:** owner policy or explicit approval authorizes one exact scope.
+4. **Execution:** only that authorized action and unmodified payload may run.
+
+Policy restrictions apply to authorization and execution, not to merely
+thinking about or explaining an alternative. Approval of one option never
+implicitly approves another option, a changed payload, or a broader scope.
+
 ## Approval Model
 
 ### Default Approval Requirements

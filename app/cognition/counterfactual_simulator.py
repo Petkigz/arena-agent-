@@ -30,6 +30,11 @@ class SimulationBranch:
     reasoning_summary: str
     candidate_payload: Dict[str, Any] = field(default_factory=dict)
     history_adjustment: float = 1.0  # Phase 1B: multiplier from historical outcomes
+    # Consideration is deliberately broader than authorization. A restricted or
+    # uncomfortable branch remains visible for consequence comparison, but this
+    # field never grants permission to execute it.
+    authorization_requirement: str = "policy_review_required"
+    consequences: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class CounterfactualSimulationResult:
@@ -94,10 +99,14 @@ class CounterfactualSimulator:
 
             # 2. Compute risk score heuristic
             risk = 0.1
-            payload_str = str(payload).lower()
-            if "delete" in payload_str or "remove" in payload_str or "purge" in payload_str:
+            # Include the action name: a send/delete/trade action can be risky
+            # even when its payload contains only a target and content/path.
+            action_context = f"{act_type} {payload}".lower()
+            if any(k in action_context for k in ("delete", "remove", "purge", "trade")):
                 risk = 0.85
-            elif "update" in payload_str or "install" in payload_str:
+            elif any(k in action_context for k in ("send", "publish", "production", "shell")):
+                risk = 0.70
+            elif "update" in action_context or "install" in action_context:
                 risk = 0.40
 
             # 3. Compute Goal Fit Heuristic (How well candidate action matches user goal)
@@ -166,6 +175,30 @@ class CounterfactualSimulator:
             utility = round(base_utility * combined_adj, 4)
 
             history_note = f", HistoryAdj={combined_adj:.2f}" if combined_adj != 1.0 else ""
+
+            # Classify the authorization requirement without invoking the gate.
+            # Simulation/consideration must be side-effect free: even sensitive
+            # alternatives may be examined and compared before a recommendation
+            # is made. Only the later ActionGate stage can authorize execution.
+            authorization_requirement = "policy_review_required"
+            try:
+                from app.tools.manifest import get_tool_manifest
+                manifest_entry = get_tool_manifest().get(act_type)
+                if manifest_entry is not None:
+                    level = int(manifest_entry.get("safety_level", 0))
+                    authorization_requirement = (
+                        "explicit_owner_approval" if level >= 3 else "delegated_policy"
+                    )
+            except Exception:
+                pass
+
+            consequences = {
+                "expected_benefit": round(goal_fit, 4),
+                "risk": round(risk, 4),
+                "uncertainty": 0.15,
+                "reversible": risk < 0.70,
+                "predicted_state_change": dict(pred.expected_changes),
+            }
             branch = SimulationBranch(
                 branch_id=uuid4().hex[:8],
                 branch_name=act_name,
@@ -177,7 +210,9 @@ class CounterfactualSimulator:
                 utility_score=utility,
                 reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.4f}{history_note}",
                 candidate_payload=dict(payload),
-                history_adjustment=combined_adj
+                history_adjustment=combined_adj,
+                authorization_requirement=authorization_requirement,
+                consequences=consequences,
             )
             branches.append(branch)
 

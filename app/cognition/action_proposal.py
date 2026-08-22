@@ -22,6 +22,11 @@ class ActionProposal:
     safety_level: int = 0
     reversibility: bool = True
     predicted_outcome: Dict[str, Any] = field(default_factory=dict)
+    # Decision transparency. These are recommendation-stage records only and
+    # carry no execution authority; ActionGate remains the authorization stage.
+    recommendation_reason: str = ""
+    alternatives_considered: List[Dict[str, Any]] = field(default_factory=list)
+    decision_stage: str = "recommendation"
     proposal_id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(default_factory=_now)
 
@@ -31,7 +36,8 @@ class ActionProposal:
         candidate: Any,
         goal_text: str = "",
         complexity: str = "fast",
-        predicted_outcome: Optional[Dict[str, Any]] = None
+        predicted_outcome: Optional[Dict[str, Any]] = None,
+        alternatives_considered: Optional[List[Dict[str, Any]]] = None,
     ) -> ActionProposal:
         """
         Constructs an ActionProposal directly from a winning candidate branch or candidate dict,
@@ -63,7 +69,13 @@ class ActionProposal:
         return cls(
             action_type=act_type,
             payload=c_payload,
-            predicted_outcome=pred_outcome
+            predicted_outcome=pred_outcome,
+            recommendation_reason=(
+                str(getattr(candidate, "reasoning_summary", ""))
+                if not isinstance(candidate, dict)
+                else str(candidate.get("reasoning_summary", ""))
+            ),
+            alternatives_considered=list(alternatives_considered or []),
         )
 
 @dataclass
@@ -72,6 +84,8 @@ class GateResult:
     gate_name: str
     reason: str
     requires_approval: bool = False
+    # consideration → recommendation → authorization → execution are distinct.
+    decision_stage: str = "authorization"
 
 class ActionGate:
     """
@@ -129,11 +143,13 @@ class ActionGate:
                 if manifest_level >= 3:
                     reason = f"Action '{act}' is Level 3 (sensitive) and requires explicit owner approval."
                     audit_logger.warning(f"ActionGate BLOCKED proposal '{act}' at Policy Gate (Level 3)")
+                    proposal.decision_stage = "awaiting_authorization"
                     return GateResult(
                         allowed=False,
                         gate_name="policy_gate",
                         reason=reason,
                         requires_approval=True,
+                        decision_stage="awaiting_authorization",
                     )
                 # Level 0-2 manifest tools are allowed autonomously (audited).
                 continue
@@ -145,11 +161,14 @@ class ActionGate:
 
             if not allowed:
                 audit_logger.warning(f"ActionGate BLOCKED proposal '{act}' at Policy Gate: {reason}")
+                stage = "awaiting_authorization" if level == 3 else "rejected"
+                proposal.decision_stage = stage
                 return GateResult(
                     allowed=False,
                     gate_name="policy_gate",
                     reason=f"Action '{act}' blocked: {reason}",
-                    requires_approval=(level == 3)
+                    requires_approval=(level == 3),
+                    decision_stage=stage,
                 )
 
         # 2. Resource Gate (Non-destructive check)
@@ -163,10 +182,12 @@ class ActionGate:
 
         if ram_percent > 98.0:
             audit_logger.warning(f"ActionGate BLOCKED proposal '{proposal.action_type}' at Resource Gate: High RAM pressure ({ram_percent}%)")
+            proposal.decision_stage = "rejected"
             return GateResult(
                 allowed=False,
                 gate_name="resource_gate",
-                reason=f"System RAM pressure above critical threshold ({ram_percent}%). Task paused."
+                reason=f"System RAM pressure above critical threshold ({ram_percent}%). Task paused.",
+                decision_stage="rejected",
             )
 
         # 3. Prediction Gate (Reuses canonical pre-execution prediction if already attached)
@@ -176,9 +197,11 @@ class ActionGate:
             proposal.predicted_outcome = pred.expected_changes
 
         audit_logger.info(f"ActionGate PASSED proposal '{proposal.action_type}' (Safety Level {proposal.safety_level})")
+        proposal.decision_stage = "authorized"
 
         return GateResult(
             allowed=True,
             gate_name="passed_all_gates",
-            reason=f"Action proposal passed Policy (Level {proposal.safety_level}), Resource, and Prediction gates."
+            reason=f"Action proposal passed Policy (Level {proposal.safety_level}), Resource, and Prediction gates.",
+            decision_stage="authorized",
         )
