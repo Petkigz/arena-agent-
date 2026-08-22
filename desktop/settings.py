@@ -14,6 +14,7 @@ DEFAULTS: Dict[str, Any] = {
     "server_url": "http://localhost:8000",
     "wake_word": "hey_arena",
     "voice_speed": 1.0,
+    "theme": "dark",
     "minimize_to_tray": True,
     "notifications_enabled": True,
 }

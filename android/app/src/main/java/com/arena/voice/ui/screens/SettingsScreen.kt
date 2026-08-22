@@ -103,6 +103,7 @@ fun SettingsScreen(
     apiKey: String,
     onSaveServerUrl: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
+    onSaveTheme: (String) -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var serverUrlInput by remember { mutableStateOf(serverUrl) }
@@ -271,7 +272,10 @@ fun SettingsScreen(
         }
 
         Button(
-            onClick = { viewModel.save() },
+            onClick = {
+                viewModel.save()
+                onSaveTheme(viewModel.theme)
+            },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Save settings") }
 

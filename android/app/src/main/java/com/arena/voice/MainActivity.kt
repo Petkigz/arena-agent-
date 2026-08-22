@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
 
     private var serverUrl by mutableStateOf(SettingsRepository.DEFAULT_SERVER_URL)
     private var apiKey by mutableStateOf("")
+    private var theme by mutableStateOf("dark")
     private var isConnected by mutableStateOf(false)
     private var isListening by mutableStateOf(false)
     private var voiceState by mutableStateOf<String?>(null)
@@ -71,6 +72,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             settings.apiKey.collect { key -> apiKey = key }
         }
+        lifecycleScope.launch {
+            settings.theme.collect { t -> theme = t }
+        }
 
         // Reflect the backend voice pipeline (listening/thinking/speaking/…)
         // onto the presence orb. The callback runs on OkHttp's thread; snapshot
@@ -89,7 +93,7 @@ class MainActivity : ComponentActivity() {
         })
 
         setContent {
-            ArenaVoiceTheme {
+            ArenaVoiceTheme(darkTheme = theme != "light", dynamicColor = false) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -104,6 +108,7 @@ class MainActivity : ComponentActivity() {
                         onQuickAction = { action -> handleQuickAction(action) },
                         onSaveServerUrl = { url -> saveServerUrl(url) },
                         onSaveApiKey = { key -> saveApiKey(key) },
+                        onSaveTheme = { t -> saveTheme(t) },
                     )
                 }
             }
@@ -154,6 +159,13 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             settings.setApiKey(key)
             apiKey = key
+        }
+    }
+
+    private fun saveTheme(t: String) {
+        lifecycleScope.launch {
+            settings.setTheme(t)
+            theme = if (t.trim().lowercase() == "light") "light" else "dark"
         }
     }
 

@@ -50,6 +50,7 @@ fun AppScaffold(
     onQuickAction: (String) -> Unit,
     onSaveServerUrl: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
+    onSaveTheme: (String) -> Unit,
 ) {
     val navController = rememberNavController()
 
@@ -119,6 +120,7 @@ fun AppScaffold(
                     apiKey = apiKey,
                     onSaveServerUrl = onSaveServerUrl,
                     onSaveApiKey = onSaveApiKey,
+                    onSaveTheme = onSaveTheme,
                 )
             }
         }

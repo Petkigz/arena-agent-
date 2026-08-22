@@ -63,14 +63,47 @@ except ImportError:
     CV2_AVAILABLE = False
 
 
-# ── Theme (mirrors frontend tailwind.config.js) ──────────────────────────────
-BG_PRIMARY = "#0F172A"
-BG_SECONDARY = "#1E293B"
-BG_SURFACE = "#334155"
-TEXT_PRIMARY = "#F1F5F9"
-TEXT_SECONDARY = "#CBD5E1"
-TEXT_MUTED = "#94A3B8"
-ACCENT = "#3B82F6"
+# ── Theme (mirrors frontend index.css dark + light palettes) ─────────────────
+# The color globals below are mutated by apply_theme() BEFORE any widget is
+# constructed, so pages read the active palette at build time. (Widgets bake
+# these values into their QSS strings at construction, so switching theme in a
+# running session requires a restart — apply_theme() is called at startup.)
+THEME_COLORS = {
+    "dark": {
+        "BG_PRIMARY": "#0F172A",
+        "BG_SECONDARY": "#1E293B",
+        "BG_SURFACE": "#334155",
+        "TEXT_PRIMARY": "#F1F5F9",
+        "TEXT_SECONDARY": "#CBD5E1",
+        "TEXT_MUTED": "#94A3B8",
+        "ACCENT": "#3B82F6",
+    },
+    "light": {
+        "BG_PRIMARY": "#F8FAFC",
+        "BG_SECONDARY": "#E2E8F0",
+        "BG_SURFACE": "#CBD5E1",
+        "TEXT_PRIMARY": "#1E293B",
+        "TEXT_SECONDARY": "#475569",
+        "TEXT_MUTED": "#64748B",
+        "ACCENT": "#2563EB",
+    },
+}
+
+BG_PRIMARY = THEME_COLORS["dark"]["BG_PRIMARY"]
+BG_SECONDARY = THEME_COLORS["dark"]["BG_SECONDARY"]
+BG_SURFACE = THEME_COLORS["dark"]["BG_SURFACE"]
+TEXT_PRIMARY = THEME_COLORS["dark"]["TEXT_PRIMARY"]
+TEXT_SECONDARY = THEME_COLORS["dark"]["TEXT_SECONDARY"]
+TEXT_MUTED = THEME_COLORS["dark"]["TEXT_MUTED"]
+ACCENT = THEME_COLORS["dark"]["ACCENT"]
+
+
+def apply_theme(name: str) -> str:
+    """Switch the active palette (returns the normalized name)."""
+    normalized = name if name in THEME_COLORS else "dark"
+    for key, value in THEME_COLORS[normalized].items():
+        globals()[key] = value
+    return normalized
 
 PRESENCE_COLORS = {
     "idle": "#3B82F6",
@@ -857,6 +890,11 @@ class SettingsPage(QWidget):
 
     # ── load / save ─────────────────────────────────────────────────────────
     def _load(self) -> None:
+        # Start from the local cache (fast, no network) so the theme + fields
+        # are populated even if the backend is offline at startup.
+        self._set_combo(self.theme_combo, str(self._settings.get("theme") or "dark"))
+        self.wake_input.setText(str(self._settings.get("wake_word") or "hey_arena"))
+
         # Shared settings (wake word, voice, speed, theme, language, api key, models).
         try:
             data = self._client.get_shared_settings()
@@ -910,6 +948,9 @@ class SettingsPage(QWidget):
         url = self.url_input.text().strip()
         self._settings.set("server_url", url)
 
+        theme = self._combo_text(self.theme_combo)
+        self._settings.set("theme", theme)
+
         voice = self._combo_text(self.voice_combo)
         try:
             # Shared settings: wake word / voice / speed / theme / language / …
@@ -933,7 +974,7 @@ class SettingsPage(QWidget):
             # applies it, but this also drives /voice/piper-voices active flag).
             if voice:
                 self._client.select_piper_voice(voice)
-            self.status_label.setText("✓ Saved.")
+            self.status_label.setText("✓ Saved. Theme applies on next launch.")
         except (BackendConnectionError, ValueError) as e:
             self.status_label.setText(f"⚠ Could not save: {e}")
 
@@ -1553,6 +1594,9 @@ class MainWindow(QMainWindow):
         self.resize(920, 720)
 
         self.settings = DesktopSettings()
+        # Apply the persisted theme BEFORE any widget is constructed, so the
+        # whole window renders in the active palette (light or dark).
+        apply_theme(self.settings.get("theme") or "dark")
         # Persisted server URL overrides the CLI default when set.
         saved_url = self.settings.get("server_url")
         base_url = saved_url if saved_url and saved_url != "http://localhost:8000" else base_url
