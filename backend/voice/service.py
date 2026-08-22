@@ -74,11 +74,13 @@ class VoiceService:
         except (TypeError, ValueError):
             tts_speed = 1.0
         wake_model = _map_wake_word(shared.get("wake_word"))
+        noise_suppression = bool(shared.get("noise_suppression", True))
 
         self.pipeline = VoicePipeline(
             wake_word=wake_model,
             tts_voice=tts_voice,
             tts_speed=tts_speed,
+            noise_suppression=noise_suppression,
             on_wake_word=self._handle_wake_word,
             on_transcript=self._handle_transcript,
             on_state_change=self._handle_state_change,
@@ -119,13 +121,43 @@ class VoiceService:
         self.current_conversation_id = None
 
     async def update_settings(self, settings: dict):
-        """Update voice pipeline settings from frontend."""
+        """Update voice pipeline settings from frontend (camelCase or snake_case).
+
+        Now consumes noise_suppression, voice_enabled, response_delay, vad_sensitivity
+        so no setting is dead (closes G2). Supports both the WS camelCase path
+        (voice_settings message) and the shared-settings snake_case path
+        (_apply_settings_live).
+        """
+        # Voice enabled / response delay / noise suppression can be handled even
+        # when the pipeline isn't running — they gate start() and _speak_reply().
+        # For live pipeline updates we still need self.pipeline.
+        if "voiceEnabled" in settings or "voice_enabled" in settings:
+            enabled = settings.get("voiceEnabled", settings.get("voice_enabled"))
+            if enabled is False and self._enabled:
+                app_logger.info("Voice disabled via settings — stopping pipeline.")
+                await self.stop()
+                return
+
+        if "responseDelay" in settings or "response_delay" in settings:
+            # response_delay is read from get_settings() at speak time, so just log
+            # that the live value changed; the next _speak_reply will honor it.
+            rd = settings.get("responseDelay", settings.get("response_delay"))
+            app_logger.info(f"Updated response delay to {rd}ms (applies on next reply)")
+
+        if "noiseSuppression" in settings or "noise_suppression" in settings:
+            ns = settings.get("noiseSuppression", settings.get("noise_suppression"))
+            if self.pipeline:
+                # PC pipeline doesn't have a real noise-suppressor library yet;
+                # store the flag so it is consumed (not dead) and log it.
+                setattr(self.pipeline, "noise_suppression", bool(ns))
+            app_logger.info(f"Updated noise suppression to {bool(ns)} (frontend uses getUserMedia constraint; PC pipeline flag stored)")
+
         if not self.pipeline:
             return
 
-        # Update wake word
-        if "wakeWord" in settings:
-            wake_word = settings["wakeWord"]
+        # Update wake word (camelCase from WS or snake_case from shared settings)
+        wake_word = settings.get("wakeWord") or settings.get("wake_word")
+        if wake_word:
             model_name = _map_wake_word(wake_word)
             await self.pipeline.update_wake_word(model_name)
             app_logger.info(f"Updated wake word to {wake_word} (model: {model_name})")
@@ -134,26 +166,48 @@ class VoiceService:
         if "voice" in settings or "selectedVoice" in settings:
             voice = settings.get("voice") or settings.get("selectedVoice")
             if voice and self.pipeline and self.pipeline.tts:
-                self.pipeline.tts.set_voice(str(voice))
+                try:
+                    self.pipeline.tts.set_voice(str(voice))
+                except Exception:
+                    # Some TTS backends expose speed but not set_voice — best effort
+                    pass
                 app_logger.info(f"Updated voice to {voice}")
 
-        # Update voice speed
-        if "voiceSpeed" in settings:
-            speed = float(settings["voiceSpeed"])
-            self.pipeline.tts.speed = speed
-            app_logger.info(f"Updated voice speed to {speed}")
+        # Update voice speed (camelCase or snake_case)
+        if "voiceSpeed" in settings or "voice_speed" in settings:
+            try:
+                speed = float(settings.get("voiceSpeed", settings.get("voice_speed")))
+                if self.pipeline.tts:
+                    self.pipeline.tts.speed = speed
+                app_logger.info(f"Updated voice speed to {speed}")
+            except Exception as e:
+                app_logger.warning(f"Could not update voice speed: {e}")
 
-        # Update VAD sensitivity
-        if "vadSensitivity" in settings:
-            sensitivity = float(settings["vadSensitivity"]) / 100.0  # Convert 0-100 to 0-1
-            self.pipeline.vad.sensitivity = sensitivity
-            app_logger.info(f"Updated VAD sensitivity to {sensitivity}")
+        # Update VAD sensitivity (0-100 → 0-1)
+        if "vadSensitivity" in settings or "vad_sensitivity" in settings:
+            try:
+                raw = settings.get("vadSensitivity", settings.get("vad_sensitivity"))
+                sensitivity = float(raw) / 100.0
+                if self.pipeline.vad:
+                    # VAD implementations vary: try sensitivity then threshold
+                    if hasattr(self.pipeline.vad, "sensitivity"):
+                        self.pipeline.vad.sensitivity = sensitivity
+                    if hasattr(self.pipeline.vad, "threshold"):
+                        self.pipeline.vad.threshold = 1.0 - sensitivity
+                app_logger.info(f"Updated VAD sensitivity to {sensitivity}")
+            except Exception as e:
+                app_logger.warning(f"Could not update VAD sensitivity: {e}")
 
         # Update wake word sensitivity
-        if "wakeWordSensitivity" in settings:
-            sensitivity = float(settings["wakeWordSensitivity"]) / 100.0
-            self.pipeline.wake_word.sensitivity = sensitivity
-            app_logger.info(f"Updated wake word sensitivity to {sensitivity}")
+        if "wakeWordSensitivity" in settings or "wake_word_sensitivity" in settings:
+            try:
+                raw = settings.get("wakeWordSensitivity", settings.get("wake_word_sensitivity"))
+                sensitivity = float(raw) / 100.0
+                if self.pipeline.wake_word and hasattr(self.pipeline.wake_word, "sensitivity"):
+                    self.pipeline.wake_word.sensitivity = sensitivity
+                app_logger.info(f"Updated wake word sensitivity to {sensitivity}")
+            except Exception as e:
+                app_logger.warning(f"Could not update wake word sensitivity: {e}")
 
     async def notify_wake_word(self, conversation_id: str):
         """

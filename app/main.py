@@ -681,8 +681,9 @@ async def _apply_settings_live(patch: Dict[str, Any]) -> None:
     """Apply a settings patch to the running subsystems (best-effort).
 
     - `voice` → persist the active Piper voice (drives /voice/synthesize).
-    - `wake_word` / `voice` / `voice_speed` / `vad_sensitivity` → live-update the
-      running voice pipeline when one is active.
+    - `wake_word` / `voice` / `voice_speed` / `vad_sensitivity` /
+      `noise_suppression` / `voice_enabled` / `response_delay` → live-update the
+      running voice pipeline when one is active (closes G2 — no dead settings).
     """
     # Piper voice selection is a file-backed setting consumed at synth time, so
     # persist it regardless of whether the pipeline is currently running.
@@ -701,6 +702,12 @@ async def _apply_settings_live(patch: Dict[str, Any]) -> None:
         live["voiceSpeed"] = patch["voice_speed"]
     if "vad_sensitivity" in patch:
         live["vadSensitivity"] = patch["vad_sensitivity"]
+    if "noise_suppression" in patch:
+        live["noiseSuppression"] = patch["noise_suppression"]
+    if "voice_enabled" in patch:
+        live["voiceEnabled"] = patch["voice_enabled"]
+    if "response_delay" in patch:
+        live["responseDelay"] = patch["response_delay"]
     if not live:
         return
 

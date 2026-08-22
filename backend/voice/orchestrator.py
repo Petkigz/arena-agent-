@@ -45,6 +45,7 @@ class VoicePipeline:
         stt_model: str = "base",
         tts_voice: str = "en_US-lessac-medium",
         tts_speed: float = 1.0,
+        noise_suppression: bool = True,
         on_wake_word: Optional[Callable[[], None]] = None,
         on_transcript: Optional[Callable[[str, bool], None]] = None,
         on_state_change: Optional[Callable[[VoiceState, VoiceState], None]] = None,
@@ -66,6 +67,7 @@ class VoicePipeline:
         self._stt_model = stt_model
         self._tts_voice = tts_voice
         self._tts_speed = tts_speed
+        self.noise_suppression = bool(noise_suppression)
 
         # State
         self.state = VoiceState.IDLE

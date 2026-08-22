@@ -61,12 +61,30 @@ export function VoiceSettingsPage() {
 
   // Debounced persistence: typing/dragging fires many events; collapse them so
   // we send ONE /settings POST ~400ms after the user stops (regression B2).
+  // All voice settings are now persisted to the backend's shared store so
+  // desktop/Android see the same values (closes G2).
   const persistWakeWord = useDebouncedCallback(
     (value: string) => updateSharedSettings({ wake_word: value }).catch(() => {}),
     400
   );
   const persistVoiceSpeed = useDebouncedCallback(
     (value: number) => updateSharedSettings({ voice_speed: value }).catch(() => {}),
+    400
+  );
+  const persistVoiceEnabled = useDebouncedCallback(
+    (value: boolean) => updateSharedSettings({ voice_enabled: value }).catch(() => {}),
+    400
+  );
+  const persistNoiseSuppression = useDebouncedCallback(
+    (value: boolean) => updateSharedSettings({ noise_suppression: value }).catch(() => {}),
+    400
+  );
+  const persistVadSensitivity = useDebouncedCallback(
+    (value: number) => updateSharedSettings({ vad_sensitivity: value }).catch(() => {}),
+    400
+  );
+  const persistResponseDelay = useDebouncedCallback(
+    (value: number) => updateSharedSettings({ response_delay: value }).catch(() => {}),
     400
   );
 
@@ -92,8 +110,8 @@ export function VoiceSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Hydrate from the backend's shared settings (wake word / voice / speed), so
-  // the web edits the SAME values the desktop + Android apps edit.
+  // Hydrate from the backend's shared settings (wake word / voice / speed / etc),
+  // so the web edits the SAME values the desktop + Android apps edit.
   useEffect(() => {
     let cancelled = false;
     getSharedSettings().then((s) => {
@@ -101,6 +119,10 @@ export function VoiceSettingsPage() {
       if (s.wake_word) setWakeWord(s.wake_word);
       if (typeof s.voice_speed === 'number') setVoiceSpeed(s.voice_speed);
       if (s.voice) setSelectedVoice(s.voice);
+      if (typeof s.voice_enabled === 'boolean') setVoiceEnabled(s.voice_enabled);
+      if (typeof s.noise_suppression === 'boolean') setNoiseSuppression(s.noise_suppression);
+      if (typeof s.vad_sensitivity === 'number') setVadSensitivity(s.vad_sensitivity);
+      if (typeof s.response_delay === 'number') setResponseDelay(s.response_delay);
     });
     return () => {
       cancelled = true;
@@ -234,7 +256,14 @@ export function VoiceSettingsPage() {
               <input
                 type="checkbox"
                 checked={voiceEnabled}
-                onChange={(e) => setVoiceEnabled(e.target.checked)}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setVoiceEnabled(v);
+                  persistVoiceEnabled(v);
+                  try {
+                    webSocketService.updateVoiceSettings({ voiceEnabled: v });
+                  } catch {}
+                }}
                 className="sr-only peer"
               />
               <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
@@ -399,7 +428,11 @@ export function VoiceSettingsPage() {
                   <input
                     type="checkbox"
                     checked={noiseSuppression}
-                    onChange={(e) => setNoiseSuppression(e.target.checked)}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setNoiseSuppression(v);
+                      persistNoiseSuppression(v);
+                    }}
                     className="sr-only peer"
                   />
                   <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
@@ -429,7 +462,14 @@ export function VoiceSettingsPage() {
                     min="0"
                     max="100"
                     value={vadSensitivity}
-                    onChange={(e) => setVadSensitivity(Number(e.target.value))}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setVadSensitivity(v);
+                      persistVadSensitivity(v);
+                      try {
+                        webSocketService.updateVoiceSettings({ vadSensitivity: v });
+                      } catch {}
+                    }}
                     className="w-full h-2 bg-background-surface rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
                   <div className="flex justify-between text-xs text-text-muted mt-1">
@@ -452,7 +492,11 @@ export function VoiceSettingsPage() {
                     max="2000"
                     step="100"
                     value={responseDelay}
-                    onChange={(e) => setResponseDelay(Number(e.target.value))}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setResponseDelay(v);
+                      persistResponseDelay(v);
+                    }}
                     className="w-full h-2 bg-background-surface rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
                   <div className="flex justify-between text-xs text-text-muted mt-1">

@@ -83,13 +83,13 @@ class MainActivity : ComponentActivity() {
 
         // Hydrate the theme from the backend's shared settings so a theme change
         // made on web/desktop is honored here too (fall back to the local
-        // DataStore value on failure). (regression B3)
+        // DataStore value on failure). (regression B3) — now supports 'system'.
         lifecycleScope.launch {
             val raw = apiClient.getSharedSettings()
             if (raw != null) {
                 runCatching {
                     val backendTheme = JSONObject(raw).optString("theme", "")
-                    if (backendTheme == "dark" || backendTheme == "light") {
+                    if (backendTheme == "dark" || backendTheme == "light" || backendTheme == "system") {
                         settings.setTheme(backendTheme)
                         theme = backendTheme
                     }
@@ -114,7 +114,14 @@ class MainActivity : ComponentActivity() {
         })
 
         setContent {
-            ArenaVoiceTheme(darkTheme = theme != "light", dynamicColor = false) {
+            // Support 'system' theme (follows OS dark mode) — matches web dark/light/system parity (G7).
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val useDark = when (theme.lowercase()) {
+                "light" -> false
+                "system" -> isSystemDark
+                else -> true // dark default
+            }
+            ArenaVoiceTheme(darkTheme = useDark, dynamicColor = false) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -185,8 +192,14 @@ class MainActivity : ComponentActivity() {
 
     private fun saveTheme(t: String) {
         lifecycleScope.launch {
-            settings.setTheme(t)
-            theme = if (t.trim().lowercase() == "light") "light" else "dark"
+            val raw = t.trim().lowercase()
+            val normalized = when (raw) {
+                "light" -> "light"
+                "system" -> "system"
+                else -> "dark"
+            }
+            settings.setTheme(normalized)
+            theme = normalized
         }
     }
 

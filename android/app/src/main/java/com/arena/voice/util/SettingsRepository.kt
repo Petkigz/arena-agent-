@@ -45,7 +45,7 @@ class SettingsRepository @Inject constructor(
         prefs[KEY_API_KEY] ?: ""
     }
 
-    /** Theme ("dark" | "light"), cached locally for instant app-level re-skinning. */
+    /** Theme ("dark" | "light" | "system"), cached locally for instant app-level re-skinning. */
     val theme: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_THEME] ?: "dark"
     }
@@ -60,7 +60,12 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setTheme(theme: String) {
-        val normalized = if (theme.trim().lowercase() == "light") "light" else "dark"
+        val raw = theme.trim().lowercase()
+        val normalized = when (raw) {
+            "light" -> "light"
+            "system" -> "system"
+            else -> "dark"
+        }
         context.dataStore.edit { prefs -> prefs[KEY_THEME] = normalized }
     }
 

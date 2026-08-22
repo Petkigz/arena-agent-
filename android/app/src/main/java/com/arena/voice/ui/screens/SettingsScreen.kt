@@ -259,16 +259,16 @@ fun SettingsScreen(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeExpanded) },
             )
             ExposedDropdownMenu(
-                expanded = themeExpanded,
-                onDismissRequest = { themeExpanded = false },
-            ) {
-                listOf("dark", "light").forEach { t ->
-                    DropdownMenuItem(text = { Text(t) }, onClick = {
-                        viewModel.theme = t
-                        themeExpanded = false
-                    })
+                    expanded = themeExpanded,
+                    onDismissRequest = { themeExpanded = false },
+                ) {
+                    listOf("dark", "light", "system").forEach { t ->
+                        DropdownMenuItem(text = { Text(t) }, onClick = {
+                            viewModel.theme = t
+                            themeExpanded = false
+                        })
+                    }
                 }
-            }
         }
 
         Button(

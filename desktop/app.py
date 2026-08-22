@@ -64,10 +64,9 @@ except ImportError:
 
 
 # ── Theme (mirrors frontend index.css dark + light palettes) ─────────────────
-# The color globals below are mutated by apply_theme() BEFORE any widget is
-# constructed, so pages read the active palette at build time. (Widgets bake
-# these values into their QSS strings at construction, so switching theme in a
-# running session requires a restart — apply_theme() is called at startup.)
+# The color globals below are mutated by apply_theme(). Pages used to bake these
+# into QSS at construction (requiring restart), but now every page implements
+# refresh_theme() so the desktop re-skins instantly when the backend theme changes.
 THEME_COLORS = {
     "dark": {
         "BG_PRIMARY": "#0F172A",
@@ -98,12 +97,52 @@ TEXT_MUTED = THEME_COLORS["dark"]["TEXT_MUTED"]
 ACCENT = THEME_COLORS["dark"]["ACCENT"]
 
 
+def _is_system_dark() -> bool:
+    """Best-effort detection of OS dark mode (Qt 6.5+ has colorScheme, else palette)."""
+    try:
+        from PySide6.QtGui import QGuiApplication
+
+        app = QGuiApplication.instance()
+        if app is not None:
+            hints = app.styleHints()
+            if hasattr(hints, "colorScheme"):
+                scheme = hints.colorScheme()
+                if int(scheme) == 1:
+                    return True
+                if int(scheme) == 0:
+                    return False
+            pal = app.palette()
+            bg = pal.color(pal.ColorRole.Window)
+            return bg.lightness() < 128
+    except Exception:
+        pass
+    return True
+
+
 def apply_theme(name: str) -> str:
-    """Switch the active palette (returns the normalized name)."""
-    normalized = name if name in THEME_COLORS else "dark"
+    """Switch the active palette (returns the normalized name).
+
+    Supports 'dark', 'light', 'system' (follows OS). Returns 'dark'/'light'/'system'
+    so callers can persist the user's choice while still rendering the resolved palette.
+    """
+    raw = (name or "dark").strip().lower()
+    if raw in ("system", "auto"):
+        resolved = "dark" if _is_system_dark() else "light"
+        for key, value in THEME_COLORS[resolved].items():
+            globals()[key] = value
+        return "system"
+    normalized = raw if raw in THEME_COLORS else "dark"
     for key, value in THEME_COLORS[normalized].items():
         globals()[key] = value
     return normalized
+
+
+def _resolved_theme_name(name: str) -> str:
+    """Return the concrete 'dark'/'light' that a stored name resolves to."""
+    n = (name or "dark").strip().lower()
+    if n in ("system", "auto"):
+        return "dark" if _is_system_dark() else "light"
+    return n if n in THEME_COLORS else "dark"
 
 PRESENCE_COLORS = {
     "idle": "#3B82F6",
@@ -474,6 +513,7 @@ class BeaniePage(QWidget):
         super().__init__(parent)
         self._on_talk = on_talk
         self._on_quick_action = on_quick_action
+        self._quick_buttons: List[QPushButton] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -490,15 +530,15 @@ class BeaniePage(QWidget):
         layout.addLayout(orb_row)
 
         # Branding
-        title = QLabel("BEANIE")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet(f"font-size: 30px; font-weight: 800; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        self._title = QLabel("BEANIE")
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title.setStyleSheet(f"font-size: 30px; font-weight: 800; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._title)
 
-        subtitle = QLabel("Personal AI")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet(f"font-size: 15px; color: {TEXT_SECONDARY};")
-        layout.addWidget(subtitle)
+        self._subtitle = QLabel("Personal AI")
+        self._subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._subtitle.setStyleSheet(f"font-size: 15px; color: {TEXT_SECONDARY};")
+        layout.addWidget(self._subtitle)
 
         self.message = QLabel("I'm here.")
         self.message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -522,6 +562,7 @@ class BeaniePage(QWidget):
                 btn.setMinimumHeight(56)
                 btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
                 btn.clicked.connect(lambda _=False, a=action: self._on_quick_action(a))
+                self._quick_buttons.append(btn)
                 col.addWidget(btn)
             grid.addLayout(col)
         layout.addLayout(grid)
@@ -529,11 +570,11 @@ class BeaniePage(QWidget):
         layout.addSpacing(8)
 
         # Talk button
-        talk = QPushButton("🎙  Talk to Beanie")
-        talk.setMinimumHeight(56)
-        talk.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        talk.clicked.connect(self._on_talk)
-        layout.addWidget(talk)
+        self._talk_btn = QPushButton("🎙  Talk to Beanie")
+        self._talk_btn.setMinimumHeight(56)
+        self._talk_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self._talk_btn.clicked.connect(self._on_talk)
+        layout.addWidget(self._talk_btn)
 
         layout.addStretch(1)
 
@@ -543,6 +584,14 @@ class BeaniePage(QWidget):
     def set_status(self, status: str) -> None:
         self.orb.set_status(status)
 
+    def refresh_theme(self) -> None:
+        self._title.setStyleSheet(f"font-size: 30px; font-weight: 800; color: {TEXT_PRIMARY};")
+        self._subtitle.setStyleSheet(f"font-size: 15px; color: {TEXT_SECONDARY};")
+        self.message.setStyleSheet(f"font-size: 13px; color: {TEXT_MUTED}; font-style: italic;")
+        for btn in self._quick_buttons:
+            btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self._talk_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+
 
 class LeftSidebar(QFrame):
     """ChatGPT-style left sidebar: Beanie identity + New Chat + conversation list + nav."""
@@ -551,6 +600,7 @@ class LeftSidebar(QFrame):
         super().__init__(parent)
         self._on_select_conversation = on_select_conversation
         self._on_conversation = on_conversation
+        self._nav_buttons: List[QPushButton] = []
         self.setFixedWidth(240)
         self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
         layout = QVBoxLayout(self)
@@ -563,9 +613,9 @@ class LeftSidebar(QFrame):
         ident.addWidget(self.orb)
         name_col = QVBoxLayout()
         name_col.setSpacing(1)
-        name = QLabel("Beanie")
-        name.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {TEXT_PRIMARY};")
-        name_col.addWidget(name)
+        self._name_label = QLabel("Beanie")
+        self._name_label.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {TEXT_PRIMARY};")
+        name_col.addWidget(self._name_label)
         self.status_label = QLabel("● Offline")
         self.status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED};")
         name_col.addWidget(self.status_label)
@@ -574,10 +624,10 @@ class LeftSidebar(QFrame):
         layout.addLayout(ident)
 
         # New chat
-        new_chat = QPushButton("+ New Chat")
-        new_chat.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        new_chat.clicked.connect(on_new_chat)
-        layout.addWidget(new_chat)
+        self._new_chat_btn = QPushButton("+ New Chat")
+        self._new_chat_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self._new_chat_btn.clicked.connect(on_new_chat)
+        layout.addWidget(self._new_chat_btn)
 
         # Conversation mode — continuous, hands-free listening (native-only:
         # browsers can't hold the mic open like this).
@@ -591,9 +641,9 @@ class LeftSidebar(QFrame):
         layout.addWidget(self.conversation_btn)
 
         # Conversation list
-        chats_label = QLabel("Chats")
-        chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
-        layout.addWidget(chats_label)
+        self._chats_label = QLabel("Chats")
+        self._chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        layout.addWidget(self._chats_label)
         self.conv_list = QListWidget()
         self.conv_list.setStyleSheet(
             f"background: transparent; color: {TEXT_PRIMARY}; border: none;"
@@ -612,6 +662,7 @@ class LeftSidebar(QFrame):
             btn = QPushButton(label)
             btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
             btn.clicked.connect(lambda _=False, k=key: on_nav(k))
+            self._nav_buttons.append(btn)
             layout.addWidget(btn)
 
     def _on_item_clicked(self, item) -> None:
@@ -638,6 +689,23 @@ class LeftSidebar(QFrame):
         self.conversation_btn.setChecked(active)
         self.conversation_btn.blockSignals(False)
 
+    def refresh_theme(self) -> None:
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
+        self._name_label.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self._chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+        self._new_chat_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.conversation_btn.setStyleSheet(
+            _button_style(BG_SURFACE, TEXT_PRIMARY)
+            + f"QPushButton:checked {{ background: {ACCENT}; color: #FFFFFF; }}"
+        )
+        self.conv_list.setStyleSheet(
+            f"background: transparent; color: {TEXT_PRIMARY}; border: none;"
+            f" QListWidget::item {{ padding: 8px; border-radius: 6px; }}"
+            f" QListWidget::item:selected {{ background: {BG_SURFACE}; }}"
+        )
+        for btn in self._nav_buttons:
+            btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+
 
 class ContextPanel(QFrame):
     """Right context panel: connection + hardware (Goal/Memory/Knowledge are web-only)."""
@@ -650,9 +718,9 @@ class ContextPanel(QFrame):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        title = QLabel("Context")
-        title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        self._title = QLabel("Context")
+        self._title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._title)
 
         self.body = QLabel("Checking…")
         self.body.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 13px;")
@@ -662,6 +730,11 @@ class ContextPanel(QFrame):
 
     def set_text(self, text: str) -> None:
         self.body.setText(text)
+
+    def refresh_theme(self) -> None:
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-left: 1px solid {BG_SURFACE};")
+        self._title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self.body.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 13px;")
 
 
 class FilesPage(QWidget):
@@ -674,9 +747,9 @@ class FilesPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("Files")
-        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        self._title = QLabel("Files")
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._title)
 
         row = QHBoxLayout()
         self.input = QLineEdit()
@@ -684,10 +757,10 @@ class FilesPage(QWidget):
         self.input.setStyleSheet(_input_style())
         self.input.returnPressed.connect(self._search)
         row.addWidget(self.input, 1)
-        btn = QPushButton("Search")
-        btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        btn.clicked.connect(self._search)
-        row.addWidget(btn)
+        self._search_btn = QPushButton("Search")
+        self._search_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self._search_btn.clicked.connect(self._search)
+        row.addWidget(self._search_btn)
         layout.addLayout(row)
 
         self.results = QListWidget()
@@ -696,6 +769,15 @@ class FilesPage(QWidget):
             f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
         )
         layout.addWidget(self.results, 1)
+
+    def refresh_theme(self) -> None:
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self.input.setStyleSheet(_input_style())
+        self._search_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.results.setStyleSheet(
+            f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+        )
 
     def _search(self) -> None:
         q = self.input.text().strip()
@@ -723,14 +805,14 @@ class PansophyPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("Pansophy")
-        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        self._title = QLabel("Pansophy")
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._title)
 
-        refresh = QPushButton("Refresh")
-        refresh.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
-        refresh.clicked.connect(self._load)
-        layout.addWidget(refresh)
+        self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self._refresh_btn.clicked.connect(self._load)
+        layout.addWidget(self._refresh_btn)
 
         self.list = QListWidget()
         self.list.setStyleSheet(
@@ -739,6 +821,14 @@ class PansophyPage(QWidget):
         )
         layout.addWidget(self.list, 1)
         self._load()
+
+    def refresh_theme(self) -> None:
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self._refresh_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.list.setStyleSheet(
+            f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+        )
 
     def _load(self) -> None:
         self.list.clear()
@@ -777,21 +867,25 @@ class SettingsPage(QWidget):
     language, voice on/off, VAD sensitivity, response delay, and fast/main models.
     Everything except the server URL (which is a local QSettings value) is
     persisted on the backend's shared settings store.
+
+    Now supports live theme switching: saving a theme calls on_theme_change so
+    MainWindow can re-skin instantly without restart (closes G4).
     """
 
-    def __init__(self, settings: DesktopSettings, client: ArenaBackendClient, on_save, parent=None):
+    def __init__(self, settings: DesktopSettings, client: ArenaBackendClient, on_save, on_theme_change=None, parent=None):
         super().__init__(parent)
         self._settings = settings
         self._client = client
         self._on_save = on_save
+        self._on_theme_change = on_theme_change
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 16, 16, 16)
         outer.setSpacing(10)
 
-        title = QLabel("Settings")
-        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
-        outer.addWidget(title)
+        self._title = QLabel("Settings")
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        outer.addWidget(self._title)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -833,7 +927,9 @@ class SettingsPage(QWidget):
         self.voice_combo.setEditable(True)
         self.voice_combo.setStyleSheet(_input_style())
         self.voice_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        form.addWidget(QLabel("Voice (Piper)"))
+        self._voice_label = QLabel("Voice (Piper)")
+        self._voice_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        form.addWidget(self._voice_label)
         form.addWidget(self.voice_combo)
         self.speed_input = field("Voice speed (0.5–2.0)")
         self.language_combo = QComboBox()
@@ -841,7 +937,9 @@ class SettingsPage(QWidget):
         self.language_combo.setStyleSheet(_input_style())
         for lang in ("en_US", "en_GB", "es_ES", "fr_FR", "de_DE", "it_IT", "pt_PT", "nl_NL"):
             self.language_combo.addItem(lang)
-        form.addWidget(QLabel("Language"))
+        self._lang_label = QLabel("Language")
+        self._lang_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        form.addWidget(self._lang_label)
         form.addWidget(self.language_combo)
         self.voice_enabled_check = QCheckBox("Voice enabled")
         self.voice_enabled_check.setStyleSheet(f"color: {TEXT_PRIMARY};")
@@ -853,8 +951,10 @@ class SettingsPage(QWidget):
         section("Appearance")
         self.theme_combo = QComboBox()
         self.theme_combo.setStyleSheet(_input_style())
-        self.theme_combo.addItems(["dark", "light"])
-        form.addWidget(QLabel("Theme"))
+        self.theme_combo.addItems(["dark", "light", "system"])
+        self._theme_label = QLabel("Theme")
+        self._theme_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        form.addWidget(self._theme_label)
         form.addWidget(self.theme_combo)
 
         # ── Models ──
@@ -863,13 +963,17 @@ class SettingsPage(QWidget):
         self.fast_model_combo.setEditable(True)
         self.fast_model_combo.setStyleSheet(_input_style())
         self.fast_model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        form.addWidget(QLabel("Fast model"))
+        self._fast_label = QLabel("Fast model")
+        self._fast_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        form.addWidget(self._fast_label)
         form.addWidget(self.fast_model_combo)
         self.main_model_combo = QComboBox()
         self.main_model_combo.setEditable(True)
         self.main_model_combo.setStyleSheet(_input_style())
         self.main_model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        form.addWidget(QLabel("Main model"))
+        self._main_label = QLabel("Main model")
+        self._main_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        form.addWidget(self._main_label)
         form.addWidget(self.main_model_combo)
 
         self.status_label = QLabel("")
@@ -881,12 +985,25 @@ class SettingsPage(QWidget):
         scroll.setWidget(container)
         outer.addWidget(scroll, stretch=1)
 
-        save = QPushButton("Save")
-        save.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        save.clicked.connect(self._save)
-        outer.addWidget(save)
+        self._save_btn = QPushButton("Save")
+        self._save_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self._save_btn.clicked.connect(self._save)
+        outer.addWidget(self._save_btn)
 
         self._load()
+
+    def refresh_theme(self) -> None:
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self.status_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
+        self._save_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        # Re-apply input styles (they read current globals)
+        for w in self.findChildren(QLineEdit):
+            w.setStyleSheet(_input_style())
+        for w in self.findChildren(QComboBox):
+            w.setStyleSheet(_input_style())
+        self.voice_enabled_check.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        for lbl in [self._voice_label, self._lang_label, self._theme_label, self._fast_label, self._main_label]:
+            lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
 
     # ── load / save ─────────────────────────────────────────────────────────
     def _load(self) -> None:
@@ -919,6 +1036,7 @@ class SettingsPage(QWidget):
             for v in voices:
                 self.voice_combo.addItem(str(v.get("id", "")), str(v.get("id", "")))
         except BackendConnectionError as e:
+            from app.utils.logger import app_logger
             app_logger.warning(f"Could not list Piper voices: {e}")
 
         # LM Studio models (populate fast/main dropdowns).
@@ -929,6 +1047,7 @@ class SettingsPage(QWidget):
                 self.fast_model_combo.addItem(str(m))
                 self.main_model_combo.addItem(str(m))
         except BackendConnectionError as e:
+            from app.utils.logger import app_logger
             app_logger.warning(f"Could not list models: {e}")
 
     @staticmethod
@@ -974,7 +1093,10 @@ class SettingsPage(QWidget):
             # applies it, but this also drives /voice/piper-voices active flag).
             if voice:
                 self._client.select_piper_voice(voice)
-            self.status_label.setText("✓ Saved. Theme applies on next launch.")
+            self.status_label.setText("✓ Saved — theme applied live.")
+            # Live theme switch (G4): re-skin the whole desktop instantly.
+            if self._on_theme_change:
+                self._on_theme_change(theme)
         except (BackendConnectionError, ValueError) as e:
             self.status_label.setText(f"⚠ Could not save: {e}")
 
@@ -992,25 +1114,31 @@ class CodePage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("Code")
-        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        self._title = QLabel("Code")
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._title)
 
         self.code = QTextEdit()
         self.code.setPlaceholderText("Enter Python code…")
         self.code.setStyleSheet(_textarea_style())
         layout.addWidget(self.code, 1)
 
-        run = QPushButton("Run")
-        run.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        run.clicked.connect(self._run)
-        layout.addWidget(run)
+        self._run_btn = QPushButton("Run")
+        self._run_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self._run_btn.clicked.connect(self._run)
+        layout.addWidget(self._run_btn)
 
         self.output = QTextEdit()
         self.output.setReadOnly(True)
         self.output.setStyleSheet(_textarea_style())
         self.output.setFixedHeight(140)
         layout.addWidget(self.output)
+
+    def refresh_theme(self) -> None:
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self.code.setStyleSheet(_textarea_style())
+        self.output.setStyleSheet(_textarea_style())
+        self._run_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
 
     def _run(self) -> None:
         code = self.code.toPlainText().strip()
@@ -1047,14 +1175,14 @@ class VisionPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("Images / Vision")
-        title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
-        layout.addWidget(title)
+        self._title = QLabel("Images / Vision")
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._title)
 
         # ── Desktop sight ──
-        sight_label = QLabel("Desktop sight")
-        sight_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
-        layout.addWidget(sight_label)
+        self._sight_label = QLabel("Desktop sight")
+        self._sight_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._sight_label)
 
         self.focus_input = QLineEdit()
         self.focus_input.setPlaceholderText("What should I focus on? (optional, e.g. \"the error dialog\")")
@@ -1080,9 +1208,9 @@ class VisionPage(QWidget):
         layout.addWidget(self.preview, 1)
 
         # ── Analyze an image file ──
-        file_label = QLabel("Analyze an image file")
-        file_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
-        layout.addWidget(file_label)
+        self._file_label = QLabel("Analyze an image file")
+        self._file_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        layout.addWidget(self._file_label)
         file_row = QHBoxLayout()
         self.file_btn = QPushButton("Choose image…")
         self.file_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
@@ -1103,6 +1231,18 @@ class VisionPage(QWidget):
         self.analysis_text.setPlaceholderText("AI analysis appears here…")
         self.analysis_text.setStyleSheet(_textarea_style())
         layout.addWidget(self.analysis_text, 1)
+
+    def refresh_theme(self) -> None:
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {TEXT_PRIMARY};")
+        self._sight_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self.focus_input.setStyleSheet(_input_style())
+        self.capture_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.analyze_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.preview.setStyleSheet(f"background: {BG_PRIMARY}; color: {TEXT_MUTED}; border-radius: 8px;")
+        self._file_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self.file_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.ocr_text.setStyleSheet(_textarea_style())
+        self.analysis_text.setStyleSheet(_textarea_style())
 
     def _busy(self, busy: bool) -> None:
         for b in (self.capture_btn, self.analyze_btn, self.file_btn):
@@ -1223,6 +1363,18 @@ class MessageBubble(QWidget):
         if self._orb is not None:
             self._orb.set_status(status)
 
+    def refresh_theme(self) -> None:
+        if self._role == "user":
+            self.label.setStyleSheet(
+                f"background: {ACCENT}; color: #FFFFFF; padding: 10px 14px;"
+                f" border-radius: 14px; font-size: 14px;"
+            )
+        else:
+            self.label.setStyleSheet(
+                f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 14px;"
+                f" border: 1px solid {BG_SURFACE}; border-radius: 14px; font-size: 14px;"
+            )
+
 
 class ChatPage(QWidget):
     """ChatGPT-style conversation: message bubbles + composer (sidebar lives in MainWindow).
@@ -1320,6 +1472,17 @@ class ChatPage(QWidget):
             self._streaming = ""
         self._scroll_to_bottom()
 
+    def refresh_theme(self) -> None:
+        self.scroll.setStyleSheet(f"background: {BG_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+        self.container.setStyleSheet(f"background: {BG_PRIMARY};")
+        self.input.setStyleSheet(_input_style())
+        self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        for bubble in self._bubbles:
+            bubble.refresh_theme()
+        if self._streaming_bubble is not None:
+            self._streaming_bubble.refresh_theme()
+
     def set_voice_status(self, status: str) -> None:
         """Show/hide the floating voice-state banner."""
         labels = {
@@ -1372,9 +1535,9 @@ class ToolsPage(QWidget):
         outer.setContentsMargins(16, 16, 16, 16)
 
         # ── Camera ──
-        cam_label = QLabel("Camera")
-        cam_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
-        outer.addWidget(cam_label)
+        self._cam_label = QLabel("Camera")
+        self._cam_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        outer.addWidget(self._cam_label)
 
         self.camera_view = QLabel("Webcam preview")
         self.camera_view.setMinimumHeight(180)
@@ -1406,33 +1569,33 @@ class ToolsPage(QWidget):
         outer.addSpacing(12)
 
         # ── Location ──
-        loc_label = QLabel("Location")
-        loc_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
-        outer.addWidget(loc_label)
+        self._loc_label = QLabel("Location")
+        self._loc_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        outer.addWidget(self._loc_label)
         self.location_label = QLabel("Not resolved")
         self.location_label.setStyleSheet(f"color: {TEXT_MUTED}; padding: 4px;")
         outer.addWidget(self.location_label)
-        loc_btn = QPushButton("Resolve my location")
-        loc_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
-        loc_btn.clicked.connect(self._resolve_location)
-        outer.addWidget(loc_btn)
+        self._loc_btn = QPushButton("Resolve my location")
+        self._loc_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self._loc_btn.clicked.connect(self._resolve_location)
+        outer.addWidget(self._loc_btn)
 
         outer.addSpacing(12)
 
         # ── Files ──
-        files_label = QLabel("Files")
-        files_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
-        outer.addWidget(files_label)
+        self._files_label = QLabel("Files")
+        self._files_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        outer.addWidget(self._files_label)
         frow = QHBoxLayout()
         self.files_input = QLineEdit()
         self.files_input.setPlaceholderText("Search files…")
         self.files_input.setStyleSheet(_input_style())
         self.files_input.returnPressed.connect(self._search_files)
         frow.addWidget(self.files_input)
-        fbtn = QPushButton("Search")
-        fbtn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        fbtn.clicked.connect(self._search_files)
-        frow.addWidget(fbtn)
+        self._files_btn = QPushButton("Search")
+        self._files_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self._files_btn.clicked.connect(self._search_files)
+        frow.addWidget(self._files_btn)
         outer.addLayout(frow)
         self.files_list = QListWidget()
         self.files_list.setStyleSheet(f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
@@ -1441,14 +1604,30 @@ class ToolsPage(QWidget):
         outer.addSpacing(12)
 
         # ── Status ──
-        status_label = QLabel("Status")
-        status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
-        outer.addWidget(status_label)
+        self._status_label = QLabel("Status")
+        self._status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        outer.addWidget(self._status_label)
         self.status_text = QTextEdit()
         self.status_text.setReadOnly(True)
         self.status_text.setFixedHeight(90)
         self.status_text.setStyleSheet(_textarea_style())
         outer.addWidget(self.status_text)
+
+    def refresh_theme(self) -> None:
+        self._cam_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self.camera_view.setStyleSheet(f"background: {BG_PRIMARY}; color: {TEXT_MUTED}; border-radius: 8px;")
+        self.cam_start.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.cam_capture.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.cam_stop.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self._loc_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self.location_label.setStyleSheet(f"color: {TEXT_MUTED}; padding: 4px;")
+        self._loc_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self._files_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self.files_input.setStyleSheet(_input_style())
+        self._files_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.files_list.setStyleSheet(f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+        self._status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
+        self.status_text.setStyleSheet(_textarea_style())
 
     def refresh_status(self) -> None:
         lines = []
@@ -1605,10 +1784,11 @@ class MainWindow(QMainWindow):
         # widget is constructed so the whole window renders in the right palette.
         # This makes the "backend-driven" theme actually two-way: a theme change
         # made on web/Android now re-themes the desktop on next launch.
+        # Supports 'system' which follows OS dark mode.
         try:
             shared = self.client.get_shared_settings(timeout=3.0)
             backend_theme = shared.get("theme")
-            if backend_theme in ("dark", "light"):
+            if backend_theme in ("dark", "light", "system"):
                 self.settings.set("theme", backend_theme)
         except BackendConnectionError:
             pass  # backend offline — keep the locally-persisted theme
@@ -1663,7 +1843,12 @@ class MainWindow(QMainWindow):
         self.files = FilesPage(self.client)
         self.code = CodePage(self.client)
         self.vision = VisionPage(self.client)
-        self.settings_page = SettingsPage(self.settings, self.client, on_save=self._on_save_server_url)
+        self.settings_page = SettingsPage(
+            self.settings,
+            self.client,
+            on_save=self._on_save_server_url,
+            on_theme_change=self._on_theme_changed,
+        )
         self.tools = ToolsPage(self.client)
 
         # Cross-thread: capture thread emits → orb.set_level runs on GUI thread.
@@ -1779,6 +1964,39 @@ class MainWindow(QMainWindow):
             "Beanie", f"Server URL saved: {url}\nRestart the app to reconnect.",
             QSystemTrayIcon.MessageIcon.Information, 3000,
         )
+
+    def _on_theme_changed(self, theme: str) -> None:
+        """Live theme switch (G4): re-skin the whole desktop instantly."""
+        normalized = apply_theme(theme)
+        # Persist locally too
+        self.settings.set("theme", theme if theme in ("dark", "light", "system") else normalized)
+        self._refresh_all_themes()
+        self.tray.showMessage(
+            "Beanie", f"Theme: {theme} — applied live.",
+            QSystemTrayIcon.MessageIcon.Information, 2000,
+        )
+
+    def _refresh_all_themes(self) -> None:
+        """Re-apply stylesheets to every widget using current globals."""
+        self.setStyleSheet(f"QMainWindow {{ background: {BG_PRIMARY}; }}")
+        # Sidebar + context
+        try:
+            self.sidebar.refresh_theme()
+        except Exception:
+            pass
+        try:
+            self.context.refresh_theme()
+        except Exception:
+            pass
+        # Pages
+        for page in [self.beanie, self.chat, self.pansophy, self.files, self.code, self.settings_page, self.tools, self.vision]:
+            try:
+                if hasattr(page, "refresh_theme"):
+                    page.refresh_theme()
+            except Exception:
+                pass
+        # Force repaint
+        self.update()
 
     def _set_status(self, status: str) -> None:
         """Update the orb on both the Beanie page and the sidebar."""
