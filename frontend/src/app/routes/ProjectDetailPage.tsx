@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores';
 import type { Project } from '../../stores/projectStore';
@@ -7,17 +7,29 @@ import { Modal } from '../../components/ui/Modal';
 import { TaskBoard } from '../../components/projects/TaskBoard';
 import { ProjectFiles } from '../../components/projects/ProjectFiles';
 import { ProjectConversations } from '../../components/projects/ProjectConversations';
-import { ArrowLeft, Trash2, Edit, FolderKanban } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit, FolderKanban, Layers, Cpu, Clock } from 'lucide-react';
+import { getBackendProject } from '../../services/api';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { projects, updateProject, deleteProject } = useProjectStore();
-  const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'conversations'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'conversations' | 'milestones'>('tasks');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [backendDetail, setBackendDetail] = useState<{ project?: any; resume_context?: any; decomposition?: any } | null>(null);
 
   const project = projects.find((p) => p.id === projectId);
+
+  // Fetch backend detail (milestones, resume_context, decomposition with resource-aware schedule)
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    getBackendProject(projectId).then((data) => {
+      if (!cancelled && data) setBackendDetail(data);
+    });
+    return () => { cancelled = true; };
+  }, [projectId]);
 
   if (!project) {
     return (
@@ -41,6 +53,7 @@ export function ProjectDetailPage() {
     { id: 'tasks', label: 'Tasks', count: project.tasks.length },
     { id: 'files', label: 'Files', count: project.files.length },
     { id: 'conversations', label: 'Conversations', count: project.conversations.length },
+    { id: 'milestones', label: 'Milestones', count: backendDetail?.project?.milestones?.length || project.tasks.length },
   ];
 
   return (
@@ -128,6 +141,45 @@ export function ProjectDetailPage() {
         {activeTab === 'tasks' && <TaskBoard project={project} />}
         {activeTab === 'files' && <ProjectFiles project={project} />}
         {activeTab === 'conversations' && <ProjectConversations project={project} />}
+        {activeTab === 'milestones' && (
+          <div className="p-6 space-y-6">
+            {/* Backend milestones (persistent project) */}
+            {backendDetail?.project?.milestones ? (
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2"><Layers className="w-5 h-5" /> Persistent Milestones (backend)</h3>
+                <p className="text-sm text-text-secondary mb-3">From ProjectManager — multi-session, resource-budgeted, with resume context</p>
+                <div className="space-y-2">
+                  {backendDetail.project.milestones.map((m: any, i: number) => (
+                    <div key={m.id || i} className="flex items-center justify-between p-3 bg-background-surface rounded border border-border">
+                      <span className="text-sm">{m.description || m}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${m.status === 'reached' ? 'bg-green-500/20 text-green-600' : 'bg-yellow-500/20 text-yellow-600'}">{m.status}</span>
+                    </div>
+                  ))}
+                </div>
+                {backendDetail.resume_context && (
+                  <div className="mt-4 p-3 bg-background-secondary rounded border border-border">
+                    <h4 className="font-medium text-sm">Resume Context</h4>
+                    <p className="text-xs text-text-secondary">Progress: {backendDetail.resume_context.progress_percent}% — Total sessions: {backendDetail.resume_context.total_sessions}</p>
+                    <p className="text-xs text-text-muted">Pending: {(backendDetail.resume_context.pending_milestones || []).slice(0,3).join(', ')}</p>
+                  </div>
+                )}
+                {backendDetail.decomposition && (
+                  <div className="mt-4 p-3 bg-background-secondary rounded border border-border">
+                    <h4 className="font-medium text-sm flex items-center gap-2"><Cpu className="w-4 h-4" /> Resource-Aware Schedule</h4>
+                    <p className="text-xs text-text-secondary">Progress: {backendDetail.decomposition.progress_percent}% — Total: {backendDetail.decomposition.total_sub_goals}, Completed: {backendDetail.decomposition.completed}, Blocked: {backendDetail.decomposition.blocked}</p>
+                    <div className="mt-2 space-y-1">
+                      {(backendDetail.decomposition.next_actions || []).slice(0,3).map((a: any, i: number) => (
+                        <div key={i} className="text-xs flex items-center gap-2"><Clock className="w-3 h-3" /> {a.description} ({a.action_type})</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">No backend milestones — this project is local-only. Complex goals auto-create persistent projects with milestones via cognitive runtime.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit Modal */}

@@ -8,6 +8,7 @@ from desktop.pages.settings import SettingsPage
 from desktop.pages.code import CodePage
 from desktop.pages.vision import VisionPage
 from desktop.pages.tools import ToolsPage
+from desktop.pages.lora import LoraPage
 from desktop.pages.chat import ChatPage
 from desktop.pages.message_bubble import MessageBubble
 
@@ -20,6 +21,7 @@ __all__ = [
     "CodePage",
     "VisionPage",
     "ToolsPage",
+    "LoraPage",
     "ChatPage",
     "MessageBubble",
 ]
