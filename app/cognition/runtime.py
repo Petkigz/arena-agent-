@@ -141,6 +141,10 @@ class CognitiveRuntime:
         self.identity_continuity = IdentityContinuityLedger(
             str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db"
         )
+        from app.cognition.self_recovery import SelfRecoveryStore
+        self.self_recovery = SelfRecoveryStore(
+            str(Path(path).parent / "self_recovery.db") if path else "data/self_recovery.db"
+        )
         self.boot_id = f"boot_{uuid.uuid4().hex[:16]}"
         self.refresh_self_knowledge()
         self.refresh_embodied_boundary()

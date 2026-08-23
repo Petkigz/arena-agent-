@@ -915,6 +915,15 @@ class ExplicitCommitmentRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     source_id: str = Field(min_length=1, max_length=200)
 
+class RecoveryDecisionRequest(BaseModel):
+    status: str
+    note: str = ""
+
+class RecoveryActionRequest(BaseModel):
+    action_type: str = Field(min_length=1)
+    payload: Dict[str, Any]
+    reason: str = Field(min_length=1)
+
 
 @router.get("/self-awareness")
 def self_awareness_endpoint(refresh: bool = Query(True)):
@@ -976,7 +985,36 @@ def identity_continuity_checkpoint_endpoint():
     from app.cognition.runtime import CognitiveRuntime
     runtime=CognitiveRuntime.get_instance()
     runtime.refresh_self_knowledge(); runtime.refresh_embodied_boundary(); runtime.refresh_commitments()
-    return {"success":True,"continuity":runtime.checkpoint_identity_continuity()}
+    continuity=runtime.checkpoint_identity_continuity()
+    recovery=None
+    if not continuity["continuous"]:
+        recovery=runtime.self_recovery.save(continuity).to_dict()
+    return {"success":True,"continuity":continuity,"recovery_assessment":recovery}
+
+@router.get("/self-awareness/recovery")
+def list_recovery_assessments_endpoint(status_filter: Optional[str]=Query(None,alias="status"),limit:int=Query(200,ge=1,le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    items=CognitiveRuntime.get_instance().self_recovery.list(status_filter,limit)
+    return {"success":True,"assessments":[item.to_dict() for item in items]}
+
+@router.post("/self-awareness/recovery/{assessment_id}/decision")
+def decide_recovery_assessment_endpoint(assessment_id:str,req:RecoveryDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try: item=CognitiveRuntime.get_instance().self_recovery.decide(assessment_id,req.status,req.note)
+    except KeyError as exc: raise HTTPException(status_code=404,detail="Recovery assessment not found") from exc
+    except ValueError as exc: raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return {"success":True,"assessment":item.to_dict()}
+
+@router.post("/self-awareness/recovery/{assessment_id}/request-action-approval")
+def request_recovery_action_endpoint(assessment_id:str,req:RecoveryActionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    from app.cognition.approval_store import approval_store
+    runtime=CognitiveRuntime.get_instance()
+    if not any(item.assessment_id==assessment_id for item in runtime.self_recovery.list(limit=1000)):
+        raise HTTPException(status_code=404,detail="Recovery assessment not found")
+    approval=approval_store.add(f"recovery:{assessment_id}",req.action_type,req.payload,req.reason,goal_text=f"Recover from identity discontinuity {assessment_id}")
+    item=runtime.self_recovery.mark_action_requested(assessment_id,f"approval:{approval.action_id}")
+    return {"success":True,"assessment":item.to_dict(),"approval":approval.to_dict(),"executed":False}
 
 
 @router.get("/self-awareness/embodied-boundary")

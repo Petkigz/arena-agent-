@@ -184,6 +184,7 @@ not authorized.
   shared surfaces, external environment, or unknown. Sending a command does not
   prove control; an Arena-controlled event requires authority plus observed effect.
 - Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
+- Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a
   biological body, persistent subjective identity, or subjective experience. The absence of measurement remains explicit.
 
