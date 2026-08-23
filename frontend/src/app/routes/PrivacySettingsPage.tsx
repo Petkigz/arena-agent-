@@ -68,6 +68,19 @@ interface AdaptiveAutonomyProfile {
   source: string;
 }
 
+interface AutonomousGoalItem {
+  goal_id: string; title: string; description: string; priority: string; status: string;
+  source: string; overall_score: number; requires_owner_approval: boolean;
+}
+interface AutonomyRunEvent {
+  event_id: string; cycle_id: string; goal_id?: string; stage: string; reason: string;
+  details: Record<string, unknown>; created_at: string;
+}
+interface ScheduledDirectiveItem {
+  schedule_id: string; title: string; next_run_at: string; recurrence: string;
+  missed_policy: string; status: string; priority: string;
+}
+
 interface OwnerControlPolicy {
   mode: ControlMode;
   paused: boolean;
@@ -109,6 +122,10 @@ export function PrivacySettingsPage() {
   const [reviewedPlans, setReviewedPlans] = useState<ReviewedPlan[]>([]);
   const [planDrafts, setPlanDrafts] = useState<Record<string, ReviewedPlanStep[]>>({});
   const [planBusy, setPlanBusy] = useState<string | null>(null);
+  const [autonomousGoals, setAutonomousGoals] = useState<AutonomousGoalItem[]>([]);
+  const [autonomyEvents, setAutonomyEvents] = useState<AutonomyRunEvent[]>([]);
+  const [autonomySchedule, setAutonomySchedule] = useState<ScheduledDirectiveItem[]>([]);
+  const [autonomyBusy, setAutonomyBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,11 +159,49 @@ export function PrivacySettingsPage() {
         ])));
       }
     });
+    Promise.all([
+      fetch('/owner-control/autonomous-goals?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
+      fetch('/owner-control/autonomy-runs?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
+      fetch('/owner-control/autonomy-schedule?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
+    ]).then(([goals, events, schedule]) => {
+      if (!cancelled) {
+        setAutonomousGoals(Array.isArray(goals?.goals) ? goals.goals : []);
+        setAutonomyEvents(Array.isArray(events?.events) ? events.events : []);
+        setAutonomySchedule(Array.isArray(schedule?.schedule) ? schedule.schedule : []);
+      }
+    }).catch(() => {});
     return () => {
       cancelled = true;
       window.clearInterval(executionTimer);
     };
   }, []);
+
+  const decideAutonomousGoal = async (goalId: string, approved: boolean) => {
+    setAutonomyBusy(goalId);
+    try {
+      const response = await fetch(`/owner-control/autonomous-goals/${encodeURIComponent(goalId)}/decision`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify({ approved }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.detail || 'Goal decision failed');
+      setAutonomousGoals((current) => current.map((goal) => goal.goal_id === goalId ? data.goal : goal));
+      notifications.success(approved ? 'Goal approved for planning only' : 'Goal rejected');
+    } catch (error) { notifications.error(error instanceof Error ? error.message : 'Goal decision failed'); }
+    finally { setAutonomyBusy(null); }
+  };
+
+  const prioritizeAutonomousGoal = async (goalId: string, priority: string) => {
+    setAutonomyBusy(goalId);
+    const response = await fetch(`/owner-control/autonomous-goals/${encodeURIComponent(goalId)}/priority`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ priority }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setAutonomousGoals((current) => current.map((goal) => goal.goal_id === goalId ? data.goal : goal));
+    else notifications.error(data?.detail || 'Could not reprioritize goal');
+    setAutonomyBusy(null);
+  };
 
   const decideApproval = async (approval: PendingApproval, approved: boolean) => {
     setApprovalBusy(approval.action_id);
@@ -544,6 +599,56 @@ export function PrivacySettingsPage() {
                 <p className="text-xs text-text-muted">Policy revision {ownerPolicy.revision}</p>
               </>
             )}
+          </Card>
+        </section>
+
+        {/* Autonomous queue, calendar, and run ledger */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <BarChart3 className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Autonomy Operations</h2>
+          </div>
+          <Card className="space-y-5">
+            <p className="text-sm text-text-secondary">
+              Planning approval never authorizes actions. Every resulting action still passes Owner Control, exact authorization when required, observation, and verification.
+            </p>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="space-y-2">
+                <h3 className="font-medium text-text-primary">Goal queue</h3>
+                {autonomousGoals.length === 0 ? <p className="text-xs text-text-muted">No queued goals.</p> : autonomousGoals.slice(0, 12).map((goal) => (
+                  <div key={goal.goal_id} className="rounded border border-border p-2 text-xs space-y-2">
+                    <div className="font-medium text-text-primary">{goal.title}</div>
+                    <div className="text-text-muted">{goal.source} · {goal.status} · score {goal.overall_score.toFixed(2)}</div>
+                    <select value={goal.priority} disabled={autonomyBusy === goal.goal_id} onChange={(e) => prioritizeAutonomousGoal(goal.goal_id, e.target.value)} className="w-full bg-background-surface border border-border rounded p-1">
+                      {['low', 'normal', 'high', 'critical'].map((p) => <option key={p}>{p}</option>)}
+                    </select>
+                    {['proposed', 'evaluated', 'deferred'].includes(goal.status) && <div className="flex gap-2">
+                      <button onClick={() => decideAutonomousGoal(goal.goal_id, true)} className="px-2 py-1 bg-accent-primary text-white rounded">Approve planning</button>
+                      <button onClick={() => decideAutonomousGoal(goal.goal_id, false)} className="px-2 py-1 border border-border rounded">Reject</button>
+                    </div>}
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-medium text-text-primary">Schedule</h3>
+                {autonomySchedule.length === 0 ? <p className="text-xs text-text-muted">No scheduled directives.</p> : autonomySchedule.slice(0, 12).map((item) => (
+                  <div key={item.schedule_id} className="rounded border border-border p-2 text-xs">
+                    <div className="font-medium text-text-primary">{item.title}</div>
+                    <div className="text-text-muted">{item.next_run_at} · {item.recurrence} · {item.status}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-medium text-text-primary">Run evidence</h3>
+                {autonomyEvents.length === 0 ? <p className="text-xs text-text-muted">No cycle events.</p> : autonomyEvents.slice(0, 20).map((event) => (
+                  <div key={event.event_id} className="rounded border border-border p-2 text-xs">
+                    <div className="font-medium text-text-primary">{event.stage}</div>
+                    <div className="text-text-muted">{event.goal_id || event.cycle_id}</div>
+                    {event.reason && <div className="text-text-secondary">{event.reason}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
           </Card>
         </section>
 
