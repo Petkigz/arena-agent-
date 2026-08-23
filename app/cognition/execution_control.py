@@ -223,10 +223,10 @@ class ExecutionControlRegistry:
             compensation_action = "delete_note"
             compensation_payload = {"note_id": result["note_id"]}
             reason = "Created note can be deleted by ID; deletion still requires approval."
-        elif action_type == "create_backup" and result.get("backup_path"):
-            compensation_action = "restore_backup"
-            compensation_payload = {"backup_path": result["backup_path"]}
-            reason = "Backup can be restored explicitly; restore requires owner approval."
+        elif action_type == "create_backup" and result.get("backup_id"):
+            compensation_action = "delete_backup"
+            compensation_payload = {"backup_id": result["backup_id"]}
+            reason = "The newly created backup artifact can be deleted by ID; deletion requires fresh approval."
         elif action_type == "move_file" and result.get("environment_verified"):
             compensation_action = "move_file"
             compensation_payload = {

@@ -157,12 +157,25 @@ class BackupManager:
         if dest.exists() and any(dest.iterdir()) and not overwrite:
             return {"success": False, "error": f"Destination '{dest}' is not empty; pass overwrite=True to proceed."}
 
+        verification = cls.verify_backup(backup_id)
+        if not verification.get("success") or not verification.get("intact"):
+            return {"success": False, "error": "Backup integrity verification failed before restore", "verification": verification}
         try:
             dest.mkdir(parents=True, exist_ok=True)
+            root = dest.resolve()
             with zipfile.ZipFile(path) as zf:
+                if zf.testzip() is not None:
+                    return {"success": False, "error": "Backup archive contains a corrupt member"}
+                members = zf.infolist()
+                for member in members:
+                    target = (root / member.filename).resolve()
+                    if target != root and root not in target.parents:
+                        return {"success": False, "error": f"Unsafe archive path rejected: {member.filename}"}
                 zf.extractall(dest)
+            restored = [str((root / member.filename).resolve()) for member in members if not member.is_dir()]
+            observed = all(Path(item).is_file() for item in restored)
             audit_logger.info(f"Restored backup {backup_id} → {dest}")
-            return {"success": True, "backup_id": backup_id, "restored_to": str(dest), "file_count": entry.get("file_count")}
+            return {"success": observed, "backup_id": backup_id, "restored_to": str(dest), "file_count": len(restored), "restored_files": restored, "archive_sha256": verification.get("current_sha256"), "environment_verified": observed, "side_effects": bool(restored), "rollback_supported": False, "rollback_reason": "Restore may overwrite or combine with pre-existing destination content; automatic rollback is unsafe."}
         except Exception as e:
             app_logger.warning(f"Restore failed: {e}")
             return {"success": False, "error": f"Restore failed: {e}"}

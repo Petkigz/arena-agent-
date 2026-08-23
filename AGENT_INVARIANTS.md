@@ -107,6 +107,7 @@ Owner Control Plane may always impose a stricter rule:
   with a deterministic compensation receipt and always requires fresh approval.
 - Transactional move/copy/archive operations reject overwrite or missing-source
   conflicts, verify paths and hashes, and preserve exact compensation facts.
+  Backup restore verifies archive hash, CRC and path containment before extraction.
   Removal rollback is allowed only while the created artifact hash is unchanged.
 - Read-only clipboard inspection never mutates content. Clearing is a separate
   Level-3 exact action, verifies empty state, and truthfully has no rollback.
