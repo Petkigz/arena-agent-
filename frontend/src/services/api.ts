@@ -616,15 +616,95 @@ export interface BackendProject {
   updated_at: string;
 }
 
-export async function listBackendProjects(): Promise<BackendProject[]> {
+export interface CollectionPage<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+}
+
+export async function listMemoryPage(
+  offset = 0,
+  limit = 50,
+  category?: string,
+): Promise<CollectionPage<Record<string, unknown>>> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (category) params.set('category', category);
   try {
-    const res = await fetch(`${API_BASE_URL}/projects`, { headers: apiKeyHeader() });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data?.projects) ? data.projects as BackendProject[] : [];
+    const response = await fetch(`${API_BASE_URL}/memories/page?${params}`, { headers: apiKeyHeader() });
+    if (!response.ok) throw new Error('Memory page unavailable');
+    const data = await response.json();
+    return {
+      items: Array.isArray(data?.memories) ? data.memories : [], total: Number(data?.total || 0),
+      limit: Number(data?.limit || limit), offset: Number(data?.offset || offset),
+      hasMore: data?.has_more === true,
+      nextOffset: typeof data?.next_offset === 'number' ? data.next_offset : null,
+    };
   } catch {
-    return [];
+    return { items: [], total: 0, limit, offset, hasMore: false, nextOffset: null };
   }
+}
+
+export async function listWorkspaceFilePage(
+  offset = 0,
+  limit = 50,
+  extension?: string,
+): Promise<CollectionPage<Record<string, unknown>>> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (extension) params.set('extension', extension);
+  try {
+    const response = await fetch(`${API_BASE_URL}/tools/workspace-files/page?${params}`, { headers: apiKeyHeader() });
+    if (!response.ok) throw new Error('Workspace page unavailable');
+    const data = await response.json();
+    return {
+      items: Array.isArray(data?.files) ? data.files : [], total: Number(data?.total || 0),
+      limit: Number(data?.limit || limit), offset: Number(data?.offset || offset),
+      hasMore: data?.has_more === true,
+      nextOffset: typeof data?.next_offset === 'number' ? data.next_offset : null,
+    };
+  } catch {
+    return { items: [], total: 0, limit, offset, hasMore: false, nextOffset: null };
+  }
+}
+
+export interface BackendProjectPage {
+  projects: BackendProject[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  next_offset: number | null;
+}
+
+export async function listBackendProjectsPage(
+  offset = 0,
+  limit = 50,
+  status?: string,
+): Promise<BackendProjectPage> {
+  const empty: BackendProjectPage = { projects: [], total: 0, limit, offset, has_more: false, next_offset: null };
+  try {
+    const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (status) params.set('status', status);
+    const res = await fetch(`${API_BASE_URL}/projects?${params.toString()}`, { headers: apiKeyHeader() });
+    if (!res.ok) return empty;
+    const data = await res.json();
+    return {
+      projects: Array.isArray(data?.projects) ? data.projects as BackendProject[] : [],
+      total: Number(data?.total || 0),
+      limit: Number(data?.limit || limit),
+      offset: Number(data?.offset || offset),
+      has_more: data?.has_more === true,
+      next_offset: typeof data?.next_offset === 'number' ? data.next_offset : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+export async function listBackendProjects(): Promise<BackendProject[]> {
+  return (await listBackendProjectsPage()).projects;
 }
 
 export async function getBackendProject(projectId: string): Promise<{ project: BackendProject; resume_context?: Record<string, unknown>; decomposition?: Record<string, unknown> } | null> {

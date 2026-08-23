@@ -164,9 +164,30 @@ class ArenaBackendClient:
         return self._post_json("/vision/vlm-analyze", {"image_path": image_path, "prompt_focus": prompt})
 
     # Projects (P2 AGI: long-horizon + multi-session)
-    def list_projects(self) -> Dict[str, Any]:
-        """GET /projects — list persistent projects."""
-        return self._get_json("/projects")
+    def list_projects(
+        self, offset: int = 0, limit: int = 50, status: str = ""
+    ) -> Dict[str, Any]:
+        """GET a bounded /projects page with continuation metadata."""
+        params = f"offset={max(0, offset)}&limit={max(1, min(limit, 100))}"
+        if status:
+            params += f"&status={quote(status)}"
+        return self._get_json(f"/projects?{params}")
+
+    def list_memories_page(
+        self, offset: int = 0, limit: int = 50, category: str = ""
+    ) -> Dict[str, Any]:
+        params = f"offset={max(0, offset)}&limit={max(1, min(limit, 200))}"
+        if category:
+            params += f"&category={quote(category)}"
+        return self._get_json(f"/memories/page?{params}")
+
+    def list_workspace_files_page(
+        self, offset: int = 0, limit: int = 50, extension: str = ""
+    ) -> Dict[str, Any]:
+        params = f"offset={max(0, offset)}&limit={max(1, min(limit, 200))}"
+        if extension:
+            params += f"&extension={quote(extension)}"
+        return self._get_json(f"/tools/workspace-files/page?{params}")
 
     def get_project(self, project_id: str) -> Dict[str, Any]:
         """GET /projects/{id} — get project + resume context."""

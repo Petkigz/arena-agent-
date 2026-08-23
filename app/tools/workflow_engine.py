@@ -3,9 +3,6 @@ import time
 from typing import Dict, Any, List, Optional
 from app.database import db
 from app.utils.logger import app_logger
-from app.tools.web_research import WebResearcher
-from app.tools.daily_briefing import DailyBriefingEngine
-from app.memory.semantic_rag import SemanticRAGEngine
 
 class WorkflowEngine:
     """
@@ -30,6 +27,8 @@ class WorkflowEngine:
 
             try:
                 if action == "daily_briefing":
+                    from app.tools.daily_briefing import DailyBriefingEngine
+
                     res = DailyBriefingEngine.generate_briefing(
                         custom_topics=params.get("topics"),
                         generate_audio=params.get("generate_audio", True)
@@ -38,12 +37,16 @@ class WorkflowEngine:
                     step_entry["result"] = res
 
                 elif action == "web_search":
+                    from app.tools.web_research import WebResearcher
+
                     query = params.get("query", "")
                     res = WebResearcher.search_and_scrape(query, max_results=params.get("max_results", 3))
                     step_entry["status"] = "success" if res.get("success") else "failed"
                     step_entry["result"] = res
 
                 elif action == "rag_search":
+                    from app.memory.semantic_rag import SemanticRAGEngine
+
                     query = params.get("query", "")
                     res = SemanticRAGEngine.search_memories(query, limit=params.get("limit", 5))
                     step_entry["status"] = "success"

@@ -193,14 +193,40 @@ class DatabaseManager:
             conn.commit()
             return cursor.lastrowid
 
-    def get_memories(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_memories(
+        self,
+        category: Optional[str] = None,
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Return memories newest-first, optionally as a deterministic page."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            params: List[Any] = []
+            query = "SELECT * FROM memories"
+            if category:
+                query += " WHERE category = ?"
+                params.append(category)
+            query += " ORDER BY last_reviewed DESC, id DESC"
+            if limit is not None:
+                query += " LIMIT ? OFFSET ?"
+                params.extend([max(1, int(limit)), max(0, int(offset))])
+            cursor.execute(query, tuple(params))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def count_memories(self, category: Optional[str] = None) -> int:
+        """Count memories using the same optional category filter as paging."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             if category:
-                cursor.execute("SELECT * FROM memories WHERE category = ? ORDER BY last_reviewed DESC", (category,))
+                cursor.execute(
+                    "SELECT COUNT(*) FROM memories WHERE category = ?", (category,)
+                )
             else:
-                cursor.execute("SELECT * FROM memories ORDER BY last_reviewed DESC")
-            return [dict(row) for row in cursor.fetchall()]
+                cursor.execute("SELECT COUNT(*) FROM memories")
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
 
     def delete_memory(self, memory_id: int) -> bool:
         with self._get_connection() as conn:

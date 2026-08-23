@@ -7,7 +7,10 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { Plus, FolderKanban, Search } from 'lucide-react';
 
 export function ProjectsPage() {
-  const { projects, createProject, hydrateFromBackend, createProjectBackend } = useProjectStore();
+  const {
+    projects, createProject, hydrateFromBackend, loadMoreBackendProjects,
+    createProjectBackend, backendHasMore, isLoading,
+  } = useProjectStore();
 
   // Hydrate from backend (single source of truth) so projects created via cognitive runtime appear
   useEffect(() => {
@@ -127,10 +130,19 @@ export function ProjectsPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProjects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+            {backendHasMore && !searchQuery && statusFilter === 'all' && (
+              <div className="flex justify-center">
+                <Button onClick={loadMoreBackendProjects} disabled={isLoading} variant="secondary">
+                  {isLoading ? 'Loading…' : 'Load 50 more projects'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

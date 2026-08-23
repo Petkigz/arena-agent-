@@ -86,8 +86,14 @@ class ProjectsPage(QWidget):
         self.detail.setFixedHeight(120)
         layout.addWidget(self.detail)
 
-        self.list.itemClicked.connect(self._on_item_clicked)
+        self.load_more_btn = QPushButton("Load 50 more")
+        self.load_more_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.load_more_btn.clicked.connect(self._load_more)
+        self.load_more_btn.setVisible(False)
+        layout.addWidget(self.load_more_btn)
 
+        self.list.itemClicked.connect(self._on_item_clicked)
+        self._next_offset = None
         self._load()
 
     def refresh_theme(self) -> None:
@@ -95,6 +101,7 @@ class ProjectsPage(QWidget):
         self.input.setStyleSheet(_input_style())
         self.create_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
         self.refresh_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+        self.load_more_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.list.setStyleSheet(
             f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
             f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
@@ -103,18 +110,31 @@ class ProjectsPage(QWidget):
 
     def _load(self) -> None:
         self.list.clear()
+        self._next_offset = 0
+        self._load_page(0)
+
+    def _load_more(self) -> None:
+        if self._next_offset is not None:
+            self._load_page(self._next_offset)
+
+    def _load_page(self, offset: int) -> None:
         try:
-            data = self._client.list_projects()
+            data = self._client.list_projects(offset=offset, limit=50)
             projects = data.get("projects", []) if isinstance(data, dict) else []
-            for p in projects[:100]:
+            for p in projects:
                 label = f"{p.get('name','')} — {p.get('progress_percent',0)}% ({p.get('status','')})"
                 item = QListWidgetItem(label)
                 item.setData(Qt.ItemDataRole.UserRole, p.get("project_id",""))
                 self.list.addItem(item)
-            if not projects:
+            if offset == 0 and not projects:
                 self.list.addItem("(no projects yet — complex goals auto-create them)")
+            self._next_offset = data.get("next_offset") if data.get("has_more") else None
+            self.load_more_btn.setVisible(self._next_offset is not None)
         except Exception as e:
-            self.list.addItem(f"⚠ {e}")
+            if offset == 0:
+                self.list.addItem(f"⚠ {e}")
+            else:
+                self.detail.setPlainText(f"⚠ Could not load more: {e}")
 
     def _create(self) -> None:
         name = self.input.text().strip()

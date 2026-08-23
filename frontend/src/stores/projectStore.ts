@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { listBackendProjects, createBackendProject } from '../services/api';
+import { listBackendProjectsPage, createBackendProject } from '../services/api';
 
 export interface ProjectTask {
   id: string;
@@ -57,6 +57,8 @@ interface ProjectStoreState {
   currentProject: Project | null;
   isLoading: boolean;
   error: string | null;
+  backendHasMore: boolean;
+  backendNextOffset: number | null;
 
   // Project actions
   createProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'tasks' | 'files' | 'conversations'>) => string;
@@ -83,6 +85,7 @@ interface ProjectStoreState {
   setError: (error: string | null) => void;
   getProjectProgress: (projectId: string) => number;
   hydrateFromBackend: () => Promise<void>;
+  loadMoreBackendProjects: () => Promise<void>;
   createProjectBackend: (name: string, description?: string, priority?: string, milestones?: string[], tags?: string[]) => Promise<string | null>;
 }
 
@@ -93,6 +96,8 @@ export const useProjectStore = create<ProjectStoreState>()(
       currentProject: null,
       isLoading: false,
       error: null,
+      backendHasMore: false,
+      backendNextOffset: null,
 
       createProject: (projectData) => {
         const id = `proj-${Date.now()}`;
@@ -330,37 +335,68 @@ export const useProjectStore = create<ProjectStoreState>()(
       },
 
       hydrateFromBackend: async () => {
+        set({ isLoading: true });
         try {
-          const backendProjects = await listBackendProjects();
-          if (!backendProjects.length) return;
+          const page = await listBackendProjectsPage(0, 50);
           set((state) => {
             const existingById = new Map(state.projects.map((p) => [p.id, p]));
-            const merged: Project[] = backendProjects.map((bp) => {
+            const merged: Project[] = page.projects.map((bp) => {
               const existing = existingById.get(bp.project_id) || existingById.get(bp.project_id.replace('proj-','')) as any;
               if (existing) {
                 return { ...existing, name: bp.name, description: bp.description, status: (bp.status as any) || existing.status, progress: Math.round(bp.progress_percent), updatedAt: bp.updated_at };
               }
               return {
-                id: bp.project_id,
-                name: bp.name,
-                description: bp.description,
-                color: '#3b82f6',
-                status: (bp.status as any) || 'active',
-                progress: Math.round(bp.progress_percent),
-                tasks: [],
-                files: [],
-                conversations: [],
-                tags: bp.tags,
-                createdAt: bp.created_at,
-                updatedAt: bp.updated_at,
+                id: bp.project_id, name: bp.name, description: bp.description,
+                color: '#3b82f6', status: (bp.status as any) || 'active',
+                progress: Math.round(bp.progress_percent), tasks: [], files: [], conversations: [],
+                tags: bp.tags, createdAt: bp.created_at, updatedAt: bp.updated_at,
               };
             });
-            // Keep local-only
-            const backendIds = new Set(backendProjects.map((bp) => bp.project_id));
-            const localOnly = state.projects.filter((p) => !backendIds.has(p.id));
-            return { projects: [...merged, ...localOnly] };
+            const backendIds = new Set(page.projects.map((bp) => bp.project_id));
+            // Locally-created fallback IDs are explicitly prefixed. Do not keep
+            // stale backend pages from persisted browser state, or pagination
+            // would silently rehydrate the entire old collection.
+            const localOnly = state.projects.filter(
+              (p) => p.id.startsWith('proj-') && !backendIds.has(p.id)
+            );
+            return {
+              projects: [...merged, ...localOnly],
+              backendHasMore: page.has_more,
+              backendNextOffset: page.next_offset,
+              isLoading: false,
+            };
           });
-        } catch {}
+        } catch {
+          set({ isLoading: false });
+        }
+      },
+
+      loadMoreBackendProjects: async () => {
+        const { backendHasMore, backendNextOffset, isLoading } = get();
+        if (!backendHasMore || backendNextOffset === null || isLoading) return;
+        set({ isLoading: true });
+        try {
+          const page = await listBackendProjectsPage(backendNextOffset, 50);
+          set((state) => {
+            const existingIds = new Set(state.projects.map((project) => project.id));
+            const additional: Project[] = page.projects
+              .filter((bp) => !existingIds.has(bp.project_id))
+              .map((bp) => ({
+                id: bp.project_id, name: bp.name, description: bp.description,
+                color: '#3b82f6', status: (bp.status as any) || 'active',
+                progress: Math.round(bp.progress_percent), tasks: [], files: [], conversations: [],
+                tags: bp.tags, createdAt: bp.created_at, updatedAt: bp.updated_at,
+              }));
+            return {
+              projects: [...state.projects, ...additional],
+              backendHasMore: page.has_more,
+              backendNextOffset: page.next_offset,
+              isLoading: false,
+            };
+          });
+        } catch {
+          set({ isLoading: false });
+        }
       },
 
       createProjectBackend: async (name, description, priority, milestones, tags) => {

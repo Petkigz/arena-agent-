@@ -173,6 +173,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Optional-tool startup isolation**: The API, manifest, `ToolRegistry`, and `CognitiveRuntime` no longer import every optional tool package at startup. Tool classes resolve only when invoked or explicitly probed; missing packages return typed `dependency_unavailable` results for that capability alone. `GET /tools/availability` reports per-tool status without probing by default. Full and core-only requirement sets are now separate while `requirements.txt` preserves the full-install behavior.
 
+- ✅ **Bounded collection pagination**: Projects now use stable updated-time/id ordering with limit, offset, total, and continuation metadata; web and desktop project views load 50 at a time. Memory/Pansophy and workspace-file APIs expose separate bounded page endpoints while retaining backward-compatible unpaged routes for existing clients. Category, project-status, and file-extension filters are applied before pagination so page counts and continuation remain correct.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):
@@ -182,7 +184,7 @@ Still open (future):
 3. Extend immediate cancellation into third-party model/media calls and Playwright operations that expose no safe cross-thread interrupt. HTTP calls now return control promptly through a cancellable bridge and close owned transports where possible; Playwright checks between operations, but an in-progress synchronous navigation can still run until its bounded timeout.
 4. Full end-to-end browser test of the multimodal round trip (text + image → grounded detection → reply) against a live server.
 5. Exercise external-API tools against live endpoints on the owner's machine.
-6. Add pagination to large Files, Pansophy, and Projects collections.
+6. Extend the new pagination contracts to any remaining high-volume audit, conversation, and temporal-history views as real owner datasets grow.
 
 Python CI is defined in `.github/workflows/tests.yml`. An Android workflow is
 still pending because the connected GitHub App cannot create workflow files

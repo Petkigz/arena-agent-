@@ -672,7 +672,28 @@ def add_new_memory(mem: MemoryCreate):
 
 @router.get("/memories")
 def list_memories(category: Optional[str] = Query(None, description="Filter memories by category")):
+    """Backward-compatible unpaged memory list."""
     return db.get_memories(category=category)
+
+
+@router.get("/memories/page")
+def list_memories_page(
+    category: Optional[str] = Query(None, description="Filter memories by category"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Return a bounded stable page for large Pansophy collections."""
+    memories = db.get_memories(category=category, limit=limit, offset=offset)
+    total = db.count_memories(category=category)
+    return {
+        "memories": memories,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(memories) < total,
+        "next_offset": offset + len(memories)
+        if offset + len(memories) < total else None,
+    }
 
 
 @router.get("/knowledge/graph")
@@ -727,16 +748,23 @@ class ProjectRunRequest(BaseModel):
     max_steps: int = Field(default=1, ge=1, le=10)
 
 @router.get("/projects")
-def list_projects_endpoint(status: Optional[str] = Query(None)):
-    """List persistent projects (multi-session)."""
+def list_projects_endpoint(
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """List a stable page of persistent multi-session projects."""
     try:
         from app.cognition.runtime import CognitiveRuntime
         runtime = CognitiveRuntime.get_instance()
-        if status == "active":
-            projects = runtime.project_manager.get_active_projects()
-        else:
-            # Return all from in-memory (which loads from DB)
-            projects = list(runtime.project_manager._projects.values())
+        projects = list(runtime.project_manager._projects.values())
+        if status:
+            projects = [project for project in projects if project.status.value == status]
+        projects.sort(
+            key=lambda project: (project.updated_at, project.project_id), reverse=True
+        )
+        total = len(projects)
+        page = projects[offset:offset + limit]
         return {
             "projects": [
                 {
@@ -753,13 +781,20 @@ def list_projects_endpoint(status: Optional[str] = Query(None)):
                     "created_at": p.created_at,
                     "updated_at": p.updated_at,
                 }
-                for p in projects[:100]
+                for p in page
             ],
-            "total": len(projects),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(page) < total,
+            "next_offset": offset + len(page) if offset + len(page) < total else None,
         }
     except Exception as e:
         app_logger.error(f"List projects failed: {e}")
-        return {"projects": [], "total": 0, "error": str(e)}
+        return {
+            "projects": [], "total": 0, "limit": limit, "offset": offset,
+            "has_more": False, "next_offset": None, "error": str(e),
+        }
 
 @router.get("/projects/{project_id}")
 def get_project_endpoint(project_id: str):
@@ -1408,7 +1443,34 @@ def list_approved_docs_endpoint():
 
 @router.get("/tools/workspace-files")
 def list_workspace_files_endpoint():
+    """Backward-compatible unpaged workspace listing."""
     return DocumentManager.list_workspace_files()
+
+
+@router.get("/tools/workspace-files/page")
+def list_workspace_files_page_endpoint(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    extension: Optional[str] = Query(None),
+):
+    """Return a stable bounded page of workspace and approved files."""
+    files = DocumentManager.list_workspace_files()
+    if extension:
+        normalized = extension.lower().strip()
+        if normalized and not normalized.startswith("."):
+            normalized = f".{normalized}"
+        files = [item for item in files if item.get("extension") == normalized]
+    files.sort(key=lambda item: (item.get("relative_path", ""), item.get("file_name", "")))
+    total = len(files)
+    page = files[offset:offset + limit]
+    return {
+        "files": page,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(page) < total,
+        "next_offset": offset + len(page) if offset + len(page) < total else None,
+    }
 
 @router.post("/tools/read-doc")
 def read_doc_endpoint(req: DocReadRequest):
