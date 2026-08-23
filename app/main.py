@@ -1580,6 +1580,14 @@ def list_plan_reviews_endpoint(status_filter: Optional[str] = Query(default=None
     }
 
 
+@router.get("/owner-control/plans/{plan_id}/freshness")
+def get_plan_freshness_endpoint(plan_id: str):
+    from app.cognition.plan_control import plan_review_store
+    from app.cognition.runtime import CognitiveRuntime
+    review=plan_review_store.get(plan_id)
+    if review is None:raise HTTPException(status_code=404,detail="Plan review not found")
+    return {"success":True,"freshness":CognitiveRuntime.get_instance().plan_freshness.validate(review,CognitiveRuntime.get_instance()).to_dict()}
+
 @router.get("/owner-control/plans/{plan_id}")
 def get_plan_review_endpoint(plan_id: str):
     from app.cognition.plan_control import plan_review_store
@@ -1624,7 +1632,12 @@ def decide_plan_review_endpoint(plan_id: str, req: PlanDecisionRequest):
         review = plan_review_store.decide(
             plan_id, req.expected_revision, req.approved, req.note
         )
-        return {"success": True, "plan": review.to_dict()}
+        freshness = None
+        if req.approved:
+            from app.cognition.runtime import CognitiveRuntime
+            runtime = CognitiveRuntime.get_instance()
+            freshness = runtime.plan_freshness.capture(review, runtime).to_dict()
+        return {"success": True, "plan": review.to_dict(), "freshness": freshness}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Plan review not found") from exc
     except ValueError as exc:
@@ -1652,6 +1665,16 @@ def execute_approved_plan_endpoint(plan_id: str):
     if review.status != PlanReviewStatus.APPROVED:
         raise HTTPException(status_code=409, detail=f"Plan is {review.status.value}, not approved")
     runtime = CognitiveRuntime.get_instance()
+    freshness = runtime.plan_freshness.validate(review, runtime)
+    if not freshness.fresh:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Approved plan assumptions changed; revise and approve a fresh plan before execution.",
+                "freshness": freshness.to_dict(),
+                "executed": False,
+            },
+        )
     try:
         runtime.commitments.upsert(
             review.goal_title or plan_id, source_type="approved_plan",

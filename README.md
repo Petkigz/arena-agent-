@@ -241,7 +241,7 @@ and evidenced download/upload events are exposed through `/os-grounding/browser-
 Autonomous resource limits are optional through `GET/PUT /owner-control/autonomy-envelope`
 and are disabled by default. The owner can cap cycle duration, cooldown, execution,
 project work, and failures when desired, preempt active work through persistent
-cancellation/resume receipts, and inspect/approve/reject/reprioritize the planning queue at `GET /owner-control/autonomous-goals`, preview resource-aware queue selection at `GET /owner-control/autonomous-goals/allocation-preview`, schedule one-time/daily/weekly directives at `GET/POST /owner-control/autonomy-schedule`, and inspect stage-by-stage run evidence at `GET /owner-control/autonomy-runs`. For a specific command, the owner can issue
+cancellation/resume receipts, and inspect/approve/reject/reprioritize the planning queue at `GET /owner-control/autonomous-goals`, preview resource-aware queue selection at `GET /owner-control/autonomous-goals/allocation-preview`, inspect cross-session plan assumptions at `/owner-control/plans/{plan_id}/freshness`, schedule one-time/daily/weekly directives at `GET/POST /owner-control/autonomy-schedule`, and inspect stage-by-stage run evidence at `GET /owner-control/autonomy-runs`. For a specific command, the owner can issue
 an exact short-lived authorization with `override_owner_policy: true`; this overrides
 the owner's own mode/block/level rules but never emergency pause, resource-critical
 shutdown, missing capability, payload binding, or verification honesty.

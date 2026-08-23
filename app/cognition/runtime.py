@@ -116,6 +116,10 @@ class CognitiveRuntime:
         self.autonomy_preemptions = AutonomyPreemptionStore(
             str(Path(path).parent / "autonomy_preemptions.db") if path else "data/autonomy_preemptions.db"
         )
+        from app.cognition.plan_freshness import PlanFreshnessStore
+        self.plan_freshness = PlanFreshnessStore(
+            str(Path(path).parent / "plan_freshness.db") if path else "data/plan_freshness.db"
+        )
         from app.cognition.temporal_vision import TemporalVisionTracker
         self.temporal_vision = TemporalVisionTracker(
             db_path=str(Path(path).parent / "temporal_vision.db") if path else "data/temporal_vision.db"

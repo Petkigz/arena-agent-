@@ -141,6 +141,9 @@ Owner Control Plane may always impose a stricter rule:
   and payload—is revisioned and owner-editable. No step runs before approval of
   that exact revision; edits invalidate approval, and plan approval never covers
   Level-3 or per-action-gated operations.
+- Approved plans are bound to owner-policy revision, tool contracts/availability,
+  interface topology, capability count, and owner goal priority. Any cross-session
+  drift blocks execution and requires a fresh recommendation and approval.
 - Persistent project DAG execution is explicit owner opt-in, bounded per cycle,
   dependency-aware, and restart-safe. UNKNOWN triggers later observation-only
   reconciliation—not re-execution; sensitive steps wait for exact single-use
