@@ -254,7 +254,7 @@ class TestPhoneCommandObservation:
         mock_result.returncode = 0
         mock_result.stdout = "Current Battery Service state: OFF\n  level: 85\n  scale: 100"
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.cognition.perception.run_cancellable_subprocess", return_value=mock_result):
             obs = ObservationCollector.collect_and_ingest_observations(
                 proposal, exec_result, world_model=wm
             )
@@ -276,7 +276,7 @@ class TestPhoneCommandObservation:
         mock_result.returncode = 0
         mock_result.stdout = "device"
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.cognition.perception.run_cancellable_subprocess", return_value=mock_result):
             obs = ObservationCollector.collect_and_ingest_observations(
                 proposal, exec_result, world_model=wm
             )
@@ -295,7 +295,7 @@ class TestPhoneCommandObservation:
         mock_result.returncode = 0
         mock_result.stdout = "mCallState=1\nmForegroundCallState=ACTIVE"
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.cognition.perception.run_cancellable_subprocess", return_value=mock_result):
             obs = ObservationCollector.collect_and_ingest_observations(
                 proposal, exec_result, world_model=wm
             )
