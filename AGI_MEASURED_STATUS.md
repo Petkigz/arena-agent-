@@ -175,6 +175,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Bounded collection pagination**: Projects now use stable updated-time/id ordering with limit, offset, total, and continuation metadata; web and desktop project views load 50 at a time. Memory/Pansophy and workspace-file APIs expose separate bounded page endpoints while retaining backward-compatible unpaged routes for existing clients. Category, project-status, and file-extension filters are applied before pagination so page counts and continuation remain correct.
 
+- ✅ **Desktop Owner Control operations**: The native desktop client now exposes policy mode, autonomous safety ceiling, exploration cap, emergency pause/resume, exact recommendation approval/rejection, plan approval/rejection, separate approved-plan execution, execution cancellation, and rollback-request creation. Exact payloads and receipts are inspectable as JSON. Approval text explicitly states that authorization does not execute, and rollback creates a new approval rather than running compensation.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):
@@ -185,6 +187,7 @@ Still open (future):
 4. Full end-to-end browser test of the multimodal round trip (text + image → grounded detection → reply) against a live server.
 5. Exercise external-API tools against live endpoints on the owner's machine.
 6. Extend the new pagination contracts to any remaining high-volume audit, conversation, and temporal-history views as real owner datasets grow.
+7. Bring Android Owner Control to parity and add exact step/payload plan editing plus scoped-authorization execution to the desktop UI. Desktop now covers the operational policy, approval, plan decision/execution, cancellation, and rollback controls; the web remains the complete editing surface.
 
 Python CI is defined in `.github/workflows/tests.yml`. An Android workflow is
 still pending because the connected GitHub App cannot create workflow files

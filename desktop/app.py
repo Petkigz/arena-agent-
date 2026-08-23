@@ -70,6 +70,7 @@ from desktop.pages.code import CodePage
 from desktop.pages.vision import VisionPage
 from desktop.pages.tools import ToolsPage
 from desktop.pages.lora import LoraPage
+from desktop.pages.owner_control import OwnerControlPage
 
 # For backward compatibility, re-export theme globals and helpers that old code might import from desktop.app
 from desktop.theme import THEME_COLORS, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten, _is_system_dark, _resolved_theme_name
@@ -173,6 +174,7 @@ class MainWindow(QMainWindow):
         self.vision = VisionPage(self.client)
         self.projects_page = ProjectsPage(self.client)
         self.lora_page = LoraPage(self.client)
+        self.owner_control_page = OwnerControlPage(self.client)
         self.settings_page = SettingsPage(
             self.settings,
             self.client,
@@ -205,6 +207,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.vision)       # index 7
         self.stack.addWidget(self.projects_page)  # index 8
         self.stack.addWidget(self.lora_page)      # index 9
+        self.stack.addWidget(self.owner_control_page)  # index 10
         self.stack.setCurrentIndex(0)
 
         # Right context panel
@@ -285,11 +288,14 @@ class MainWindow(QMainWindow):
     def _nav_to_key(self, key: str) -> None:
         index = {
             "chat": 0, "pansophy": 1, "files": 2, "code": 3,
-            "settings": 4, "beanie": 5, "tools": 6, "images": 7, "projects": 8, "lora": 9,
+            "settings": 4, "beanie": 5, "tools": 6, "images": 7,
+            "projects": 8, "lora": 9, "owner_control": 10,
         }.get(key, 0)
         self.stack.setCurrentIndex(index)
         if key == "tools":
             self.tools.refresh_status()
+        elif key == "owner_control":
+            self.owner_control_page.refresh()
 
     def _on_save_server_url(self, url: str) -> None:
         self.tray.showMessage(
@@ -321,7 +327,11 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         # Pages
-        for page in [self.beanie, self.chat, self.pansophy, self.files, self.code, self.settings_page, self.tools, self.vision]:
+        for page in [
+            self.beanie, self.chat, self.pansophy, self.files, self.code,
+            self.settings_page, self.tools, self.vision, self.projects_page,
+            self.lora_page, self.owner_control_page,
+        ]:
             try:
                 if hasattr(page, "refresh_theme"):
                     page.refresh_theme()

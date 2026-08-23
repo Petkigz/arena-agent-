@@ -104,7 +104,8 @@ class LeftSidebar(QFrame):
         for label, key in [
             ("Chats", "chat"), ("Pansophy", "pansophy"), ("Files", "files"),
             ("Code", "code"), ("Images", "images"), ("Projects", "projects"),
-            ("Settings", "settings"), ("Beanie", "beanie"), ("Tools", "tools"),
+            ("Owner Control", "owner_control"), ("Settings", "settings"),
+            ("Beanie", "beanie"), ("Tools", "tools"),
         ]:
             btn = QPushButton(label)
             btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))

@@ -304,6 +304,63 @@ class ArenaBackendClient:
         """POST /voice/piper/select → set the active Piper voice."""
         return self._post_json("/voice/piper/select", {"profile_name": voice_id})
 
+    # ── owner control plane ─────────────────────────────────────────────────
+    def owner_control(self) -> Dict[str, Any]:
+        return self._get_json("/owner-control")
+
+    def update_owner_control(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+        return self._put_json("/owner-control", patch)
+
+    def set_emergency_pause(self, paused: bool) -> Dict[str, Any]:
+        return self._post_json("/owner-control/pause", {"paused": paused})
+
+    def pending_approvals(self) -> Dict[str, Any]:
+        return self._get_json("/owner-control/approvals")
+
+    def decide_approval(self, action_id: str, approved: bool, note: str = "") -> Dict[str, Any]:
+        return self._post_json(
+            f"/owner-control/approvals/{quote(action_id, safe='')}/decision",
+            {"approved": approved, "note": note, "ttl_seconds": 300},
+        )
+
+    def reviewed_plans(self) -> Dict[str, Any]:
+        return self._get_json("/owner-control/plans")
+
+    def decide_plan(self, plan_id: str, revision: int, approved: bool, note: str = "") -> Dict[str, Any]:
+        return self._post_json(
+            f"/owner-control/plans/{quote(plan_id, safe='')}/decision",
+            {"expected_revision": revision, "approved": approved, "note": note},
+        )
+
+    def execute_plan(self, plan_id: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/plans/{quote(plan_id, safe='')}/execute", {})
+
+    def controlled_executions(self, active_only: bool = False) -> Dict[str, Any]:
+        value = "true" if active_only else "false"
+        return self._get_json(f"/owner-control/executions?active_only={value}&limit=100")
+
+    def cancel_execution(self, execution_id: str) -> Dict[str, Any]:
+        return self._post_json(
+            f"/owner-control/executions/{quote(execution_id, safe='')}/cancel", {}
+        )
+
+    def request_rollback(self, execution_id: str) -> Dict[str, Any]:
+        return self._post_json(
+            f"/owner-control/executions/{quote(execution_id, safe='')}/request-rollback", {}
+        )
+
+    def adaptive_autonomy(self) -> Dict[str, Any]:
+        return self._get_json("/owner-control/adaptive-autonomy")
+
+    def set_exploration_budget(self, maximum: int) -> Dict[str, Any]:
+        return self._put_json(
+            "/owner-control/adaptive-autonomy/exploration-budget",
+            {"max_exploration_goals": maximum},
+        )
+
+    def latest_intelligence_benchmark(self) -> Dict[str, Any]:
+        return self._get_json("/benchmarks/intelligence/latest")
+
     # ── code execution ──────────────────────────────────────────────────────
     def execute_code(self, code: str, language: str = "python") -> Dict[str, Any]:
         """POST /code/execute."""
@@ -325,6 +382,14 @@ class ArenaBackendClient:
             return r.json()
         except httpx.HTTPError as e:
             raise BackendConnectionError(f"POST {path} failed: {e}") from e
+
+    def _put_json(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            r = self._client.put(f"{self.base_url}{path}", json=payload)
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"PUT {path} failed: {e}") from e
 
     def close(self) -> None:
         self._client.close()
