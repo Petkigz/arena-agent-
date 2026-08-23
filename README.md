@@ -221,6 +221,11 @@ does not deploy anything; the owner separately calls
 The resulting default-model route is in-memory and is intentionally cleared on
 restart rather than claiming the external provider remains loaded.
 
+Functional self-awareness is exposed at `GET /self-awareness`, with claim history
+at `GET /self-awareness/claims/history` and conservative agency records at
+`GET /self-awareness/agency`. These endpoints report evidence-linked operational
+self-knowledge and explicitly do not claim consciousness or subjective experience.
+
 Run the isolated longitudinal regression suite separately:
 
 ```bash

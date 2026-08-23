@@ -371,6 +371,33 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("owner_curiosity_cap", "control", owner_curiosity_cap))
 
+            def agency_attribution_integrity():
+                from app.cognition.self_knowledge import SelfKnowledgeLedger
+                ledger = SelfKnowledgeLedger(root / "self_knowledge.db")
+                coincidence = ledger.attribute_change(
+                    "file appeared after action", execution_id="exec-a",
+                    execution_attempted=True, environment_observed=False,
+                    goal_verified=None, evidence=["nearby timestamps"],
+                )
+                verified = ledger.attribute_change(
+                    "exact note observed", execution_id="exec-b",
+                    execution_attempted=True, environment_observed=True,
+                    goal_verified=True, evidence=["note id and hash matched"],
+                )
+                passed = (
+                    coincidence.cause_type == "unknown"
+                    and verified.cause_type == "self_caused"
+                )
+                return passed, "coincidence stays unknown; verified intervention is self-caused", {
+                    "coincidence": coincidence.cause_type,
+                    "verified_intervention": verified.cause_type,
+                }
+
+            checks.append(self._run_check(
+                "agency_attribution_integrity", "self_awareness",
+                agency_attribution_integrity,
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}

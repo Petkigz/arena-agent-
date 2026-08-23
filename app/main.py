@@ -910,6 +910,48 @@ def tool_availability_endpoint(
     }
 
 
+# ── Evidence-linked functional self-awareness ────────────────────────────────
+@router.get("/self-awareness")
+def self_awareness_endpoint(refresh: bool = Query(True)):
+    """Return evidence-backed self-claims, agency records, and performance."""
+    from dataclasses import asdict
+    from app.cognition.runtime import CognitiveRuntime
+
+    runtime = CognitiveRuntime.get_instance()
+    snapshot = (
+        runtime.refresh_self_knowledge()["snapshot"]
+        if refresh else runtime.self_knowledge.snapshot()
+    )
+    return {
+        "success": True,
+        "self_knowledge": snapshot,
+        "performance_self_model": asdict(runtime.self_model.generate_report()),
+        "disclaimer": (
+            "Functional evidence-linked self-knowledge only; this does not "
+            "demonstrate consciousness, sentience, emotion, or subjective experience."
+        ),
+    }
+
+
+@router.get("/self-awareness/claims/history")
+def self_claim_history_endpoint(
+    predicate: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    from app.cognition.runtime import CognitiveRuntime
+
+    claims = CognitiveRuntime.get_instance().self_knowledge.history(predicate, limit)
+    return {"success": True, "claims": [claim.to_dict() for claim in claims]}
+
+
+@router.get("/self-awareness/agency")
+def self_agency_history_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+
+    records = CognitiveRuntime.get_instance().self_knowledge.recent_attributions(limit)
+    return {"success": True, "attributions": [record.to_dict() for record in records]}
+
+
 # ── Longitudinal intelligence benchmarks ────────────────────────────────────
 @router.post("/benchmarks/intelligence/run")
 def run_intelligence_benchmark_endpoint():

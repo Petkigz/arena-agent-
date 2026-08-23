@@ -157,6 +157,22 @@ or explaining a restricted action is never permission to execute it. The
 restricted alternative remains visible in the decision record even when it is
 not authorized.
 
+## 11. Self-knowledge is evidence, not model narration
+
+- Every factual self-claim has a source type, evidence references, confidence,
+  timestamp, freshness/expiry, and revision history.
+- Free-form model statements such as “I can,” “I remember,” or “I caused” are not
+  privileged introspection and cannot create self-knowledge by themselves.
+- Changed self-beliefs supersede rather than erase earlier claims so contradiction
+  and correction history stays inspectable.
+- Temporal proximity never proves agency. Arena may mark a change `self_caused`
+  only when a controlled execution is followed by environmental observation and
+  goal-verifying evidence; otherwise causation remains unknown.
+- Owner-caused and identified external changes remain distinct from self-caused
+  changes.
+- Functional self-knowledge never implies consciousness, sentience, emotion, or
+  subjective experience. The absence of a measurement remains explicit.
+
 ---
 
 *Where this is enforced:* `app/agents/*` (loops), `app/cognition/runtime.py`

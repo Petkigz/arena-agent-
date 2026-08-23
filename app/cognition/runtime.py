@@ -125,7 +125,12 @@ class CognitiveRuntime:
         self.resource_allocator = ResourceAllocator()
         self.confidence_calibrator = ConfidenceCalibrator(db_path=path)
         self.self_model = SelfModel(outcome_store=self.outcomes, lesson_store=self.lessons)
-        
+        from app.cognition.self_knowledge import SelfKnowledgeLedger
+        self.self_knowledge = SelfKnowledgeLedger(
+            str(Path(path).parent / "self_knowledge.db") if path else "data/self_knowledge.db"
+        )
+        self.refresh_self_knowledge()
+
         # Phase 6: Common Sense Knowledge Base for AGI
         from app.cognition.common_sense import CommonSenseKnowledgeBase
         self.common_sense = CommonSenseKnowledgeBase(db_path=path)
@@ -214,6 +219,44 @@ class CognitiveRuntime:
         # get_instance() returns the SAME instance the server (or any caller)
         # constructed — instead of spawning a second, divergent brain.
         type(self)._instance = self
+
+    def refresh_self_knowledge(self) -> Dict[str, Any]:
+        """Refresh volatile evidence-backed claims about this runtime."""
+        recorded = []
+        try:
+            if isinstance(self.hardware_self_model, dict) and self.hardware_self_model:
+                recorded.append(self.self_knowledge.assert_claim(
+                    "hardware.profile", self.hardware_self_model,
+                    source_type="hardware_probe",
+                    evidence=["HardwareGovernor.build_self_model"],
+                    confidence=0.9, ttl_seconds=300,
+                ))
+            recorded.append(self.self_knowledge.assert_claim(
+                "capabilities.registered_tool_count", len(self.registry._registry),
+                source_type="capability_probe",
+                evidence=["ToolRegistry._registry live count"],
+                confidence=1.0, ttl_seconds=300,
+            ))
+            from app.cognition.owner_control import owner_control_store
+            policy = owner_control_store.get_policy().to_dict()
+            recorded.append(self.self_knowledge.assert_claim(
+                "authority.owner_policy", policy,
+                source_type="owner_policy",
+                evidence=[f"owner_control revision {policy.get('revision')}"],
+                confidence=1.0,
+            ))
+            recorded.append(self.self_knowledge.assert_claim(
+                "consciousness.evidence_available", False,
+                source_type="capability_probe",
+                evidence=["No phenomenal-consciousness measurement capability is registered"],
+                confidence=1.0,
+            ))
+        except Exception as exc:
+            app_logger.warning(f"Self-knowledge refresh failed: {exc}")
+        return {
+            "recorded_claim_ids": [claim.claim_id for claim in recorded],
+            "snapshot": self.self_knowledge.snapshot(),
+        }
 
     def get_hardware_self_report(self) -> Dict[str, Any]:
         """
@@ -2062,6 +2105,20 @@ class CognitiveRuntime:
         )
         trace.goal_verified = verification.verified_success
         try:
+            agency_evidence = list(verification.met_conditions or [])
+            if observation_error:
+                agency_evidence.append(f"observation_error: {observation_error}")
+            execution["agency_attribution"] = self.self_knowledge.attribute_change(
+                f"Outcome of {proposal.action_type} for goal: {goal_text[:160]}",
+                execution_id=execution.get("controlled_execution_id"),
+                execution_attempted=bool(execution.get("attempted", True)),
+                environment_observed=bool(observed_state) and not observation_error,
+                goal_verified=verification.verified_success,
+                evidence=agency_evidence,
+            ).to_dict()
+        except Exception as exc:
+            app_logger.warning(f"Agency attribution failed: {exc}")
+        try:
             self.learning.record_verified_episode(
                 goal=goal_text,
                 action_type=proposal.action_type,
@@ -2264,6 +2321,7 @@ class CognitiveRuntime:
             "cancel_requested": execution.get("cancel_requested", False),
             "cancellation_observed": execution.get("cancellation_observed", False),
             "rollback_receipt": execution.get("rollback_receipt"),
+            "agency_attribution": execution.get("agency_attribution"),
             "replan_performed": False,
             "requires_new_authorization_for_retry": (
                 scoped_authorization and not verification.verified_success
@@ -2865,6 +2923,17 @@ class CognitiveRuntime:
             goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker, observed_state=obs_state, failed_payload=proposal.payload
         )
         trace.goal_verified = verify_res.verified_success
+        try:
+            agent_res["agency_attribution"] = self.self_knowledge.attribute_change(
+                f"Outcome of {proposal.action_type} for goal: {user_text[:160]}",
+                execution_id=agent_res.get("controlled_execution_id"),
+                execution_attempted=bool(agent_res.get("attempted", True)),
+                environment_observed=bool(obs_state),
+                goal_verified=verify_res.verified_success,
+                evidence=list(verify_res.met_conditions or []),
+            ).to_dict()
+        except Exception as exc:
+            app_logger.warning(f"Agency attribution failed: {exc}")
 
         # Reassessment & Replanning on Goal Verification Failure
         final_action_type = proposal.action_type
@@ -3129,5 +3198,6 @@ class CognitiveRuntime:
             "cancel_requested": control_result.get("cancel_requested", False),
             "cancellation_observed": control_result.get("cancellation_observed", False),
             "rollback_receipt": control_result.get("rollback_receipt"),
+            "agency_attribution": agent_res.get("agency_attribution"),
             "model_used": trace.model_used
         }
