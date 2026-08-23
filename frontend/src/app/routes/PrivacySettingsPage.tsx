@@ -80,6 +80,11 @@ interface ScheduledDirectiveItem {
   schedule_id: string; title: string; next_run_at: string; recurrence: string;
   missed_policy: string; status: string; priority: string;
 }
+interface AutonomyEnvelopeState {
+  cycles_enabled: boolean; limits_enabled: boolean; max_goal_executions_per_cycle: number;
+  max_project_steps_per_cycle: number; max_projects_per_cycle: number;
+  max_cycle_seconds: number; minimum_seconds_between_cycles: number; max_consecutive_failures: number;
+}
 
 interface OwnerControlPolicy {
   mode: ControlMode;
@@ -128,6 +133,7 @@ export function PrivacySettingsPage() {
   const [autonomyBusy, setAutonomyBusy] = useState<string | null>(null);
   const [newDirective, setNewDirective] = useState({ title: '', description: '', priority: 'normal' });
   const [newSchedule, setNewSchedule] = useState({ title: '', run_at: '', recurrence: 'none', missed_policy: 'run_once' });
+  const [autonomyEnvelope, setAutonomyEnvelope] = useState<AutonomyEnvelopeState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,11 +171,13 @@ export function PrivacySettingsPage() {
       fetch('/owner-control/autonomous-goals?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
       fetch('/owner-control/autonomy-runs?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
       fetch('/owner-control/autonomy-schedule?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
-    ]).then(([goals, events, schedule]) => {
+      fetch('/owner-control/autonomy-envelope', { headers: apiKeyHeader() }).then((r) => r.json()),
+    ]).then(([goals, events, schedule, envelope]) => {
       if (!cancelled) {
         setAutonomousGoals(Array.isArray(goals?.goals) ? goals.goals : []);
         setAutonomyEvents(Array.isArray(events?.events) ? events.events : []);
         setAutonomySchedule(Array.isArray(schedule?.schedule) ? schedule.schedule : []);
+        if (envelope?.envelope) setAutonomyEnvelope(envelope.envelope);
       }
     }).catch(() => {});
     return () => {
@@ -177,6 +185,21 @@ export function PrivacySettingsPage() {
       window.clearInterval(executionTimer);
     };
   }, []);
+
+  const updateAutonomyEnvelope = async (patch: Partial<AutonomyEnvelopeState>) => {
+    if (!autonomyEnvelope) return;
+    const next = { ...autonomyEnvelope, ...patch };
+    setAutonomyEnvelope(next);
+    setAutonomyBusy('envelope');
+    const response = await fetch('/owner-control/autonomy-envelope', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify(patch),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.envelope) setAutonomyEnvelope(data.envelope);
+    else notifications.error(data?.detail || 'Could not update autonomy envelope');
+    setAutonomyBusy(null);
+  };
 
   const updateScheduleStatus = async (scheduleId: string, status: string) => {
     setAutonomyBusy(scheduleId);
@@ -670,6 +693,19 @@ export function PrivacySettingsPage() {
               </p>
               <button disabled={autonomyBusy === 'execute-next'} onClick={executeNextAutonomousGoal} className="shrink-0 px-3 py-1.5 bg-accent-primary text-white rounded text-xs disabled:opacity-50">Process next approved goal</button>
             </div>
+            {autonomyEnvelope && <div className="rounded border border-border p-3 space-y-3">
+              <div className="flex flex-wrap gap-6 text-sm">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={autonomyEnvelope.cycles_enabled} onChange={(e) => updateAutonomyEnvelope({ cycles_enabled: e.target.checked })} />Cycles enabled</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={autonomyEnvelope.limits_enabled} onChange={(e) => updateAutonomyEnvelope({ limits_enabled: e.target.checked })} />Apply optional resource limits</label>
+              </div>
+              {autonomyEnvelope.limits_enabled && <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <label>Goals/cycle<input type="number" min="0" max="20" value={autonomyEnvelope.max_goal_executions_per_cycle} onChange={(e) => updateAutonomyEnvelope({ max_goal_executions_per_cycle: Number(e.target.value) })} className="w-full bg-background-surface border border-border rounded p-1" /></label>
+                <label>Projects/cycle<input type="number" min="0" max="20" value={autonomyEnvelope.max_projects_per_cycle} onChange={(e) => updateAutonomyEnvelope({ max_projects_per_cycle: Number(e.target.value) })} className="w-full bg-background-surface border border-border rounded p-1" /></label>
+                <label>Cycle seconds<input type="number" min="10" max="3600" value={autonomyEnvelope.max_cycle_seconds} onChange={(e) => updateAutonomyEnvelope({ max_cycle_seconds: Number(e.target.value) })} className="w-full bg-background-surface border border-border rounded p-1" /></label>
+                <label>Failure streak<input type="number" min="0" max="20" value={autonomyEnvelope.max_consecutive_failures} onChange={(e) => updateAutonomyEnvelope({ max_consecutive_failures: Number(e.target.value) })} className="w-full bg-background-surface border border-border rounded p-1" /></label>
+              </div>}
+              <p className="text-xs text-text-muted">Limits are optional and grant no authority. Emergency pause and exact action gates remain separate.</p>
+            </div>}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded border border-border p-3 space-y-2">
                 <h3 className="text-sm font-medium text-text-primary">Create owner directive</h3>
