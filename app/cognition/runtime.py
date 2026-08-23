@@ -316,6 +316,7 @@ class CognitiveRuntime:
             "screen_capture": "desktop_screen", "mouse_click": "desktop_pointer",
             "type_text": "desktop_keyboard", "press_hotkey": "desktop_keyboard",
             "browser_extract": "web_browser", "web_workflow": "web_browser",
+            "accessibility_activate": "semantic_accessibility",
             "camera_photo": "local_camera", "phone_command": "android_phone",
             "phone_sms": "android_phone", "phone_call": "android_phone",
             "phone_screenshot": "android_phone",
@@ -329,6 +330,7 @@ class CognitiveRuntime:
             ("desktop_pointer", "actuator", "shared", False, True, "mouse_click"),
             ("desktop_keyboard", "actuator", "shared", False, True, "type_text"),
             ("web_browser", "sensor_actuator", "shared", True, True, "browser_extract"),
+            ("semantic_accessibility", "sensor_actuator", "shared", True, True, "accessibility_resolve"),
             ("local_camera", "sensor", "owner_device", True, False, "camera_photo"),
             ("android_phone", "sensor_actuator", "owner_device", True, True, "phone_command"),
         ]

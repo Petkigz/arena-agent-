@@ -201,6 +201,8 @@ not authorized.
   prove control; an Arena-controlled event requires authority plus observed effect.
 - OS targeting requires a unique live process grounding and, for UI interaction,
   observed window/display/region evidence. Ambiguous application names never select a target.
+- Prefer semantic accessibility role/name targeting over raw coordinates. A semantic
+  target must be unique and have observed bounds before activation.
 - Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
 - Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a

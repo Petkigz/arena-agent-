@@ -1059,6 +1059,16 @@ def request_recovery_action_endpoint(assessment_id:str,req:RecoveryActionRequest
     return {"success":True,"assessment":item.to_dict(),"approval":approval.to_dict(),"executed":False}
 
 
+@router.get("/os-grounding/accessibility/status")
+def accessibility_status_endpoint():
+    from app.tools.accessibility_control import AccessibilityControlTool
+    return AccessibilityControlTool.status()
+
+@router.get("/os-grounding/accessibility/resolve")
+def accessibility_resolve_endpoint(role:str=Query(...),name:str=Query(...),window_id:Optional[str]=Query(None)):
+    from app.tools.accessibility_control import AccessibilityControlTool
+    return AccessibilityControlTool.resolve_target(role,name,window_id)
+
 @router.get("/os-grounding")
 def list_os_groundings_endpoint(app_name:Optional[str]=Query(None),limit:int=Query(200,ge=1,le=1000)):
     from app.cognition.runtime import CognitiveRuntime

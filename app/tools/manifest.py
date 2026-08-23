@@ -160,6 +160,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     DailyBriefingEngine = _LazyImportProxy("app.tools.daily_briefing", "DailyBriefingEngine")
     DataAnalysisEngine = _LazyImportProxy("app.tools.data_analyzer", "DataAnalysisEngine")
     DeepOSController = _LazyImportProxy("app.tools.deep_os_controller", "DeepOSController")
+    AccessibilityControlTool = _LazyImportProxy("app.tools.accessibility_control", "AccessibilityControlTool")
     DesktopControl = _LazyImportProxy("app.tools.desktop_control", "DesktopControl")
     DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
     DocumentManager = _LazyImportProxy("app.tools.doc_manager", "DocumentManager")
@@ -246,6 +247,14 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DeepOSController.press_hotkey, "keys"))
     add("open_url", "os_control", 2, "Open a URL in the default browser",
         _wrap(DesktopControl.open_url, "url"))
+    add("accessibility_status", "os_control", 0, "Check native semantic accessibility adapter availability",
+        _ignore_payload(AccessibilityControlTool.status))
+    add("accessibility_ingest", "os_control", 0, "Ingest an observed accessibility-tree snapshot",
+        _wrap(AccessibilityControlTool.ingest_snapshot, "nodes", "interface", "window_id", "evidence"))
+    add("accessibility_resolve", "os_control", 0, "Resolve one unique semantic UI target",
+        _wrap(AccessibilityControlTool.resolve_target, "role", "name", "window_id"))
+    add("accessibility_activate", "os_control", 2, "Activate a uniquely grounded semantic UI target",
+        _wrap(AccessibilityControlTool.activate_target, "role", "name", "window_id"))
     add("system_update", "os_control", 3, "Update installed software",
         _wrap(DeepOSController.check_and_update_software, "package_name"))
 
