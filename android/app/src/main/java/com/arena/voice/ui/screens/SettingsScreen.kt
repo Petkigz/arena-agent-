@@ -23,6 +23,27 @@ import javax.inject.Inject
  * voice, voice speed, theme, language, VAD sensitivity, response delay), so the
  * Android app changes the SAME values the web + desktop apps edit.
  */
+data class OwnerApproval(
+    val actionId: String,
+    val actionType: String,
+    val reason: String,
+    val payload: String,
+)
+
+data class OwnerPlanReview(
+    val planId: String,
+    val title: String,
+    val revision: Int,
+    val status: String,
+)
+
+data class OwnerExecution(
+    val executionId: String,
+    val actionType: String,
+    val status: String,
+    val rollbackSupported: Boolean,
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val api: ApiClient,
@@ -35,6 +56,17 @@ class SettingsViewModel @Inject constructor(
     var voiceEnabled by mutableStateOf(true)
     var vadSensitivity by mutableStateOf("50")
     var responseDelay by mutableStateOf("500")
+
+    var ownerMode by mutableStateOf("approve_every_action")
+    var ownerPaused by mutableStateOf(false)
+    var maxAutonomousSafety by mutableStateOf("0")
+    var explorationBudget by mutableStateOf("0")
+    var ownerApprovals by mutableStateOf<List<OwnerApproval>>(emptyList())
+        private set
+    var ownerPlans by mutableStateOf<List<OwnerPlanReview>>(emptyList())
+        private set
+    var ownerExecutions by mutableStateOf<List<OwnerExecution>>(emptyList())
+        private set
 
     var piperVoices by mutableStateOf<List<String>>(emptyList())
         private set
@@ -73,7 +105,135 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             }
+            loadOwnerControlState()
             loading = false
+        }
+    }
+
+    private suspend fun loadOwnerControlState() {
+        api.getOwnerControl()?.let { raw ->
+            runCatching {
+                val policy = JSONObject(raw).optJSONObject("policy") ?: JSONObject()
+                ownerMode = policy.optString("mode", ownerMode)
+                ownerPaused = policy.optBoolean("paused", false)
+                maxAutonomousSafety = policy.optInt("max_autonomous_safety_level", 0).toString()
+            }
+        }
+        api.getAdaptiveAutonomy()?.let { raw ->
+            runCatching {
+                val profile = JSONObject(raw).optJSONObject("profile") ?: JSONObject()
+                explorationBudget = profile.optInt("owner_max_exploration_goals", 0).toString()
+            }
+        }
+        api.getPendingApprovals()?.let { raw ->
+            runCatching {
+                val array = JSONObject(raw).optJSONArray("approvals") ?: JSONArray()
+                ownerApprovals = (0 until array.length()).mapNotNull { index ->
+                    array.optJSONObject(index)?.let { item ->
+                        OwnerApproval(
+                            item.optString("action_id"), item.optString("action_type"),
+                            item.optString("reason"), item.optJSONObject("payload")?.toString(2) ?: "{}",
+                        )
+                    }
+                }
+            }
+        }
+        api.getReviewedPlans()?.let { raw ->
+            runCatching {
+                val array = JSONObject(raw).optJSONArray("plans") ?: JSONArray()
+                ownerPlans = (0 until array.length()).mapNotNull { index ->
+                    array.optJSONObject(index)?.let { item ->
+                        OwnerPlanReview(
+                            item.optString("plan_id"), item.optString("goal_title", item.optString("plan_id")),
+                            item.optInt("revision"), item.optString("status"),
+                        )
+                    }
+                }
+            }
+        }
+        api.getControlledExecutions()?.let { raw ->
+            runCatching {
+                val array = JSONObject(raw).optJSONArray("executions") ?: JSONArray()
+                ownerExecutions = (0 until array.length()).mapNotNull { index ->
+                    array.optJSONObject(index)?.let { item ->
+                        OwnerExecution(
+                            item.optString("execution_id"), item.optString("action_type"),
+                            item.optString("status"),
+                            item.optJSONObject("rollback_receipt")?.optBoolean("supported", false) ?: false,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun refreshOwnerControl() {
+        viewModelScope.launch {
+            loadOwnerControlState()
+            status = "Owner-control state refreshed"
+        }
+    }
+
+    fun saveOwnerPolicy() {
+        viewModelScope.launch {
+            val policy = api.updateOwnerControl(
+                ownerMode, (maxAutonomousSafety.toIntOrNull() ?: 0).coerceIn(0, 2)
+            )
+            val budget = api.setExplorationBudget(
+                (explorationBudget.toIntOrNull() ?: 0).coerceIn(0, 10)
+            )
+            status = if (policy != null && budget != null)
+                "Policy saved; no action was authorized or executed" else "Could not save owner policy"
+            loadOwnerControlState()
+        }
+    }
+
+    fun toggleEmergencyPause() {
+        viewModelScope.launch {
+            status = if (api.setEmergencyPause(!ownerPaused) != null)
+                "Emergency state updated" else "Could not update emergency state"
+            loadOwnerControlState()
+        }
+    }
+
+    fun decideApproval(approval: OwnerApproval, approved: Boolean) {
+        viewModelScope.launch {
+            status = if (api.decideApproval(approval.actionId, approved) != null) {
+                if (approved) "Exact action authorized; nothing executed" else "Recommendation rejected"
+            } else "Approval decision failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun decidePlan(plan: OwnerPlanReview, approved: Boolean) {
+        viewModelScope.launch {
+            status = if (api.decidePlan(plan.planId, plan.revision, approved) != null)
+                "Plan decision recorded; nothing executed" else "Plan decision failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun executePlan(plan: OwnerPlanReview) {
+        viewModelScope.launch {
+            status = if (api.executeApprovedPlan(plan.planId) != null)
+                "Separate plan execution request completed" else "Plan execution failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun cancelExecution(execution: OwnerExecution) {
+        viewModelScope.launch {
+            status = if (api.cancelExecution(execution.executionId) != null)
+                "Cooperative cancellation requested; prior side effects may exist" else "Cancellation failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun requestRollback(execution: OwnerExecution) {
+        viewModelScope.launch {
+            status = if (api.requestRollback(execution.executionId) != null)
+                "Rollback compensation added to approvals; not executed" else "Rollback request failed"
+            loadOwnerControlState()
         }
     }
 
@@ -142,6 +302,148 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Save connection") }
 
+        // ── Owner Control (backend authority, not local preferences) ──
+        Divider()
+        Text("Owner Control", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Approval authorizes only the exact recommendation. It does not execute it. " +
+                "Plan execution, cancellation, and rollback are separate owner actions.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        var ownerModeExpanded by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(
+            expanded = ownerModeExpanded,
+            onExpandedChange = { ownerModeExpanded = it },
+        ) {
+            OutlinedTextField(
+                value = viewModel.ownerMode,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Authority mode") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(ownerModeExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+            )
+            ExposedDropdownMenu(
+                expanded = ownerModeExpanded,
+                onDismissRequest = { ownerModeExpanded = false },
+            ) {
+                listOf(
+                    "observe_only", "suggest_only", "approve_every_action",
+                    "approve_each_plan", "bounded_autonomy", "custom",
+                ).forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(mode) },
+                        onClick = { viewModel.ownerMode = mode; ownerModeExpanded = false },
+                    )
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = viewModel.maxAutonomousSafety,
+                onValueChange = { viewModel.maxAutonomousSafety = it },
+                label = { Text("Safety ceiling 0–2") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = viewModel.explorationBudget,
+                onValueChange = { viewModel.explorationBudget = it },
+                label = { Text("Exploration 0–10") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.saveOwnerPolicy() }, modifier = Modifier.weight(1f)) {
+                Text("Save policy")
+            }
+            Button(
+                onClick = { viewModel.toggleEmergencyPause() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (viewModel.ownerPaused) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
+                ),
+                modifier = Modifier.weight(1f),
+            ) { Text(if (viewModel.ownerPaused) "Resume" else "Emergency pause") }
+        }
+        OutlinedButton(
+            onClick = { viewModel.refreshOwnerControl() }, modifier = Modifier.fillMaxWidth()
+        ) { Text("Refresh Owner Control") }
+
+        Text("Pending exact-action approvals", fontWeight = FontWeight.SemiBold)
+        if (viewModel.ownerApprovals.isEmpty()) {
+            Text("None", style = MaterialTheme.typography.bodySmall)
+        }
+        viewModel.ownerApprovals.forEach { approval ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(approval.actionType, fontWeight = FontWeight.SemiBold)
+                    Text(approval.reason, style = MaterialTheme.typography.bodySmall)
+                    Text(approval.payload, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { viewModel.decideApproval(approval, true) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Authorize only") }
+                        OutlinedButton(
+                            onClick = { viewModel.decideApproval(approval, false) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Reject") }
+                    }
+                }
+            }
+        }
+
+        Text("Plan reviews", fontWeight = FontWeight.SemiBold)
+        viewModel.ownerPlans.forEach { plan ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${plan.title} [${plan.status}] r${plan.revision}")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.decidePlan(plan, true) },
+                            enabled = plan.status == "pending",
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Approve") }
+                        OutlinedButton(
+                            onClick = { viewModel.decidePlan(plan, false) },
+                            enabled = plan.status == "pending",
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Reject") }
+                    }
+                    if (plan.status == "approved") {
+                        Button(
+                            onClick = { viewModel.executePlan(plan) }, modifier = Modifier.fillMaxWidth()
+                        ) { Text("Execute approved plan separately") }
+                    }
+                }
+            }
+        }
+
+        Text("Execution control", fontWeight = FontWeight.SemiBold)
+        viewModel.ownerExecutions.take(20).forEach { execution ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${execution.actionType} [${execution.status}]")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.cancelExecution(execution) },
+                            enabled = execution.status == "running",
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Cancel") }
+                        OutlinedButton(
+                            onClick = { viewModel.requestRollback(execution) },
+                            enabled = execution.rollbackSupported,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Request rollback") }
+                    }
+                }
+            }
+        }
+
+        Divider()
         // ── Voice (backend shared settings) ──
         Text("Voice", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         if (viewModel.loading) {

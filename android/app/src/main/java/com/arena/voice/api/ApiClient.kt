@@ -39,8 +39,11 @@ class ApiClient @Inject constructor(
                         val key = settings.apiKey.first()
                         if (key.isNotBlank()) header("X-API-Key", key)
                     }
-                if (method == "POST") {
-                    builder.post((body ?: "{}").toRequestBody("application/json".toMediaTypeOrNull()))
+                val requestBody = (body ?: "{}").toRequestBody("application/json".toMediaTypeOrNull())
+                when (method) {
+                    "POST" -> builder.post(requestBody)
+                    "PUT" -> builder.put(requestBody)
+                    "DELETE" -> builder.delete(if (body == null) null else requestBody)
                 }
                 client.newCall(builder.build()).execute().use { resp ->
                     if (resp.isSuccessful) resp.body?.string() else null
@@ -129,4 +132,49 @@ class ApiClient @Inject constructor(
     suspend fun getVlmStatus(): String? = call("/vision/vlm-status")
     suspend fun getLoras(): String? = call("/loras")
     suspend fun getLoraStatus(): String? = call("/loras/status")
+
+    // ── owner control plane ─────────────────────────────────────────────────
+    private fun segment(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+    suspend fun getOwnerControl(): String? = call("/owner-control")
+    suspend fun updateOwnerControl(mode: String, maxSafetyLevel: Int): String? =
+        call(
+            "/owner-control", "PUT",
+            JSONObject().put("mode", mode)
+                .put("max_autonomous_safety_level", maxSafetyLevel).toString(),
+        )
+    suspend fun setEmergencyPause(paused: Boolean): String? =
+        call("/owner-control/pause", "POST", JSONObject().put("paused", paused).toString())
+    suspend fun getAdaptiveAutonomy(): String? = call("/owner-control/adaptive-autonomy")
+    suspend fun setExplorationBudget(maximum: Int): String? =
+        call(
+            "/owner-control/adaptive-autonomy/exploration-budget", "PUT",
+            JSONObject().put("max_exploration_goals", maximum).toString(),
+        )
+    suspend fun getPendingApprovals(): String? = call("/owner-control/approvals")
+    suspend fun decideApproval(actionId: String, approved: Boolean): String? =
+        call(
+            "/owner-control/approvals/${segment(actionId)}/decision", "POST",
+            JSONObject().put("approved", approved).put("note", "Android owner decision")
+                .put("ttl_seconds", 300).toString(),
+        )
+    suspend fun getReviewedPlans(): String? = call("/owner-control/plans")
+    suspend fun decidePlan(planId: String, revision: Int, approved: Boolean): String? =
+        call(
+            "/owner-control/plans/${segment(planId)}/decision", "POST",
+            JSONObject().put("expected_revision", revision).put("approved", approved)
+                .put("note", "Android owner decision").toString(),
+        )
+    suspend fun executeApprovedPlan(planId: String): String? =
+        call("/owner-control/plans/${segment(planId)}/execute", "POST", "{}")
+    suspend fun getControlledExecutions(): String? =
+        call("/owner-control/executions?active_only=false&limit=100")
+    suspend fun cancelExecution(executionId: String): String? =
+        call("/owner-control/executions/${segment(executionId)}/cancel", "POST", "{}")
+    suspend fun requestRollback(executionId: String): String? =
+        call(
+            "/owner-control/executions/${segment(executionId)}/request-rollback",
+            "POST", "{}",
+        )
 }
