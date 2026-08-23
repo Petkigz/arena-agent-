@@ -126,6 +126,8 @@ export function PrivacySettingsPage() {
   const [autonomyEvents, setAutonomyEvents] = useState<AutonomyRunEvent[]>([]);
   const [autonomySchedule, setAutonomySchedule] = useState<ScheduledDirectiveItem[]>([]);
   const [autonomyBusy, setAutonomyBusy] = useState<string | null>(null);
+  const [newDirective, setNewDirective] = useState({ title: '', description: '', priority: 'normal' });
+  const [newSchedule, setNewSchedule] = useState({ title: '', run_at: '', recurrence: 'none', missed_policy: 'run_once' });
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +177,38 @@ export function PrivacySettingsPage() {
       window.clearInterval(executionTimer);
     };
   }, []);
+
+  const createOwnerDirective = async () => {
+    if (!newDirective.title.trim()) return;
+    setAutonomyBusy('create-directive');
+    const response = await fetch('/owner-control/autonomous-goals', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ ...newDirective, approve_for_planning: true }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setAutonomousGoals((current) => [data.goal, ...current]);
+      setNewDirective({ title: '', description: '', priority: 'normal' });
+      notifications.success('Owner directive added and approved for planning; actions remain gated');
+    } else notifications.error(data?.detail || 'Could not create directive');
+    setAutonomyBusy(null);
+  };
+
+  const createScheduledDirective = async () => {
+    if (!newSchedule.title.trim() || !newSchedule.run_at) return;
+    setAutonomyBusy('create-schedule');
+    const response = await fetch('/owner-control/autonomy-schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ ...newSchedule, run_at: new Date(newSchedule.run_at).toISOString(), approve_for_planning: true }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setAutonomySchedule((current) => [...current, data.schedule]);
+      setNewSchedule({ title: '', run_at: '', recurrence: 'none', missed_policy: 'run_once' });
+      notifications.success('Scheduled directive saved; execution actions remain separately gated');
+    } else notifications.error(data?.detail || 'Could not create schedule');
+    setAutonomyBusy(null);
+  };
 
   const decideAutonomousGoal = async (goalId: string, approved: boolean) => {
     setAutonomyBusy(goalId);
@@ -612,6 +646,27 @@ export function PrivacySettingsPage() {
             <p className="text-sm text-text-secondary">
               Planning approval never authorizes actions. Every resulting action still passes Owner Control, exact authorization when required, observation, and verification.
             </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded border border-border p-3 space-y-2">
+                <h3 className="text-sm font-medium text-text-primary">Create owner directive</h3>
+                <input value={newDirective.title} onChange={(e) => setNewDirective({ ...newDirective, title: e.target.value })} placeholder="Task title" className="w-full px-2 py-1 bg-background-surface border border-border rounded text-sm" />
+                <textarea value={newDirective.description} onChange={(e) => setNewDirective({ ...newDirective, description: e.target.value })} placeholder="Description" className="w-full px-2 py-1 bg-background-surface border border-border rounded text-sm" />
+                <select value={newDirective.priority} onChange={(e) => setNewDirective({ ...newDirective, priority: e.target.value })} className="w-full px-2 py-1 bg-background-surface border border-border rounded text-sm">
+                  {['low', 'normal', 'high', 'critical'].map((p) => <option key={p}>{p}</option>)}
+                </select>
+                <button disabled={autonomyBusy === 'create-directive'} onClick={createOwnerDirective} className="px-3 py-1.5 bg-accent-primary text-white rounded text-xs disabled:opacity-50">Add to planning queue</button>
+              </div>
+              <div className="rounded border border-border p-3 space-y-2">
+                <h3 className="text-sm font-medium text-text-primary">Schedule owner directive</h3>
+                <input value={newSchedule.title} onChange={(e) => setNewSchedule({ ...newSchedule, title: e.target.value })} placeholder="Task title" className="w-full px-2 py-1 bg-background-surface border border-border rounded text-sm" />
+                <input type="datetime-local" value={newSchedule.run_at} onChange={(e) => setNewSchedule({ ...newSchedule, run_at: e.target.value })} className="w-full px-2 py-1 bg-background-surface border border-border rounded text-sm" />
+                <div className="flex gap-2">
+                  <select value={newSchedule.recurrence} onChange={(e) => setNewSchedule({ ...newSchedule, recurrence: e.target.value })} className="flex-1 px-2 py-1 bg-background-surface border border-border rounded text-sm">{['none', 'daily', 'weekly'].map((v) => <option key={v}>{v}</option>)}</select>
+                  <select value={newSchedule.missed_policy} onChange={(e) => setNewSchedule({ ...newSchedule, missed_policy: e.target.value })} className="flex-1 px-2 py-1 bg-background-surface border border-border rounded text-sm">{['run_once', 'skip'].map((v) => <option key={v}>{v}</option>)}</select>
+                </div>
+                <button disabled={autonomyBusy === 'create-schedule'} onClick={createScheduledDirective} className="px-3 py-1.5 bg-accent-primary text-white rounded text-xs disabled:opacity-50">Save schedule</button>
+              </div>
+            </div>
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="space-y-2">
                 <h3 className="font-medium text-text-primary">Goal queue</h3>
