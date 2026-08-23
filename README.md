@@ -246,6 +246,15 @@ an exact short-lived authorization with `override_owner_policy: true`; this over
 the owner's own mode/block/level rules but never emergency pause, resource-critical
 shutdown, missing capability, payload binding, or verification honesty.
 
+Run owner-machine OS validation without destructive system changes:
+
+```bash
+python scripts/validate_os_control.py
+```
+
+It verifies privilege/process identity and temporary transactional file operations,
+while reporting display/accessibility hardware as unavailable rather than simulating it.
+
 Run the isolated longitudinal regression suite separately:
 
 ```bash
