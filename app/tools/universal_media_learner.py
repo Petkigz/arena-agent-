@@ -11,6 +11,10 @@ from app.perception.speech_to_text import LocalSpeechToText
 from app.tools.ocr_reader import OCRReaderTool
 from app.tools.youtube_learner import YouTubeLearner
 from app.llm import llm_client, extract_reply
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
 
 class UniversalMediaLearner:
     """
@@ -25,7 +29,15 @@ class UniversalMediaLearner:
         Scrapes a web page to extract embedded HTML5 <video>, <source>, <iframe> video tags, or ad media.
         """
         try:
-            resp = httpx.get(url, timeout=10.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+            resp = run_cancellable_blocking_call(
+                lambda: httpx.get(
+                    url,
+                    timeout=10.0,
+                    follow_redirects=True,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                ),
+                description="media page HTTP request",
+            )
             soup = BeautifulSoup(resp.text, "html.parser")
 
             video_sources = []
@@ -61,6 +73,8 @@ class UniversalMediaLearner:
                 "ad_elements": list(set(ad_elements))[:5],
                 "page_text_snippet": soup.get_text(separator=" ", strip=True)[:1500]
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.error(f"Error scraping webpage media: {e}")
             return {"success": False, "error": str(e)}

@@ -6,6 +6,10 @@ from urllib.parse import urlparse, quote_plus
 from typing import Dict, Any, List, Optional
 from app.llm import llm_client, extract_reply
 from app.utils.logger import app_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -51,7 +55,10 @@ class MultiEngineSearchAggregator:
         try:
             search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers(), follow_redirects=True) as client:
-                resp = client.get(search_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(search_url), cancel=client.close,
+                    description="search engine HTTP request",
+                )
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, "html.parser")
                     for a in soup.find_all("a", class_="result__url"):
@@ -62,6 +69,8 @@ class MultiEngineSearchAggregator:
                                 urls.append(match)
                         elif href.startswith("http"):
                             urls.append(href)
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"DuckDuckGo search error: {e}")
         return urls[:max_results]
@@ -72,13 +81,18 @@ class MultiEngineSearchAggregator:
         try:
             search_url = f"https://www.bing.com/search?q={quote_plus(query)}"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers(), follow_redirects=True) as client:
-                resp = client.get(search_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(search_url), cancel=client.close,
+                    description="search engine HTTP request",
+                )
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, "html.parser")
                     for li in soup.find_all("li", class_="b_algo"):
                         a = li.find("a")
                         if a and a.get("href", "").startswith("http"):
                             urls.append(a["href"])
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"Bing search error: {e}")
         return urls[:max_results]
@@ -90,12 +104,17 @@ class MultiEngineSearchAggregator:
         try:
             api_url = f"https://api.github.com/search/repositories?q={quote_plus(query)}&sort=stars&order=desc&per_page={max_results}"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
-                resp = client.get(api_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(api_url), cancel=client.close,
+                    description="search API HTTP request",
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     for item in data.get("items", []):
                         if item.get("html_url"):
                             urls.append(item["html_url"])
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"GitHub search error: {e}")
         return urls
@@ -106,12 +125,17 @@ class MultiEngineSearchAggregator:
         try:
             api_url = f"https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q={quote_plus(query)}&site=stackoverflow"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
-                resp = client.get(api_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(api_url), cancel=client.close,
+                    description="search API HTTP request",
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     for item in data.get("items", [])[:max_results]:
                         if item.get("link"):
                             urls.append(item["link"])
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"StackOverflow search error: {e}")
         return urls
@@ -123,11 +147,16 @@ class MultiEngineSearchAggregator:
         try:
             api_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={quote_plus(query)}&limit={max_results}&namespace=0&format=json"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
-                resp = client.get(api_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(api_url), cancel=client.close,
+                    description="search API HTTP request",
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     if len(data) >= 4 and isinstance(data[3], list):
                         urls.extend(data[3])
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"Wikipedia search error: {e}")
         return urls
@@ -138,13 +167,18 @@ class MultiEngineSearchAggregator:
         try:
             api_url = f"http://export.arxiv.org/api/query?search_query=all:{quote_plus(query)}&start=0&max_results={max_results}"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
-                resp = client.get(api_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(api_url), cancel=client.close,
+                    description="search API HTTP request",
+                )
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, "xml")
                     for entry in soup.find_all("entry"):
                         id_tag = entry.find("id")
                         if id_tag and id_tag.text:
                             urls.append(id_tag.text.strip())
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"ArXiv search error: {e}")
         return urls
@@ -156,7 +190,10 @@ class MultiEngineSearchAggregator:
         try:
             api_url = f"https://hn.algolia.com/api/v1/search?query={quote_plus(query)}&tags=story&hitsPerPage={max_results}"
             with httpx.Client(timeout=8.0, headers=DynamicEngineRegistry.get_headers()) as client:
-                resp = client.get(api_url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(api_url), cancel=client.close,
+                    description="search API HTTP request",
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     for hit in data.get("hits", []):
@@ -164,6 +201,8 @@ class MultiEngineSearchAggregator:
                             urls.append(hit["url"])
                         elif hit.get("objectID"):
                             urls.append(f"https://news.ycombinator.com/item?id={hit['objectID']}")
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"HackerNews search error: {e}")
         return urls
@@ -245,7 +284,10 @@ class WebResearcher:
 
         try:
             with httpx.Client(timeout=15.0, headers=headers, follow_redirects=True) as client:
-                resp = client.get(url)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.get(url), cancel=client.close,
+                    description="web page HTTP request",
+                )
                 resp.raise_for_status()
                 html_content = resp.text
 
@@ -286,6 +328,8 @@ class WebResearcher:
                 "code_blocks": code_blocks[:5],
                 "text_length": len(clean_text)
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"Error scraping URL '{url}': {e}")
             return {
@@ -380,6 +424,8 @@ Please extract:
                 "ai_summary": ai_summary,
                 "raw_text_snippet": article_text[:400] + "..."
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             return {
                 "success": False,

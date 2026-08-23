@@ -11,6 +11,17 @@ from typing import Dict, Any, Optional
 import httpx
 
 from app.utils.logger import app_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
+
+
+def _cancellable_get(*args, **kwargs):
+    return run_cancellable_blocking_call(
+        lambda: httpx.get(*args, **kwargs),
+        description="weather HTTP request",
+    )
 
 # Open-Meteo geocoding + forecast (free, no key).
 GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -27,7 +38,7 @@ WMO_CODES = {
 class WeatherService:
     @classmethod
     def _geocode(cls, city: str) -> Optional[Dict[str, Any]]:
-        r = httpx.get(GEO_URL, params={"name": city, "count": 1, "language": "en"}, timeout=8.0)
+        r = _cancellable_get(GEO_URL, params={"name": city, "count": 1, "language": "en"}, timeout=8.0)
         r.raise_for_status()
         results = r.json().get("results") or []
         return results[0] if results else None
@@ -40,7 +51,7 @@ class WeatherService:
             if loc is None:
                 return {"success": False, "error": f"City '{city}' not found."}
 
-            r = httpx.get(FORECAST_URL, params={
+            r = _cancellable_get(FORECAST_URL, params={
                 "latitude": loc["latitude"],
                 "longitude": loc["longitude"],
                 "current_weather": "true",
@@ -66,6 +77,8 @@ class WeatherService:
                 "high_c": high,
                 "low_c": low,
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"Weather lookup failed: {e}")
             return {"success": False, "error": f"Weather unavailable: {e}"}

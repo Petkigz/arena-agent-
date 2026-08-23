@@ -18,6 +18,7 @@ import httpx
 
 from app.llm import llm_client, extract_reply
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.execution_control import run_cancellable_blocking_call
 
 
 def _local(tag: str) -> str:
@@ -52,7 +53,12 @@ class RssAggregator:
         if not url.lower().startswith(("http://", "https://")):
             return {"success": False, "error": "Feed URL must start with http:// or https://."}
         try:
-            resp = httpx.get(url, timeout=timeout, follow_redirects=True)
+            resp = run_cancellable_blocking_call(
+                lambda: httpx.get(
+                    url, timeout=timeout, follow_redirects=True
+                ),
+                description="RSS feed HTTP request",
+            )
             resp.raise_for_status()
         except httpx.HTTPError as e:
             app_logger.warning(f"Feed fetch failed for {url}: {e}")

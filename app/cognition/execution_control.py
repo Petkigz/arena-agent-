@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 from uuid import uuid4
 
 from app.config import settings
@@ -269,6 +269,90 @@ class ExecutionControlRegistry:
                     (max(1, min(limit, 500)),),
                 ).fetchall()
             return [self._from_row(row) for row in rows]
+
+
+_T = TypeVar("_T")
+
+
+def run_cancellable_blocking_call(
+    operation: Callable[[], _T],
+    *,
+    cancel: Optional[Callable[[], None]] = None,
+    description: str = "blocking operation",
+    poll_interval: float = 0.05,
+    cancellation_grace: float = 0.5,
+) -> _T:
+    """Run a synchronous library call with owner-cancellation observation.
+
+    Python cannot forcibly terminate a worker thread safely. When cancellation
+    arrives, this helper invokes the supplied resource-specific interrupt
+    callback (for example ``httpx.Client.close``), waits a short bounded grace
+    period, records the cancellation checkpoint, and returns control by raising
+    ``ExecutionCancelled``. For remote writes, cancellation never proves that
+    the peer did not already receive the request.
+
+    Calls outside a controlled execution run inline with no thread overhead.
+    """
+    execution_id = current_execution_id()
+    if not execution_id:
+        return operation()
+
+    completed = threading.Event()
+    outcome: Dict[str, Any] = {}
+
+    def worker() -> None:
+        try:
+            outcome["value"] = operation()
+        except BaseException as exc:  # re-raised in the controlling thread
+            outcome["error"] = exc
+        finally:
+            completed.set()
+
+    thread = threading.Thread(
+        target=worker,
+        name=f"cancellable-{description[:32]}",
+        daemon=True,
+    )
+    thread.start()
+    interval = max(0.01, float(poll_interval))
+    while not completed.wait(interval):
+        if execution_control_registry.is_cancel_requested(execution_id):
+            if cancel is not None:
+                try:
+                    cancel()
+                except Exception as exc:
+                    audit_logger.warning(
+                        f"Cancellation interrupt for {description} failed: {exc}"
+                    )
+            completed.wait(max(0.0, float(cancellation_grace)))
+            # This marks cancellation observed in the persistent receipt.
+            try:
+                execution_control_registry.checkpoint(
+                    f"cancelled_during:{description}"
+                )
+            except ExecutionCancelled as checkpoint_error:
+                raise ExecutionCancelled(
+                    f"Execution cancelled during {description}; remote side effects "
+                    "may already have occurred"
+                ) from checkpoint_error
+
+    # The interrupt may make the worker finish between polling iterations. A
+    # pending owner request still takes precedence over an HTTP/model error.
+    if execution_control_registry.is_cancel_requested(execution_id):
+        try:
+            execution_control_registry.checkpoint(
+                f"cancelled_during:{description}"
+            )
+        except ExecutionCancelled as checkpoint_error:
+            raise ExecutionCancelled(
+                f"Execution cancelled during {description}; remote side effects "
+                "may already have occurred"
+            ) from checkpoint_error
+
+    error = outcome.get("error")
+    if error is not None:
+        raise error
+    return outcome["value"]
 
 
 def run_cancellable_subprocess(

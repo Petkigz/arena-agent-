@@ -16,6 +16,10 @@ from typing import Dict, Any, Optional
 import httpx
 
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
 
 # Free, keyless IP geolocation endpoint (no auth required).
 IP_API_URL = "http://ip-api.com/json/"
@@ -68,6 +72,8 @@ class LocationService:
                 "latitude": lat,
                 "longitude": lon,
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"Phone location query failed: {e}")
             return {"success": False, "error": str(e)}
@@ -76,7 +82,10 @@ class LocationService:
     def get_ip_location(cls) -> Dict[str, Any]:
         """Resolve approximate location from the public IP (free, keyless)."""
         try:
-            r = httpx.get(IP_API_URL, timeout=5.0)
+            r = run_cancellable_blocking_call(
+                lambda: httpx.get(IP_API_URL, timeout=5.0),
+                description="IP geolocation request",
+            )
             if r.status_code != 200:
                 return {"success": False, "error": f"IP API returned {r.status_code}"}
             data = r.json()
@@ -92,6 +101,8 @@ class LocationService:
                 "country": data.get("country"),
                 "timezone": data.get("timezone"),
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"IP geolocation failed: {e}")
             return {"success": False, "error": str(e)}

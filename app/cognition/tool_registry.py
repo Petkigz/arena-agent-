@@ -103,7 +103,10 @@ class ToolRegistry:
 
         app_logger.info(f"ToolRegistry executing verified tool '{key}'...")
         try:
-            from app.cognition.execution_control import execution_control_registry
+            from app.cognition.execution_control import (
+                ExecutionCancelled,
+                execution_control_registry,
+            )
             execution_control_registry.checkpoint(f"before_tool:{key}")
             result = tool_entry["handler"](payload)
             execution_control_registry.checkpoint(f"after_tool:{key}")
@@ -128,6 +131,10 @@ class ToolRegistry:
 
             audit_logger.info(f"ToolRegistry executed tool '{key}' (Surprisal: {surprisal})")
             return result
+        except ExecutionCancelled:
+            # Cancellation is control flow, not a tool failure. The owning
+            # CognitiveRuntime records the persistent cancellation outcome.
+            raise
         except ImportError as e:
             # Optional dependencies are capability-local failures.  Import the
             # typed exception lazily so ToolRegistry itself remains core-only.

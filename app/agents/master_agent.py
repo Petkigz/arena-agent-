@@ -354,6 +354,10 @@ class MasterAgentOrchestrator:
                         outputs={"unsupported_capability": action_type}
                     )
             except Exception as e:
+                from app.cognition.execution_control import ExecutionCancelled
+
+                if isinstance(e, ExecutionCancelled):
+                    raise
                 app_logger.warning(f"CapabilityResolver lookup exception for '{action_type}': {e}")
                 return ExecutionResult(
                     proposal_id=proposal_id,

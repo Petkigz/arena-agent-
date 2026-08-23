@@ -20,6 +20,17 @@ from typing import Any, Dict, Optional
 import httpx
 
 from app.utils.logger import app_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
+
+
+def _cancellable_get(*args, **kwargs):
+    return run_cancellable_blocking_call(
+        lambda: httpx.get(*args, **kwargs),
+        description="price lookup HTTP request",
+    )
 
 
 class PriceLookup:
@@ -31,7 +42,7 @@ class PriceLookup:
             return {"success": False, "error": "A coin id (e.g. 'bitcoin', 'ethereum') is required."}
         currency = (currency or "usd").strip().lower()
         try:
-            resp = httpx.get(
+            resp = _cancellable_get(
                 f"https://api.coingecko.com/api/v3/simple/price",
                 params={"ids": coin_id, "vs_currencies": currency},
                 timeout=10.0,
@@ -42,6 +53,8 @@ class PriceLookup:
         except httpx.HTTPError as e:
             app_logger.warning(f"CoinGecko fetch failed for {coin_id}: {e}")
             return {"success": False, "error": f"Could not fetch crypto price: {e}"}
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             return {"success": False, "error": f"Could not fetch crypto price: {e}"}
 
@@ -52,7 +65,7 @@ class PriceLookup:
         if not symbol:
             return {"success": False, "error": "A stock symbol is required."}
         try:
-            resp = httpx.get(
+            resp = _cancellable_get(
                 "https://stooq.com/q/l/",
                 params={"s": symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"},
                 timeout=10.0,
@@ -62,6 +75,8 @@ class PriceLookup:
         except httpx.HTTPError as e:
             app_logger.warning(f"Stooq fetch failed for {symbol}: {e}")
             return {"success": False, "error": f"Could not fetch stock price: {e}"}
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             return {"success": False, "error": f"Could not fetch stock price: {e}"}
 

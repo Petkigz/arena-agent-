@@ -5,6 +5,11 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    cooperative_checkpoint,
+    run_cancellable_blocking_call,
+)
 
 class BrowserAutomation:
     SCREENSHOTS_DIR = settings.DATA_DIR / "workspace" / "screenshots"
@@ -46,40 +51,51 @@ class BrowserAutomation:
         screenshot_path = cls.SCREENSHOTS_DIR / filename
 
         try:
+            cooperative_checkpoint("before_playwright_import")
             from playwright.sync_api import sync_playwright
 
             with sync_playwright() as p:
+                cooperative_checkpoint("before_browser_launch")
                 browser = p.chromium.launch(headless=True)
+                cooperative_checkpoint("after_browser_launch")
                 page = browser.new_page()
                 page.set_viewport_size({"width": 1280, "height": 800})
-                
+
                 app_logger.info(f"Playwright navigating to '{url}'...")
+                cooperative_checkpoint("before_browser_navigation")
                 page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                cooperative_checkpoint("after_browser_navigation")
 
                 # Fill out input fields if specified
                 if fill_inputs:
                     for selector, value in fill_inputs.items():
+                        cooperative_checkpoint("before_browser_fill")
                         try:
                             if page.is_visible(selector):
                                 page.fill(selector, value)
+                        except ExecutionCancelled:
+                            raise
                         except Exception as ie:
                             app_logger.warning(f"Could not fill input '{selector}': {ie}")
 
                 # Click elements if specified
                 if click_selectors:
                     for selector in click_selectors:
+                        cooperative_checkpoint("before_browser_click")
                         try:
                             if page.is_visible(selector):
                                 page.click(selector)
                                 page.wait_for_timeout(1000)
+                        except ExecutionCancelled:
+                            raise
                         except Exception as ce:
                             app_logger.warning(f"Could not click '{selector}': {ce}")
 
-                # Take screenshot checkpoint
+                cooperative_checkpoint("before_browser_capture")
                 page.screenshot(path=str(screenshot_path))
                 page_title = page.title()
                 page_text = page.inner_text("body") if page.query_selector("body") else ""
-                
+                cooperative_checkpoint("before_browser_close")
                 browser.close()
 
             audit_logger.info(f"Automated browser navigation to '{url}' completed.")
@@ -93,6 +109,8 @@ class BrowserAutomation:
                 "image_url": f"/static/workspace/screenshots/{filename}",
                 "text_length": len(page_text)
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.warning(f"Playwright launch notice ({e}). Falling back to HTTP HTML scraper...")
             # Fallback using httpx & BeautifulSoup if Playwright browser binaries are not downloaded locally
@@ -101,7 +119,11 @@ class BrowserAutomation:
                 from bs4 import BeautifulSoup
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 with httpx.Client(timeout=10.0, headers=headers, follow_redirects=True) as client:
-                    resp = client.get(url)
+                    resp = run_cancellable_blocking_call(
+                        lambda: client.get(url),
+                        cancel=client.close,
+                        description="browser HTTP fallback",
+                    )
                     if resp.status_code == 200:
                         soup = BeautifulSoup(resp.text, "html.parser")
                         text = soup.get_text(separator="\n", strip=True)
@@ -115,6 +137,8 @@ class BrowserAutomation:
                             "image_url": "",
                             "text_length": len(text)
                         }
+            except ExecutionCancelled:
+                raise
             except Exception:
                 pass
 

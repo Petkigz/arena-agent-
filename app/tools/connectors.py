@@ -3,6 +3,10 @@ from typing import Dict, Any, Optional
 from app.policy import PolicyEvaluator
 from app.tools.doc_manager import DocumentManager
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
 
 class ConnectorsTool:
     @classmethod
@@ -17,7 +21,11 @@ class ConnectorsTool:
 
         try:
             with httpx.Client(timeout=10.0) as client:
-                resp = client.post(webhook_url, json=payload)
+                resp = run_cancellable_blocking_call(
+                    lambda: client.post(webhook_url, json=payload),
+                    cancel=client.close,
+                    description="webhook send request",
+                )
                 resp.raise_for_status()
 
             audit_logger.info(f"Triggered webhook at {webhook_url}")
@@ -26,6 +34,8 @@ class ConnectorsTool:
                 "status_code": resp.status_code,
                 "message": f"Webhook triggered successfully at {webhook_url}."
             }
+        except ExecutionCancelled:
+            raise
         except Exception as e:
             app_logger.error(f"Error triggering webhook '{webhook_url}': {e}")
             return {"success": False, "error": f"Webhook error: {str(e)}"}

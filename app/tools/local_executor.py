@@ -20,6 +20,7 @@ import httpx
 
 from app.tools.disposable_sandbox import DisposableSandbox
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.execution_control import run_cancellable_blocking_call
 
 VALID_ACTIONS = ("shell", "python", "http")
 
@@ -97,9 +98,17 @@ class LocalExecutor:
 
         try:
             if method == "GET":
-                r = httpx.get(url, timeout=timeout_seconds)
+                r = run_cancellable_blocking_call(
+                    lambda: httpx.get(url, timeout=timeout_seconds),
+                    description="local HTTP GET",
+                )
             elif method == "POST":
-                r = httpx.post(url, json=body or {}, timeout=timeout_seconds)
+                r = run_cancellable_blocking_call(
+                    lambda: httpx.post(
+                        url, json=body or {}, timeout=timeout_seconds
+                    ),
+                    description="local HTTP POST",
+                )
             else:
                 return {"success": False, "error": f"Unsupported HTTP method '{method}'. Use GET or POST."}
             r.raise_for_status()

@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.execution_control import run_cancellable_blocking_call
 
 
 class Messaging:
@@ -37,10 +38,13 @@ class Messaging:
             return {"success": False, "error": "Telegram chat_id is required (or set ARENA_TELEGRAM_CHAT_ID)."}
 
         try:
-            resp = httpx.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": message},
-                timeout=15.0,
+            resp = run_cancellable_blocking_call(
+                lambda: httpx.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json={"chat_id": chat_id, "text": message},
+                    timeout=15.0,
+                ),
+                description="Telegram send request",
             )
             data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
             if resp.status_code == 200 and data.get("ok"):
@@ -72,11 +76,14 @@ class Messaging:
             return {"success": False, "error": "WhatsApp recipient 'to' is required (e.g. 'whatsapp:+1415...')."}
 
         try:
-            resp = httpx.post(
-                f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
-                data={"From": frm, "To": to, "Body": message},
-                auth=(sid, token),
-                timeout=15.0,
+            resp = run_cancellable_blocking_call(
+                lambda: httpx.post(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+                    data={"From": frm, "To": to, "Body": message},
+                    auth=(sid, token),
+                    timeout=15.0,
+                ),
+                description="WhatsApp send request",
             )
             if resp.status_code in (200, 201):
                 audit_logger.info(f"Sent WhatsApp message to {to}")

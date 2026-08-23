@@ -12,6 +12,7 @@ from app.cognition.action_proposal import ActionProposal
 from app.cognition.execution_control import (
     ExecutionCancelled,
     ExecutionControlRegistry,
+    run_cancellable_blocking_call,
 )
 from app.cognition.runtime import CognitiveRuntime
 from app.tools.disposable_sandbox import DisposableSandbox
@@ -89,6 +90,145 @@ def test_runtime_controlled_execution_emits_id_and_receipt(tmp_path):
     persisted = registry.get(result["controlled_execution_id"])
     assert persisted.status == "completed"
     assert persisted.rollback_receipt.compensation_action == "deactivate_lora"
+
+
+def test_blocking_library_call_is_interrupted_cooperatively(tmp_path):
+    registry = ExecutionControlRegistry(tmp_path / "executions.db")
+    record = registry.begin("proposal-http", "web_search")
+    release = threading.Event()
+    interrupt_called = threading.Event()
+    result_holder = {}
+
+    def blocking_operation():
+        release.wait(10)
+        return "late response"
+
+    def interrupt():
+        interrupt_called.set()
+        release.set()
+
+    def run():
+        with registry.scope(record.execution_id):
+            try:
+                run_cancellable_blocking_call(
+                    blocking_operation,
+                    cancel=interrupt,
+                    description="test HTTP request",
+                )
+            except Exception as exc:
+                result_holder["error"] = exc
+
+    with patch("app.cognition.execution_control.execution_control_registry", registry):
+        thread = threading.Thread(target=run)
+        started = time.monotonic()
+        thread.start()
+        time.sleep(0.15)
+        registry.request_cancel(record.execution_id)
+        thread.join(timeout=3)
+        elapsed = time.monotonic() - started
+
+    assert not thread.is_alive()
+    assert elapsed < 3
+    assert interrupt_called.is_set()
+    assert isinstance(result_holder["error"], ExecutionCancelled)
+    assert "remote side effects may already have occurred" in str(result_holder["error"])
+    assert registry.get(record.execution_id).cancellation_observed is True
+
+
+def test_blocking_call_runs_inline_outside_controlled_execution():
+    caller_thread = threading.get_ident()
+    observed_thread = run_cancellable_blocking_call(
+        threading.get_ident,
+        description="uncontrolled test call",
+    )
+    assert observed_thread == caller_thread
+
+
+def test_tool_registry_does_not_downgrade_cancellation_to_tool_error(tmp_path):
+    from app.cognition.tool_registry import ToolRegistry
+
+    registry = ExecutionControlRegistry(tmp_path / "executions.db")
+    record = registry.begin("proposal-tool-http", "web_search")
+    release = threading.Event()
+    result_holder = {}
+    tools = ToolRegistry()
+    tools.register_tool(
+        "web_search",
+        "test",
+        lambda payload: run_cancellable_blocking_call(
+            lambda: release.wait(10),
+            cancel=release.set,
+            description="registry HTTP test",
+        ),
+    )
+
+    def run():
+        with registry.scope(record.execution_id):
+            try:
+                tools.execute_registered_tool("web_search", {})
+            except Exception as exc:
+                result_holder["error"] = exc
+
+    with patch("app.cognition.execution_control.execution_control_registry", registry):
+        thread = threading.Thread(target=run)
+        thread.start()
+        time.sleep(0.15)
+        registry.request_cancel(record.execution_id)
+        thread.join(timeout=3)
+
+    assert not thread.is_alive()
+    assert isinstance(result_holder["error"], ExecutionCancelled)
+
+
+def test_local_model_http_cancellation_is_not_converted_to_offline_fallback(tmp_path):
+    import httpx
+    from app.llm import LocalLLMClient
+
+    registry = ExecutionControlRegistry(tmp_path / "executions.db")
+    record = registry.begin("proposal-model", "answer")
+    request_started = threading.Event()
+    release = threading.Event()
+    result_holder = {}
+
+    class BlockingClient:
+        is_closed = False
+
+        def post(self, *args, **kwargs):
+            request_started.set()
+            release.wait(10)
+            raise httpx.ReadError("transport interrupted")
+
+        def close(self):
+            self.is_closed = True
+            release.set()
+
+    model_client = LocalLLMClient(base_url="http://127.0.0.1:1/v1")
+    model_client.client.close()
+    blocking_client = BlockingClient()
+    model_client.client = blocking_client
+
+    def run():
+        with registry.scope(record.execution_id):
+            try:
+                model_client.generate_chat_completion(
+                    [{"role": "user", "content": "hello"}]
+                )
+            except Exception as exc:
+                result_holder["error"] = exc
+
+    with patch("app.cognition.execution_control.execution_control_registry", registry):
+        thread = threading.Thread(target=run)
+        thread.start()
+        assert request_started.wait(2)
+        registry.request_cancel(record.execution_id)
+        thread.join(timeout=3)
+
+    assert not thread.is_alive()
+    assert blocking_client.is_closed is True
+    assert isinstance(result_holder["error"], ExecutionCancelled)
+    # Cancellation must propagate, never become a simulated/offline answer.
+    assert "result" not in result_holder
+    model_client.close()
 
 
 def test_cancellable_sandbox_terminates_process_group(tmp_path):

@@ -2,6 +2,10 @@ import httpx
 from typing import List, Dict, Any, Optional
 from app.config import settings
 from app.utils.logger import app_logger
+from app.cognition.execution_control import (
+    ExecutionCancelled,
+    run_cancellable_blocking_call,
+)
 
 class LocalLLMClient:
     def __init__(self, base_url: str = settings.LM_STUDIO_URL):
@@ -47,9 +51,21 @@ class LocalLLMClient:
         try:
             url = f"{self.base_url}/chat/completions"
             app_logger.info(f"Sending request to Provider '{self.provider}' for model '{model}': {url}")
-            response = self.client.post(url, json=payload, timeout=settings.DEFAULT_TIMEOUT)
+            response = run_cancellable_blocking_call(
+                lambda: self.client.post(
+                    url, json=payload, timeout=settings.DEFAULT_TIMEOUT
+                ),
+                cancel=self.client.close,
+                description="local model HTTP request",
+            )
             response.raise_for_status()
             return response.json()
+        except ExecutionCancelled:
+            # The cancellation interrupt closes this request's transport.
+            # Replace it so later, separately authorized requests can run.
+            if self.client.is_closed:
+                self.client = httpx.Client(timeout=settings.DEFAULT_TIMEOUT)
+            raise
         except httpx.HTTPError as e:
             app_logger.warning(f"Local LLM provider '{self.provider}' returned error or timed out with model '{model}': {e}. Falling back to simulation.")
             last_user_msg = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
