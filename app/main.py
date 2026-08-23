@@ -196,6 +196,18 @@ class ApprovalDecisionRequest(BaseModel):
 class ExplorationBudgetRequest(BaseModel):
     max_exploration_goals: int = Field(ge=0, le=10)
 
+class ScheduledDirectiveRequest(BaseModel):
+    title: str = Field(min_length=1,max_length=300)
+    run_at: str
+    description: str = Field(default="",max_length=2000)
+    priority: str = "normal"
+    recurrence: str = "none"
+    missed_policy: str = "run_once"
+    approve_for_planning: bool = True
+
+class ScheduleStatusRequest(BaseModel):
+    status: str
+
 class OwnerAutonomousGoalRequest(BaseModel):
     title: str = Field(min_length=1,max_length=300)
     description: str = Field(default="",max_length=2000)
@@ -1194,6 +1206,26 @@ def create_owner_autonomous_goal_endpoint(req:OwnerAutonomousGoalRequest):
     runtime.goal_generator.add_goal(goal); runtime.goal_generator.evaluate_goal(goal)
     if req.approve_for_planning: goal=runtime.goal_generator.owner_decide_goal(goal.goal_id,True)
     return {"success":True,"goal":goal.to_dict(),"execution_authorized":False}
+
+@router.post("/owner-control/autonomy-schedule")
+def create_autonomy_schedule_endpoint(req:ScheduledDirectiveRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:item=CognitiveRuntime.get_instance().autonomy_schedule.create(req.title,req.run_at,description=req.description,priority=req.priority,recurrence=req.recurrence,missed_policy=req.missed_policy,approve_for_planning=req.approve_for_planning)
+    except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
+    return {"success":True,"schedule":item.to_dict(),"execution_authorized":False}
+
+@router.get("/owner-control/autonomy-schedule")
+def list_autonomy_schedule_endpoint(status_filter:Optional[str]=Query(None,alias="status"),limit:int=Query(500,ge=1,le=2000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {"success":True,"schedule":[x.to_dict() for x in CognitiveRuntime.get_instance().autonomy_schedule.list(status_filter,limit)]}
+
+@router.post("/owner-control/autonomy-schedule/{schedule_id}/status")
+def update_autonomy_schedule_status_endpoint(schedule_id:str,req:ScheduleStatusRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:item=CognitiveRuntime.get_instance().autonomy_schedule.set_status(schedule_id,req.status)
+    except KeyError as exc:raise HTTPException(status_code=404,detail="Schedule not found") from exc
+    except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
+    return {"success":True,"schedule":item.to_dict()}
 
 @router.get("/owner-control/autonomy-runs")
 def list_autonomy_run_events_endpoint(cycle_id:Optional[str]=Query(None),goal_id:Optional[str]=Query(None),limit:int=Query(500,ge=1,le=2000)):

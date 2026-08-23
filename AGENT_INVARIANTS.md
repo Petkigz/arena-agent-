@@ -118,6 +118,8 @@ Owner Control Plane may always impose a stricter rule:
   reject, reprioritize, or request the next goal; goal approval never authorizes its actions.
 - Every autonomous cycle persists stage events for observation, consideration,
   recommendation, planning approval, execution, blocking, budget stops, and outcome.
+- Owner schedules are timezone-aware and persistent. Recurrence and missed-run
+  policy release owner-directive goals; schedule approval still authorizes planning only.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.

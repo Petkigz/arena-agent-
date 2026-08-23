@@ -248,6 +248,10 @@ class PeriodicAutonomousCycle:
             # then information-gain curiosity, then keyword fallback. Thresholds
             # are calibrated from verified outcomes and bounded by owner budget.
             all_goals = []
+            if cognitive_runtime and hasattr(cognitive_runtime,"autonomy_schedule"):
+                scheduled=cognitive_runtime.autonomy_schedule.release_due(self.goal_generator)
+                all_goals.extend(scheduled["released_goals"])
+                cycle.goals_generated += len(scheduled["released_goals"])
             threshold_profile: Dict[str, Any] = {}
             if cognitive_runtime and hasattr(cognitive_runtime, "adaptive_autonomy"):
                 try:
@@ -308,6 +312,10 @@ class PeriodicAutonomousCycle:
                 threshold_profile.get("goal_auto_approve_threshold", 0.7)
             )
             for goal in all_goals:
+                if getattr(goal.status,"value",goal.status)=="approved":
+                    cycle.goals_approved += 1
+                    self._record_event(cycle.cycle_id,"approved_for_planning",goal_id=goal.goal_id,reason="Explicit owner scheduled directive",details={"execution_authorized":False})
+                    continue
                 self.goal_generator.evaluate_goal(goal)
                 if execution_allowed and self.goal_generator.approve_goal(
                     goal.goal_id,
@@ -327,7 +335,7 @@ class PeriodicAutonomousCycle:
             ))
             consecutive_failures = 0
             failure_cap = int(envelope_policy.get("max_consecutive_failures", 2)) if limits_enabled else 0
-            execution_cap = (
+            execution_cap = 0 if not execution_allowed else (
                 min(cycle.goals_approved, self.max_goals_per_cycle, envelope_goal_cap)
                 if limits_enabled else cycle.goals_approved
             )

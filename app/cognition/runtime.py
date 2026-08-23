@@ -106,6 +106,10 @@ class CognitiveRuntime:
         self.autonomy_run_ledger = AutonomyRunLedger(
             str(Path(path).parent / "autonomy_run_ledger.db") if path else "data/autonomy_run_ledger.db"
         )
+        from app.cognition.autonomy_schedule import AutonomySchedule
+        self.autonomy_schedule = AutonomySchedule(
+            str(Path(path).parent / "autonomy_schedule.db") if path else "data/autonomy_schedule.db"
+        )
         from app.cognition.temporal_vision import TemporalVisionTracker
         self.temporal_vision = TemporalVisionTracker(
             db_path=str(Path(path).parent / "temporal_vision.db") if path else "data/temporal_vision.db"
