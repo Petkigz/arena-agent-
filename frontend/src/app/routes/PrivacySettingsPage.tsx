@@ -178,6 +178,27 @@ export function PrivacySettingsPage() {
     };
   }, []);
 
+  const updateScheduleStatus = async (scheduleId: string, status: string) => {
+    setAutonomyBusy(scheduleId);
+    const response = await fetch(`/owner-control/autonomy-schedule/${encodeURIComponent(scheduleId)}/status`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ status }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setAutonomySchedule((current) => current.map((item) => item.schedule_id === scheduleId ? data.schedule : item));
+    else notifications.error(data?.detail || 'Could not update schedule');
+    setAutonomyBusy(null);
+  };
+
+  const executeNextAutonomousGoal = async () => {
+    setAutonomyBusy('execute-next');
+    const response = await fetch('/owner-control/autonomous-goals/execute-next', { method: 'POST', headers: apiKeyHeader() });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.plan) notifications.success(`Goal processed through action gates — plan ${data.plan.plan_id || ''}`);
+    else notifications.error(data?.detail || data?.note || 'No approved goal is ready');
+    setAutonomyBusy(null);
+  };
+
   const createOwnerDirective = async () => {
     if (!newDirective.title.trim()) return;
     setAutonomyBusy('create-directive');
@@ -643,9 +664,12 @@ export function PrivacySettingsPage() {
             <h2 className="text-2xl font-semibold text-text-primary">Autonomy Operations</h2>
           </div>
           <Card className="space-y-5">
-            <p className="text-sm text-text-secondary">
-              Planning approval never authorizes actions. Every resulting action still passes Owner Control, exact authorization when required, observation, and verification.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-sm text-text-secondary">
+                Planning approval never authorizes actions. Every resulting action still passes Owner Control, exact authorization when required, observation, and verification.
+              </p>
+              <button disabled={autonomyBusy === 'execute-next'} onClick={executeNextAutonomousGoal} className="shrink-0 px-3 py-1.5 bg-accent-primary text-white rounded text-xs disabled:opacity-50">Process next approved goal</button>
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded border border-border p-3 space-y-2">
                 <h3 className="text-sm font-medium text-text-primary">Create owner directive</h3>
@@ -692,9 +716,13 @@ export function PrivacySettingsPage() {
               <div className="space-y-2">
                 <h3 className="font-medium text-text-primary">Schedule</h3>
                 {autonomySchedule.length === 0 ? <p className="text-xs text-text-muted">No scheduled directives.</p> : autonomySchedule.slice(0, 12).map((item) => (
-                  <div key={item.schedule_id} className="rounded border border-border p-2 text-xs">
+                  <div key={item.schedule_id} className="rounded border border-border p-2 text-xs space-y-2">
                     <div className="font-medium text-text-primary">{item.title}</div>
                     <div className="text-text-muted">{item.next_run_at} · {item.recurrence} · {item.status}</div>
+                    {!['completed', 'cancelled'].includes(item.status) && <div className="flex gap-2">
+                      <button disabled={autonomyBusy === item.schedule_id} onClick={() => updateScheduleStatus(item.schedule_id, item.status === 'paused' ? 'active' : 'paused')} className="px-2 py-1 border border-border rounded">{item.status === 'paused' ? 'Resume' : 'Pause'}</button>
+                      <button disabled={autonomyBusy === item.schedule_id} onClick={() => updateScheduleStatus(item.schedule_id, 'cancelled')} className="px-2 py-1 border border-red-500 text-red-500 rounded">Cancel</button>
+                    </div>}
                   </div>
                 ))}
               </div>
