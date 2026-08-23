@@ -137,6 +137,11 @@ class CognitiveRuntime:
         self.embodied_boundary = EmbodiedBoundaryModel(
             str(Path(path).parent / "embodied_boundary.db") if path else "data/embodied_boundary.db"
         )
+        from app.cognition.identity_continuity import IdentityContinuityLedger
+        self.identity_continuity = IdentityContinuityLedger(
+            str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db"
+        )
+        self.boot_id = f"boot_{uuid.uuid4().hex[:16]}"
         self.refresh_self_knowledge()
         self.refresh_embodied_boundary()
 
@@ -298,6 +303,19 @@ class CognitiveRuntime:
                 evidence=[f"tool:{tool}", f"availability:{status.get('status')}"]
             ))
         return {"interfaces": [item.to_dict() for item in records]}
+
+    def checkpoint_identity_continuity(self) -> Dict[str, Any]:
+        claims=self.self_knowledge.current_claims(include_stale=True)
+        commitments=self.commitments.list()
+        interfaces=self.embodied_boundary.interfaces()
+        from app.cognition.owner_control import owner_control_store
+        return self.identity_continuity.checkpoint({
+            "claim_predicates":[c.predicate for c in claims],
+            "active_commitment_sources":[f"{c.source_type}:{c.source_id}" for c in commitments if c.status in ("active","blocked")],
+            "interface_ids":[i.interface_id for i in interfaces],
+            "tool_count":len(self.registry._registry),
+            "owner_policy_revision":owner_control_store.get_policy().revision,
+        },self.boot_id)
 
     def refresh_commitments(self) -> Dict[str, Any]:
         """Reconcile persistent projects into the commitment ledger."""

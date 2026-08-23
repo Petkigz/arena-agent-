@@ -183,8 +183,9 @@ not authorized.
 - Sensor and actuator interfaces are modeled as Arena interfaces, owner devices,
   shared surfaces, external environment, or unknown. Sending a command does not
   prove control; an Arena-controlled event requires authority plus observed effect.
+- Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a
-  biological body, or subjective experience. The absence of measurement remains explicit.
+  biological body, persistent subjective identity, or subjective experience. The absence of measurement remains explicit.
 
 ---
 

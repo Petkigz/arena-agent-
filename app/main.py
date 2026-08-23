@@ -971,6 +971,14 @@ def self_agency_history_endpoint(limit: int = Query(100, ge=1, le=1000)):
     return {"success": True, "attributions": [record.to_dict() for record in records]}
 
 
+@router.post("/self-awareness/identity-checkpoint")
+def identity_continuity_checkpoint_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    runtime=CognitiveRuntime.get_instance()
+    runtime.refresh_self_knowledge(); runtime.refresh_embodied_boundary(); runtime.refresh_commitments()
+    return {"success":True,"continuity":runtime.checkpoint_identity_continuity()}
+
+
 @router.get("/self-awareness/embodied-boundary")
 def embodied_boundary_endpoint(refresh: bool = Query(True)):
     from app.cognition.runtime import CognitiveRuntime
