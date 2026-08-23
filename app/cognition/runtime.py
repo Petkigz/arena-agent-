@@ -1646,6 +1646,152 @@ class CognitiveRuntime:
         except Exception as exc:
             app_logger.warning(f"Could not propose reviewed LoRA example: {exc}")
 
+    def verify_existing_proposal_outcome(
+        self,
+        proposal: ActionProposal,
+        user_text: str,
+        previous_result: Dict[str, Any],
+        *,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Re-observe an earlier action without executing it again.
+
+        Used for UNKNOWN project steps. It performs only capability-specific
+        observation probes and GoalVerifier evaluation; no ActionGate grant is
+        consumed and the capability layer is never invoked.
+        """
+        from app.cognition.owner_control import owner_control_store
+        if owner_control_store.get_policy().paused:
+            return {
+                "success": False,
+                "request_success": False,
+                "execution_success": False,
+                "goal_verified": False,
+                "verification_unknown": True,
+                "goal_lifecycle_state": "waiting_for_evidence",
+                "reconciliation": True,
+                "reason": "Owner emergency pause is active; reconciliation probe skipped.",
+            }
+
+        session_id = session_id or f"reconcile_{uuid.uuid4().hex[:8]}"
+        goal_text = str(
+            proposal.payload.get("original_goal")
+            or proposal.payload.get("query")
+            or user_text
+        )
+        tracker = GoalTracker(user_query=goal_text)
+        from app.cognition.goal_interpreter import SemanticGoalInterpreter
+        try:
+            goal_rep = SemanticGoalInterpreter.interpret_goal(
+                goal_text,
+                complexity="fast",
+                memory_store=self.memory,
+                world_model=self.world,
+                tool_registry=self.registry,
+            )
+        except Exception as exc:
+            return {
+                "success": False,
+                "request_success": True,
+                "execution_success": False,
+                "goal_verified": False,
+                "verification_unknown": True,
+                "goal_lifecycle_state": "waiting_for_evidence",
+                "reconciliation": True,
+                "reason": f"Could not reconstruct goal for observation-only reconciliation: {exc}",
+            }
+
+        tracker.transition(GoalLifecycleState.UNDERSTOOD, "Restored goal for observation-only reconciliation")
+        tracker.transition(GoalLifecycleState.EXECUTING, "Running observation probes without re-executing action")
+        from app.cognition.perception import ObservationCollector
+        observation_error = ""
+        try:
+            ObservationCollector.collect_and_ingest_observations(
+                proposal,
+                previous_result,
+                world_model=self.world,
+                event_bus=self.events,
+            )
+        except Exception as exc:
+            observation_error = str(exc)
+            app_logger.warning(f"Evidence reconciliation observation failed: {exc}")
+
+        previous_actions = list(previous_result.get("executed_actions", []) or [])
+        previous_reply = str(previous_result.get("assistant_reply", "") or "")
+        observed_state = self.capture_observed_world_state(
+            previous_actions, previous_reply, goal_rep
+        )
+        verification = GoalVerifier.verify_goal_achievement(
+            goal_rep,
+            previous_actions,
+            previous_reply,
+            failed_action_type=proposal.action_type,
+            tracker=tracker,
+            observed_state=observed_state,
+            failed_payload=proposal.payload,
+        )
+
+        if verification.final_state in (
+            GoalLifecycleState.ACHIEVED,
+            GoalLifecycleState.FAILED,
+            GoalLifecycleState.BLOCKED,
+        ):
+            try:
+                self.learning.record_verified_episode(
+                    goal=goal_text,
+                    action_type=proposal.action_type,
+                    verification_result=verification,
+                    task_id=session_id,
+                    task_type=goal_rep.primary_intent_type,
+                )
+                self._propose_training_example(
+                    prompt=goal_text,
+                    response=previous_reply,
+                    action_type=proposal.action_type,
+                    verification_result=verification,
+                    session_id=session_id,
+                    trace_id=str(previous_result.get("trace_id", "")),
+                )
+            except Exception as exc:
+                app_logger.warning(f"Evidence reconciliation learning failed: {exc}")
+
+        try:
+            self.events.publish(CognitiveEvent(
+                event_type="proposal_outcome_reconciled",
+                data={
+                    "session_id": session_id,
+                    "proposal_id": proposal.proposal_id,
+                    "action_type": proposal.action_type,
+                    "goal_verified": verification.verified_success,
+                    "goal_state": tracker.current_state.value,
+                },
+                source=SourceType.COGNITIVE_RUNTIME,
+            ))
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "request_success": True,
+            "execution_success": bool(previous_result.get("execution_success", False)),
+            "goal_verified": verification.verified_success,
+            "verification_unknown": verification.is_unknown,
+            "goal_lifecycle_state": tracker.current_state.value,
+            "reconciliation": True,
+            "reexecuted": False,
+            "proposal_id": proposal.proposal_id,
+            "action_type": proposal.action_type,
+            "assistant_reply": previous_reply,
+            "executed_actions": previous_actions,
+            "verification": {
+                "reason": verification.verification_reason,
+                "met_conditions": verification.met_conditions,
+                "failed_conditions": verification.failed_conditions,
+                "unknown_conditions": verification.unknown_conditions,
+            },
+            "observation_error": observation_error or None,
+        }
+
     def execute_authorized_proposal(
         self,
         proposal: ActionProposal,

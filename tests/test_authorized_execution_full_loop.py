@@ -246,6 +246,68 @@ def test_gate_failure_never_reaches_interpreter_or_capability_execution():
     execute.assert_not_called()
 
 
+def test_observation_only_reconciliation_never_calls_capability_layer():
+    runtime = _runtime()
+    proposal = ActionProposal(
+        action_type="open_application",
+        payload={"query": "Open editor", "app_name": "editor"},
+    )
+    observe = Mock(return_value=[SimpleNamespace(source="process_probe")])
+    fake_perception_module = SimpleNamespace(
+        ObservationCollector=SimpleNamespace(collect_and_ingest_observations=observe)
+    )
+    execute = Mock()
+    fake_agent_module = SimpleNamespace(
+        MasterAgentOrchestrator=SimpleNamespace(execute_proposal=execute)
+    )
+
+    def verified(*args, **kwargs):
+        tracker = kwargs["tracker"]
+        tracker.transition(GoalLifecycleState.VERIFYING, "checking again")
+        tracker.transition(GoalLifecycleState.ACHIEVED, "process now observed")
+        return SimpleNamespace(
+            verified_success=True,
+            final_state=GoalLifecycleState.ACHIEVED,
+            is_unknown=False,
+            failed_conditions=[],
+            met_conditions=["process_running = true"],
+            unknown_conditions=[],
+            verification_reason="Direct process probe",
+        )
+
+    with (
+        patch.dict(sys.modules, {
+            "app.cognition.perception": fake_perception_module,
+            "app.agents.master_agent": fake_agent_module,
+        }),
+        patch(
+            "app.cognition.goal_interpreter.SemanticGoalInterpreter.interpret_goal",
+            return_value=_goal(),
+        ),
+        patch("app.cognition.runtime.GoalVerifier.verify_goal_achievement", side_effect=verified),
+        patch(
+            "app.cognition.owner_control.owner_control_store.get_policy",
+            return_value=SimpleNamespace(paused=False),
+        ),
+    ):
+        result = runtime.verify_existing_proposal_outcome(
+            proposal,
+            "Open editor",
+            {
+                "execution_success": True,
+                "executed_actions": ["Prior launch command"],
+                "assistant_reply": "Launch command succeeded",
+                "trace_id": "trace-prior",
+            },
+        )
+
+    assert result["goal_verified"] is True
+    assert result["reconciliation"] is True
+    assert result["reexecuted"] is False
+    observe.assert_called_once()
+    execute.assert_not_called()
+
+
 def test_interpretation_failure_returns_typed_result_after_grant_consumption():
     runtime = _runtime()
     proposal = ActionProposal(

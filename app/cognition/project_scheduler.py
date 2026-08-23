@@ -180,6 +180,80 @@ class ProjectDAGScheduler:
         )
         return {"sub_goal_id": sub_goal.sub_goal_id, "status": "failed", "error": str(error)}
 
+    def _reconcile_waiting_evidence(
+        self,
+        cognitive_runtime: Any,
+        project: Any,
+        decomposition: Any,
+        remaining_budget: int,
+        reviewed_steps: Optional[Dict[str, Any]] = None,
+        plan_review: Optional[Any] = None,
+    ) -> List[Dict[str, Any]]:
+        reconciled: List[Dict[str, Any]] = []
+        for sub_goal in decomposition.sub_goals:
+            if len(reconciled) >= remaining_budget:
+                break
+            if not self._review_is_current(plan_review):
+                reconciled.append({"status": "plan_approval_invalidated"})
+                break
+            if sub_goal.status != SubGoalStatus.WAITING_EVIDENCE:
+                continue
+            previous = dict(sub_goal.result or {})
+            reviewed_step = (reviewed_steps or {}).get(sub_goal.sub_goal_id)
+            proposal = self._proposal_for(
+                sub_goal,
+                decomposition.original_goal,
+                reviewed_step=reviewed_step,
+            )
+            if previous.get("proposal_id"):
+                proposal.proposal_id = str(previous["proposal_id"])
+            result = cognitive_runtime.verify_existing_proposal_outcome(
+                proposal,
+                user_text=(getattr(reviewed_step, "description", "") or sub_goal.description),
+                previous_result=previous,
+                session_id=f"reconcile_{project.project_id}_{sub_goal.sub_goal_id}",
+            )
+            if result.get("goal_verified") is True:
+                verified = dict(result)
+                verified["verified_success"] = True
+                self.goal_decomposer.update_sub_goal(
+                    decomposition.project_id,
+                    sub_goal.sub_goal_id,
+                    SubGoalStatus.COMPLETED,
+                    result=verified,
+                )
+                reconciled.append({
+                    "sub_goal_id": sub_goal.sub_goal_id,
+                    "status": "completed_after_reconciliation",
+                })
+            elif result.get("goal_lifecycle_state") in ("failed", "blocked"):
+                self.goal_decomposer.update_sub_goal(
+                    decomposition.project_id,
+                    sub_goal.sub_goal_id,
+                    SubGoalStatus.FAILED,
+                    result=dict(result),
+                    error=str(result.get("reason") or "Reconciliation observed failure"),
+                )
+                self.goal_decomposer.mark_dependents_blocked(
+                    decomposition.project_id, sub_goal.sub_goal_id
+                )
+                reconciled.append({
+                    "sub_goal_id": sub_goal.sub_goal_id,
+                    "status": "failed_after_reconciliation",
+                })
+            else:
+                self.goal_decomposer.update_sub_goal(
+                    decomposition.project_id,
+                    sub_goal.sub_goal_id,
+                    SubGoalStatus.WAITING_EVIDENCE,
+                    result=dict(result),
+                )
+                reconciled.append({
+                    "sub_goal_id": sub_goal.sub_goal_id,
+                    "status": "still_waiting_evidence",
+                })
+        return reconciled
+
     @staticmethod
     def _review_is_current(review: Optional[Any]) -> bool:
         if review is None:
@@ -360,7 +434,7 @@ class ProjectDAGScheduler:
             }
 
         with scope:
-            outcomes = self._resume_waiting_approvals(
+            outcomes = self._reconcile_waiting_evidence(
                 cognitive_runtime,
                 project,
                 decomposition,
@@ -369,6 +443,17 @@ class ProjectDAGScheduler:
                 plan_review=review,
             )
             budget = max_steps - len(outcomes)
+            if budget > 0:
+                resumed = self._resume_waiting_approvals(
+                    cognitive_runtime,
+                    project,
+                    decomposition,
+                    budget,
+                    reviewed_steps=reviewed_steps,
+                    plan_review=review,
+                )
+                outcomes.extend(resumed)
+                budget = max_steps - len(outcomes)
             if budget > 0:
                 schedule = decomposition.get_resource_aware_schedule(
                     hardware_self_model=getattr(cognitive_runtime, "hardware_self_model", None),

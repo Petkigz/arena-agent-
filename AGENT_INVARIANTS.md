@@ -116,8 +116,9 @@ Owner Control Plane may always impose a stricter rule:
   that exact revision; edits invalidate approval, and plan approval never covers
   Level-3 or per-action-gated operations.
 - Persistent project DAG execution is explicit owner opt-in, bounded per cycle,
-  dependency-aware, and restart-safe. UNKNOWN waits for evidence rather than
-  re-executing; sensitive steps wait for exact single-use authorization.
+  dependency-aware, and restart-safe. UNKNOWN triggers later observation-only
+  reconciliation—not re-execution; sensitive steps wait for exact single-use
+  authorization.
 
 ## 9. Honesty over AGI theater
 

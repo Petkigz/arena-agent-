@@ -126,8 +126,9 @@ per-action rules still require exact action authorization.
 
 Persistent project DAG scheduling is owner opt-in (`PUT /projects/{id}/scheduler`)
 and bounded per cycle. Exact action/payload steps are reviewable in
-approve-each-plan mode. Unverified steps enter `waiting_evidence` and are never
-blindly repeated; Level-3 steps enter `waiting_approval` and resume only with the
+approve-each-plan mode. Unverified steps enter `waiting_evidence`; later cycles
+run observation probes only and never repeat the action. Level-3 steps enter
+`waiting_approval` and resume only with the
 matching single-use authorization. `POST /projects/{id}/run-ready` runs a bounded
 batch manually. Pending project/action approvals are available under
 `/owner-control/approvals`.

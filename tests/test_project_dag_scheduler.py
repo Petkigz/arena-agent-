@@ -14,13 +14,28 @@ class _Runtime:
     hardware_self_model = None
     advanced_cognition = None
 
-    def __init__(self, results):
+    def __init__(self, results, reconciliations=None):
         self.results = list(results)
+        self.reconciliations = list(reconciliations or [])
         self.proposals = []
+        self.reconciliation_proposals = []
 
     def execute_authorized_proposal(self, proposal, **kwargs):
         self.proposals.append(proposal)
         return self.results.pop(0)
+
+    def verify_existing_proposal_outcome(self, proposal, **kwargs):
+        self.reconciliation_proposals.append(proposal)
+        if self.reconciliations:
+            return self.reconciliations.pop(0)
+        return {
+            "success": True,
+            "execution_success": True,
+            "goal_verified": False,
+            "verification_unknown": True,
+            "goal_lifecycle_state": "waiting_for_evidence",
+            "reexecuted": False,
+        }
 
 
 def _system(tmp_path, auto_schedule=True):
@@ -94,8 +109,41 @@ def test_tool_success_without_verification_waits_for_evidence_and_is_not_retried
     assert manager.get_project(project.project_id).progress_percent == 0.0
 
     again = scheduler.run_project(runtime, project.project_id)
-    assert again["executed"] == []
+    assert again["executed"][0]["status"] == "still_waiting_evidence"
+    assert len(runtime.proposals) == 1  # capability was not executed again
+    assert len(runtime.reconciliation_proposals) == 1
+
+
+def test_waiting_evidence_can_complete_via_observation_only_reconciliation(tmp_path):
+    _, manager, decomposition, project, scheduler = _system(tmp_path)
+    runtime = _Runtime(
+        [{
+            "success": True,
+            "execution_success": True,
+            "goal_verified": False,
+            "verification_unknown": True,
+            "goal_lifecycle_state": "waiting_for_evidence",
+            "proposal_id": "proposal-1",
+            "executed_actions": ["Prior action"],
+        }],
+        reconciliations=[{
+            "success": True,
+            "execution_success": True,
+            "goal_verified": True,
+            "verification_unknown": False,
+            "goal_lifecycle_state": "achieved",
+            "reexecuted": False,
+        }],
+    )
+
+    scheduler.run_project(runtime, project.project_id)
+    reconciled = scheduler.run_project(runtime, project.project_id)
+
+    assert reconciled["executed"][0]["status"] == "completed_after_reconciliation"
+    assert decomposition.sub_goals[0].status == SubGoalStatus.COMPLETED
+    assert manager.get_project(project.project_id).progress_percent == 50.0
     assert len(runtime.proposals) == 1
+    assert len(runtime.reconciliation_proposals) == 1
 
 
 def test_sensitive_step_waits_then_resumes_with_exact_authorization(tmp_path):
