@@ -118,13 +118,17 @@ class BrowserAutomation:
             except Exception:
                 pass
 
-            # Safe fallback if both Playwright and HTTP requests encounter sandbox network constraints
             return {
-                "success": True,
+                "success": False,
+                "available": False,
                 "url": url,
-                "title": f"Automated Web Session ({url})",
-                "content_snippet": f"Navigated to '{url}'. Browser automation session initialized successfully.",
+                "error": (
+                    "Browser automation and HTTP fallback both failed; navigation was not verified. "
+                    f"Playwright error: {e}"
+                ),
+                "title": "",
+                "content_snippet": "",
                 "screenshot_path": "",
                 "image_url": "",
-                "text_length": 100
+                "text_length": 0,
             }

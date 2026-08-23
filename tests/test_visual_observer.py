@@ -10,19 +10,20 @@ def test_observe_missing_file_degrades_cleanly():
     assert "not found" in v.error
 
 
-def test_observe_dummy_screenshot_produces_typed_observation():
+def test_observe_captured_screenshot_produces_typed_observation():
+    import pytest
     from app.tools.screen_capture import ScreenCaptureTool
     cap = ScreenCaptureTool.capture_screen("vis_test.png")
-    assert cap["success"] is True
+    if not cap["success"]:
+        pytest.skip("Physical display capture unavailable")
 
     v = VisualObserver.observe_screenshot(cap["file_path"])
     assert isinstance(v, VisualObservation)
-    # Dummy screenshot has no OCR-readable text; tesseract may or may not be
-    # installed. Either way, the result is a typed observation with a timestamp
-    # and image name — it must not raise and must carry the right shape.
+    # Tesseract may or may not be installed. Either way, a real captured image
+    # produces a typed observation with timestamp and dimensions.
     assert v.image_name == "vis_test.png"
     assert v.timestamp
-    # Width/height should be read from the image (dummy is 1920x1080).
+    # Width/height are read from the real image.
     assert v.width is not None
     assert v.height is not None
 

@@ -6,12 +6,22 @@ from app.tools.android_adb_controller import AndroidADBController
 from app.tools.universal_filesystem import UniversalFilesystem
 from app.tools.data_analyzer import DataAnalysisEngine
 
-def test_deep_os_controller():
-    res = DeepOSController.mouse_click(100, 200)
-    assert res["success"] is True
+def test_deep_os_controller(monkeypatch):
+    """Real desktop action may be unavailable in headless CI, but is never simulated."""
+    import sys
+    from types import SimpleNamespace
 
+    broken = SimpleNamespace(
+        click=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no display")),
+        doubleClick=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no display")),
+        write=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no display")),
+    )
+    monkeypatch.setitem(sys.modules, "pyautogui", broken)
+    res = DeepOSController.mouse_click(100, 200)
     type_res = DeepOSController.type_text("Hello World")
-    assert type_res["success"] is True
+
+    assert res["success"] is False and res["available"] is False
+    assert type_res["success"] is False and type_res["available"] is False
 
 def test_android_adb_controller():
     devs = AndroidADBController.list_connected_devices()

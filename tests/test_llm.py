@@ -15,5 +15,8 @@ def test_llm_graceful_fallback():
     # generate completion should gracefully mock a response
     response = client.generate_chat_completion(messages, complexity="fast")
     assert response["id"] == "chat-simulated"
+    assert response["success"] is False
+    assert response["simulated"] is True
+    assert response["error"]
     assert "Simulated Response" in response["choices"][0]["message"]["content"]
     assert "Hello LLM!" in response["choices"][0]["message"]["content"]

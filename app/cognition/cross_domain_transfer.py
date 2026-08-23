@@ -168,8 +168,12 @@ class TransferResult:
     target_problem: str = ""
     transferred_knowledge: List[str] = field(default_factory=list)
     adaptations: List[str] = field(default_factory=list)  # How knowledge was adapted
-    success: bool = False
-    effectiveness_score: float = 0.0  # 0.0 to 1.0
+    success: bool = False  # verified application outcome only
+    predicted_success: bool = False
+    verified: bool = False
+    evaluation_mode: str = "predicted_similarity"
+    effectiveness_score: float = 0.0  # predicted until verified=True
+    verification_evidence: List[str] = field(default_factory=list)
     lessons_learned: List[str] = field(default_factory=list)
     created_at: str = field(default_factory=_now)
     
@@ -183,7 +187,11 @@ class TransferResult:
             'transferred_knowledge': self.transferred_knowledge,
             'adaptations': self.adaptations,
             'success': self.success,
+            'predicted_success': self.predicted_success,
+            'verified': self.verified,
+            'evaluation_mode': self.evaluation_mode,
             'effectiveness_score': self.effectiveness_score,
+            'verification_evidence': self.verification_evidence,
             'lessons_learned': self.lessons_learned,
             'created_at': self.created_at
         }
@@ -199,7 +207,11 @@ class TransferResult:
             transferred_knowledge=data.get('transferred_knowledge', []),
             adaptations=data.get('adaptations', []),
             success=data.get('success', False),
+            predicted_success=data.get('predicted_success', False),
+            verified=data.get('verified', False),
+            evaluation_mode=data.get('evaluation_mode', 'predicted_similarity'),
             effectiveness_score=data.get('effectiveness_score', 0.0),
+            verification_evidence=data.get('verification_evidence', []),
             lessons_learned=data.get('lessons_learned', []),
             created_at=data.get('created_at', _now())
         )
@@ -505,13 +517,16 @@ class CrossDomainTransferEngine:
             source_domain, target_domain, transferred_knowledge
         )
         
-        # Simulate success (in production, this would be based on actual application)
-        success = relationship.similarity_score > 0.5
-        effectiveness = relationship.similarity_score * (1.0 if success else 0.5)
-        
-        # Generate lessons learned
+        # Similarity predicts whether transfer may help; it is not evidence that
+        # the target task actually succeeded.
+        predicted_success = relationship.similarity_score > 0.5
+        effectiveness = relationship.similarity_score * (
+            1.0 if predicted_success else 0.5
+        )
+
+        # These are proposed adaptations, not learned success lessons.
         lessons = self._generate_lessons(
-            source_domain, target_domain, success, effectiveness
+            source_domain, target_domain, predicted_success, effectiveness
         )
         
         # Create result
@@ -521,7 +536,10 @@ class CrossDomainTransferEngine:
             target_problem=target_problem,
             transferred_knowledge=transferred_knowledge,
             adaptations=adaptations,
-            success=success,
+            success=False,
+            predicted_success=predicted_success,
+            verified=False,
+            evaluation_mode="predicted_similarity",
             effectiveness_score=effectiveness,
             lessons_learned=lessons
         )
@@ -529,14 +547,33 @@ class CrossDomainTransferEngine:
         # Save result
         self._save_result(result)
         
-        # Update relationship success rate
-        self._update_relationship_success_rate(relationship_id, success)
-        
+        # Do not update historical success rate from a similarity prediction.
         app_logger.info(
-            f"Transfer attempt: {source_domain.name} → {target_domain.name} "
-            f"(success: {success}, effectiveness: {effectiveness:.2f})"
+            f"Transfer proposal: {source_domain.name} → {target_domain.name} "
+            f"(predicted_success: {predicted_success}, predicted_effectiveness: {effectiveness:.2f})"
         )
         
+        return result
+
+    def record_verified_transfer_result(
+        self,
+        result_id: str,
+        *,
+        success: bool,
+        effectiveness_score: float,
+        evidence: List[str],
+    ) -> Optional[TransferResult]:
+        """Record an externally verified application outcome for a transfer."""
+        result = next((item for item in self.list_results() if item.result_id == result_id), None)
+        if result is None or not evidence:
+            return None
+        result.success = bool(success)
+        result.verified = True
+        result.evaluation_mode = "verified_application"
+        result.effectiveness_score = max(0.0, min(1.0, float(effectiveness_score)))
+        result.verification_evidence = [str(item) for item in evidence]
+        self._save_result(result)
+        self._update_relationship_success_rate(result.relationship_id, result.success)
         return result
     
     def _generate_transfer(
@@ -633,8 +670,11 @@ class CrossDomainTransferEngine:
             return
         
         # Get all results for this relationship
-        results = self.list_results(relationship_id=relationship_id)
-        
+        results = [
+            result for result in self.list_results(relationship_id=relationship_id)
+            if result.verified
+        ]
+
         if results:
             success_count = sum(1 for r in results if r.success)
             relationship.success_rate = success_count / len(results)
@@ -785,7 +825,7 @@ class CrossDomainTransferEngine:
         
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                INSERT INTO transfer_results
+                INSERT OR REPLACE INTO transfer_results
                 (result_id, relationship_id, result_data, created_at)
                 VALUES (?, ?, ?, ?)
             """, (

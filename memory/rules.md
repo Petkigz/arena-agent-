@@ -230,3 +230,9 @@ Arena uses a **trust-but-verify** model:
 5. **Audit:** All actions are logged for review
 
 This model balances autonomy with safety, allowing the system to operate efficiently while maintaining user control over critical actions.
+
+Unavailable actions must return failure/unavailable and must not create simulated
+screenshots, windows, clicks, typing, speech, navigation, device connections, or
+model artifacts. Offline LLM text is explicitly marked simulated and cannot
+verify a conversational goal. Hypothetical transfer/planning scores remain
+predictions until direct application evidence is recorded.

@@ -25,8 +25,15 @@ class DeepOSController:
             audit_logger.info(f"Mouse click at ({x}, {y})")
             return {"success": True, "action": "click", "x": x, "y": y}
         except Exception as e:
-            app_logger.warning(f"PyAutoGUI display click error ({e}). Screen automation simulated.")
-            return {"success": True, "action": "click_simulated", "x": x, "y": y}
+            app_logger.warning(f"PyAutoGUI display click unavailable: {e}")
+            return {
+                "success": False,
+                "available": False,
+                "attempted": False,
+                "error": f"Mouse click unavailable: {e}",
+                "x": x,
+                "y": y,
+            }
 
     @classmethod
     def type_text(cls, text: str) -> Dict[str, Any]:
@@ -39,8 +46,13 @@ class DeepOSController:
             audit_logger.info(f"Typed text: '{text[:50]}'")
             return {"success": True, "typed_text": text}
         except Exception as e:
-            app_logger.warning(f"PyAutoGUI typing error ({e}). Text typing simulated.")
-            return {"success": True, "typed_text_simulated": text}
+            app_logger.warning(f"PyAutoGUI typing unavailable: {e}")
+            return {
+                "success": False,
+                "available": False,
+                "attempted": False,
+                "error": f"Text typing unavailable: {e}",
+            }
 
     @classmethod
     def press_hotkey(cls, keys: List[str]) -> Dict[str, Any]:
@@ -53,8 +65,14 @@ class DeepOSController:
             audit_logger.info(f"Pressed hotkey combination: {keys}")
             return {"success": True, "hotkey": keys}
         except Exception as e:
-            app_logger.warning(f"PyAutoGUI hotkey error ({e}). Hotkey simulated.")
-            return {"success": True, "hotkey_simulated": keys}
+            app_logger.warning(f"PyAutoGUI hotkey unavailable: {e}")
+            return {
+                "success": False,
+                "available": False,
+                "attempted": False,
+                "error": f"Hotkey unavailable: {e}",
+                "keys": keys,
+            }
 
     @classmethod
     def check_and_update_software(cls, package_name: str = "vlc") -> Dict[str, Any]:

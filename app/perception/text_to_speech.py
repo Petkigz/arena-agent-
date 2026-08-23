@@ -193,8 +193,8 @@ class LocalTextToSpeech:
         Synthesizes text into spoken audio (.wav) locally.
 
         Prefers Piper (offline, deterministic, real voices) when the model is
-        available; falls back to the OS TTS driver (pyttsx3), then a beep.
-        Saves audio into data/audio/ and returns a relative URL for playback.
+        available and otherwise tries the OS TTS driver (pyttsx3). If neither
+        produces speech, returns unavailable rather than labeling a tone as voice.
         """
         cls.ensure_audio_dir()
         text = text.strip()
@@ -250,7 +250,7 @@ class LocalTextToSpeech:
             engine.runAndWait()
 
             if not audio_path.exists() or audio_path.stat().st_size == 0:
-                cls.generate_fallback_wav(audio_path)
+                raise RuntimeError("TTS engine produced no audio artifact")
 
             audio_url = f"/audio/{filename}"
 
@@ -265,22 +265,16 @@ class LocalTextToSpeech:
                 "audio_url": audio_url
             }
         except Exception as e:
-            app_logger.warning(f"pyttsx3 TTS driver unavailable ({e}). Generating fallback audio file...")
+            app_logger.warning(f"pyttsx3 TTS unavailable: {e}")
             try:
-                cls.generate_fallback_wav(audio_path)
-                return {
-                    "success": True,
-                    "text": text,
-                    "spoken_text": speech_text,
-                    "active_voice_profile": active_profile,
-                    "custom_voice_cloned": False,
-                    "file_path": str(audio_path),
-                    "file_name": filename,
-                    "audio_url": f"/audio/{filename}"
-                }
-            except Exception as ex:
-                return {
-                    "success": False,
-                    "error": f"Speech synthesis error: {str(ex)}",
-                    "audio_url": ""
-                }
+                audio_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "available": False,
+                "error": f"Speech synthesis unavailable: {e}",
+                "text": text,
+                "audio_url": "",
+                "file_path": "",
+            }

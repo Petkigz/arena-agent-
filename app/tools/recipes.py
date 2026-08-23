@@ -146,11 +146,23 @@ class Recipes:
             search = WebResearcher.search_and_scrape(query, max_results=max_results)
         except Exception as e:
             app_logger.warning(f"research_digest search failed: {e}")
-            return {"success": True, "query": query, "sources": [], "digest": f"Search failed: {e}"}
+            return {
+                "success": False,
+                "query": query,
+                "sources": [],
+                "digest": "",
+                "error": f"Search failed: {e}",
+            }
 
         sources = FactChecker._extract_sources(search.get("pages", []))
         if not sources:
-            return {"success": True, "query": query, "sources": [], "digest": "No usable sources found."}
+            return {
+                "success": False,
+                "query": query,
+                "sources": [],
+                "digest": "",
+                "error": "No usable sources found; no research digest was produced.",
+            }
 
         llm = llm or llm_client
         digest = extract_reply(

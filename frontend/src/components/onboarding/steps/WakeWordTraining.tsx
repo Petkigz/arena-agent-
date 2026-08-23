@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import { Button } from '../../ui/Button';
-import { Mic, ArrowRight, ArrowLeft, SkipForward, Check } from 'lucide-react';
-import { useOnboardingStore } from '../../../stores/onboardingStore';
+import { Mic, ArrowRight, ArrowLeft, SkipForward } from 'lucide-react';
 
 interface WakeWordTrainingProps {
   onNext: () => void;
@@ -10,38 +8,7 @@ interface WakeWordTrainingProps {
 }
 
 export function WakeWordTraining({ onNext, onBack, onSkip }: WakeWordTrainingProps) {
-  const { addWakeWordSample, wakeWordSamples } = useOnboardingStore();
-  const [isRecording, setIsRecording] = useState(false);
-  const [currentSample, setCurrentSample] = useState(0);
-  const [wakeWord] = useState('Hey Arena');
-  const requiredSamples = 5;
-
-  const handleRecord = async () => {
-    if (isRecording) {
-      // Stop recording
-      setIsRecording(false);
-      
-      // Simulate recording completion
-      setTimeout(() => {
-        addWakeWordSample(`sample_${currentSample + 1}`);
-        setCurrentSample(prev => prev + 1);
-      }, 500);
-    } else {
-      // Start recording
-      setIsRecording(true);
-      
-      // In production, this would use the Web Audio API to record
-      // For now, simulate a 2-second recording
-      setTimeout(() => {
-        setIsRecording(false);
-        addWakeWordSample(`sample_${currentSample + 1}`);
-        setCurrentSample(prev => prev + 1);
-      }, 2000);
-    }
-  };
-
-  const progress = (wakeWordSamples.length / requiredSamples) * 100;
-  const isComplete = wakeWordSamples.length >= requiredSamples;
+  const wakeWord = 'Hey Arena';
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-12">
@@ -54,66 +21,17 @@ export function WakeWordTraining({ onNext, onBack, onSkip }: WakeWordTrainingPro
           Train Your Wake Word
         </h2>
         <p className="text-text-secondary">
-          Record yourself saying "<span className="font-semibold text-text-primary">{wakeWord}</span>" {requiredSamples} times
+          Built-in phrase: "<span className="font-semibold text-text-primary">{wakeWord}</span>"
         </p>
       </div>
 
-      {/* Progress */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-text-secondary">
-            {wakeWordSamples.length} of {requiredSamples} samples
-          </span>
-          <span className="text-sm text-text-secondary">{Math.round(progress)}%</span>
-        </div>
-        <div className="h-2 bg-background-surface rounded-full overflow-hidden">
-          <div
-            className="h-full bg-accent-primary transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Recording interface */}
-      <div className="bg-background-secondary rounded-lg p-8 mb-8">
-        <div className="text-center">
-          {/* Microphone button */}
-          <button
-            onClick={handleRecord}
-            disabled={isComplete}
-            className={`
-              inline-flex items-center justify-center w-24 h-24 rounded-full mb-4 transition-all
-              ${isRecording 
-                ? 'bg-accent-error animate-pulse' 
-                : isComplete
-                  ? 'bg-accent-success cursor-not-allowed'
-                  : 'bg-accent-primary hover:bg-accent-primary/90'
-              }
-            `}
-          >
-            {isComplete ? (
-              <Check className="w-12 h-12 text-white" />
-            ) : (
-              <Mic className="w-12 h-12 text-white" />
-            )}
-          </button>
-
-          {/* Status text */}
-          <p className="text-text-primary font-medium mb-2">
-            {isRecording
-              ? 'Recording... Say the wake word'
-              : isComplete
-                ? 'Training complete!'
-                : 'Tap to record'
-            }
-          </p>
-
-          {!isRecording && !isComplete && (
-            <p className="text-sm text-text-muted">
-              Speak clearly and naturally
-            </p>
-          )}
-        </div>
+      {/* Training availability */}
+      <div className="bg-amber-500/10 border border-amber-500/50 rounded-lg p-8 mb-8 text-center">
+        <Mic className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+        <p className="text-text-primary font-medium mb-2">Custom training is currently unavailable</p>
+        <p className="text-sm text-text-secondary">
+          Arena does not have a verified custom wake-word ONNX training pipeline configured. No sample or accuracy will be simulated. You can continue with a built-in wake word.
+        </p>
       </div>
 
       {/* Tips */}
@@ -143,11 +61,10 @@ export function WakeWordTraining({ onNext, onBack, onSkip }: WakeWordTrainingPro
       <div className="flex flex-col gap-3">
         <Button
           onClick={onNext}
-          disabled={!isComplete}
           size="lg"
           className="w-full"
         >
-          {isComplete ? 'Continue' : `Complete ${requiredSamples - wakeWordSamples.length} more samples`}
+          Continue with built-in wake word
           <ArrowRight className="w-5 h-5 ml-2" />
         </Button>
 

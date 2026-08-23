@@ -111,7 +111,7 @@ export const faqItems: FAQItem[] = [
   },
   {
     question: 'How do I pair my phone with Arena?',
-    answer: 'Go to Settings → Devices → Pair New Device. You can scan a QR code or enter a pairing code manually. Both devices must be on the same network.',
+    answer: 'Verified QR/code pairing is not implemented yet. Configure the Android app with the authenticated Arena server URL and API key manually; onboarding will not invent a connected device.',
   },
   {
     question: 'Can multiple people use Arena?',

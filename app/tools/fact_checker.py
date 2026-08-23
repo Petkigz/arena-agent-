@@ -41,6 +41,8 @@ class FactChecker:
             app_logger.warning(f"Fact-check search failed: {e}")
             return {
                 "success": True,
+                "search_success": False,
+                "evidence_available": False,
                 "claim": claim,
                 "verdict": "unverifiable",
                 "justification": f"Could not search for sources (search failed: {e}).",
@@ -52,6 +54,8 @@ class FactChecker:
         if not sources:
             return {
                 "success": True,
+                "search_success": bool(search.get("success", False)),
+                "evidence_available": False,
                 "claim": claim,
                 "verdict": "unverifiable",
                 "justification": "No usable sources were found for this claim.",
@@ -82,6 +86,8 @@ class FactChecker:
 
         return {
             "success": True,
+            "search_success": True,
+            "evidence_available": True,
             "claim": claim,
             "verdict": verdict,
             "justification": justification,

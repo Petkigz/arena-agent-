@@ -56,6 +56,9 @@ class LocalLLMClient:
             return {
                 "id": "chat-simulated",
                 "object": "chat.completion",
+                "success": False,
+                "simulated": True,
+                "error": f"Local LLM provider unavailable: {e}",
                 "model": model,
                 "choices": [{
                     "index": 0,

@@ -131,9 +131,11 @@ Owner Control Plane may always impose a stricter rule:
   scorecard), never percentages.
 - Flag what cannot be verified in-sandbox (real GPU, real LLM, Android compile,
   GUI launch) instead of implying it works.
-- Unimplemented model/training/identification features return typed
-  `success: false` / unavailable responses. Never create placeholder artifacts,
-  select an arbitrary identity, or invent accuracy/confidence values.
+- Unimplemented or unavailable execution/model/training/identification features
+  return typed `success: false` / unavailable responses. Never create placeholder
+  artifacts, windows, navigation, speech, device connections, or identities; never
+  invent accuracy/confidence. Hypothetical simulations are labeled predicted and
+  cannot update verified success history.
 
 ## 10. Consideration is not authority
 

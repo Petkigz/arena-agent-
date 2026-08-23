@@ -2474,6 +2474,39 @@ class CognitiveRuntime:
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
+            if llm_res.get("simulated") or llm_res.get("id") == "chat-simulated":
+                tracker.transition(
+                    GoalLifecycleState.DEFERRED,
+                    "Local language model unavailable; no conversational answer was generated.",
+                )
+                latency = (time.time() - start_time) * 1000
+                trace.finalize(
+                    reply=assistant_reply,
+                    actions=[],
+                    latency=latency,
+                    surprisal=0.0,
+                    lesson="",
+                    gate_decision="llm_unavailable",
+                    goal_verified=False,
+                )
+                return {
+                    "request_success": True,
+                    "execution_success": False,
+                    "goal_verified": False,
+                    "success": False,
+                    "session_id": session_id,
+                    "trace_id": trace.trace_id,
+                    "user_text": user_text,
+                    "assistant_reply": assistant_reply,
+                    "executed_actions": [],
+                    "action_type": "defer",
+                    "reasoning_action": "defer",
+                    "goal_lifecycle_state": tracker.current_state.value,
+                    "prediction_surprisal": 0.0,
+                    "latency_ms": round(latency, 2),
+                    "model_used": llm_res.get("model", "fast"),
+                    "llm_available": False,
+                }
 
             obs_state = self.capture_observed_world_state([], assistant_reply, goal_rep)
             verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)

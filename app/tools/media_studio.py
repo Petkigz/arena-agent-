@@ -46,15 +46,13 @@ class MediaStudioTool:
             raw_svg = extract_reply(llm_res, fallback="")
             clean_svg = raw_svg.replace("```xml", "").replace("```svg", "").replace("```", "").strip()
 
-            if "<svg" not in clean_svg:
-                # Valid fallback SVG template for offline test simulation
-                clean_svg = (
-                    f'<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">\n'
-                    f'  <rect width="100%" height="100%" fill="#0b0f19"/>\n'
-                    f'  <circle cx="400" cy="300" r="150" fill="none" stroke="#00f2fe" stroke-width="4"/>\n'
-                    f'  <text x="50%" y="50%" fill="#f9fafb" font-family="sans-serif" font-size="24" text-anchor="middle" dominant-baseline="middle">{description}</text>\n'
-                    f'</svg>'
-                )
+            if "<svg" not in clean_svg or "</svg>" not in clean_svg:
+                return {
+                    "success": False,
+                    "available": not str(raw_svg).startswith("[Simulated Response"),
+                    "error": "The model did not produce a valid SVG artifact; no fallback graphic was fabricated.",
+                    "file_path": "",
+                }
 
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(clean_svg)

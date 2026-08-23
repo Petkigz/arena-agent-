@@ -1433,7 +1433,16 @@ async def voice_transcribe_endpoint(file: UploadFile = File(...)):
 @router.post("/voice/synthesize")
 def voice_synthesize_endpoint(req: TTSSynthesizeRequest):
     res = LocalTextToSpeech.synthesize_speech(req.text, voice=req.voice)
-    db.create_audit_log("voice_synthesize", "success", f"Synthesized speech for text: '{req.text[:80]}'", level=0)
+    db.create_audit_log(
+        "voice_synthesize",
+        "success" if res.get("success") else "failed",
+        (
+            f"Synthesized speech for text: '{req.text[:80]}'"
+            if res.get("success")
+            else f"Speech synthesis unavailable: {res.get('error', 'unknown error')}"
+        ),
+        level=0,
+    )
     return res
 
 

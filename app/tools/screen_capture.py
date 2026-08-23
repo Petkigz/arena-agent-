@@ -1,7 +1,13 @@
 import uuid
 import hashlib
-import mss
-from PIL import Image, ImageDraw
+try:
+    import mss
+    MSS_AVAILABLE = True
+except ImportError:
+    mss = None
+    MSS_AVAILABLE = False
+
+from PIL import Image
 from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings
@@ -16,17 +22,6 @@ class ScreenCaptureTool:
         cls.SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def generate_dummy_screenshot(cls, file_path: Path, width: int = 1920, height: int = 1080):
-        """
-        Generates a placeholder PNG image when no physical X11 display server is available (e.g. headless Linux).
-        """
-        img = Image.new('RGB', (width, height), color=(11, 15, 25))
-        d = ImageDraw.Draw(img)
-        d.text((50, 50), "[SYSTEM DESKTOP SCREENSHOT - SIMULATED DISPLAY]", fill=(0, 242, 254))
-        d.text((50, 100), "Active Window: Visual Dashboard / Desktop Application", fill=(249, 250, 251))
-        img.save(file_path, "PNG")
-
-    @classmethod
     def capture_screen(cls, filename: Optional[str] = None) -> Dict[str, Any]:
         """
         Captures full desktop screen using mss high-performance screen capture.
@@ -38,6 +33,14 @@ class ScreenCaptureTool:
 
         file_path = cls.SCREENSHOTS_DIR / filename
         width, height = 1920, 1080
+        if not MSS_AVAILABLE:
+            return {
+                "success": False,
+                "available": False,
+                "error": "Desktop screen capture unavailable: mss is not installed.",
+                "file_path": "",
+                "image_url": "",
+            }
 
         try:
             with mss.MSS() as sct:
@@ -59,24 +62,18 @@ class ScreenCaptureTool:
                 "height": height
             }
         except Exception as e:
-            app_logger.warning(f"Display capture notice ({e}). Generating fallback screen capture...")
+            app_logger.warning(f"Desktop screen capture unavailable: {e}")
             try:
-                cls.generate_dummy_screenshot(file_path, width=width, height=height)
-                return {
-                    "success": True,
-                    "file_name": filename,
-                    "file_path": str(file_path),
-                    "image_url": f"/static/workspace/screenshots/{filename}",
-                    "width": width,
-                    "height": height
-                }
-            except Exception as ex:
-                return {
-                    "success": False,
-                    "error": f"Screen capture error: {str(ex)}",
-                    "file_path": "",
-                    "image_url": ""
-                }
+                file_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "available": False,
+                "error": f"Desktop screen capture unavailable: {e}",
+                "file_path": "",
+                "image_url": "",
+            }
 
     _last_screen_image: Optional[Path] = None
 

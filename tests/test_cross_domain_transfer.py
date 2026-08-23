@@ -263,8 +263,20 @@ class TestCrossDomainTransfer:
             target_problem="Building a REST API with authentication"
         )
         
-        assert result.success is True
+        assert result.success is False  # similarity is prediction, not verified application
+        assert result.predicted_success is True
+        assert result.verified is False
         assert result.effectiveness_score > 0.7
+
+        verified = transfer_engine.record_verified_transfer_result(
+            result.result_id,
+            success=True,
+            effectiveness_score=0.9,
+            evidence=["target benchmark passed"],
+        )
+        assert verified.success is True
+        assert verified.verified is True
+        assert verified.evaluation_mode == "verified_application"
     
     def test_transfer_with_low_similarity(self, transfer_engine):
         """Test transfer between very different domains."""

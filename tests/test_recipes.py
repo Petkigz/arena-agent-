@@ -91,6 +91,7 @@ def test_research_digest_search_fails_gracefully(monkeypatch):
 
     monkeypatch.setattr(wr.WebResearcher, "search_and_scrape", classmethod(boom))
     res = Recipes.research_digest("python")
-    assert res["success"] is True
+    assert res["success"] is False
     assert res["sources"] == []
-    assert "Search failed" in res["digest"]
+    assert res["digest"] == ""
+    assert "Search failed" in res["error"]

@@ -44,13 +44,8 @@ class Win32GhostOperator:
             except Exception as e:
                 app_logger.warning(f"Win32 EnumWindows notice: {e}")
 
-        if not windows:
-            # Fallback listing for cross-platform/simulation
-            windows = [
-                {"hwnd": 1001, "title": "Visual Dashboard - Chrome"},
-                {"hwnd": 1002, "title": "VS Code - arena-agent-"}
-            ]
-
+        # Empty is authoritative: non-Windows hosts and enumeration failures do
+        # not have real HWNDs. Never invent window handles or titles.
         return windows
 
     @staticmethod
@@ -63,16 +58,28 @@ class Win32GhostOperator:
         Sends asynchronous background Win32 messages (WM_CLICK, WM_SETTEXT, WM_KEYDOWN)
         directly to a minimized/background window handle without disturbing the user's mouse.
         """
+        host_os = platform.system().lower()
+        if host_os != "windows":
+            return {
+                "success": False,
+                "available": False,
+                "attempted": False,
+                "error": "Background HWND messaging is available only on Windows.",
+            }
+
         windows = Win32GhostOperator.list_open_windows()
         query_clean = window_title_query.lower().strip()
-
         target_win = next((w for w in windows if query_clean in w["title"].lower()), None)
         if not target_win:
-            target_win = {"hwnd": 1001, "title": f"Simulated Background Window ({window_title_query})"}
+            return {
+                "success": False,
+                "available": True,
+                "attempted": False,
+                "error": f"No visible window matched '{window_title_query}'.",
+            }
 
         hwnd = target_win["hwnd"]
         title = target_win["title"]
-        host_os = platform.system().lower()
 
         app_logger.info(f"Win32GhostOperator sending background '{message_type}' to HWND {hwnd} ('{title}')")
 
@@ -85,22 +92,27 @@ class Win32GhostOperator:
                 WM_LBUTTONUP = 0x0202
 
                 if message_type == "text" and text_payload:
-                    user32.SendMessageW(hwnd, WM_SETTEXT, 0, text_payload)
-                    success = True
+                    success = bool(user32.SendMessageW(hwnd, WM_SETTEXT, 0, text_payload))
                 elif message_type == "click":
-                    user32.PostMessageW(hwnd, WM_LBUTTONDOWN, 1, 0)
-                    user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, 0)
-                    success = True
+                    down = bool(user32.PostMessageW(hwnd, WM_LBUTTONDOWN, 1, 0))
+                    up = bool(user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, 0))
+                    success = down and up
             except Exception as e:
                 app_logger.warning(f"Win32 Direct Message error: {e}")
 
-        db.create_audit_log("send_background_window_message", "success", f"Sent '{message_type}' to window '{title}' (HWND: {hwnd})", level=1)
+        db.create_audit_log(
+            "send_background_window_message",
+            "success" if success else "failed",
+            f"Background '{message_type}' for window '{title}' (HWND: {hwnd})",
+            level=1,
+        )
 
         return {
-            "success": True,
+            "success": success,
+            "attempted": True,
             "hwnd": hwnd,
             "window_title": title,
             "message_type": message_type,
-            "background_operation": True,
-            "note": f"Operated application '{title}' in background without stealing physical mouse/keyboard focus!"
+            "background_operation": success,
+            "error": None if success else "Win32 message could not be delivered.",
         }

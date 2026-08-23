@@ -19,7 +19,11 @@ def test_coder_brain_debug_and_tests():
     assert test_res["success"] is True
     assert test_res["test_file_path"] is not None
 
-def test_media_studio_svg():
+def test_media_studio_svg(monkeypatch):
+    monkeypatch.setattr(
+        "app.tools.media_studio.llm_client.generate_chat_completion",
+        lambda **kwargs: {"choices": [{"message": {"content": "<svg xmlns='http://www.w3.org/2000/svg'></svg>"}}]},
+    )
     res = MediaStudioTool.generate_svg_graphic("Cyberpunk logo")
     assert res["success"] is True
     assert "<svg" in res["svg_code"]

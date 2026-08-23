@@ -10,28 +10,25 @@ interface DevicePairingProps {
 }
 
 export function DevicePairing({ onNext, onBack, onSkip }: DevicePairingProps) {
-  const { addPairedDevice, pairedDevices } = useOnboardingStore();
+  const { pairedDevices } = useOnboardingStore();
   const [pairingMethod, setPairingMethod] = useState<'qr' | 'manual' | null>(null);
   const [pairingCode, setPairingCode] = useState('');
   const [isPairing, setIsPairing] = useState(false);
+  const [pairingError, setPairingError] = useState('');
 
   const handlePairDevice = async () => {
     if (!pairingCode.trim()) return;
-
     setIsPairing(true);
-    
-    // Simulate pairing process
-    setTimeout(() => {
-      addPairedDevice(`device_${Date.now()}`);
-      setIsPairing(false);
-      setPairingMethod(null);
-      setPairingCode('');
-    }, 2000);
+    setPairingError(
+      'Device pairing verification is not implemented. No device was added or marked connected.'
+    );
+    setIsPairing(false);
   };
 
   const generateQRCode = () => {
-    // In production, this would generate a QR code with pairing info
-    setPairingMethod('qr');
+    setPairingError(
+      'Verified QR pairing is not implemented. Arena will not display a placeholder pairing code.'
+    );
   };
 
   return (
@@ -68,7 +65,7 @@ export function DevicePairing({ onNext, onBack, onSkip }: DevicePairingProps) {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-accent-success">
                   <Wifi className="w-3 h-3" />
-                  <span>Connected</span>
+                  <span>Saved (connection not verified)</span>
                 </div>
               </div>
             ))}
@@ -121,25 +118,9 @@ export function DevicePairing({ onNext, onBack, onSkip }: DevicePairingProps) {
         </div>
       )}
 
-      {/* QR Code display */}
-      {pairingMethod === 'qr' && (
-        <div className="bg-background-secondary rounded-lg p-8 mb-8 text-center">
-          <div className="inline-block p-4 bg-white rounded-lg mb-4">
-            {/* Placeholder QR code */}
-            <div className="w-48 h-48 bg-background-surface rounded flex items-center justify-center">
-              <QrCode className="w-24 h-24 text-text-muted" />
-            </div>
-          </div>
-          <p className="text-sm text-text-secondary mb-4">
-            Open the Arena mobile app and scan this QR code
-          </p>
-          <Button
-            onClick={() => setPairingMethod(null)}
-            variant="secondary"
-            size="sm"
-          >
-            Cancel
-          </Button>
+      {pairingError && (
+        <div className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-text-secondary">
+          {pairingError}
         </div>
       )}
 
