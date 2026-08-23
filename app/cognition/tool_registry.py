@@ -68,7 +68,10 @@ class ToolRegistry:
 
         app_logger.info(f"ToolRegistry executing verified tool '{key}'...")
         try:
+            from app.cognition.execution_control import execution_control_registry
+            execution_control_registry.checkpoint(f"before_tool:{key}")
             result = tool_entry["handler"](payload)
+            execution_control_registry.checkpoint(f"after_tool:{key}")
 
             # Calculate prediction surprisal
             pe = PredictionEngine()

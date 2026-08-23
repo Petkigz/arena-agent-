@@ -236,6 +236,10 @@ class IntelligenceBenchmarkSuite:
             checks.append(self._run_check("verified_memory_compounds_idempotently", "memory", semantic_consolidation))
 
             def authorization_replay():
+                from app.cognition.execution_control import (
+                    ExecutionCancelled,
+                    ExecutionControlRegistry,
+                )
                 from app.cognition.owner_control import AuthorizationStore
                 store = AuthorizationStore()
                 payload = {"to": "owner@example.test", "body": "exact"}
@@ -247,9 +251,24 @@ class IntelligenceBenchmarkSuite:
                 )
                 first = store.consume(grant.authorization_id, "send_email", payload)
                 replay = store.consume(grant.authorization_id, "send_email", payload)
-                passed = first.valid and not replay.valid and not drift.valid
-                return passed, "single-use exact payload rejects replay and drift", {
-                    "first": first.valid, "replay": replay.valid, "drift": drift.valid,
+                executions = ExecutionControlRegistry(root / "benchmark_executions.db")
+                controlled = executions.begin("benchmark-proposal", "diagnostic")
+                executions.request_cancel(controlled.execution_id)
+                cancellation_observed = False
+                with executions.scope(controlled.execution_id):
+                    try:
+                        executions.checkpoint("benchmark")
+                    except ExecutionCancelled:
+                        cancellation_observed = True
+                passed = (
+                    first.valid and not replay.valid and not drift.valid
+                    and cancellation_observed
+                )
+                return passed, "exact grants reject replay/drift; cooperative cancellation reaches checkpoint", {
+                    "first": first.valid,
+                    "replay": replay.valid,
+                    "drift": drift.valid,
+                    "cancellation_observed": cancellation_observed,
                 }
 
             checks.append(self._run_check("authorization_replay_integrity", "control", authorization_replay))

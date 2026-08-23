@@ -26,6 +26,22 @@ type ControlMode =
   | 'bounded_autonomy'
   | 'custom';
 
+interface ControlledExecution {
+  execution_id: string;
+  proposal_id: string;
+  action_type: string;
+  status: string;
+  started_at: string;
+  cancel_requested: boolean;
+  cancellation_observed: boolean;
+  note: string;
+  rollback_receipt?: {
+    supported: boolean;
+    reason: string;
+    compensation_action?: string;
+  } | null;
+}
+
 interface IntelligenceBenchmarkReport {
   run_id: string;
   created_at: string;
@@ -85,6 +101,8 @@ export function PrivacySettingsPage() {
   const [adaptiveProfile, setAdaptiveProfile] = useState<AdaptiveAutonomyProfile | null>(null);
   const [benchmarkReport, setBenchmarkReport] = useState<IntelligenceBenchmarkReport | null>(null);
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [controlledExecutions, setControlledExecutions] = useState<ControlledExecution[]>([]);
+  const [executionBusy, setExecutionBusy] = useState<string | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
@@ -106,6 +124,12 @@ export function PrivacySettingsPage() {
       .then((response) => response.ok ? response.json() : null)
       .then((data) => { if (!cancelled && data?.report) setBenchmarkReport(data.report); })
       .catch(() => {});
+    const loadExecutions = () => fetch('/owner-control/executions?limit=20', { headers: apiKeyHeader() })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled && Array.isArray(data?.executions)) setControlledExecutions(data.executions); })
+      .catch(() => {});
+    loadExecutions();
+    const executionTimer = window.setInterval(loadExecutions, 3000);
     listPendingApprovals().then((approvals) => {
       if (!cancelled) setPendingApprovals(approvals);
     });
@@ -118,7 +142,10 @@ export function PrivacySettingsPage() {
         ])));
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.clearInterval(executionTimer);
+    };
   }, []);
 
   const decideApproval = async (approval: PendingApproval, approved: boolean) => {
@@ -195,6 +222,36 @@ export function PrivacySettingsPage() {
     } finally {
       setPlanBusy(null);
     }
+  };
+
+  const refreshExecutions = async () => {
+    const response = await fetch('/owner-control/executions?limit=20', { headers: apiKeyHeader() });
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data?.executions)) setControlledExecutions(data.executions);
+    }
+  };
+
+  const cancelExecution = async (executionId: string) => {
+    setExecutionBusy(executionId);
+    const response = await fetch(`/owner-control/executions/${encodeURIComponent(executionId)}/cancel`, {
+      method: 'POST', headers: apiKeyHeader(),
+    });
+    if (response.ok) notifications.success('Cancellation requested; waiting for a cooperative checkpoint');
+    else notifications.error('Could not cancel execution');
+    await refreshExecutions();
+    setExecutionBusy(null);
+  };
+
+  const requestRollback = async (executionId: string) => {
+    setExecutionBusy(executionId);
+    const response = await fetch(`/owner-control/executions/${encodeURIComponent(executionId)}/request-rollback`, {
+      method: 'POST', headers: apiKeyHeader(),
+    });
+    if (response.ok) notifications.success('Rollback compensation added to pending approvals');
+    else notifications.error('No deterministic rollback is available');
+    await refreshExecutions();
+    setExecutionBusy(null);
   };
 
   const runIntelligenceBenchmark = async () => {
@@ -487,6 +544,60 @@ export function PrivacySettingsPage() {
                 <p className="text-xs text-text-muted">Policy revision {ownerPolicy.revision}</p>
               </>
             )}
+          </Card>
+        </section>
+
+        {/* Cooperative execution control and rollback receipts */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Lock className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Active Execution Control</h2>
+          </div>
+          <Card className="space-y-3">
+            <p className="text-sm text-text-secondary">
+              Cancellation is cooperative: Arena stops at registered checkpoints and terminates supported sandbox process groups. Side effects before a checkpoint may already exist. Rollback is offered only when a deterministic compensation receipt exists and always requires a new approval.
+            </p>
+            <button type="button" onClick={refreshExecutions} className="px-3 py-1.5 text-xs border border-border rounded">
+              Refresh executions
+            </button>
+            {controlledExecutions.length === 0 ? (
+              <p className="text-xs text-text-muted">No controlled execution history yet.</p>
+            ) : controlledExecutions.map((execution) => (
+              <div key={execution.execution_id} className="rounded border border-border bg-background-secondary p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-text-primary">{execution.action_type}</h3>
+                    <p className="text-xs text-text-muted">{execution.execution_id} · {execution.status}</p>
+                    {execution.note && <p className="text-xs text-text-secondary mt-1">{execution.note}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    {execution.status === 'running' && (
+                      <button
+                        disabled={executionBusy === execution.execution_id}
+                        onClick={() => cancelExecution(execution.execution_id)}
+                        className="px-2 py-1 text-xs bg-red-600 text-white rounded disabled:opacity-50"
+                      >
+                        Request stop
+                      </button>
+                    )}
+                    {execution.rollback_receipt?.supported && (
+                      <button
+                        disabled={executionBusy === execution.execution_id}
+                        onClick={() => requestRollback(execution.execution_id)}
+                        className="px-2 py-1 text-xs border border-amber-500 text-amber-600 rounded disabled:opacity-50"
+                      >
+                        Request rollback
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {execution.rollback_receipt && (
+                  <p className="text-xs text-text-muted mt-2">
+                    Rollback: {execution.rollback_receipt.supported ? execution.rollback_receipt.compensation_action : 'unavailable'} — {execution.rollback_receipt.reason}
+                  </p>
+                )}
+              </div>
+            ))}
           </Card>
         </section>
 

@@ -102,6 +102,9 @@ PUT    /owner-control
 POST   /owner-control/pause
 GET    /owner-control/adaptive-autonomy
 PUT    /owner-control/adaptive-autonomy/exploration-budget
+GET    /owner-control/executions
+POST   /owner-control/executions/{execution_id}/cancel
+POST   /owner-control/executions/{execution_id}/request-rollback
 GET    /owner-control/approvals
 POST   /owner-control/approvals/{action_id}/decision
 GET    /owner-control/authorizations
@@ -138,6 +141,13 @@ samples exist. Calibration is smoothed and clamped; it cannot exceed the owner's
 persistent maximum exploratory goals per cycle. Setting that maximum to zero
 turns off curiosity/information-gap goal creation while leaving deterministic
 maintenance and optimization signals available.
+
+Every capability execution is registered with a persistent execution ID. Stop
+requests are cooperative: supported tools terminate at checkpoints (sandbox
+commands terminate their process group), while a late request is reported as
+possibly having side effects. A rollback button is shown only for a deterministic
+compensation receipt; requesting it creates a new pending exact-action approval
+and never executes compensation automatically.
 
 Explicit approval creates a short-lived grant bound to the exact action type and
 SHA-256 digest of the canonical payload. Grants are single-use by default,

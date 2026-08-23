@@ -939,6 +939,59 @@ def set_exploration_budget_endpoint(req: ExplorationBudgetRequest):
     return {"success": True, "profile": profile.to_dict()}
 
 
+@router.get("/owner-control/executions")
+def list_controlled_executions_endpoint(
+    active_only: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+):
+    from app.cognition.execution_control import execution_control_registry
+    records = execution_control_registry.list(active_only=active_only, limit=limit)
+    return {"success": True, "executions": [record.to_dict() for record in records]}
+
+
+@router.post("/owner-control/executions/{execution_id}/cancel")
+def cancel_controlled_execution_endpoint(execution_id: str):
+    from app.cognition.execution_control import execution_control_registry
+    record = execution_control_registry.request_cancel(execution_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {
+        "success": True,
+        "execution": record.to_dict(),
+        "note": (
+            "Cancellation is cooperative. A running tool stops only at a cancellation "
+            "checkpoint; side effects before that checkpoint may already exist."
+        ),
+    }
+
+
+@router.post("/owner-control/executions/{execution_id}/request-rollback")
+def request_execution_rollback_endpoint(execution_id: str):
+    from app.cognition.approval_store import approval_store
+    from app.cognition.execution_control import execution_control_registry
+    record = execution_control_registry.get(execution_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    receipt = record.rollback_receipt
+    if receipt is None or not receipt.supported or not receipt.compensation_action:
+        raise HTTPException(
+            status_code=409,
+            detail=receipt.reason if receipt else "No rollback receipt exists",
+        )
+    request = approval_store.add(
+        conversation_id=f"rollback:{execution_id}",
+        action_type=receipt.compensation_action,
+        payload=receipt.compensation_payload,
+        reason=f"Rollback requested for {execution_id}: {receipt.reason}",
+        goal_text=f"Rollback {record.action_type} execution {execution_id}",
+    )
+    return {
+        "success": True,
+        "rollback_receipt": receipt.to_dict(),
+        "approval": request.to_dict(),
+    }
+
+
 @router.get("/owner-control/approvals")
 def list_pending_approvals_endpoint():
     from app.cognition.approval_store import approval_store

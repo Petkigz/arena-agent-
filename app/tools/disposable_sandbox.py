@@ -4,10 +4,69 @@ import uuid
 import subprocess
 import platform
 import datetime
+import signal
+import time
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
+
+
+def _run_cancellable_process(args, *, shell: bool, cwd: str, timeout: int):
+    """Popen loop that can terminate its process group on owner cancellation."""
+    from app.cognition.execution_control import (
+        ExecutionCancelled,
+        execution_control_registry,
+    )
+
+    popen_kwargs = {
+        "shell": shell,
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+    process = subprocess.Popen(args, **popen_kwargs)
+    deadline = time.monotonic() + timeout
+    while process.poll() is None:
+        if execution_control_registry.is_cancel_requested():
+            try:
+                if os.name == "nt":
+                    process.terminate()
+                else:
+                    os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=2)
+            except Exception:
+                try:
+                    if os.name == "nt":
+                        process.kill()
+                    else:
+                        os.killpg(process.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+            stdout, stderr = process.communicate()
+            execution_control_registry.checkpoint("sandbox_process_terminated")
+            raise ExecutionCancelled(
+                f"Sandbox process cancelled by owner. stdout={stdout[:120]!r}; stderr={stderr[:120]!r}"
+            )
+        if time.monotonic() >= deadline:
+            try:
+                if os.name == "nt":
+                    process.kill()
+                else:
+                    os.killpg(process.pid, signal.SIGKILL)
+            except Exception:
+                process.kill()
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(args, timeout, output=stdout, stderr=stderr)
+        time.sleep(0.05)
+    stdout, stderr = process.communicate()
+    return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+
 
 class DisposableSandbox:
     """
@@ -139,13 +198,11 @@ class DisposableSandbox:
 
         # Attempt primary execution wrapper
         try:
-            res = subprocess.run(
+            res = _run_cancellable_process(
                 cmd_args,
                 shell=use_shell if isinstance(cmd_args, str) else False,
                 cwd=str(sandbox_dir),
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
 
             # If primary wrapper succeeded, return result
@@ -172,6 +229,20 @@ class DisposableSandbox:
                 app_logger.warning(f"Primary execution wrapper '{exec_mode}' returned code {res.returncode}. Attempting native sandbox fallback...")
 
         except Exception as e:
+            from app.cognition.execution_control import ExecutionCancelled
+            if isinstance(e, ExecutionCancelled):
+                return {
+                    "success": False,
+                    "cancelled": True,
+                    "sandbox_id": sandbox_id,
+                    "error": str(e),
+                }
+            if isinstance(e, subprocess.TimeoutExpired):
+                return {
+                    "success": False,
+                    "sandbox_id": sandbox_id,
+                    "error": f"Execution timed out after {timeout_seconds} seconds.",
+                }
             app_logger.warning(f"Primary execution wrapper failed: {e}. Attempting native sandbox fallback...")
 
         # Fallback to direct native isolated subprocess in sandbox directory.
@@ -181,13 +252,11 @@ class DisposableSandbox:
         # API-key gated when ARENA_API_KEY is set.
         try:
             native_cmd = command if host_os != "windows" else f"cmd.exe /c {command}"
-            fallback_res = subprocess.run(
+            fallback_res = _run_cancellable_process(
                 native_cmd,
                 shell=True,
                 cwd=str(sandbox_dir),
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
 
             exit_code = fallback_res.returncode
@@ -211,15 +280,23 @@ class DisposableSandbox:
                 "command": command
             }
 
-        except subprocess.TimeoutExpired:
+        except Exception as e:
+            from app.cognition.execution_control import ExecutionCancelled
+            if isinstance(e, ExecutionCancelled):
+                return {
+                    "success": False,
+                    "cancelled": True,
+                    "sandbox_id": sandbox_id,
+                    "error": str(e),
+                }
+            if not isinstance(e, subprocess.TimeoutExpired):
+                app_logger.error(f"Error in native sandbox fallback execution: {e}")
+                return {"success": False, "sandbox_id": sandbox_id, "error": str(e)}
             return {
                 "success": False,
                 "sandbox_id": sandbox_id,
                 "error": f"Execution timed out after {timeout_seconds} seconds."
             }
-        except Exception as e:
-            app_logger.error(f"Error in native sandbox fallback execution: {e}")
-            return {"success": False, "sandbox_id": sandbox_id, "error": str(e)}
 
     @staticmethod
     def destroy_sandbox(sandbox_id: str) -> Dict[str, Any]:

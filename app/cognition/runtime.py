@@ -112,6 +112,8 @@ class CognitiveRuntime:
                 if path else "data/intelligence_benchmarks.db"
             )
         )
+        from app.cognition.execution_control import execution_control_registry
+        self.execution_control = execution_control_registry
         # Phase 3: Transfer Learning
         from app.cognition.skill_classifier import SkillClassifier
         from app.cognition.analogical_memory import AnalogicalMemory
@@ -731,8 +733,9 @@ class CognitiveRuntime:
                 "approval_gate",
                 (not allowed and level == 3 and default_read.allowed and
                  not strict_read.allowed and strict_read.requires_approval and
-                 hasattr(self, "execute_authorized_proposal")),
-                "Level 3 requires approval; Owner Control can gate Level 0; scoped execution returns through verification",
+                 hasattr(self, "execute_authorized_proposal")
+                 and hasattr(self, "execution_control")),
+                "Owner gates + scoped verification + persistent cooperative execution control",
                 "behavioral",
             )
         except Exception as e:
@@ -1646,6 +1649,102 @@ class CognitiveRuntime:
         except Exception as exc:
             app_logger.warning(f"Could not propose reviewed LoRA example: {exc}")
 
+    def _execute_capability_controlled(
+        self,
+        proposal: ActionProposal,
+        user_text: str,
+        complexity: str,
+    ) -> Dict[str, Any]:
+        """Execute one proposal under cooperative cancellation accounting."""
+        from app.agents.master_agent import MasterAgentOrchestrator
+        from app.cognition.execution_control import (
+            ExecutionCancelled,
+            execution_control_registry,
+        )
+        control = getattr(self, "execution_control", execution_control_registry)
+
+        record = control.begin(
+            proposal_id=proposal.proposal_id,
+            action_type=proposal.action_type,
+        )
+        with control.scope(record.execution_id):
+            try:
+                control.checkpoint("before_capability")
+                raw_result = MasterAgentOrchestrator.execute_proposal(
+                    proposal,
+                    user_text,
+                    complexity=complexity,
+                    world_model=self.world,
+                )
+                result = (
+                    raw_result.to_dict()
+                    if hasattr(raw_result, "to_dict")
+                    else dict(raw_result)
+                )
+            except ExecutionCancelled as exc:
+                result = {
+                    "success": False,
+                    "attempted": False,
+                    "executed_actions": [],
+                    "assistant_reply": str(exc),
+                    "error": str(exc),
+                    "execution_status": "cancelled",
+                }
+                control.complete(
+                    record.execution_id,
+                    status="cancelled",
+                    note=str(exc),
+                )
+                result.update({
+                    "controlled_execution_id": record.execution_id,
+                    "cancel_requested": True,
+                    "cancellation_observed": True,
+                    "rollback_receipt": None,
+                })
+                return result
+            except Exception as exc:
+                result = {
+                    "success": False,
+                    "attempted": True,
+                    "executed_actions": [],
+                    "assistant_reply": f"Capability execution failed: {exc}",
+                    "error": str(exc),
+                    "execution_status": "failed",
+                }
+
+        cancel_requested = control.is_cancel_requested(record.execution_id)
+        receipt = control.create_rollback_receipt(
+            record.execution_id,
+            proposal.action_type,
+            proposal.payload,
+            result,
+        )
+        if record.cancellation_observed or result.get("cancelled"):
+            status = "cancelled"
+            note = "Cancellation was observed at a cooperative checkpoint."
+        elif cancel_requested:
+            status = "completed_after_cancel_request"
+            note = (
+                "Cancellation arrived after the last cooperative checkpoint; "
+                "side effects may have occurred and were still observed/verified."
+            )
+        else:
+            status = "completed" if result.get("success") else "failed"
+            note = ""
+        completed = control.complete(
+            record.execution_id,
+            status=status,
+            rollback_receipt=receipt,
+            note=note,
+        )
+        result.update({
+            "controlled_execution_id": record.execution_id,
+            "cancel_requested": cancel_requested,
+            "cancellation_observed": completed.cancellation_observed,
+            "rollback_receipt": receipt.to_dict(),
+        })
+        return result
+
     def verify_existing_proposal_outcome(
         self,
         proposal: ActionProposal,
@@ -1926,26 +2025,13 @@ class CognitiveRuntime:
             GoalLifecycleState.EXECUTING,
             f"Executing exact owner-authorized proposal '{proposal.proposal_id}'",
         )
-        from app.agents.master_agent import MasterAgentOrchestrator
         from app.cognition.perception import ObservationCollector
 
-        try:
-            execution = MasterAgentOrchestrator.execute_proposal(
-                proposal,
-                goal_text,
-                complexity=complexity,
-                world_model=self.world,
-            )
-        except Exception as exc:
-            app_logger.error(f"Authorized capability execution raised: {exc}")
-            execution = {
-                "success": False,
-                "attempted": True,
-                "executed_actions": [],
-                "assistant_reply": f"Capability execution failed: {exc}",
-                "error": str(exc),
-                "model_used": "capability_layer",
-            }
+        execution = self._execute_capability_controlled(
+            proposal,
+            goal_text,
+            complexity,
+        )
         executed_actions = execution.get("executed_actions", [])
         assistant_reply = execution.get("assistant_reply", "")
         execution_success = bool(execution.get("success", False))
@@ -2174,6 +2260,10 @@ class CognitiveRuntime:
             "trace_id": trace.trace_id,
             "session_id": session_id,
             "model_used": trace.model_used,
+            "controlled_execution_id": execution.get("controlled_execution_id"),
+            "cancel_requested": execution.get("cancel_requested", False),
+            "cancellation_observed": execution.get("cancellation_observed", False),
+            "rollback_receipt": execution.get("rollback_receipt"),
             "replan_performed": False,
             "requires_new_authorization_for_retry": (
                 scoped_authorization and not verification.verified_success
@@ -2723,10 +2813,10 @@ class CognitiveRuntime:
 
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
         tracker.transition(GoalLifecycleState.EXECUTING, "Executing selected action strategy via capability layer.")
-        from app.agents.master_agent import MasterAgentOrchestrator
-        agent_res = MasterAgentOrchestrator.execute_proposal(
-            proposal, user_text, complexity=complexity, world_model=self.world
+        agent_res = self._execute_capability_controlled(
+            proposal, user_text, complexity
         )
+        control_result = agent_res
         executed_actions = agent_res.get("executed_actions", [])
         assistant_reply = agent_res.get("assistant_reply", "Done.")
 
@@ -2758,9 +2848,10 @@ class CognitiveRuntime:
                 if replan_gate_res.allowed:
                     final_action_type = replan_proposal.action_type
                     tracker.transition(GoalLifecycleState.EXECUTING, f"Executing Plan B proposal '{replan_proposal.action_type}'")
-                    replan_agent_res = MasterAgentOrchestrator.execute_proposal(
-                        replan_proposal, user_text, complexity=complexity, world_model=self.world
+                    replan_agent_res = self._execute_capability_controlled(
+                        replan_proposal, user_text, complexity
                     )
+                    control_result = replan_agent_res
                     ObservationCollector.collect_and_ingest_observations(
                         replan_proposal, replan_agent_res, world_model=self.world, event_bus=self.events
                     )
@@ -2896,7 +2987,7 @@ class CognitiveRuntime:
             f"GoalLifecycleState: {tracker.current_state.value} | Verified: {verify_res.verified_success} | Latency: {latency:.0f}ms"
         )
 
-        exec_success = bool(agent_res.get("success", True)) if isinstance(agent_res, dict) else True
+        exec_success = bool(control_result.get("success", True))
 
         # Phase 1B: Record strategy outcome for learning
         try:
@@ -2989,7 +3080,7 @@ class CognitiveRuntime:
             "user_text": user_text,
             "assistant_reply": assistant_reply,
             "executed_actions": executed_actions,
-            "action_type": fine_action_type,
+            "action_type": final_action_type,
             "reasoning_action": reasoning_action.value if hasattr(reasoning_action, "value") else str(reasoning_action),
             "decision_stage": "execution_completed",
             "recommendation": {
@@ -3001,5 +3092,9 @@ class CognitiveRuntime:
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
             "latency_ms": round(latency, 2),
+            "controlled_execution_id": control_result.get("controlled_execution_id"),
+            "cancel_requested": control_result.get("cancel_requested", False),
+            "cancellation_observed": control_result.get("cancellation_observed", False),
+            "rollback_receipt": control_result.get("rollback_receipt"),
             "model_used": trace.model_used
         }

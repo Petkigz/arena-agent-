@@ -238,7 +238,7 @@ the same unified server.)
 | **2** | Reversible | Autonomous with audit trail — organize files, open apps |
 | **3** | Sensitive | **Requires explicit owner approval** — send messages, delete files, execute trades, install packages |
 
-Approval is configurable per-action, not per-domain. A capability is never permanently removed from consideration — execution enters the Owner Control gate instead. Control modes include observe-only, suggest-only, approve-every-action, approve-each-plan, bounded autonomy, and custom allowlists. Explicit approval creates a short-lived exact-payload grant; execution still passes through independent observation and tri-state goal verification.
+Approval is configurable per-action, not per-domain. A capability is never permanently removed from consideration — execution enters the Owner Control gate instead. Control modes include observe-only, suggest-only, approve-every-action, approve-each-plan, bounded autonomy, and custom allowlists. Explicit approval creates a short-lived exact-payload grant; execution still passes through independent observation and tri-state goal verification. Running capabilities receive persistent execution IDs and cooperative stop controls; rollback is offered only through deterministic compensation receipts and fresh approval.
 
 ---
 

@@ -166,6 +166,12 @@ class OwnerControlStore:
             grants = globals().get("authorization_store")
             if grants is not None:
                 grants.revoke_all()
+            try:
+                from app.cognition.execution_control import execution_control_registry
+                for execution in execution_control_registry.list(active_only=True, limit=500):
+                    execution_control_registry.request_cancel(execution.execution_id)
+            except Exception as exc:
+                app_logger.warning(f"Could not request cancellation of active executions: {exc}")
         return policy
 
     def _persist(self, policy: OwnerControlPolicy) -> None:
