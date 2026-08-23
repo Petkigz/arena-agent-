@@ -196,6 +196,15 @@ class ApprovalDecisionRequest(BaseModel):
 class ExplorationBudgetRequest(BaseModel):
     max_exploration_goals: int = Field(ge=0, le=10)
 
+class AutonomyEnvelopeUpdate(BaseModel):
+    cycles_enabled: Optional[bool] = None
+    max_goal_executions_per_cycle: Optional[int] = Field(None, ge=0, le=20)
+    max_project_steps_per_cycle: Optional[int] = Field(None, ge=0, le=20)
+    max_projects_per_cycle: Optional[int] = Field(None, ge=0, le=20)
+    max_cycle_seconds: Optional[int] = Field(None, ge=10, le=3600)
+    minimum_seconds_between_cycles: Optional[int] = Field(None, ge=0, le=86400)
+    max_consecutive_failures: Optional[int] = Field(None, ge=0, le=20)
+
 class AuthorizationIssueRequest(BaseModel):
     action_type: str = Field(min_length=1)
     payload: Dict[str, Any]
@@ -1148,6 +1157,17 @@ def get_adaptive_autonomy_endpoint():
     profile = runtime.adaptive_autonomy.get_profile()
     return {"success": True, "profile": profile.to_dict()}
 
+
+@router.get("/owner-control/autonomy-envelope")
+def get_autonomy_envelope_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    return {"success": True, "envelope": CognitiveRuntime.get_instance().autonomy_envelope.get().to_dict()}
+
+@router.put("/owner-control/autonomy-envelope")
+def update_autonomy_envelope_endpoint(req: AutonomyEnvelopeUpdate):
+    from app.cognition.runtime import CognitiveRuntime
+    policy=CognitiveRuntime.get_instance().autonomy_envelope.update(req.model_dump(exclude_none=True))
+    return {"success": True, "envelope": policy.to_dict(), "note": "Limits constrain future cycles and grant no new authority."}
 
 @router.put("/owner-control/adaptive-autonomy/exploration-budget")
 def set_exploration_budget_endpoint(req: ExplorationBudgetRequest):

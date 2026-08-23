@@ -98,6 +98,10 @@ class CognitiveRuntime:
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
             path=str(Path(path).parent / "adaptive_autonomy.json") if path else "data/adaptive_autonomy.json"
         )
+        from app.cognition.autonomy_envelope import AutonomyEnvelopeStore
+        self.autonomy_envelope = AutonomyEnvelopeStore(
+            str(Path(path).parent / "autonomy_envelope.json") if path else "data/autonomy_envelope.json"
+        )
         from app.cognition.temporal_vision import TemporalVisionTracker
         self.temporal_vision = TemporalVisionTracker(
             db_path=str(Path(path).parent / "temporal_vision.db") if path else "data/temporal_vision.db"
@@ -174,6 +178,7 @@ class CognitiveRuntime:
             db_path=path,
             interval_seconds=3600,  # 1 hour
             max_goals_per_cycle=3,
+            autonomy_envelope=self.autonomy_envelope,
         )
         
         # Phase 11-21: Higher-order cognition modules (wired into the cycle via

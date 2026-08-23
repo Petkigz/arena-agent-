@@ -130,6 +130,7 @@ class PeriodicAutonomousCycle:
         db_path: str = "data/autonomous_cycles.db",
         interval_seconds: int = 3600,  # Default: 1 hour
         max_goals_per_cycle: int = 3,
+        autonomy_envelope=None,
     ):
         """
         Initialize the periodic autonomous cycle.
@@ -148,6 +149,7 @@ class PeriodicAutonomousCycle:
         self.db_path = db_path
         self.interval_seconds = interval_seconds
         self.max_goals_per_cycle = max_goals_per_cycle
+        self.autonomy_envelope = autonomy_envelope
         self._running = False
         
         self._ensure_db()
@@ -198,7 +200,26 @@ class PeriodicAutonomousCycle:
         cycle.status = CycleStatus.RUNNING
         cycle.started_at = _now()
         start_time = time.time()
-        
+        envelope_decision = {"cycle_allowed": True, "execution_allowed": True, "policy": {}}
+        if self.autonomy_envelope is not None:
+            from app.cognition.owner_control import owner_control_store
+            with sqlite3.connect(self.db_path) as conn:
+                row = conn.execute(
+                    "SELECT started_at FROM autonomous_cycles WHERE started_at IS NOT NULL "
+                    "ORDER BY started_at DESC LIMIT 1"
+                ).fetchone()
+            envelope_decision = self.autonomy_envelope.evaluate(
+                owner_policy=owner_control_store.get_policy(),
+                last_started_at=row[0] if row else None,
+            )
+            if not envelope_decision["cycle_allowed"]:
+                cycle.status = CycleStatus.SKIPPED
+                cycle.completed_at = _now()
+                cycle.summary = "; ".join(envelope_decision["reasons"])
+                self._save_cycle(cycle)
+                return cycle
+        deadline = start_time + int(envelope_decision.get("policy", {}).get("max_cycle_seconds", 300))
+        execution_allowed = bool(envelope_decision["execution_allowed"])
         app_logger.info(f"Starting autonomous cycle {cycle.cycle_id}")
         
         try:
@@ -271,7 +292,7 @@ class PeriodicAutonomousCycle:
             )
             for goal in all_goals:
                 self.goal_generator.evaluate_goal(goal)
-                if self.goal_generator.approve_goal(
+                if execution_allowed and self.goal_generator.approve_goal(
                     goal.goal_id,
                     auto_approve_threshold=approval_threshold,
                 ):
@@ -281,7 +302,15 @@ class PeriodicAutonomousCycle:
             
             # Step 4: Execute approved goals (up to max_goals_per_cycle)
             executed_plans = []
-            for _ in range(min(cycle.goals_approved, self.max_goals_per_cycle)):
+            envelope_goal_cap = int(envelope_decision.get("policy", {}).get(
+                "max_goal_executions_per_cycle", self.max_goals_per_cycle
+            ))
+            consecutive_failures = 0
+            failure_cap = int(envelope_decision.get("policy", {}).get("max_consecutive_failures", 2))
+            for _ in range(min(cycle.goals_approved, self.max_goals_per_cycle, envelope_goal_cap)):
+                if time.time() >= deadline or (failure_cap and consecutive_failures >= failure_cap):
+                    cycle.errors.append("Autonomy execution budget reached")
+                    break
                 plan = self.goal_executor.execute_next_goal(self.goal_generator, cognitive_runtime)
                 if plan:
                     cycle.goals_executed += 1
@@ -290,8 +319,10 @@ class PeriodicAutonomousCycle:
                     from app.cognition.autonomous_goal_executor import ExecutionStatus
                     if plan.status == ExecutionStatus.COMPLETED:
                         cycle.goals_completed += 1
+                        consecutive_failures = 0
                     elif plan.status == ExecutionStatus.FAILED:
                         cycle.goals_failed += 1
+                        consecutive_failures += 1
             
             app_logger.info(
                 f"Cycle {cycle.cycle_id}: {cycle.goals_executed} executed, "
@@ -301,12 +332,17 @@ class PeriodicAutonomousCycle:
             # Step 4b: Resume owner-enabled persistent project DAGs. Each project
             # and step batch is bounded; exact actions still pass Owner Control,
             # ActionGate, observation, and verification.
-            if cognitive_runtime and hasattr(cognitive_runtime, "project_scheduler"):
+            if execution_allowed and cognitive_runtime and hasattr(cognitive_runtime, "project_scheduler"):
                 try:
-                    project_cycle = cognitive_runtime.project_scheduler.run_cycle(
-                        cognitive_runtime,
-                        max_projects=3,
-                        max_steps_per_project=1,
+                    project_cap = int(envelope_decision.get("policy", {}).get("max_projects_per_cycle", 3))
+                    step_cap = int(envelope_decision.get("policy", {}).get("max_project_steps_per_cycle", 3))
+                    project_cycle = (
+                        cognitive_runtime.project_scheduler.run_cycle(
+                            cognitive_runtime, max_projects=project_cap,
+                            max_steps_per_project=1,
+                        )
+                        if project_cap > 0 and step_cap > 0
+                        else {"projects_processed": 0, "reason": "owner envelope project budget is zero"}
                     )
                     app_logger.info(
                         f"Cycle {cycle.cycle_id}: project scheduler processed "

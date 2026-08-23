@@ -230,6 +230,10 @@ at `GET /self-awareness/claims/history`, structured belief changes at
 operational evidence and explicitly do not claim hidden chain-of-thought,
 consciousness, or subjective experience.
 
+Autonomous operation is bounded through `GET/PUT /owner-control/autonomy-envelope`.
+The owner can independently cap cycle duration, cooldown, goal execution, project
+work, and failure streaks without granting any new action authority.
+
 Run the isolated longitudinal regression suite separately:
 
 ```bash

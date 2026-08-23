@@ -107,6 +107,9 @@ Owner Control Plane may always impose a stricter rule:
   with a deterministic compensation receipt and always requires fresh approval.
 - Curiosity thresholds may adapt only from verified outcomes, within conservative
   clamps. The owner's exploration maximum is absolute and may be set to zero.
+- Every autonomous cycle obeys a persistent owner envelope for cycle duration,
+  cooldown, goal executions, project work, and consecutive failures. Suggest-only
+  may generate recommendations but cannot execute them; a zero budget stays zero.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.
