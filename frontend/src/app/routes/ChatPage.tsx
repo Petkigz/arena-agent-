@@ -256,15 +256,26 @@ export function ChatPage() {
       authorizationId: approvalResult.authorization_id,
       actionType: approvalRequest.action_type,
       payload: approvalRequest.payload,
-      userText: `Execute owner-approved ${approvalRequest.action_type}`,
+      userText: approvalRequest.goal_text || `Execute owner-approved ${approvalRequest.action_type}`,
     });
     setAuthorizedExecutionBusy(false);
-    if (result.success) {
-      toast.success('Authorized action executed');
-      setApprovalRequest(null);
-      setApprovalResult(null);
-    } else {
+    if (!result.success) {
       toast.error(result.reason || 'Authorized action did not execute');
+      return;
+    }
+
+    setApprovalRequest(null);
+    setApprovalResult(null);
+    if (result.goalVerified) {
+      toast.success('Authorized action executed and independently verified');
+    } else if (result.executionSuccess) {
+      toast(
+        result.verificationUnknown
+          ? 'Action executed, but the outcome remains unknown pending evidence'
+          : 'Action executed, but the goal was not verified',
+      );
+    } else {
+      toast.error('Authorized execution was attempted but the tool did not succeed');
     }
   };
 

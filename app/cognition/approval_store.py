@@ -30,6 +30,11 @@ class ApprovalRequest:
     action_type: str
     payload: Dict[str, Any]
     reason: str
+    goal_text: str = ""
+    proposal_id: str = ""
+    recommendation_reason: str = ""
+    alternatives_considered: List[Dict[str, Any]] = field(default_factory=list)
+    predicted_outcome: Dict[str, Any] = field(default_factory=dict)
     status: str = "pending"  # pending | approved | denied
     created_at: str = field(default_factory=_now)
     decided_at: Optional[str] = None
@@ -43,6 +48,11 @@ class ApprovalRequest:
             "action_type": self.action_type,
             "payload": self.payload,
             "reason": self.reason,
+            "goal_text": self.goal_text,
+            "proposal_id": self.proposal_id,
+            "recommendation_reason": self.recommendation_reason,
+            "alternatives_considered": self.alternatives_considered,
+            "predicted_outcome": self.predicted_outcome,
             "status": self.status,
             "created_at": self.created_at,
             "decided_at": self.decided_at,
@@ -58,13 +68,29 @@ class ApprovalStore:
         self._requests: Dict[str, ApprovalRequest] = {}
         self._lock = threading.Lock()
 
-    def add(self, conversation_id: str, action_type: str, payload: Dict[str, Any], reason: str) -> ApprovalRequest:
+    def add(
+        self,
+        conversation_id: str,
+        action_type: str,
+        payload: Dict[str, Any],
+        reason: str,
+        goal_text: str = "",
+        proposal_id: str = "",
+        recommendation_reason: str = "",
+        alternatives_considered: Optional[List[Dict[str, Any]]] = None,
+        predicted_outcome: Optional[Dict[str, Any]] = None,
+    ) -> ApprovalRequest:
         req = ApprovalRequest(
             action_id=uuid4().hex[:12],
             conversation_id=conversation_id,
             action_type=action_type,
             payload=payload,
             reason=reason,
+            goal_text=goal_text,
+            proposal_id=proposal_id,
+            recommendation_reason=recommendation_reason,
+            alternatives_considered=list(alternatives_considered or []),
+            predicted_outcome=dict(predicted_outcome or {}),
         )
         with self._lock:
             self._requests[req.action_id] = req

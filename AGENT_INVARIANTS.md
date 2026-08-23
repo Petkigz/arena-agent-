@@ -85,6 +85,10 @@ Owner Control Plane may always impose a stricter rule:
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.
+- Authorized execution must return through the same capability → independent
+  observation → tri-state verification → outcome/lesson/causal-learning loop.
+  Tool success is never reported as goal verification, and retries or Plan B
+  require a fresh recommendation and authorization.
 - In approve-each-plan mode, the complete step graph is revisioned and owner-editable.
   No step runs before approval of that exact revision; edits invalidate approval,
   and plan approval never covers Level-3 or per-action-gated operations.

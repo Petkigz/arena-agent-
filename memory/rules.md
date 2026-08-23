@@ -125,6 +125,12 @@ SHA-256 digest of the canonical payload. Grants are single-use by default,
 expire within at most one hour, are lost on process restart, and are all revoked
 by emergency pause. Changing any payload field invalidates the grant.
 
+Executing that grant does not bypass cognition: the exact proposal passes through
+ActionGate, capability execution, independent observation, tri-state goal
+verification, prediction-error measurement, reflection, outcome/lesson storage,
+and causal learning. No automatic replan is permitted under the old grant;
+an alternative or retry requires a new owner authorization.
+
 The default remains bounded autonomy through Level 2. Owner policy can tighten
 that authority but cannot silently make a manifest Level-3 action autonomous.
 

@@ -161,6 +161,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **P2 Project management**: `ProjectManager` + `GoalDecomposer` wired into runtime (17 modules), complex goals (>15 words or setup/research keywords) → decompose into sub-goals DAG → persistent `Project` with milestones + session tracking. Milestones now carry stable sub-goal IDs and automatically reconcile on every persisted sub-goal update: only explicitly verified completion reaches a milestone, failure blocks the project, all verified milestones complete it, and session task history is updated idempotently. Endpoints `/projects`, `/projects/{id}`, POST `/projects`. Desktop tray icon refreshed on live theme, chat auto-reconnect with backoff, Android wake-word re-arm shows notification on background restriction (G7).
 
+- ✅ **Owner authority and verified authorization execution**: Persistent control modes, emergency pause, per-action block/approval lists, revision-bound editable plan approval, and short-lived exact-payload authorization grants. Executing a grant now returns through the authoritative ActionGate → capability → independent observation → tri-state verification → prediction error → reflection/outcome/lesson/causal learning path. Tool success remains separate from goal verification, and retries/alternatives require fresh authorization.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):

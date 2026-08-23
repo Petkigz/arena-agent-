@@ -884,8 +884,9 @@ def revoke_authorization_endpoint(authorization_id: str):
 
 @router.post("/owner-control/execute-authorized")
 def execute_authorized_endpoint(req: AuthorizedExecutionRequest):
-    """Execute only after the exact scoped grant passes ActionGate and is consumed."""
-    from app.cognition.action_proposal import ActionGate, ActionProposal
+    """Run an exact scoped action through execution, observation, and verification."""
+    from app.cognition.action_proposal import ActionProposal
+    from app.cognition.runtime import CognitiveRuntime
 
     proposal = ActionProposal(
         action_type=req.action_type,
@@ -894,28 +895,32 @@ def execute_authorized_endpoint(req: AuthorizedExecutionRequest):
         plan_id=req.plan_id,
         decision_stage="authorization",
     )
-    gate = ActionGate.evaluate_proposal(proposal)
-    if not gate.allowed:
-        return {
-            "success": False,
-            "execution_success": False,
-            "gate": gate.gate_name,
-            "reason": gate.reason,
-            "decision_stage": gate.decision_stage,
-        }
+    # Restore the original recommendation record when this grant came from a
+    # pending chat approval. This keeps consideration → recommendation →
+    # authorization → execution linked under the original proposal ID.
+    execution_goal_text = req.user_text
+    grant_decision = authorization_store.validate(
+        req.authorization_id,
+        req.action_type,
+        req.payload,
+        plan_id=req.plan_id,
+    )
+    if grant_decision.valid and grant_decision.grant and grant_decision.grant.source_approval_id:
+        from app.cognition.approval_store import approval_store
+        approval = approval_store.get(grant_decision.grant.source_approval_id)
+        if approval is not None:
+            proposal.proposal_id = approval.proposal_id or proposal.proposal_id
+            proposal.recommendation_reason = approval.recommendation_reason
+            proposal.alternatives_considered = list(approval.alternatives_considered)
+            proposal.predicted_outcome = dict(approval.predicted_outcome)
+            if approval.goal_text:
+                execution_goal_text = approval.goal_text
 
-    result = MasterAgentOrchestrator.execute_proposal(
+    return CognitiveRuntime.get_instance().execute_authorized_proposal(
         proposal,
-        req.user_text,
+        user_text=execution_goal_text,
         complexity=req.complexity,
     )
-    return {
-        "success": bool(result.get("success", False)),
-        "execution_success": bool(result.get("success", False)),
-        "decision_stage": "execution_completed",
-        "authorization_id": req.authorization_id,
-        "result": result,
-    }
 
 
 @router.get("/owner-control/plans")

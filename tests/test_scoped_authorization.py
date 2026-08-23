@@ -48,7 +48,17 @@ def test_approval_mints_one_scoped_grant_without_mutating_payload():
     grants = AuthorizationStore()
     approvals = ApprovalStore()
     payload = {"to": "owner@example.test", "body": "exact"}
-    request = approvals.add("conv-1", "send_email", payload, "Level 3")
+    request = approvals.add(
+        "conv-1",
+        "send_email",
+        payload,
+        "Level 3",
+        goal_text="Send the verified report",
+        proposal_id="proposal_original",
+        recommendation_reason="Fastest delivery option",
+        alternatives_considered=[{"action_type": "save_draft", "rank": 2}],
+        predicted_outcome={"message": "delivered"},
+    )
 
     with patch("app.cognition.owner_control.authorization_store", grants):
         decided = approvals.decide(request.action_id, True, note="approved once")
@@ -57,6 +67,9 @@ def test_approval_mints_one_scoped_grant_without_mutating_payload():
     assert decided.authorization_id is not None
     assert decided.payload == payload
     assert decided.decision_note == "approved once"
+    assert decided.goal_text == "Send the verified report"
+    assert decided.proposal_id == "proposal_original"
+    assert decided.alternatives_considered[0]["action_type"] == "save_draft"
     assert grants.validate(decided.authorization_id, "send_email", payload).valid is True
 
     # A repeated approval decision is idempotent and cannot mint another grant.

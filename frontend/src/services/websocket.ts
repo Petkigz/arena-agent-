@@ -9,6 +9,7 @@ export interface ApprovalRequestEvent {
   action_type: string;
   payload: Record<string, unknown>;
   reason: string;
+  goal_text?: string;
   status: 'pending';
 }
 

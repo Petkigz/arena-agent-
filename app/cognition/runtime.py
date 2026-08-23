@@ -692,8 +692,9 @@ class CognitiveRuntime:
             _add(
                 "approval_gate",
                 (not allowed and level == 3 and default_read.allowed and
-                 not strict_read.allowed and strict_read.requires_approval),
-                "Level 3 requires approval; isolated Owner Control policy can also gate Level 0",
+                 not strict_read.allowed and strict_read.requires_approval and
+                 hasattr(self, "execute_authorized_proposal")),
+                "Level 3 requires approval; Owner Control can gate Level 0; scoped execution returns through verification",
                 "behavioral",
             )
         except Exception as e:
@@ -1522,6 +1523,356 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Perception→grounding loop failed (best-effort): {e}")
 
+    def execute_authorized_proposal(
+        self,
+        proposal: ActionProposal,
+        user_text: str,
+        complexity: str = "fast",
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Execute one exact authorized proposal through the full evidence loop.
+
+        This path deliberately does not re-plan: changing the selected action or
+        payload would exceed the owner's scoped authorization. A failed or
+        unverified result is reported and learned from; any retry/alternative
+        requires a new recommendation and authorization.
+        """
+        start_time = time.time()
+        session_id = session_id or f"auth_{uuid.uuid4().hex[:8]}"
+        goal_text = str(
+            proposal.payload.get("original_goal")
+            or proposal.payload.get("query")
+            or user_text
+        )
+        tracker = GoalTracker(user_query=goal_text)
+        trace = CognitiveTrace(
+            user_input=goal_text,
+            complexity_requested=complexity,
+            session_id=session_id,
+        )
+
+        # Validate and consume the exact grant before semantic interpretation or
+        # any other potentially expensive work. A bad/replayed grant is rejected
+        # without reaching the model, resource manager, or capability layer.
+        gate = ActionGate.evaluate_proposal(proposal)
+        trace.gate_decision = gate.gate_name
+        if not gate.allowed:
+            tracker.transition(GoalLifecycleState.BLOCKED, gate.reason)
+            latency = (time.time() - start_time) * 1000
+            trace.finalize(
+                reply=gate.reason,
+                actions=[],
+                latency=latency,
+                surprisal=0.0,
+                lesson="",
+                gate_decision=gate.gate_name,
+                goal_verified=False,
+            )
+            return {
+                "success": False,
+                "request_success": False,
+                "execution_success": False,
+                "goal_verified": False,
+                "verification_unknown": False,
+                "decision_stage": gate.decision_stage,
+                "gate": gate.gate_name,
+                "reason": gate.reason,
+                "proposal_id": proposal.proposal_id,
+                "authorization_id": proposal.authorization_id,
+                "session_id": session_id,
+                "trace_id": trace.trace_id,
+            }
+
+        from app.cognition.goal_interpreter import SemanticGoalInterpreter
+        try:
+            goal_rep = SemanticGoalInterpreter.interpret_goal(
+                goal_text,
+                complexity=complexity,
+                memory_store=self.memory,
+                world_model=self.world,
+                tool_registry=self.registry,
+            )
+        except Exception as exc:
+            tracker.transition(GoalLifecycleState.FAILED, f"Could not restore authorized goal: {exc}")
+            latency = (time.time() - start_time) * 1000
+            message = f"Authorization was consumed, but goal interpretation failed: {exc}"
+            trace.finalize(
+                reply=message,
+                actions=[],
+                latency=latency,
+                surprisal=0.0,
+                lesson="",
+                gate_decision=gate.gate_name,
+                goal_verified=False,
+            )
+            return {
+                "success": False,
+                "request_success": True,
+                "execution_success": False,
+                "goal_verified": False,
+                "verification_unknown": False,
+                "goal_lifecycle_state": tracker.current_state.value,
+                "decision_stage": "execution_failed_before_capability",
+                "reason": message,
+                "proposal_id": proposal.proposal_id,
+                "authorization_id": proposal.authorization_id,
+                "authorization_consumed": True,
+                "requires_new_authorization_for_retry": True,
+                "session_id": session_id,
+                "trace_id": trace.trace_id,
+            }
+        intent_type = goal_rep.primary_intent_type
+        tracker.transition(
+            GoalLifecycleState.UNDERSTOOD,
+            f"Restored owner-authorized goal in domain '{goal_rep.target_domain}'",
+        )
+        tracker.transition(
+            GoalLifecycleState.PLANNED,
+            f"Using exact authorized proposal '{proposal.proposal_id}' without re-planning",
+        )
+
+        prediction = self.prediction.predict_action(proposal.action_type, proposal.payload)
+        proposal.predicted_outcome = proposal.predicted_outcome or prediction.expected_changes
+        trace.predicted_outcome = proposal.predicted_outcome
+
+        tracker.transition(
+            GoalLifecycleState.EXECUTING,
+            f"Executing exact owner-authorized proposal '{proposal.proposal_id}'",
+        )
+        from app.agents.master_agent import MasterAgentOrchestrator
+        from app.cognition.perception import ObservationCollector
+
+        try:
+            execution = MasterAgentOrchestrator.execute_proposal(
+                proposal,
+                goal_text,
+                complexity=complexity,
+                world_model=self.world,
+            )
+        except Exception as exc:
+            app_logger.error(f"Authorized capability execution raised: {exc}")
+            execution = {
+                "success": False,
+                "attempted": True,
+                "executed_actions": [],
+                "assistant_reply": f"Capability execution failed: {exc}",
+                "error": str(exc),
+                "model_used": "capability_layer",
+            }
+        executed_actions = execution.get("executed_actions", [])
+        assistant_reply = execution.get("assistant_reply", "")
+        execution_success = bool(execution.get("success", False))
+
+        observation_error = ""
+        try:
+            ObservationCollector.collect_and_ingest_observations(
+                proposal,
+                execution,
+                world_model=self.world,
+                event_bus=self.events,
+            )
+        except Exception as exc:
+            observation_error = str(exc)
+            app_logger.warning(f"Authorized execution observation failed: {exc}")
+
+        observed_state = self.capture_observed_world_state(
+            executed_actions, assistant_reply, goal_rep
+        )
+        verification = GoalVerifier.verify_goal_achievement(
+            goal_rep,
+            executed_actions,
+            assistant_reply,
+            failed_action_type=proposal.action_type,
+            tracker=tracker,
+            observed_state=observed_state,
+            failed_payload=proposal.payload,
+        )
+        trace.goal_verified = verification.verified_success
+
+        actual_state = dict(observed_state or {})
+        actual_state.update({
+            "actions": executed_actions,
+            "reply": assistant_reply[:100],
+            "success": verification.verified_success,
+            "goal_state": tracker.current_state.value,
+        })
+        surprisal = self.prediction.evaluate_surprisal(prediction, actual_state)
+        trace.prediction_surprisal = surprisal
+
+        try:
+            self.world_ingest.ingest(
+                subject="system",
+                predicate="authorized_response",
+                value=assistant_reply[:200],
+                source=SourceType.MASTER_AGENT,
+                task_id=session_id,
+                observation_type="self_reported",
+            )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution world ingest failed: {exc}")
+
+        effect_name = (
+            executed_actions[0][:60]
+            if executed_actions
+            else ("goal_verified" if verification.verified_success else "goal_unverified")
+        )
+        try:
+            self.causal_inference.learn_from_surprisal(
+                cause_name=proposal.action_type,
+                effect_name=effect_name,
+                surprisal=surprisal,
+                evidence=[
+                    f"authorized_proposal={proposal.proposal_id}",
+                    f"verified={verification.verified_success}",
+                ],
+            )
+            self.causal_inference.learn_from_execution(
+                cause_name=f"intent:{intent_type}",
+                effect_name=effect_name,
+                success=verification.verified_success,
+                evidence=[f"action={proposal.action_type}", f"surprisal={surprisal:.2f}"],
+            )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution causal learning failed: {exc}")
+
+        lesson_text = ""
+        try:
+            lesson = self.learning.process_outcome_reflection(
+                task_title=goal_text[:50],
+                goal=goal_text,
+                verification_result=verification,
+                surprisal=surprisal,
+            )
+            lesson_text = getattr(lesson, "content", "")
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution reflection failed: {exc}")
+
+        latency = (time.time() - start_time) * 1000
+        try:
+            self.outcomes.record_outcome(
+                goal_type=intent_type,
+                action_type=proposal.action_type,
+                success=verification.verified_success,
+                latency_ms=latency,
+                surprisal=surprisal,
+                goal_text=goal_text,
+            )
+            self.lessons.extract_lesson(
+                task_type=intent_type,
+                action_type=proposal.action_type,
+                final_state=tracker.current_state.value,
+                verified_success=verification.verified_success,
+                failed_conditions=verification.failed_conditions,
+                reply_text=assistant_reply,
+                goal_text=goal_text,
+                latency_ms=latency,
+                surprisal=surprisal,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution outcome learning failed: {exc}")
+
+        try:
+            if hasattr(self, "self_model"):
+                self.self_model.assess_capability(proposal.action_type)
+            if hasattr(self, "analogies"):
+                self.analogies.record_task(
+                    intent_type=intent_type,
+                    target_domain=goal_rep.target_domain,
+                    entity_types=list(getattr(goal_rep, "entities", [])[:5]),
+                    action_type=proposal.action_type,
+                    success=verification.verified_success,
+                    outcome=tracker.current_state.value,
+                    goal_text=goal_text,
+                )
+            if hasattr(self, "patterns") and executed_actions:
+                self.patterns.record_sequence(
+                    intent_type=intent_type,
+                    action_sequence=[proposal.action_type],
+                    success=verification.verified_success,
+                    successful_step=0 if verification.verified_success else -1,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution transfer learning failed: {exc}")
+
+        try:
+            self.events.publish(CognitiveEvent(
+                event_type="authorized_execution_completed",
+                data={
+                    "session_id": session_id,
+                    "proposal_id": proposal.proposal_id,
+                    "authorization_id": proposal.authorization_id,
+                    "action_type": proposal.action_type,
+                    "execution_success": execution_success,
+                    "goal_verified": verification.verified_success,
+                    "goal_state": tracker.current_state.value,
+                    "surprisal": surprisal,
+                },
+                source=SourceType.COGNITIVE_RUNTIME,
+            ))
+            db.create_audit_log(
+                "authorized_execution",
+                "verified" if verification.verified_success else "unverified",
+                f"proposal={proposal.proposal_id}; action={proposal.action_type}; "
+                f"execution_success={execution_success}; goal_state={tracker.current_state.value}",
+                level=proposal.safety_level,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution audit/event failed: {exc}")
+
+        try:
+            self._integrate_phase_modules(
+                user_text=goal_text,
+                intent_type=intent_type,
+                latency_ms=latency,
+                reasoning_action="authorized_execution",
+                success=verification.verified_success,
+                goal_verified=verification.verified_success,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution module integration failed: {exc}")
+
+        trace.model_used = execution.get("model_used", "fast")
+        trace.finalize(
+            reply=assistant_reply,
+            actions=executed_actions,
+            latency=latency,
+            surprisal=surprisal,
+            lesson=lesson_text,
+            gate_decision=gate.gate_name,
+            goal_verified=verification.verified_success,
+        )
+
+        verification_unknown = tracker.current_state == GoalLifecycleState.WAITING_FOR_EVIDENCE
+        return {
+            "success": True,
+            "request_success": True,
+            "execution_success": execution_success,
+            "goal_verified": verification.verified_success,
+            "verification_unknown": verification_unknown,
+            "goal_lifecycle_state": tracker.current_state.value,
+            "decision_stage": "execution_completed",
+            "proposal_id": proposal.proposal_id,
+            "authorization_id": proposal.authorization_id,
+            "action_type": proposal.action_type,
+            "executed_actions": executed_actions,
+            "assistant_reply": assistant_reply,
+            "verification": {
+                "verified_success": verification.verified_success,
+                "failed_conditions": verification.failed_conditions,
+                "met_conditions": verification.met_conditions,
+                "reason": verification.verification_reason,
+            },
+            "observation_error": observation_error or None,
+            "prediction_surprisal": surprisal,
+            "reflection_lesson": lesson_text,
+            "latency_ms": round(latency, 2),
+            "trace_id": trace.trace_id,
+            "session_id": session_id,
+            "model_used": trace.model_used,
+            "replan_performed": False,
+            "requires_new_authorization_for_retry": not verification.verified_success,
+        }
+
     def process_cognitive_cycle(
         self,
         user_text: str,
@@ -1962,6 +2313,11 @@ class CognitiveRuntime:
                         action_type=fine_action_type,
                         payload=proposal.payload,
                         reason=gate_res.reason,
+                        goal_text=user_text,
+                        proposal_id=proposal.proposal_id,
+                        recommendation_reason=proposal.recommendation_reason,
+                        alternatives_considered=proposal.alternatives_considered,
+                        predicted_outcome=proposal.predicted_outcome,
                     )
                     approval_request = req.to_dict()
                     app_logger.info(f"Pending approval recorded: action_id={req.action_id}")

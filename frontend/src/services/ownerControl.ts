@@ -95,11 +95,20 @@ export async function executeReviewedPlan(planId: string): Promise<Record<string
   return jsonRequest(`/owner-control/plans/${encodeURIComponent(planId)}/execute`, { method: 'POST' });
 }
 
-export async function executeAuthorizedAction(input: AuthorizedExecutionInput): Promise<{
+export interface AuthorizedExecutionResult {
   success: boolean;
+  requestSuccess?: boolean;
+  executionSuccess?: boolean;
+  goalVerified?: boolean;
+  verificationUnknown?: boolean;
+  goalLifecycleState?: string;
+  assistantReply?: string;
   reason?: string;
-  result?: unknown;
-}> {
+}
+
+export async function executeAuthorizedAction(
+  input: AuthorizedExecutionInput
+): Promise<AuthorizedExecutionResult> {
   try {
     const response = await fetch('/owner-control/execute-authorized', {
       method: 'POST',
@@ -114,7 +123,16 @@ export async function executeAuthorizedAction(input: AuthorizedExecutionInput): 
     });
     const data = await response.json();
     if (!response.ok) return { success: false, reason: data?.detail || 'Execution request failed' };
-    return { success: data?.success === true, reason: data?.reason, result: data?.result };
+    return {
+      success: data?.success === true,
+      requestSuccess: data?.request_success,
+      executionSuccess: data?.execution_success,
+      goalVerified: data?.goal_verified,
+      verificationUnknown: data?.verification_unknown,
+      goalLifecycleState: data?.goal_lifecycle_state,
+      assistantReply: data?.assistant_reply,
+      reason: data?.reason || data?.verification?.reason,
+    };
   } catch (error) {
     return { success: false, reason: error instanceof Error ? error.message : 'Execution request failed' };
   }
