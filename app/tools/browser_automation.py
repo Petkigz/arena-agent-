@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
+from app.cognition.browser_grounding import BrowserGroundingStore
 from app.cognition.execution_control import (
     ExecutionCancelled,
     cooperative_checkpoint,
@@ -13,6 +14,7 @@ from app.cognition.execution_control import (
 
 class BrowserAutomation:
     SCREENSHOTS_DIR = settings.DATA_DIR / "workspace" / "screenshots"
+    GROUNDING = BrowserGroundingStore(settings.DATA_DIR / "browser_grounding.db")
 
     @classmethod
     def ensure_dir(cls):
@@ -99,6 +101,12 @@ class BrowserAutomation:
                 browser.close()
 
             audit_logger.info(f"Automated browser navigation to '{url}' completed.")
+            browser_session_id = f"browser_session_{uuid.uuid4().hex[:12]}"
+            tab = cls.GROUNDING.observe_tab(
+                session_id=browser_session_id, url=url, title=page_title,
+                profile_type="ephemeral",
+                evidence=["Playwright page.url", "Playwright page.title", "page screenshot captured"],
+            )
 
             return {
                 "success": True,
@@ -107,7 +115,11 @@ class BrowserAutomation:
                 "content_snippet": page_text[:5000],
                 "screenshot_path": str(screenshot_path),
                 "image_url": f"/static/workspace/screenshots/{filename}",
-                "text_length": len(page_text)
+                "text_length": len(page_text),
+                "browser_session_id": browser_session_id,
+                "tab_grounding": tab.to_dict(),
+                "profile_type": "ephemeral",
+                "auth_state": "unknown",
             }
         except ExecutionCancelled:
             raise

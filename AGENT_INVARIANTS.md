@@ -210,6 +210,8 @@ not authorized.
   target must be unique and have observed bounds before activation.
 - Multi-monitor coordinates use observed physical topology. Window-local transforms
   require verified DPI scale and must remain inside the selected display.
+- Browser automation binds to an observed session/tab URL/title. Authentication is
+  always unknown unless separately evidenced, and owner takeover pauses automation.
 - Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
 - Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a

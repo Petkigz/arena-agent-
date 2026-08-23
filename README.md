@@ -235,7 +235,8 @@ requires a unique accessibility role/name match with observed screen bounds. Cur
 privilege and process provenance are exposed at `/os-control/privilege` and
 `/os-control/process-ownership/{pid}`. Multi-monitor physical topology and DPI-safe
 coordinate transforms are available through the `display_topology`, `display_scale`,
-and `display_transform` manifest capabilities.
+and `display_transform` manifest capabilities. Browser session/tab identity, owner takeover,
+and evidenced download/upload events are exposed through `/os-grounding/browser-tabs/*`.
 
 Autonomous resource limits are optional through `GET/PUT /owner-control/autonomy-envelope`
 and are disabled by default. The owner can cap cycle duration, cooldown, execution,

@@ -273,6 +273,14 @@ class VisionAnalyzeRequest(BaseModel):
     prompt_focus: Optional[str] = None
     auto_save_memory: bool = True
 
+class BrowserTakeoverRequest(BaseModel):
+    active: bool
+
+class BrowserEventRequest(BaseModel):
+    event_type: str
+    state: str
+    evidence: List[str]
+
 class BrowserNavigateRequest(BaseModel):
     url: str
     fill_inputs: Optional[Dict[str, str]] = None
@@ -1058,6 +1066,29 @@ def request_recovery_action_endpoint(assessment_id:str,req:RecoveryActionRequest
     item=runtime.self_recovery.mark_action_requested(assessment_id,f"approval:{approval.action_id}")
     return {"success":True,"assessment":item.to_dict(),"approval":approval.to_dict(),"executed":False}
 
+
+@router.get("/os-grounding/browser-tabs")
+def list_browser_tabs_endpoint(session_id:Optional[str]=Query(None),limit:int=Query(200,ge=1,le=1000)):
+    from app.tools.browser_automation import BrowserAutomation
+    return {"success":True,"tabs":[t.to_dict() for t in BrowserAutomation.GROUNDING.list(session_id,limit)]}
+
+@router.get("/os-grounding/browser-tabs/resolve")
+def resolve_browser_tab_endpoint(url:Optional[str]=Query(None),title:Optional[str]=Query(None),session_id:Optional[str]=Query(None)):
+    from app.tools.browser_automation import BrowserAutomation
+    return BrowserAutomation.GROUNDING.resolve(url=url,title=title,session_id=session_id)
+
+@router.post("/os-grounding/browser-tabs/{tab_id}/owner-takeover")
+def browser_owner_takeover_endpoint(tab_id:str,req:BrowserTakeoverRequest):
+    from app.tools.browser_automation import BrowserAutomation
+    try:tab=BrowserAutomation.GROUNDING.set_owner_takeover(tab_id,req.active)
+    except KeyError as exc:raise HTTPException(status_code=404,detail="Browser tab not found") from exc
+    return {"success":True,"tab":tab.to_dict(),"automation_paused":req.active}
+
+@router.post("/os-grounding/browser-tabs/{tab_id}/event")
+def record_browser_transfer_event_endpoint(tab_id:str,req:BrowserEventRequest):
+    from app.tools.browser_automation import BrowserAutomation
+    try:return BrowserAutomation.GROUNDING.record_event(tab_id,req.event_type,req.state,evidence=req.evidence)
+    except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
 
 @router.get("/os-control/privilege")
 def os_privilege_endpoint():
