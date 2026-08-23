@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 DEFAULTS: Dict[str, Any] = {
     "server_url": "http://localhost:8000",
+    "api_key": "",
     "wake_word": "hey_arena",
     "voice_speed": 1.0,
     "theme": "dark",

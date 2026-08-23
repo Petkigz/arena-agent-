@@ -106,7 +106,10 @@ class MainWindow(QMainWindow):
         saved_url = self.settings.get("server_url")
         base_url = saved_url if saved_url and saved_url != "http://localhost:8000" else base_url
 
-        self.client = ArenaBackendClient(base_url=base_url)
+        self.client = ArenaBackendClient(
+            base_url=base_url,
+            api_key=str(self.settings.get("api_key") or ""),
+        )
 
         # Hydrate the theme from the backend's shared settings (short timeout so
         # an offline backend doesn't block launch), then apply it BEFORE any

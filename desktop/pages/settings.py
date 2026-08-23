@@ -169,6 +169,7 @@ class SettingsPage(QWidget):
         # are populated even if the backend is offline at startup.
         self._set_combo(self.theme_combo, str(self._settings.get("theme") or "dark"))
         self.wake_input.setText(str(self._settings.get("wake_word") or "hey_arena"))
+        self.api_key_input.setText(str(self._settings.get("api_key") or ""))
 
         # Shared settings (wake word, voice, speed, theme, language, api key, models).
         try:
@@ -178,7 +179,8 @@ class SettingsPage(QWidget):
             self.vad_input.setText(str(data.get("vad_sensitivity", 50)))
             self.delay_input.setText(str(data.get("response_delay", 500)))
             self.voice_enabled_check.setChecked(bool(data.get("voice_enabled", True)))
-            self.api_key_input.setText(str(data.get("api_key", "")))
+            # API credentials are local connection settings. Never hydrate them
+            # from or persist them into the backend's shared preference record.
             self._set_combo(self.theme_combo, str(data.get("theme", "dark")))
             self._set_combo(self.language_combo, str(data.get("language", "en_US")))
             voice = str(data.get("voice", "en_US-lessac-medium"))
@@ -227,6 +229,9 @@ class SettingsPage(QWidget):
 
         theme = self._combo_text(self.theme_combo)
         self._settings.set("theme", theme)
+        api_key = self.api_key_input.text().strip()
+        self._settings.set("api_key", api_key)
+        self._client.set_api_key(api_key)
 
         voice = self._combo_text(self.voice_combo)
         try:
@@ -240,7 +245,6 @@ class SettingsPage(QWidget):
                 "vad_sensitivity": int(float(self.vad_input.text().strip() or "50")),
                 "response_delay": int(float(self.delay_input.text().strip() or "500")),
                 "theme": self._combo_text(self.theme_combo),
-                "api_key": self.api_key_input.text().strip(),
             })
             # Models (LM Studio).
             self._client.update_model_config(

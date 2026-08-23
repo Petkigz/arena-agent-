@@ -20,11 +20,26 @@ class BackendConnectionError(Exception):
 class ArenaBackendClient:
     """Synchronous HTTP client for the unified Arena server (app.server:app)."""
 
-    def __init__(self, base_url: str = "http://localhost:8000", timeout: float = 180.0):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        timeout: float = 180.0,
+        api_key: str = "",
+    ):
         # Strip trailing slash so url-joining is predictable.
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._client = httpx.Client(timeout=timeout)
+        self.api_key = api_key.strip()
+        headers = {"X-API-Key": self.api_key} if self.api_key else {}
+        self._client = httpx.Client(timeout=timeout, headers=headers)
+
+    def set_api_key(self, api_key: str) -> None:
+        """Update the local authentication header without sending the key anywhere."""
+        self.api_key = (api_key or "").strip()
+        if self.api_key:
+            self._client.headers["X-API-Key"] = self.api_key
+        else:
+            self._client.headers.pop("X-API-Key", None)
 
     # ── health ──────────────────────────────────────────────────────────────
     def health(self) -> Dict[str, Any]:
