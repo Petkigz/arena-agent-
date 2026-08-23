@@ -637,6 +637,33 @@ export async function getBackendProject(projectId: string): Promise<{ project: B
   }
 }
 
+export async function setProjectScheduler(projectId: string, enabled: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/scheduler`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ enabled }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function runProjectReadySteps(projectId: string, maxSteps = 1): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/run-ready`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ max_steps: maxSteps }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function createBackendProject(name: string, description = "", priority = "normal", milestones?: string[], tags?: string[]): Promise<{ project_id: string } | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/projects`, {

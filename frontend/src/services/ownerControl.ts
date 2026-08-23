@@ -20,11 +20,45 @@ export async function revokeAuthorization(authorizationId: string): Promise<bool
   }
 }
 
+export interface PendingApproval {
+  action_id: string;
+  conversation_id: string;
+  action_type: string;
+  payload: Record<string, unknown>;
+  reason: string;
+  goal_text: string;
+  status: 'pending';
+  created_at: string;
+}
+
+export async function listPendingApprovals(): Promise<PendingApproval[]> {
+  try {
+    const data = await jsonRequest('/owner-control/approvals');
+    return Array.isArray(data?.approvals) ? data.approvals : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function decidePendingApproval(
+  actionId: string,
+  approved: boolean,
+  note = '',
+): Promise<Record<string, unknown>> {
+  return jsonRequest(`/owner-control/approvals/${encodeURIComponent(actionId)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ approved, note, ttl_seconds: 300 }),
+  });
+}
+
 export interface ReviewedPlanStep {
   step_id: string;
   goal_id: string;
   description: string;
   task_type: string;
+  action_type: string;
+  payload: Record<string, unknown>;
+  source_sub_goal_id?: string;
   depends_on: string[];
   requires_evidence: string[];
   produces_evidence: string[];

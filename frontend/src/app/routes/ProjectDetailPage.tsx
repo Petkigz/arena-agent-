@@ -8,7 +8,8 @@ import { TaskBoard } from '../../components/projects/TaskBoard';
 import { ProjectFiles } from '../../components/projects/ProjectFiles';
 import { ProjectConversations } from '../../components/projects/ProjectConversations';
 import { ArrowLeft, Trash2, Edit, FolderKanban, Layers, Cpu, Clock } from 'lucide-react';
-import { getBackendProject } from '../../services/api';
+import { getBackendProject, runProjectReadySteps, setProjectScheduler } from '../../services/api';
+import { notifications } from '../../services/notifications';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -18,6 +19,7 @@ export function ProjectDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [backendDetail, setBackendDetail] = useState<{ project?: any; resume_context?: any; decomposition?: any } | null>(null);
+  const [schedulerBusy, setSchedulerBusy] = useState(false);
 
   const project = projects.find((p) => p.id === projectId);
 
@@ -30,6 +32,39 @@ export function ProjectDetailPage() {
     });
     return () => { cancelled = true; };
   }, [projectId]);
+
+  const refreshBackendDetail = async () => {
+    if (!projectId) return;
+    const detail = await getBackendProject(projectId);
+    if (detail) setBackendDetail(detail);
+  };
+
+  const toggleScheduler = async () => {
+    if (!projectId) return;
+    const enabled = !Boolean(backendDetail?.project?.context?.auto_schedule);
+    setSchedulerBusy(true);
+    const ok = await setProjectScheduler(projectId, enabled);
+    if (ok) {
+      await refreshBackendDetail();
+      notifications.success(enabled ? 'Persistent DAG scheduling enabled' : 'Persistent DAG scheduling paused');
+    } else {
+      notifications.error('Could not update project scheduler');
+    }
+    setSchedulerBusy(false);
+  };
+
+  const runReadyStep = async () => {
+    if (!projectId) return;
+    setSchedulerBusy(true);
+    const result = await runProjectReadySteps(projectId, 1);
+    if (result) {
+      await refreshBackendDetail();
+      notifications.success(`Project scheduler: ${String(result.status || 'cycle complete')}`);
+    } else {
+      notifications.error('Could not run the next project step');
+    }
+    setSchedulerBusy(false);
+  };
 
   if (!project) {
     return (
@@ -143,6 +178,22 @@ export function ProjectDetailPage() {
         {activeTab === 'conversations' && <ProjectConversations project={project} />}
         {activeTab === 'milestones' && (
           <div className="p-6 space-y-6">
+            {backendDetail?.project?.context?.decomposition_id && (
+              <div className="rounded border border-border bg-background-surface p-4">
+                <h3 className="font-semibold text-text-primary">Persistent DAG Scheduler</h3>
+                <p className="text-xs text-text-muted mt-1">
+                  Runs one dependency-ready sub-goal per autonomous cycle through Owner Control, independent observation, and verification. Enable explicitly to avoid duplicating the foreground request.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Button onClick={toggleScheduler} disabled={schedulerBusy} variant="secondary" size="sm">
+                    {backendDetail.project.context.auto_schedule ? 'Pause background scheduling' : 'Enable background scheduling'}
+                  </Button>
+                  <Button onClick={runReadyStep} disabled={schedulerBusy} size="sm">
+                    Run next ready step
+                  </Button>
+                </div>
+              </div>
+            )}
             {/* Backend milestones (persistent project) */}
             {backendDetail?.project?.milestones ? (
               <div>

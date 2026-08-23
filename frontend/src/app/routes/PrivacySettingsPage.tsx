@@ -6,11 +6,14 @@ import { ArrowLeft, Database, BarChart3, Lock, FileText, Download, Upload } from
 import { notifications } from '../../services/notifications';
 import { apiKeyHeader } from '../../services/api';
 import {
+  decidePendingApproval,
   decideReviewedPlan,
   editReviewedPlan,
   executeReviewedPlan,
+  listPendingApprovals,
   listReviewedPlans,
   revokeReviewedPlan,
+  type PendingApproval,
   type ReviewedPlan,
   type ReviewedPlanStep,
 } from '../../services/ownerControl';
@@ -54,6 +57,8 @@ export function PrivacySettingsPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [ownerPolicy, setOwnerPolicy] = useState<OwnerControlPolicy | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
   const [reviewedPlans, setReviewedPlans] = useState<ReviewedPlan[]>([]);
   const [planDrafts, setPlanDrafts] = useState<Record<string, ReviewedPlanStep[]>>({});
   const [planBusy, setPlanBusy] = useState<string | null>(null);
@@ -64,6 +69,9 @@ export function PrivacySettingsPage() {
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Control policy unavailable')))
       .then((data) => { if (!cancelled) setOwnerPolicy(data.policy); })
       .catch(() => { if (!cancelled) notifications.error('Could not load owner control policy'); });
+    listPendingApprovals().then((approvals) => {
+      if (!cancelled) setPendingApprovals(approvals);
+    });
     listReviewedPlans().then((plans) => {
       if (!cancelled) {
         setReviewedPlans(plans);
@@ -75,6 +83,23 @@ export function PrivacySettingsPage() {
     });
     return () => { cancelled = true; };
   }, []);
+
+  const decideApproval = async (approval: PendingApproval, approved: boolean) => {
+    setApprovalBusy(approval.action_id);
+    try {
+      await decidePendingApproval(
+        approval.action_id,
+        approved,
+        approved ? 'Approved from Owner Control' : 'Denied from Owner Control',
+      );
+      setPendingApprovals((current) => current.filter((item) => item.action_id !== approval.action_id));
+      notifications.success(approved ? 'Exact action scope authorized' : 'Action denied');
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : 'Could not decide action');
+    } finally {
+      setApprovalBusy(null);
+    }
+  };
 
   const replaceReviewedPlan = (plan: ReviewedPlan) => {
     setReviewedPlans((current) => current.map((item) => item.plan_id === plan.plan_id ? plan : item));
@@ -352,6 +377,51 @@ export function PrivacySettingsPage() {
           </Card>
         </section>
 
+        {/* Pending exact-action approvals, including project DAG steps */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Lock className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Pending Action Approvals</h2>
+          </div>
+          <Card className="space-y-4">
+            {pendingApprovals.length === 0 ? (
+              <p className="text-sm text-text-muted">No actions are waiting for authorization.</p>
+            ) : pendingApprovals.map((approval) => (
+              <div key={approval.action_id} className="rounded border border-amber-500/50 bg-amber-500/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium text-text-primary">{approval.goal_text || approval.action_type}</h3>
+                    <p className="text-xs text-text-muted mt-1">{approval.reason}</p>
+                    <code className="text-xs text-text-secondary">{approval.action_type}</code>
+                  </div>
+                  <span className="text-xs text-text-muted">{approval.conversation_id}</span>
+                </div>
+                <pre className="mt-3 max-h-40 overflow-auto rounded bg-background-primary p-2 text-xs text-text-secondary">
+                  {JSON.stringify(approval.payload, null, 2)}
+                </pre>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    disabled={approvalBusy === approval.action_id}
+                    onClick={() => decideApproval(approval, false)}
+                    className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+                  >
+                    Deny
+                  </button>
+                  <button
+                    type="button"
+                    disabled={approvalBusy === approval.action_id}
+                    onClick={() => decideApproval(approval, true)}
+                    className="px-3 py-2 rounded bg-green-600 text-white disabled:opacity-50"
+                  >
+                    Authorize exact scope once
+                  </button>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </section>
+
         {/* Editable plan approval */}
         <section className="mb-8">
           <div className="flex items-center gap-3 mb-4">
@@ -408,6 +478,43 @@ export function PrivacySettingsPage() {
                           <option value="exploration">Exploration</option>
                           <option value="user_assistance">User assistance</option>
                         </select>
+                        {step.action_type && (
+                          <>
+                            <input
+                              value={step.action_type}
+                              disabled={busy || plan.status === 'executed'}
+                              onChange={(event) => setPlanDrafts((current) => ({
+                                ...current,
+                                [plan.plan_id]: draft.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, action_type: event.target.value } : item
+                                ),
+                              }))}
+                              className="w-full mb-2 px-3 py-2 bg-background-primary border border-border rounded font-mono text-xs"
+                              aria-label={`Action type for step ${index + 1}`}
+                            />
+                            <textarea
+                              key={`${plan.plan_id}-${plan.revision}-${step.step_id}-payload`}
+                              defaultValue={JSON.stringify(step.payload, null, 2)}
+                              disabled={busy || plan.status === 'executed'}
+                              onBlur={(event) => {
+                                try {
+                                  const payload = JSON.parse(event.target.value);
+                                  if (!payload || Array.isArray(payload) || typeof payload !== 'object') throw new Error();
+                                  setPlanDrafts((current) => ({
+                                    ...current,
+                                    [plan.plan_id]: draft.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, payload } : item
+                                    ),
+                                  }));
+                                } catch {
+                                  notifications.error('Step payload must be a valid JSON object');
+                                }
+                              }}
+                              className="w-full mb-2 min-h-24 px-3 py-2 bg-background-primary border border-border rounded font-mono text-xs"
+                              aria-label={`Payload for step ${index + 1}`}
+                            />
+                          </>
+                        )}
                         <textarea
                           value={step.description}
                           disabled={busy || plan.status === 'executed'}

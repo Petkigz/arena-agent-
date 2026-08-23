@@ -100,6 +100,8 @@ The authenticated control surface is:
 GET    /owner-control
 PUT    /owner-control
 POST   /owner-control/pause
+GET    /owner-control/approvals
+POST   /owner-control/approvals/{action_id}/decision
 GET    /owner-control/authorizations
 POST   /owner-control/authorizations
 DELETE /owner-control/authorizations/{authorization_id}
@@ -119,6 +121,14 @@ start execution separately. Unknown dependencies, dependency cycles, stale
 revision writes, and execution of unapproved plans are rejected. Plan approval
 only delegates Levels 0–2 up to the configured ceiling; Level 3 and explicit
 per-action rules still require exact action authorization.
+
+Persistent project DAG scheduling is owner opt-in (`PUT /projects/{id}/scheduler`)
+and bounded per cycle. Exact action/payload steps are reviewable in
+approve-each-plan mode. Unverified steps enter `waiting_evidence` and are never
+blindly repeated; Level-3 steps enter `waiting_approval` and resume only with the
+matching single-use authorization. `POST /projects/{id}/run-ready` runs a bounded
+batch manually. Pending project/action approvals are available under
+`/owner-control/approvals`.
 
 Explicit approval creates a short-lived grant bound to the exact action type and
 SHA-256 digest of the canonical payload. Grants are single-use by default,

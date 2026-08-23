@@ -28,6 +28,8 @@ def _now() -> str:
 class SubGoalStatus(str, Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
+    WAITING_APPROVAL = "waiting_approval"
+    WAITING_EVIDENCE = "waiting_evidence"
     COMPLETED = "completed"
     FAILED = "failed"
     BLOCKED = "blocked"
@@ -438,7 +440,8 @@ class GoalDecomposer:
         for sg in project.sub_goals:
             if sg.sub_goal_id == sub_goal_id:
                 sg.status = status
-                sg.attempts += 1
+                if status == SubGoalStatus.IN_PROGRESS:
+                    sg.attempts += 1
                 if result:
                     sg.result = result
                 if error:
@@ -523,6 +526,8 @@ class GoalDecomposer:
             "pending": sum(1 for sg in project.sub_goals if sg.status == SubGoalStatus.PENDING),
             "blocked": sum(1 for sg in project.sub_goals if sg.status == SubGoalStatus.BLOCKED),
             "in_progress": sum(1 for sg in project.sub_goals if sg.status == SubGoalStatus.IN_PROGRESS),
+            "waiting_approval": sum(1 for sg in project.sub_goals if sg.status == SubGoalStatus.WAITING_APPROVAL),
+            "waiting_evidence": sum(1 for sg in project.sub_goals if sg.status == SubGoalStatus.WAITING_EVIDENCE),
             "is_complete": project.is_complete,
             "is_success": project.is_success,
             "sub_goals": sub_goal_details,

@@ -159,7 +159,7 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **P2 Self-evolution verified**: `self_evolving_agent.py` generates pytest contract (3 tests), runs in `DisposableSandbox`, only hotloads if green, saves to `app/tools/` + `data/plugins/`, rebuilds manifest cache.
 
-- ✅ **P2 Project management**: `ProjectManager` + `GoalDecomposer` wired into runtime (17 modules), complex goals (>15 words or setup/research keywords) → decompose into sub-goals DAG → persistent `Project` with milestones + session tracking. Milestones now carry stable sub-goal IDs and automatically reconcile on every persisted sub-goal update: only explicitly verified completion reaches a milestone, failure blocks the project, all verified milestones complete it, and session task history is updated idempotently. Endpoints `/projects`, `/projects/{id}`, POST `/projects`. Desktop tray icon refreshed on live theme, chat auto-reconnect with backoff, Android wake-word re-arm shows notification on background restriction (G7).
+- ✅ **P2 Project management**: `ProjectManager` + `GoalDecomposer` + `ProjectDAGScheduler` are wired into runtime. Complex goals become persistent dependency DAGs; owner-enabled projects resume bounded ready steps across autonomous cycles. Exact action/payload steps pass Owner Control and the full observation/verification loop. Unverified tool success waits for evidence without retrying, Level-3 steps wait for exact authorization, failures block dependents, and verified outcomes reconcile milestones/session history idempotently. Approve-each-plan mode exposes exact action/payload revisions for owner editing before execution. Background scheduling is explicit opt-in to prevent duplication of the foreground request.
 
 - ✅ **Owner authority and verified authorization execution**: Persistent control modes, emergency pause, per-action block/approval lists, revision-bound editable plan approval, and short-lived exact-payload authorization grants. Executing a grant now returns through the authoritative ActionGate → capability → independent observation → tri-state verification → prediction error → reflection/outcome/lesson/causal learning path. Tool success remains separate from goal verification, and retries/alternatives require fresh authorization.
 
@@ -171,7 +171,7 @@ Still open (future):
 
 1. Install and exercise the optional tiny VLM on the owner's hardware. The integration and honest OCR+detector fallback exist, but model quality/performance on the RX 580 has not been live-verified in this sandbox.
 2. Automatically derive reviewed LoRA training examples from successful outcomes and lessons; dataset preparation and training scaffolding currently require explicit examples.
-3. Autonomously schedule and execute each ready project sub-goal across sessions; verified sub-goal outcomes now reconcile milestones automatically, but project creation does not yet launch the full DAG scheduler by itself.
+3. Add evidence-reconciliation probes for project sub-goals left in `waiting_evidence`; the scheduler deliberately does not repeat an unverified action, but currently needs an owner/manual observation to resume it.
 4. Full end-to-end browser test of the multimodal round trip (text + image → grounded detection → reply) against a live server.
 5. Exercise external-API tools against live endpoints on the owner's machine.
 6. Add pagination to large Files, Pansophy, and Projects collections.

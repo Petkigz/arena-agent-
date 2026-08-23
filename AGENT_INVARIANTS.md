@@ -89,9 +89,13 @@ Owner Control Plane may always impose a stricter rule:
   observation → tri-state verification → outcome/lesson/causal-learning loop.
   Tool success is never reported as goal verification, and retries or Plan B
   require a fresh recommendation and authorization.
-- In approve-each-plan mode, the complete step graph is revisioned and owner-editable.
-  No step runs before approval of that exact revision; edits invalidate approval,
-  and plan approval never covers Level-3 or per-action-gated operations.
+- In approve-each-plan mode, the complete step graph—including exact action type
+  and payload—is revisioned and owner-editable. No step runs before approval of
+  that exact revision; edits invalidate approval, and plan approval never covers
+  Level-3 or per-action-gated operations.
+- Persistent project DAG execution is explicit owner opt-in, bounded per cycle,
+  dependency-aware, and restart-safe. UNKNOWN waits for evidence rather than
+  re-executing; sensitive steps wait for exact single-use authorization.
 
 ## 8. Honesty over AGI theater
 

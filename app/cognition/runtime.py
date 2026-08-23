@@ -167,6 +167,10 @@ class CognitiveRuntime:
         self.goal_decomposer.add_update_listener(
             lambda decomposition, _sub_goal: self.project_manager.reconcile_decomposition(decomposition)
         )
+        from app.cognition.project_scheduler import ProjectDAGScheduler
+        self.project_scheduler = ProjectDAGScheduler(
+            self.goal_decomposer, self.project_manager
+        )
         
         self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
@@ -1027,8 +1031,9 @@ class CognitiveRuntime:
             _add("project_management",
                  hasattr(self, "project_manager") and hasattr(self, "goal_decomposer")
                  and hasattr(self.project_manager, "create_project")
-                 and hasattr(self.project_manager, "reconcile_decomposition"),
-                 "ProjectManager + GoalDecomposer wired (17 modules) — verified sub-goal updates automatically reconcile persistent milestones", "integration")
+                 and hasattr(self.project_manager, "reconcile_decomposition")
+                 and hasattr(self, "project_scheduler"),
+                 "ProjectManager + GoalDecomposer + persistent DAG scheduler — exact ready sub-goals execute through verification and reconcile milestones", "integration")
         except Exception as e:
             _add("project_management", False, f"project management probe failed: {e}", "integration")
 
@@ -1529,6 +1534,8 @@ class CognitiveRuntime:
         user_text: str,
         complexity: str = "fast",
         session_id: Optional[str] = None,
+        success_criteria_override: Optional[List[str]] = None,
+        failure_conditions_override: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Execute one exact authorized proposal through the full evidence loop.
 
@@ -1544,6 +1551,7 @@ class CognitiveRuntime:
             or proposal.payload.get("query")
             or user_text
         )
+        scoped_authorization = bool(proposal.authorization_id)
         tracker = GoalTracker(user_query=goal_text)
         trace = CognitiveTrace(
             user_input=goal_text,
@@ -1577,6 +1585,7 @@ class CognitiveRuntime:
                 "decision_stage": gate.decision_stage,
                 "gate": gate.gate_name,
                 "reason": gate.reason,
+                "requires_approval": gate.requires_approval,
                 "proposal_id": proposal.proposal_id,
                 "authorization_id": proposal.authorization_id,
                 "session_id": session_id,
@@ -1595,7 +1604,12 @@ class CognitiveRuntime:
         except Exception as exc:
             tracker.transition(GoalLifecycleState.FAILED, f"Could not restore authorized goal: {exc}")
             latency = (time.time() - start_time) * 1000
-            message = f"Authorization was consumed, but goal interpretation failed: {exc}"
+            authority_note = (
+                "Scoped authorization was consumed"
+                if scoped_authorization
+                else "Owner-delegated execution authority passed the gate"
+            )
+            message = f"{authority_note}, but goal interpretation failed: {exc}"
             trace.finalize(
                 reply=message,
                 actions=[],
@@ -1616,11 +1630,20 @@ class CognitiveRuntime:
                 "reason": message,
                 "proposal_id": proposal.proposal_id,
                 "authorization_id": proposal.authorization_id,
-                "authorization_consumed": True,
-                "requires_new_authorization_for_retry": True,
+                "authorization_consumed": scoped_authorization,
+                "requires_new_authorization_for_retry": scoped_authorization,
+                "requires_fresh_decision_for_retry": True,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
             }
+        if success_criteria_override:
+            goal_rep.success_conditions = [
+                str(item) for item in success_criteria_override if str(item).strip()
+            ]
+        if failure_conditions_override:
+            goal_rep.failure_conditions = [
+                str(item) for item in failure_conditions_override if str(item).strip()
+            ]
         intent_type = goal_rep.primary_intent_type
         tracker.transition(
             GoalLifecycleState.UNDERSTOOD,
@@ -1870,7 +1893,10 @@ class CognitiveRuntime:
             "session_id": session_id,
             "model_used": trace.model_used,
             "replan_performed": False,
-            "requires_new_authorization_for_retry": not verification.verified_success,
+            "requires_new_authorization_for_retry": (
+                scoped_authorization and not verification.verified_success
+            ),
+            "requires_fresh_decision_for_retry": not verification.verified_success,
         }
 
     def process_cognitive_cycle(
@@ -1999,7 +2025,14 @@ class CognitiveRuntime:
                         "source_sub_goal_id": sg.sub_goal_id,
                     } for sg in decomposition.sub_goals],
                     tags=[query_pred, goal_rep.target_domain],
-                    context={"original_goal": user_text, "intent": query_pred, "decomposition_id": decomposition.project_id},
+                    context={
+                        "original_goal": user_text,
+                        "intent": query_pred,
+                        "decomposition_id": decomposition.project_id,
+                        # Avoid duplicating the current foreground action. The
+                        # owner explicitly enables persistent DAG scheduling.
+                        "auto_schedule": False,
+                    },
                     decomposition_id=decomposition.project_id,
                 )
                 # Start first session

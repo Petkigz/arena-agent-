@@ -74,6 +74,11 @@ class ExecutionStep:
     goal_id: str = ""
     description: str = ""
     task_type: TaskType = TaskType.ANALYSIS
+    # Optional exact capability scope used by project DAG plans. Generic
+    # autonomous plans may leave these empty and use the cognitive planner.
+    action_type: str = ""
+    payload: Dict[str, Any] = field(default_factory=dict)
+    source_sub_goal_id: Optional[str] = None
     status: ExecutionStatus = ExecutionStatus.PENDING
     result: Optional[str] = None
     error: Optional[str] = None
@@ -92,6 +97,9 @@ class ExecutionStep:
             "goal_id": self.goal_id,
             "description": self.description,
             "task_type": self.task_type.value,
+            "action_type": self.action_type,
+            "payload": self.payload,
+            "source_sub_goal_id": self.source_sub_goal_id,
             "status": self.status.value,
             "result": self.result,
             "error": self.error,
@@ -112,6 +120,9 @@ class ExecutionStep:
             goal_id=data.get("goal_id", ""),
             description=data.get("description", ""),
             task_type=TaskType(data.get("task_type", "analysis")),
+            action_type=data.get("action_type", ""),
+            payload=dict(data.get("payload", {}) or {}),
+            source_sub_goal_id=data.get("source_sub_goal_id"),
             status=ExecutionStatus(data.get("status", "pending")),
             result=data.get("result"),
             error=data.get("error"),

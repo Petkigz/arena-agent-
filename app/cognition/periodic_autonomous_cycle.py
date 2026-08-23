@@ -266,6 +266,23 @@ class PeriodicAutonomousCycle:
                 f"Cycle {cycle.cycle_id}: {cycle.goals_executed} executed, "
                 f"{cycle.goals_completed} completed, {cycle.goals_failed} failed"
             )
+
+            # Step 4b: Resume owner-enabled persistent project DAGs. Each project
+            # and step batch is bounded; exact actions still pass Owner Control,
+            # ActionGate, observation, and verification.
+            if cognitive_runtime and hasattr(cognitive_runtime, "project_scheduler"):
+                try:
+                    project_cycle = cognitive_runtime.project_scheduler.run_cycle(
+                        cognitive_runtime,
+                        max_projects=3,
+                        max_steps_per_project=1,
+                    )
+                    app_logger.info(
+                        f"Cycle {cycle.cycle_id}: project scheduler processed "
+                        f"{project_cycle.get('projects_processed', 0)} project(s)"
+                    )
+                except Exception as e:
+                    app_logger.warning(f"Cycle {cycle.cycle_id}: project scheduler skipped: {e}")
             
             # Step 5: Reflect on outcomes
             for plan in executed_plans:

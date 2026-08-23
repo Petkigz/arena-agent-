@@ -58,6 +58,9 @@ def reviewable_snapshot(plan: Any) -> Dict[str, Any]:
             "goal_id": str(step.goal_id or plan.goal_id),
             "description": str(step.description),
             "task_type": str(task_type),
+            "action_type": str(getattr(step, "action_type", "") or ""),
+            "payload": dict(getattr(step, "payload", {}) or {}),
+            "source_sub_goal_id": getattr(step, "source_sub_goal_id", None),
             "depends_on": list(step.depends_on or []),
             "requires_evidence": list(step.requires_evidence or []),
             "produces_evidence": list(step.produces_evidence or []),
@@ -86,8 +89,9 @@ def _validate_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         raise ValueError("A reviewed plan cannot exceed 100 steps")
 
     allowed_fields = {
-        "step_id", "goal_id", "description", "task_type", "depends_on",
-        "requires_evidence", "produces_evidence", "success_criteria", "failure_conditions",
+        "step_id", "goal_id", "description", "task_type", "action_type",
+        "payload", "source_sub_goal_id", "depends_on", "requires_evidence",
+        "produces_evidence", "success_criteria", "failure_conditions",
     }
     normalized = []
     ids = set()
@@ -109,12 +113,18 @@ def _validate_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "exploration", "user_assistance",
         }:
             raise ValueError(f"Unknown task_type '{task_type}' in step '{step_id}'")
+        payload = raw.get("payload", {})
+        if not isinstance(payload, dict):
+            raise ValueError(f"Step '{step_id}' payload must be an object")
         ids.add(step_id)
         normalized.append({
             "step_id": step_id,
             "goal_id": str(raw.get("goal_id", "")),
             "description": description,
             "task_type": task_type,
+            "action_type": str(raw.get("action_type", "")),
+            "payload": dict(payload),
+            "source_sub_goal_id": raw.get("source_sub_goal_id"),
             "depends_on": [str(v) for v in raw.get("depends_on", [])],
             "requires_evidence": [str(v) for v in raw.get("requires_evidence", [])],
             "produces_evidence": [str(v) for v in raw.get("produces_evidence", [])],

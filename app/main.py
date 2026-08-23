@@ -187,6 +187,11 @@ class OwnerControlUpdate(BaseModel):
 class OwnerPauseRequest(BaseModel):
     paused: bool
 
+class ApprovalDecisionRequest(BaseModel):
+    approved: bool
+    note: str = ""
+    ttl_seconds: int = Field(default=300, ge=1, le=3600)
+
 class AuthorizationIssueRequest(BaseModel):
     action_type: str = Field(min_length=1)
     payload: Dict[str, Any]
@@ -711,6 +716,12 @@ class ProjectCreateRequest(BaseModel):
     milestones: Optional[List[str]] = None
     tags: Optional[List[str]] = None
 
+class ProjectScheduleRequest(BaseModel):
+    enabled: bool
+
+class ProjectRunRequest(BaseModel):
+    max_steps: int = Field(default=1, ge=1, le=10)
+
 @router.get("/projects")
 def list_projects_endpoint(status: Optional[str] = Query(None)):
     """List persistent projects (multi-session)."""
@@ -805,6 +816,34 @@ def create_project_endpoint(req: ProjectCreateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/projects/{project_id}/scheduler")
+def configure_project_scheduler_endpoint(project_id: str, req: ProjectScheduleRequest):
+    """Owner opt-in/out for persistent background DAG scheduling."""
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    project = runtime.project_manager.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.decomposition_id:
+        raise HTTPException(status_code=409, detail="Project has no goal decomposition")
+    runtime.project_manager.update_context(project_id, {"auto_schedule": req.enabled})
+    return {
+        "success": True,
+        "project_id": project_id,
+        "auto_schedule": req.enabled,
+    }
+
+
+@router.post("/projects/{project_id}/run-ready")
+def run_project_ready_steps_endpoint(project_id: str, req: ProjectRunRequest):
+    """Run a bounded batch of dependency-ready sub-goals now."""
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return runtime.project_scheduler.run_project(
+        runtime, project_id, max_steps=req.max_steps
+    )
+
+
 # ── Shared settings (cross-platform: web / desktop / Android) ────────────────
 @router.get("/settings")
 def get_settings_endpoint():
@@ -848,6 +887,29 @@ def pause_owner_control_endpoint(req: OwnerPauseRequest):
         "policy": policy.to_dict(),
         "message": "All action execution paused and grants revoked." if policy.paused else "Action execution resumed under owner policy.",
     }
+
+
+@router.get("/owner-control/approvals")
+def list_pending_approvals_endpoint():
+    from app.cognition.approval_store import approval_store
+    return {
+        "success": True,
+        "approvals": [request.to_dict() for request in approval_store.list_pending()],
+    }
+
+
+@router.post("/owner-control/approvals/{action_id}/decision")
+def decide_pending_approval_endpoint(action_id: str, req: ApprovalDecisionRequest):
+    from app.cognition.approval_store import approval_store
+    request = approval_store.decide(
+        action_id,
+        approved=req.approved,
+        note=req.note,
+        ttl_seconds=req.ttl_seconds,
+    )
+    if request is None:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    return {"success": True, "approval": request.to_dict()}
 
 
 @router.get("/owner-control/authorizations")
@@ -1008,6 +1070,11 @@ def execute_approved_plan_endpoint(plan_id: str):
     if review.status != PlanReviewStatus.APPROVED:
         raise HTTPException(status_code=409, detail=f"Plan is {review.status.value}, not approved")
     runtime = CognitiveRuntime.get_instance()
+    if plan_id.startswith("project_dag_"):
+        project_id = plan_id[len("project_dag_"):]
+        return runtime.project_scheduler.run_project(
+            runtime, project_id, max_steps=10
+        )
     plan = runtime.goal_executor.get_plan(plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Execution plan not found")
