@@ -98,6 +98,10 @@ class CognitiveRuntime:
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
             path=str(Path(path).parent / "adaptive_autonomy.json") if path else "data/adaptive_autonomy.json"
         )
+        from app.cognition.temporal_vision import TemporalVisionTracker
+        self.temporal_vision = TemporalVisionTracker(
+            db_path=str(Path(path).parent / "temporal_vision.db") if path else "data/temporal_vision.db"
+        )
         # Phase 3: Transfer Learning
         from app.cognition.skill_classifier import SkillClassifier
         from app.cognition.analogical_memory import AnalogicalMemory
@@ -1060,8 +1064,8 @@ class CognitiveRuntime:
             sig = inspect.signature(self.process_cognitive_cycle)
             has_multimodal = "image_path" in sig.parameters and "attachments" in sig.parameters
             _add("multimodal_chat",
-                 has_multimodal,
-                 "process_cognitive_cycle(image_path, attachments) — chat is multimodal (text+vision+files) through ONE brain", "integration")
+                 has_multimodal and hasattr(self, "temporal_vision"),
+                 "Multimodal chat + persistent appeared/moved/disappeared object tracking through ONE brain", "integration")
         except Exception as e:
             _add("multimodal_chat", False, f"multimodal probe failed: {e}", "integration")
 
@@ -1560,21 +1564,50 @@ class CognitiveRuntime:
                             continue
                     if latest and (_time.time() - latest_mtime) < 300:  # only if recent (<5 min)
                         det_res = ObjectDetectorTool.analyze_image_grounded(str(latest), auto_create_groundings=True)
-                        if det_res.get("success") and det_res.get("detections"):
+                        if det_res.get("success"):
+                            detections = det_res.get("detections", [])
+                            temporal = self.temporal_vision.update_frame(
+                                detections,
+                                source="desktop_screen",
+                            )
                             self.blackboard.set(
-                                "grounded_detections",
-                                {
-                                    "image": str(latest),
-                                    "detections": det_res.get("detections", []),
-                                    "groundings_created": det_res.get("groundings_created", []),
-                                    "engine": det_res.get("engine", "unknown"),
-                                },
-                                source="object_detector",
+                                "temporal_visual_scene",
+                                temporal,
+                                source="temporal_vision",
                             )
-                            app_logger.info(
-                                f"Grounded detections: {len(det_res.get('detections', []))} objects from {latest.name} "
-                                f"→ {len(det_res.get('groundings_created', []))} groundings"
-                            )
+                            for event in temporal.get("events", [])[:20]:
+                                try:
+                                    self.world_ingest.ingest(
+                                        subject=event.get("track_id", event.get("label", "visual_object")),
+                                        predicate="visual_event",
+                                        value={
+                                            "event_type": event.get("event_type"),
+                                            "label": event.get("label"),
+                                            "bbox": event.get("current_bbox"),
+                                        },
+                                        source="temporal_vision",
+                                        observation_type="inferred",
+                                        confidence=float(event.get("confidence", 0.0)),
+                                    )
+                                except Exception:
+                                    pass
+                            if detections:
+                                self.blackboard.set(
+                                    "grounded_detections",
+                                    {
+                                        "image": str(latest),
+                                        "detections": detections,
+                                        "groundings_created": det_res.get("groundings_created", []),
+                                        "engine": det_res.get("engine", "unknown"),
+                                        "temporal_events": temporal.get("events", []),
+                                    },
+                                    source="object_detector",
+                                )
+                                app_logger.info(
+                                    f"Grounded detections: {len(detections)} objects from {latest.name} "
+                                    f"→ {len(det_res.get('groundings_created', []))} groundings, "
+                                    f"{len(temporal.get('events', []))} temporal event(s)"
+                                )
                 self._last_grounding_detection_ts = now
         except Exception as e:
             app_logger.warning(f"Perception→grounding loop failed (best-effort): {e}")

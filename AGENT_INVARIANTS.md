@@ -63,6 +63,10 @@ Every non-trivial agent step is verified by an executor, not by the model:
 
 ## 6. Evidence-linked memory consolidation
 
+Temporal visual tracking is stream-isolated and may claim only detector-backed
+continuity (appeared/moved/disappeared). It must not infer identity, depth,
+intent, or emotion from bounding-box association alone.
+
 Automatic consolidation may promote only verifier-authored terminal episodes.
 Every semantic/procedural/lesson target keeps source-memory links; UNKNOWN,
 self-reported, and conversational claims are not promoted as facts. Repeated

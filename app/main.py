@@ -1585,6 +1585,24 @@ def list_groundings_endpoint(symbol: Optional[str] = Query(None), modality: Opti
         app_logger.error(f"Groundings list failed: {e}")
         return {"groundings": [], "count": 0, "error": str(e)}
 
+
+@router.get("/vision/temporal-scene")
+def temporal_scene_endpoint(stream_id: str = Query("desktop_screen")):
+    """Return active object tracks for one explicit visual stream."""
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "scene": CognitiveRuntime.get_instance().temporal_vision.scene_summary(stream_id),
+    }
+
+
+@router.get("/vision/temporal-events")
+def temporal_events_endpoint(limit: int = Query(50, ge=1, le=500)):
+    """Return provenance-carrying appeared/moved/disappeared events."""
+    from app.cognition.runtime import CognitiveRuntime
+    events = CognitiveRuntime.get_instance().temporal_vision.recent_events(limit=limit)
+    return {"success": True, "events": events, "count": len(events)}
+
 # VLM integration (P2 AGI: true visual understanding)
 @router.get("/vision/vlm-status")
 def vlm_status_endpoint():

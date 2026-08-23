@@ -112,6 +112,7 @@ arena-agent-/
 │   │   ├── goal_replanner.py    # Plan B generation (resource-aware)
 │   │   ├── goal_decomposer.py   # Long-horizon decomposition → sub-goals DAG (P2)
 │   │   ├── project_manager.py   # Multi-session project tracking (P2)
+│   │   ├── temporal_vision.py   # Persistent stream-isolated object continuity + events
 │   │   ├── perception.py        # Environmental observation strategies
 │   │   ├── world_model.py       # Entity/observation store
 │   │   ├── reasoning_loop.py    # ACT/INVESTIGATE/DEFER/ANSWER routing

@@ -97,7 +97,7 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **curiosity_info_gain** — information-gain curiosity with outcome-calibrated thresholds and owner-bounded exploration budget (P1-4)
 - **resource_aware_planning** — RESOURCE_COSTS + hardware pressure penalties (P2)
 - **prosody_emotion** — ProsodyAnalyzerTool (pitch/energy/ZCR→emotion) + social_cognition wired (P2)
-- **multimodal_chat** — process_cognitive_cycle(image_path, attachments) — multimodal through ONE brain (P2)
+- **multimodal_chat** — text/image/file chat plus persistent stream-isolated object tracking and temporal events through ONE brain (P2)
 - **self_evolution_verified** — SelfEvolvingAgent verified loop: synthesize→pytest→hotload only if green (P2)
 - **project_management** — ProjectManager + GoalDecomposer wired — complex goals → sub-goals DAG → Project (P2)
 - **vlm_integration** — VlmAnalyzerTool (Moondream2/Llava) with OCR+LLM fallback — true VLM when installed (P3)
@@ -155,7 +155,7 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **P2 Social from real signals**: New `prosody_analyzer.py` — rms, pitch (autocorr), ZCR, speaking rate → emotion (joy/sadness/anger/fear/surprise/neutral) + intensity. `VoiceService._transcribe_remote_utterance()` analyzes prosody before STT and feeds to `social_cognition`. Runtime `_integrate_phase_modules()` infers emotion from text keywords.
 
-- ✅ **P2 Multimodal chat**: `process_cognitive_cycle(image_path, attachments)` + `message_router` accepts `image_path`/`attachments` in `user_message` WS, forwards to runtime. Frontend `websocket.ts` + `conversationStore` + `ChatPage` send first uploaded image path for grounding — chat is vision-grounded through ONE brain.
+- ✅ **P2 Multimodal + temporal vision**: Chat accepts text, image paths, and attachments through one runtime. `TemporalVisionTracker` now assigns persistent label/IoU track IDs per explicit visual stream and records appeared/moved/disappeared events, confidence, frame counts, and bounding-box evidence in SQLite. Desktop sight and live screenshot streams feed the tracker; events enter the blackboard and WorldModel as inferred perception. Static unrelated uploads are deliberately not treated as a temporal sequence. This is object continuity, not person identity, depth, intent, facial emotion, or full video understanding.
 
 - ✅ **P2 Self-evolution verified**: `self_evolving_agent.py` generates pytest contract (3 tests), runs in `DisposableSandbox`, only hotloads if green, saves to `app/tools/` + `data/plugins/`, rebuilds manifest cache.
 

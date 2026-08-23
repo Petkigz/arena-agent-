@@ -133,6 +133,7 @@ async def screenshot_websocket(websocket: WebSocket, conversation_id: str):
                     "height": data.get("height"),
                     "format": data.get("format", "png"),
                     "annotations": data.get("annotations", []),
+                    "conversation_id": conversation_id,
                 }
                 
                 # Store screenshot
@@ -232,9 +233,35 @@ async def analyze_screenshot(request: ScreenshotAnalysisRequest):
             }
             if not vision_success:
                 errors.append(f"Vision: {vision_result.get('error', 'analysis failed')}")
+            else:
+                try:
+                    from app.cognition.runtime import CognitiveRuntime
+                    stream_id = f"screenshot_stream:{screenshot.get('conversation_id', 'unknown')}"
+                    temporal = CognitiveRuntime.get_instance().temporal_vision.update_frame(
+                        vision_result.get("detections", []),
+                        source=stream_id,
+                    )
+                    components["temporal"] = {
+                        "success": True,
+                        "stream_id": stream_id,
+                        "tracks": temporal.get("tracks", []),
+                        "events": temporal.get("events", []),
+                        "scene_summary": temporal.get("scene_summary", {}),
+                    }
+                except Exception as exc:
+                    # Temporal tracking is supplementary; do not turn a real
+                    # single-frame analysis into a false failure.
+                    components["temporal"] = {
+                        "success": False,
+                        "error": str(exc),
+                    }
 
+        requested_components = [
+            component for name, component in components.items()
+            if name in {"ocr", "vision"}
+        ]
         complete = not errors and all(
-            component.get("success") is True for component in components.values()
+            component.get("success") is True for component in requested_components
         )
         analysis = {
             "type": analysis_type,
