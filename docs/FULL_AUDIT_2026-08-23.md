@@ -39,7 +39,7 @@ Post-remediation evidence:
 - Intelligence benchmark: **10/10 passed**, no regressions.
 - Focused execution/project/memory/LoRA/benchmark suites: **35 passed**.
 
-GitHub CI confirmation remains pending until the remediation commit is pushed and its clean runner completes. Android compilation and real owner-hardware checks remain open.
+GitHub Actions run `32635400747` subsequently passed dependency installation and the full pytest job from a clean runner. Android compilation and real owner-hardware checks remain open.
 
 ---
 

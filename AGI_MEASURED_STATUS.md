@@ -14,8 +14,8 @@ and test-count figures that did not match the code; they are now archived under
 > unified server starts with core dependencies; native safety fields match the
 > backend; conversation identifiers require auth; approvals persist without
 > persisting authority; and the software-only dependency set runs the complete
-> backend suite. GitHub CI still needs to confirm the clean-checkout result after
-> this remediation push. See
+> backend suite. GitHub Actions run `32635400747` then passed from a clean runner
+> after dependency installation and the full pytest job. See
 > [`docs/FULL_AUDIT_2026-08-23.md`](docs/FULL_AUDIT_2026-08-23.md).
 
 ---
