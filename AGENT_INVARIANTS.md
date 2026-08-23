@@ -121,6 +121,8 @@ Owner Control Plane may always impose a stricter rule:
   payload binding, or evidence/verification honesty.
 - Autonomous goals remain an owner-visible queue. The owner can approve planning,
   reject, reprioritize, or request the next goal; goal approval never authorizes its actions.
+- Multi-goal allocation makes owner priority dominant, blocks incomplete dependencies,
+  and uses resource pressure only as a secondary cost—not as permission to reorder owner intent.
 - Every autonomous cycle persists stage events for observation, consideration,
   recommendation, planning approval, execution, blocking, budget stops, and outcome.
 - Owner schedules are timezone-aware and persistent. Recurrence and missed-run

@@ -833,8 +833,16 @@ class AutonomousGoalExecutor:
         Returns:
             The execution plan, or None if no goals are ready
         """
-        # Get next approved goal
-        goal = goal_generator.get_next_goal()
+        # Owner priority dominates; dependencies and live resource pressure refine
+        # selection among approved goals without overriding owner ordering.
+        allocation = None
+        if cognitive_runtime is not None and hasattr(cognitive_runtime, "autonomy_allocator"):
+            hardware = getattr(cognitive_runtime, "hardware_self_model", {})
+            allocation = cognitive_runtime.autonomy_allocator.select(goal_generator, hardware)
+            cognitive_runtime.last_autonomy_allocation = allocation
+            goal = allocation.get("goal")
+        else:
+            goal = goal_generator.get_next_goal()
         if not goal:
             app_logger.info("No approved goals ready for execution")
             return None

@@ -106,6 +106,8 @@ class CognitiveRuntime:
         self.autonomy_run_ledger = AutonomyRunLedger(
             str(Path(path).parent / "autonomy_run_ledger.db") if path else "data/autonomy_run_ledger.db"
         )
+        from app.cognition.autonomy_allocator import AutonomyResourceAllocator
+        self.autonomy_allocator = AutonomyResourceAllocator()
         from app.cognition.autonomy_schedule import AutonomySchedule
         self.autonomy_schedule = AutonomySchedule(
             str(Path(path).parent / "autonomy_schedule.db") if path else "data/autonomy_schedule.db"

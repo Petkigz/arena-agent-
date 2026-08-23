@@ -348,7 +348,8 @@ class PeriodicAutonomousCycle:
                 if plan:
                     cycle.goals_executed += 1
                     executed_plans.append(plan)
-                    self._record_event(cycle.cycle_id,"execution_started",goal_id=plan.goal_id,details={"plan_id":plan.plan_id})
+                    allocation=getattr(cognitive_runtime,"last_autonomy_allocation",None) if cognitive_runtime else None
+                    self._record_event(cycle.cycle_id,"execution_started",goal_id=plan.goal_id,details={"plan_id":plan.plan_id,"allocation":allocation})
                     
                     from app.cognition.autonomous_goal_executor import ExecutionStatus
                     if plan.status == ExecutionStatus.COMPLETED:

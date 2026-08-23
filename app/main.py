@@ -1301,6 +1301,13 @@ def list_autonomy_run_events_endpoint(cycle_id:Optional[str]=Query(None),goal_id
     events=CognitiveRuntime.get_instance().autonomy_run_ledger.list(cycle_id=cycle_id,goal_id=goal_id,limit=limit)
     return {"success":True,"events":[event.to_dict() for event in events]}
 
+@router.get("/owner-control/autonomous-goals/allocation-preview")
+def preview_autonomous_goal_allocation_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    runtime=CognitiveRuntime.get_instance()
+    result=runtime.autonomy_allocator.select(runtime.goal_generator,runtime.hardware_self_model)
+    return {"success":True,"selected":result["selected"],"rankings":result["rankings"],"note":"Preview only; no goal or action executed."}
+
 @router.get("/owner-control/autonomous-goals")
 def list_autonomous_goal_queue_endpoint(status_filter: Optional[str]=Query(None,alias="status"),limit:int=Query(100,ge=1,le=1000)):
     from app.cognition.autonomous_goal_generator import GoalStatus
