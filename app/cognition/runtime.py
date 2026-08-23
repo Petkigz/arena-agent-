@@ -161,6 +161,12 @@ class CognitiveRuntime:
         from app.cognition.project_manager import ProjectManager
         self.goal_decomposer = GoalDecomposer(db_path=str(Path(path).parent / "goal_decompositions.db") if path else "data/goal_decompositions.db")
         self.project_manager = ProjectManager(db_path=str(Path(path).parent / "projects.db") if path else "data/projects.db")
+        # Close the long-horizon loop: every persisted sub-goal update
+        # deterministically reconciles its linked project. Only explicitly
+        # verified completions can reach milestones.
+        self.goal_decomposer.add_update_listener(
+            lambda decomposition, _sub_goal: self.project_manager.reconcile_decomposition(decomposition)
+        )
         
         self.reasoning_cycle = ReasoningCycle(engine=self.beliefs)
 
@@ -1018,8 +1024,10 @@ class CognitiveRuntime:
         # 25. Project management (P2): long-horizon + multi-session
         try:
             _add("project_management",
-                 hasattr(self, "project_manager") and hasattr(self, "goal_decomposer") and hasattr(self.project_manager, "create_project"),
-                 "ProjectManager + GoalDecomposer wired (17 modules) — complex goals → sub-goals DAG → persistent Project", "integration")
+                 hasattr(self, "project_manager") and hasattr(self, "goal_decomposer")
+                 and hasattr(self.project_manager, "create_project")
+                 and hasattr(self.project_manager, "reconcile_decomposition"),
+                 "ProjectManager + GoalDecomposer wired (17 modules) — verified sub-goal updates automatically reconcile persistent milestones", "integration")
         except Exception as e:
             _add("project_management", False, f"project management probe failed: {e}", "integration")
 
@@ -1635,7 +1643,10 @@ class CognitiveRuntime:
                     name=user_text[:60],
                     description=user_text,
                     priority="high" if "critical" in user_text.lower() or "urgent" in user_text.lower() else "normal",
-                    milestones=[sg.description for sg in decomposition.sub_goals],
+                    milestones=[{
+                        "description": sg.description,
+                        "source_sub_goal_id": sg.sub_goal_id,
+                    } for sg in decomposition.sub_goals],
                     tags=[query_pred, goal_rep.target_domain],
                     context={"original_goal": user_text, "intent": query_pred, "decomposition_id": decomposition.project_id},
                     decomposition_id=decomposition.project_id,

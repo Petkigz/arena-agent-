@@ -15,7 +15,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from uuid import uuid4
 
 
@@ -258,6 +258,7 @@ class GoalDecomposer:
     def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = db_path
         self._projects: Dict[str, GoalDecomposition] = {}
+        self._update_listeners: List[Callable[[GoalDecomposition, SubGoal], None]] = []
         if self.db_path:
             self._init_db()
             self._load_from_db()
@@ -414,6 +415,13 @@ class GoalDecomposer:
         # Default: single-step decomposition
         return [{"description": goal_text, "action_type": "generic_action", "depends_on": []}]
 
+    def add_update_listener(
+        self, listener: Callable[[GoalDecomposition, SubGoal], None]
+    ) -> None:
+        """Register a best-effort integration hook for persisted sub-goal updates."""
+        if listener not in self._update_listeners:
+            self._update_listeners.append(listener)
+
     def update_sub_goal(
         self,
         project_id: str,
@@ -443,6 +451,13 @@ class GoalDecomposer:
                     project.completed_at = _now()
 
                 self._save_to_db(project)
+                for listener in list(self._update_listeners):
+                    try:
+                        listener(project, sg)
+                    except Exception:
+                        # Project/UI synchronization is best-effort and must not
+                        # corrupt the authoritative decomposition update.
+                        pass
                 return sg
         return None
 

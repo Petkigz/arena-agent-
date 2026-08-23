@@ -38,9 +38,12 @@ class Milestone:
     """A significant checkpoint in a project."""
     milestone_id: str
     description: str
-    status: str = "pending"     # pending, reached, skipped
+    status: str = "pending"     # pending, reached, failed, skipped
     reached_at: Optional[str] = None
     notes: str = ""
+    # Stable link to GoalDecomposer. Description matching is only a backward-
+    # compatible fallback for projects created before this field existed.
+    source_sub_goal_id: Optional[str] = None
 
 
 @dataclass
@@ -164,6 +167,7 @@ class ProjectManager:
                     status=m.get("status", "pending"),
                     reached_at=m.get("reached_at"),
                     notes=m.get("notes", ""),
+                    source_sub_goal_id=m.get("source_sub_goal_id"),
                 ))
             sessions = []
             for s in json.loads(row[6] or "[]"):
@@ -204,6 +208,7 @@ class ProjectManager:
             "status": m.status,
             "reached_at": m.reached_at,
             "notes": m.notes,
+            "source_sub_goal_id": m.source_sub_goal_id,
         } for m in project.milestones])
         sess_json = json.dumps([{
             "session_id": s.session_id,
@@ -235,7 +240,7 @@ class ProjectManager:
         name: str,
         description: str = "",
         priority: str = "normal",
-        milestones: Optional[List[str]] = None,
+        milestones: Optional[List[Any]] = None,
         tags: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         decomposition_id: Optional[str] = None
@@ -244,10 +249,19 @@ class ProjectManager:
         project_id = uuid4().hex[:12]
         ms = []
         if milestones:
-            for desc in milestones:
+            for item in milestones:
+                if isinstance(item, dict):
+                    description = str(item.get("description", "")).strip()
+                    source_sub_goal_id = item.get("source_sub_goal_id") or item.get("sub_goal_id")
+                else:
+                    description = str(item).strip()
+                    source_sub_goal_id = None
+                if not description:
+                    continue
                 ms.append(Milestone(
                     milestone_id=uuid4().hex[:8],
-                    description=desc,
+                    description=description,
+                    source_sub_goal_id=str(source_sub_goal_id) if source_sub_goal_id else None,
                 ))
 
         project = Project(
@@ -365,6 +379,116 @@ class ProjectManager:
                 self._save_to_db(project)
                 return True
         return False
+
+    @staticmethod
+    def _result_is_verified(result: Optional[Dict[str, Any]]) -> bool:
+        """Require explicit verification evidence before reaching a milestone."""
+        if not isinstance(result, dict):
+            return False
+        if result.get("verified_success") is True or result.get("goal_verified") is True:
+            return True
+        nested = result.get("verification_result")
+        return isinstance(nested, dict) and nested.get("verified_success") is True
+
+    def get_project_by_decomposition(self, decomposition_id: str) -> Optional[Project]:
+        for project in self._projects.values():
+            if project.decomposition_id == decomposition_id:
+                return project
+        return None
+
+    def reconcile_decomposition(
+        self,
+        decomposition: Any,
+        project_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Synchronize verified sub-goal outcomes into project milestones.
+
+        COMPLETED alone is not enough: the sub-goal result must explicitly carry
+        a verified-success verdict. This preserves the attempted/worked/observed/
+        verified distinction while closing the long-horizon progress loop.
+        """
+        project = (
+            self._projects.get(project_id) if project_id
+            else self.get_project_by_decomposition(str(decomposition.project_id))
+        )
+        if project is None:
+            return {"success": False, "error": "Linked project not found", "milestones_reached": 0}
+
+        reached = 0
+        failed = 0
+        unchanged = 0
+        session = project.current_session
+        milestones_by_source = {
+            milestone.source_sub_goal_id: milestone
+            for milestone in project.milestones
+            if milestone.source_sub_goal_id
+        }
+
+        for sub_goal in decomposition.sub_goals:
+            milestone = milestones_by_source.get(sub_goal.sub_goal_id)
+            if milestone is None:
+                matches = [
+                    item for item in project.milestones
+                    if item.description.strip().casefold() == sub_goal.description.strip().casefold()
+                ]
+                milestone = matches[0] if len(matches) == 1 else None
+            if milestone is None:
+                unchanged += 1
+                continue
+
+            status = getattr(sub_goal.status, "value", str(sub_goal.status)).lower()
+            if status == "completed" and self._result_is_verified(sub_goal.result):
+                if milestone.status != "reached":
+                    milestone.status = "reached"
+                    milestone.reached_at = _now()
+                    evidence = sub_goal.result or {}
+                    verdict = (
+                        evidence.get("verification_status")
+                        or evidence.get("verification")
+                        or evidence.get("verdict")
+                        or "verified_success"
+                    )
+                    milestone.notes = f"Automatically reached from verified sub-goal {sub_goal.sub_goal_id}: {verdict}"
+                    reached += 1
+                    if session and sub_goal.description not in session.tasks_completed:
+                        session.tasks_completed.append(sub_goal.description)
+                else:
+                    unchanged += 1
+            elif status == "failed":
+                if milestone.status != "failed":
+                    milestone.status = "failed"
+                    milestone.reached_at = _now()
+                    milestone.notes = f"Sub-goal failed: {sub_goal.error or 'no error detail'}"
+                    failed += 1
+                    if session and sub_goal.description not in session.tasks_failed:
+                        session.tasks_failed.append(sub_goal.description)
+                else:
+                    unchanged += 1
+            else:
+                # Unverified completion deliberately remains pending.
+                unchanged += 1
+
+        if project.milestones and all(item.status == "reached" for item in project.milestones):
+            project.status = ProjectStatus.COMPLETED
+            project.completed_at = project.completed_at or _now()
+        elif any(item.status == "failed" for item in project.milestones):
+            project.status = ProjectStatus.BLOCKED
+            project.completed_at = None
+        elif project.status in (ProjectStatus.BLOCKED, ProjectStatus.COMPLETED):
+            project.status = ProjectStatus.ACTIVE
+            project.completed_at = None
+
+        project.updated_at = _now()
+        self._save_to_db(project)
+        return {
+            "success": True,
+            "project_id": project.project_id,
+            "milestones_reached": reached,
+            "milestones_failed": failed,
+            "unchanged": unchanged,
+            "project_status": project.status.value,
+            "progress_percent": round(project.progress_percent, 1),
+        }
 
     def update_context(self, project_id: str, context: Dict[str, Any]) -> bool:
         """Update project context (merge with existing)."""

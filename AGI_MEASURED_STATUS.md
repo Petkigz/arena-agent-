@@ -159,7 +159,7 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **P2 Self-evolution verified**: `self_evolving_agent.py` generates pytest contract (3 tests), runs in `DisposableSandbox`, only hotloads if green, saves to `app/tools/` + `data/plugins/`, rebuilds manifest cache.
 
-- ✅ **P2 Project management**: `ProjectManager` + `GoalDecomposer` wired into runtime (17 modules), complex goals (>15 words or setup/research keywords) → decompose into sub-goals DAG → persistent `Project` with milestones + session tracking. Endpoints `/projects`, `/projects/{id}`, POST `/projects`. Desktop tray icon refreshed on live theme, chat auto-reconnect with backoff, Android wake-word re-arm shows notification on background restriction (G7).
+- ✅ **P2 Project management**: `ProjectManager` + `GoalDecomposer` wired into runtime (17 modules), complex goals (>15 words or setup/research keywords) → decompose into sub-goals DAG → persistent `Project` with milestones + session tracking. Milestones now carry stable sub-goal IDs and automatically reconcile on every persisted sub-goal update: only explicitly verified completion reaches a milestone, failure blocks the project, all verified milestones complete it, and session task history is updated idempotently. Endpoints `/projects`, `/projects/{id}`, POST `/projects`. Desktop tray icon refreshed on live theme, chat auto-reconnect with backoff, Android wake-word re-arm shows notification on background restriction (G7).
 
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
@@ -167,7 +167,7 @@ Still open (future):
 
 1. Install and exercise the optional tiny VLM on the owner's hardware. The integration and honest OCR+detector fallback exist, but model quality/performance on the RX 580 has not been live-verified in this sandbox.
 2. Automatically derive reviewed LoRA training examples from successful outcomes and lessons; dataset preparation and training scaffolding currently require explicit examples.
-3. Automatically reconcile verified sub-goal execution with project milestones; projects currently persist milestones and sessions but do not infer milestone completion.
+3. Autonomously schedule and execute each ready project sub-goal across sessions; verified sub-goal outcomes now reconcile milestones automatically, but project creation does not yet launch the full DAG scheduler by itself.
 4. Full end-to-end browser test of the multimodal round trip (text + image → grounded detection → reply) against a live server.
 5. Exercise external-API tools against live endpoints on the owner's machine.
 6. Add pagination to large Files, Pansophy, and Projects collections.
