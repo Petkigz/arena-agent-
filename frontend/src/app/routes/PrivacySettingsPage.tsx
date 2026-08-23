@@ -5,6 +5,15 @@ import { usePrivacySettingsStore } from '../../stores';
 import { ArrowLeft, Database, BarChart3, Lock, FileText, Download, Upload } from 'lucide-react';
 import { notifications } from '../../services/notifications';
 import { apiKeyHeader } from '../../services/api';
+import {
+  decideReviewedPlan,
+  editReviewedPlan,
+  executeReviewedPlan,
+  listReviewedPlans,
+  revokeReviewedPlan,
+  type ReviewedPlan,
+  type ReviewedPlanStep,
+} from '../../services/ownerControl';
 
 type ControlMode =
   | 'observe_only'
@@ -45,6 +54,9 @@ export function PrivacySettingsPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [ownerPolicy, setOwnerPolicy] = useState<OwnerControlPolicy | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
+  const [reviewedPlans, setReviewedPlans] = useState<ReviewedPlan[]>([]);
+  const [planDrafts, setPlanDrafts] = useState<Record<string, ReviewedPlanStep[]>>({});
+  const [planBusy, setPlanBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,8 +64,76 @@ export function PrivacySettingsPage() {
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Control policy unavailable')))
       .then((data) => { if (!cancelled) setOwnerPolicy(data.policy); })
       .catch(() => { if (!cancelled) notifications.error('Could not load owner control policy'); });
+    listReviewedPlans().then((plans) => {
+      if (!cancelled) {
+        setReviewedPlans(plans);
+        setPlanDrafts(Object.fromEntries(plans.map((plan) => [
+          plan.plan_id,
+          plan.snapshot.steps.map((step) => ({ ...step })),
+        ])));
+      }
+    });
     return () => { cancelled = true; };
   }, []);
+
+  const replaceReviewedPlan = (plan: ReviewedPlan) => {
+    setReviewedPlans((current) => current.map((item) => item.plan_id === plan.plan_id ? plan : item));
+    setPlanDrafts((current) => ({
+      ...current,
+      [plan.plan_id]: plan.snapshot.steps.map((step) => ({ ...step })),
+    }));
+  };
+
+  const savePlanEdits = async (plan: ReviewedPlan) => {
+    setPlanBusy(plan.plan_id);
+    try {
+      replaceReviewedPlan(await editReviewedPlan(plan, planDrafts[plan.plan_id] || plan.snapshot.steps));
+      notifications.success('Plan edits saved; fresh approval is required');
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : 'Could not edit plan');
+    } finally {
+      setPlanBusy(null);
+    }
+  };
+
+  const decidePlan = async (plan: ReviewedPlan, approved: boolean) => {
+    setPlanBusy(plan.plan_id);
+    try {
+      replaceReviewedPlan(await decideReviewedPlan(plan, approved));
+      notifications.success(approved ? 'Plan approved' : 'Plan rejected');
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : 'Could not decide plan');
+    } finally {
+      setPlanBusy(null);
+    }
+  };
+
+  const revokePlan = async (plan: ReviewedPlan) => {
+    setPlanBusy(plan.plan_id);
+    try {
+      replaceReviewedPlan(await revokeReviewedPlan(plan.plan_id, 'Revoked from Owner Control'));
+      notifications.success('Plan authorization revoked');
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : 'Could not revoke plan');
+    } finally {
+      setPlanBusy(null);
+    }
+  };
+
+  const executePlan = async (plan: ReviewedPlan) => {
+    setPlanBusy(plan.plan_id);
+    try {
+      const execution = await executeReviewedPlan(plan.plan_id);
+      const status = String(execution.plan_status || 'unknown');
+      notifications.success(`Approved plan processed — status: ${status}`);
+      const plans = await listReviewedPlans();
+      setReviewedPlans(plans);
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : 'Could not execute plan');
+    } finally {
+      setPlanBusy(null);
+    }
+  };
 
   const updateOwnerPolicy = async (patch: Partial<OwnerControlPolicy>) => {
     setControlBusy(true);
@@ -269,6 +349,151 @@ export function PrivacySettingsPage() {
                 <p className="text-xs text-text-muted">Policy revision {ownerPolicy.revision}</p>
               </>
             )}
+          </Card>
+        </section>
+
+        {/* Editable plan approval */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <FileText className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Plan Review</h2>
+          </div>
+          <Card className="space-y-4">
+            <p className="text-sm text-text-secondary">
+              In “Approve each plan” mode, no plan step runs until you review the full sequence.
+              Editing any step creates a new revision and invalidates prior approval. Level-3
+              actions still require their own exact-payload authorization.
+            </p>
+            {reviewedPlans.length === 0 ? (
+              <p className="text-sm text-text-muted">No execution plans are waiting for review.</p>
+            ) : reviewedPlans.map((plan) => {
+              const draft = planDrafts[plan.plan_id] || plan.snapshot.steps;
+              const busy = planBusy === plan.plan_id;
+              return (
+                <div key={plan.plan_id} className="rounded border border-border p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="font-medium text-text-primary">{plan.goal_title}</h3>
+                      <p className="text-xs text-text-muted">
+                        {plan.plan_id} · revision {plan.revision}
+                      </p>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded bg-background-secondary text-text-secondary">
+                      {plan.status}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {draft.map((step, index) => (
+                      <div key={step.step_id} className="rounded bg-background-secondary p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-text-muted">Step {index + 1} · {step.task_type}</span>
+                          <code className="text-xs text-text-muted">{step.step_id}</code>
+                        </div>
+                        <select
+                          value={step.task_type}
+                          disabled={busy || plan.status === 'executed'}
+                          onChange={(event) => setPlanDrafts((current) => ({
+                            ...current,
+                            [plan.plan_id]: draft.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, task_type: event.target.value } : item
+                            ),
+                          }))}
+                          className="w-full mb-2 px-3 py-2 bg-background-primary border border-border rounded text-sm"
+                        >
+                          <option value="analysis">Analysis</option>
+                          <option value="information_gathering">Information gathering</option>
+                          <option value="optimization">Optimization</option>
+                          <option value="maintenance">Maintenance</option>
+                          <option value="exploration">Exploration</option>
+                          <option value="user_assistance">User assistance</option>
+                        </select>
+                        <textarea
+                          value={step.description}
+                          disabled={busy || plan.status === 'executed'}
+                          onChange={(event) => setPlanDrafts((current) => ({
+                            ...current,
+                            [plan.plan_id]: draft.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, description: event.target.value } : item
+                            ),
+                          }))}
+                          className="w-full min-h-20 px-3 py-2 bg-background-primary border border-border rounded text-sm"
+                        />
+                        <input
+                          value={step.success_criteria.join(', ')}
+                          disabled={busy || plan.status === 'executed'}
+                          onChange={(event) => setPlanDrafts((current) => ({
+                            ...current,
+                            [plan.plan_id]: draft.map((item, itemIndex) => itemIndex === index ? {
+                              ...item,
+                              success_criteria: event.target.value.split(',').map((value) => value.trim()).filter(Boolean),
+                            } : item),
+                          }))}
+                          className="w-full mt-2 px-3 py-2 bg-background-primary border border-border rounded text-xs"
+                          placeholder="Success criteria, comma separated"
+                        />
+                        {step.depends_on.length > 0 && (
+                          <p className="text-xs text-text-muted mt-1">Depends on: {step.depends_on.join(', ')}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {plan.status !== 'executed' && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => savePlanEdits(plan)}
+                        className="px-3 py-2 rounded border border-border text-text-primary disabled:opacity-50"
+                      >
+                        Save edits as new revision
+                      </button>
+                    )}
+                    {plan.status === 'pending' && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => decidePlan(plan, false)}
+                          className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+                        >
+                          Reject plan
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => decidePlan(plan, true)}
+                          className="px-3 py-2 rounded bg-green-600 text-white disabled:opacity-50"
+                        >
+                          Approve revision {plan.revision}
+                        </button>
+                      </>
+                    )}
+                    {plan.status === 'approved' && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => revokePlan(plan)}
+                          className="px-3 py-2 rounded border border-red-500 text-red-500 disabled:opacity-50"
+                        >
+                          Revoke approval
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => executePlan(plan)}
+                          className="px-3 py-2 rounded bg-accent-primary text-white disabled:opacity-50"
+                        >
+                          Execute approved plan
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </Card>
         </section>
 

@@ -85,6 +85,9 @@ Owner Control Plane may always impose a stricter rule:
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.
+- In approve-each-plan mode, the complete step graph is revisioned and owner-editable.
+  No step runs before approval of that exact revision; edits invalidate approval,
+  and plan approval never covers Level-3 or per-action-gated operations.
 
 ## 8. Honesty over AGI theater
 

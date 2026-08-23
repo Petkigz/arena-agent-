@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -20,6 +22,25 @@ from uuid import uuid4
 
 from app.config import settings
 from app.utils.logger import app_logger, audit_logger
+
+
+_active_plan_scope: ContextVar[Optional[tuple[str, int]]] = ContextVar(
+    "arena_active_plan_scope", default=None
+)
+
+
+@contextmanager
+def authorized_plan_scope(plan_id: str, max_safety_level: int = 2):
+    """Temporarily delegate non-sensitive actions for one approved plan.
+
+    ContextVars keep the scope local to the current execution context/thread.
+    Level 3 and per-action approval rules are never covered by a plan grant.
+    """
+    token = _active_plan_scope.set((str(plan_id), max(0, min(2, int(max_safety_level)))))
+    try:
+        yield
+    finally:
+        _active_plan_scope.reset(token)
 
 
 class ControlMode(str, Enum):
@@ -165,11 +186,20 @@ class OwnerControlStore:
             return OwnerControlDecision(False, False, "Observe-only mode forbids action execution.", policy.mode.value)
         if policy.mode == ControlMode.SUGGEST_ONLY:
             return OwnerControlDecision(False, False, "Suggest-only mode allows recommendations but not execution.", policy.mode.value)
-        if policy.mode in (ControlMode.APPROVE_EVERY_ACTION, ControlMode.APPROVE_EACH_PLAN):
-            scope = "action" if policy.mode == ControlMode.APPROVE_EVERY_ACTION else "plan"
-            return OwnerControlDecision(False, True, f"Owner approval is required for every {scope}.", policy.mode.value)
         if action in policy.require_approval_actions:
             return OwnerControlDecision(False, True, f"Action '{action}' requires approval by owner policy.", policy.mode.value)
+        if policy.mode == ControlMode.APPROVE_EVERY_ACTION:
+            return OwnerControlDecision(False, True, "Owner approval is required for every action.", policy.mode.value)
+        if policy.mode == ControlMode.APPROVE_EACH_PLAN:
+            active_plan = _active_plan_scope.get()
+            if active_plan is None or int(safety_level) > active_plan[1]:
+                return OwnerControlDecision(False, True, "Owner approval is required for this plan.", policy.mode.value)
+            return OwnerControlDecision(
+                True,
+                False,
+                f"Allowed within owner-approved plan '{active_plan[0]}'.",
+                policy.mode.value,
+            )
         if policy.mode == ControlMode.CUSTOM and action not in policy.custom_autonomous_actions:
             return OwnerControlDecision(False, True, f"Action '{action}' is outside the custom autonomous allowlist.", policy.mode.value)
         if int(safety_level) > policy.max_autonomous_level:

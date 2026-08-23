@@ -202,6 +202,18 @@ class AuthorizedExecutionRequest(BaseModel):
     complexity: str = "fast"
     plan_id: Optional[str] = None
 
+class PlanEditRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
+    steps: List[Dict[str, Any]] = Field(min_length=1, max_length=100)
+
+class PlanDecisionRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
+    approved: bool
+    note: str = ""
+
+class PlanRevokeRequest(BaseModel):
+    note: str = ""
+
 class VisionOCRRequest(BaseModel):
     image_path: str
 
@@ -896,6 +908,104 @@ def execute_authorized_endpoint(req: AuthorizedExecutionRequest):
         "decision_stage": "execution_completed",
         "authorization_id": req.authorization_id,
         "result": result,
+    }
+
+
+@router.get("/owner-control/plans")
+def list_plan_reviews_endpoint(status_filter: Optional[str] = Query(default=None, alias="status")):
+    from app.cognition.plan_control import PlanReviewStatus, plan_review_store
+    try:
+        status_value = PlanReviewStatus(status_filter) if status_filter else None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Unknown plan status: {status_filter}") from exc
+    return {
+        "success": True,
+        "plans": [review.to_dict() for review in plan_review_store.list(status_value)],
+    }
+
+
+@router.get("/owner-control/plans/{plan_id}")
+def get_plan_review_endpoint(plan_id: str):
+    from app.cognition.plan_control import plan_review_store
+    review = plan_review_store.get(plan_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Plan review not found")
+    return {"success": True, "plan": review.to_dict()}
+
+
+@router.put("/owner-control/plans/{plan_id}")
+def edit_plan_review_endpoint(plan_id: str, req: PlanEditRequest):
+    from app.cognition.plan_control import plan_review_store
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        current_review = plan_review_store.get(plan_id)
+        if current_review is None:
+            raise KeyError(plan_id)
+        execution_plan = CognitiveRuntime.get_instance().goal_executor.get_plan(plan_id)
+        if execution_plan and execution_plan.started_at:
+            old_steps = {
+                step["step_id"]: step for step in current_review.snapshot.get("steps", [])
+            }
+            new_steps = {str(step.get("step_id", "")): step for step in req.steps}
+            for executed_step in execution_plan.steps:
+                if executed_step.status.value != "pending":
+                    if new_steps.get(executed_step.step_id) != old_steps.get(executed_step.step_id):
+                        raise ValueError(
+                            f"Already-started step '{executed_step.step_id}' is immutable"
+                        )
+        review = plan_review_store.edit(plan_id, req.expected_revision, req.steps)
+        return {"success": True, "plan": review.to_dict()}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Plan review not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/owner-control/plans/{plan_id}/decision")
+def decide_plan_review_endpoint(plan_id: str, req: PlanDecisionRequest):
+    from app.cognition.plan_control import plan_review_store
+    try:
+        review = plan_review_store.decide(
+            plan_id, req.expected_revision, req.approved, req.note
+        )
+        return {"success": True, "plan": review.to_dict()}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Plan review not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/owner-control/plans/{plan_id}/revoke")
+def revoke_plan_review_endpoint(plan_id: str, req: PlanRevokeRequest):
+    from app.cognition.plan_control import plan_review_store
+    try:
+        review = plan_review_store.revoke(plan_id, req.note)
+        return {"success": True, "plan": review.to_dict()}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Plan review not found") from exc
+
+
+@router.post("/owner-control/plans/{plan_id}/execute")
+def execute_approved_plan_endpoint(plan_id: str):
+    from app.cognition.plan_control import PlanReviewStatus, plan_review_store
+    from app.cognition.runtime import CognitiveRuntime
+
+    review = plan_review_store.get(plan_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Plan review not found")
+    if review.status != PlanReviewStatus.APPROVED:
+        raise HTTPException(status_code=409, detail=f"Plan is {review.status.value}, not approved")
+    runtime = CognitiveRuntime.get_instance()
+    plan = runtime.goal_executor.get_plan(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Execution plan not found")
+    result = runtime.goal_executor.execute_plan(plan, runtime)
+    return {
+        "success": True,
+        "request_success": True,
+        "execution_success": result.status.value == "completed",
+        "plan_status": result.status.value,
+        "plan": result.to_dict(),
     }
 
 

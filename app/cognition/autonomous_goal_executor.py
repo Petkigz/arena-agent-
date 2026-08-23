@@ -577,20 +577,69 @@ class AutonomousGoalExecutor:
         return step
     
     def execute_plan(self, plan: ExecutionPlan, cognitive_runtime=None) -> ExecutionPlan:
-        """
-        Execute an entire plan step by step.
-        
-        Args:
-            plan: The plan to execute
-            cognitive_runtime: Optional CognitiveRuntime instance
-            
-        Returns:
-            The updated plan with results
-        """
+        """Execute a plan, enforcing owner plan review when that mode is active."""
+        from app.cognition.owner_control import ControlMode, authorized_plan_scope, owner_control_store
+
+        policy = owner_control_store.get_policy()
+        if policy.mode != ControlMode.APPROVE_EACH_PLAN:
+            return self._execute_plan_steps(plan, cognitive_runtime)
+
+        from app.cognition.plan_control import PlanReviewStatus, plan_review_store
+        review = plan_review_store.get(plan.plan_id)
+        if review is None:
+            review = plan_review_store.submit(plan)
+
+        if review.status in (PlanReviewStatus.REJECTED, PlanReviewStatus.REVOKED):
+            plan.status = ExecutionStatus.CANCELLED
+            plan.outcome_summary = f"Owner {review.status.value} plan revision {review.revision}"
+            plan.completed_at = _now()
+            self.save_plan(plan)
+            return plan
+
+        if review.status != PlanReviewStatus.APPROVED:
+            plan.status = ExecutionStatus.WAITING_APPROVAL
+            plan.outcome_summary = f"Plan revision {review.revision} is awaiting owner approval"
+            self.save_plan(plan)
+            return plan
+
+        # The reviewed snapshot is authoritative. Applying it before comparing
+        # the digest ensures stale/unreviewed in-memory edits cannot execute.
+        plan_review_store.apply_to_plan(plan)
+        if not plan_review_store.is_current_approval(plan):
+            plan.status = ExecutionStatus.WAITING_APPROVAL
+            plan.outcome_summary = "Plan changed after approval and requires a new review"
+            self.save_plan(plan)
+            return plan
+
+        with authorized_plan_scope(plan.plan_id, policy.max_autonomous_level):
+            result = self._execute_plan_steps(plan, cognitive_runtime)
+        if result.status in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED):
+            plan_review_store.mark_executed(plan.plan_id)
+        return result
+
+    def _execute_plan_steps(self, plan: ExecutionPlan, cognitive_runtime=None) -> ExecutionPlan:
+        """Run plan steps after any required plan-level authorization."""
         plan.status = ExecutionStatus.IN_PROGRESS
-        plan.started_at = _now()
+        plan.started_at = plan.started_at or _now()
+        owner_revoked = False
         
         for step in plan.steps:
+            # Revocation is checked between every step. Emergency pause is also
+            # checked inside ActionGate, including during a currently active plan.
+            try:
+                from app.cognition.owner_control import ControlMode, owner_control_store
+                if owner_control_store.get_policy().mode == ControlMode.APPROVE_EACH_PLAN:
+                    from app.cognition.plan_control import PlanReviewStatus, plan_review_store
+                    review = plan_review_store.get(plan.plan_id)
+                    if review is None or review.status != PlanReviewStatus.APPROVED:
+                        owner_revoked = True
+                        plan.outcome_summary = "Owner revoked or invalidated plan approval"
+                        break
+            except Exception as exc:
+                owner_revoked = True
+                plan.outcome_summary = f"Could not verify owner plan approval: {exc}"
+                break
+
             if step.status == ExecutionStatus.PENDING:
                 # Enforce the data-flow graph: a step runs only if (a) every
                 # declared depends_on prerequisite is COMPLETED AND (b) every
@@ -636,7 +685,10 @@ class AutonomousGoalExecutor:
         waiting = sum(1 for s in plan.steps if s.status == ExecutionStatus.WAITING_APPROVAL)
         pending = sum(1 for s in plan.steps if s.status == ExecutionStatus.PENDING)
         
-        if completed == len(plan.steps):
+        if owner_revoked:
+            plan.status = ExecutionStatus.CANCELLED
+            plan.outcome_summary = plan.outcome_summary or "Owner revoked plan approval"
+        elif completed == len(plan.steps):
             plan.status = ExecutionStatus.COMPLETED
             plan.outcome_summary = f"All {completed} steps verified complete"
         elif waiting > 0:
@@ -698,13 +750,29 @@ class AutonomousGoalExecutor:
         VERIFY-ONLY mode: observe the environment, confirm the result, and only
         fall through to execution if verification still can't resolve it.
         """
-        for s in plan.steps:
-            if s.status == ExecutionStatus.UNVERIFIED:
-                s.status = ExecutionStatus.PENDING
-                s.error = None
-                s.confidence = 0.0
-                # verify_only=True → investigate/observe rather than re-execute.
-                self.execute_step(s, cognitive_runtime, verify_only=True)
+        from contextlib import nullcontext
+        from app.cognition.owner_control import ControlMode, authorized_plan_scope, owner_control_store
+
+        scope = nullcontext()
+        policy = owner_control_store.get_policy()
+        if policy.mode == ControlMode.APPROVE_EACH_PLAN:
+            from app.cognition.plan_control import PlanReviewStatus, plan_review_store
+            review = plan_review_store.get(plan.plan_id)
+            if review is None or review.status != PlanReviewStatus.APPROVED:
+                return self.execute_plan(plan, cognitive_runtime)
+            plan_review_store.apply_to_plan(plan)
+            if not plan_review_store.is_current_approval(plan):
+                return self.execute_plan(plan, cognitive_runtime)
+            scope = authorized_plan_scope(plan.plan_id, policy.max_autonomous_level)
+
+        with scope:
+            for s in plan.steps:
+                if s.status == ExecutionStatus.UNVERIFIED:
+                    s.status = ExecutionStatus.PENDING
+                    s.error = None
+                    s.confidence = 0.0
+                    # verify_only=True → investigate/observe rather than re-execute.
+                    self.execute_step(s, cognitive_runtime, verify_only=True)
         # Re-run the plan loop for any remaining pending steps.
         return self.execute_plan(plan, cognitive_runtime)
 

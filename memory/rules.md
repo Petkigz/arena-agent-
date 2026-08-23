@@ -104,7 +104,21 @@ GET    /owner-control/authorizations
 POST   /owner-control/authorizations
 DELETE /owner-control/authorizations/{authorization_id}
 POST   /owner-control/execute-authorized
+GET    /owner-control/plans
+GET    /owner-control/plans/{plan_id}
+PUT    /owner-control/plans/{plan_id}
+POST   /owner-control/plans/{plan_id}/decision
+POST   /owner-control/plans/{plan_id}/revoke
+POST   /owner-control/plans/{plan_id}/execute
 ```
+
+In approve-each-plan mode, generated `ExecutionPlan` step graphs are persisted as
+revisioned review snapshots. The owner can edit step descriptions and evidence
+contracts, approve or reject an exact revision, revoke it before completion, and
+start execution separately. Unknown dependencies, dependency cycles, stale
+revision writes, and execution of unapproved plans are rejected. Plan approval
+only delegates Levels 0–2 up to the configured ceiling; Level 3 and explicit
+per-action rules still require exact action authorization.
 
 Explicit approval creates a short-lived grant bound to the exact action type and
 SHA-256 digest of the canonical payload. Grants are single-use by default,
