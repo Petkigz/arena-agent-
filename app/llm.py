@@ -12,6 +12,9 @@ class LocalLLMClient:
         self.base_url = base_url.rstrip('/')
         self.provider = "lm_studio"  # "lm_studio", "ollama", "openai"
         self.client = httpx.Client(timeout=settings.DEFAULT_TIMEOUT)
+        # In-memory only. It is set exclusively after held-out evaluation and a
+        # fresh provider identity probe; restart intentionally clears it.
+        self.model_override: Optional[str] = None
 
     def route_request(self, request_complexity: str) -> str:
         """
@@ -20,11 +23,17 @@ class LocalLLMClient:
         'main' -> settings.MAIN_MODEL
         Otherwise -> uses the direct model ID passed
         """
+        if request_complexity in ("fast", "main") and self.model_override:
+            return self.model_override
         if request_complexity == "fast":
             return settings.FAST_MODEL
         elif request_complexity == "main":
             return settings.MAIN_MODEL
         return request_complexity
+
+    def set_model_override(self, model: Optional[str]) -> None:
+        """Set a verified provider model for default routes, or clear it."""
+        self.model_override = (model or "").strip() or None
 
     def generate_chat_completion(
         self, 

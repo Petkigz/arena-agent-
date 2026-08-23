@@ -21,6 +21,18 @@ interface LoraStatus {
   note?: string;
 }
 
+interface LoraEvaluationReport {
+  report_id: string;
+  adapter_name: string;
+  adapter_model: string;
+  skill_improvement: number | null;
+  unrelated_regression: number | null;
+  provider_model_identity_verified: boolean;
+  deployment_eligible: boolean;
+  runtime_applied: boolean;
+  errors: string[];
+}
+
 interface TrainingCandidate {
   candidate_id: string;
   skill_name: string;
@@ -60,6 +72,12 @@ export function ModelSettingsPage() {
   const [candidateBusy, setCandidateBusy] = useState<string | null>(null);
   const [candidateMessage, setCandidateMessage] = useState('');
   const [correction, setCorrection] = useState({ skill_name: 'general', prompt: '', response: '' });
+  const [evaluationForm, setEvaluationForm] = useState({
+    adapter_name: '', base_model: '', adapter_model: '', skill_name: '', unrelated_skill_name: 'general',
+  });
+  const [evaluationReport, setEvaluationReport] = useState<LoraEvaluationReport | null>(null);
+  const [evaluationBusy, setEvaluationBusy] = useState(false);
+  const [evaluationMessage, setEvaluationMessage] = useState('');
   const [vlmStatus, setVlmStatus] = useState<{ available: boolean; model_id?: string; engine?: string; note?: string } | null>(null);
 
   useEffect(() => {
@@ -172,6 +190,51 @@ export function ModelSettingsPage() {
       setCandidateMessage(error instanceof Error ? error.message : 'Could not add correction');
     } finally {
       setCandidateBusy(null);
+    }
+  };
+
+  const evaluateAdapter = async () => {
+    setEvaluationBusy(true);
+    setEvaluationMessage('');
+    setEvaluationReport(null);
+    try {
+      const response = await fetch('/loras/evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify(evaluationForm),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!data?.report) throw new Error(data?.error || data?.detail || 'Evaluation could not run');
+      setEvaluationReport(data.report);
+      setEvaluationMessage(data.report.deployment_eligible
+        ? 'Evaluation passed. Nothing has been deployed; review the metrics and use the separate Deploy button.'
+        : 'Evaluation did not pass deployment gates. Runtime remains unchanged.');
+    } catch (error) {
+      setEvaluationMessage(error instanceof Error ? error.message : 'Evaluation failed');
+    } finally {
+      setEvaluationBusy(false);
+    }
+  };
+
+  const deployEvaluatedAdapter = async () => {
+    if (!evaluationReport?.deployment_eligible) return;
+    setEvaluationBusy(true);
+    try {
+      const response = await fetch('/loras/deploy-evaluated', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify({ report_id: evaluationReport.report_id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!data?.runtime_applied) throw new Error(data?.error || 'Provider deployment was not verified');
+      setEvaluationMessage('Provider model verified and applied for default requests in this process.');
+      setEvaluationReport((current) => current ? { ...current, runtime_applied: true } : current);
+      const status = await fetch('/loras/status', { headers: apiKeyHeader() });
+      if (status.ok) setLoraStatus(await status.json());
+    } catch (error) {
+      setEvaluationMessage(error instanceof Error ? error.message : 'Deployment failed');
+    } finally {
+      setEvaluationBusy(false);
     }
   };
 
@@ -413,7 +476,7 @@ export function ModelSettingsPage() {
                             }}
                             className="px-2 py-1 text-xs bg-accent-primary text-white rounded"
                           >
-                            Select
+                            Select metadata only
                           </button>
                         </div>
                       </li>
@@ -437,6 +500,55 @@ export function ModelSettingsPage() {
             ) : (
               <p className="text-xs text-text-muted">Loading LoRA status… (backend may be offline)</p>
             )}
+
+            <div className="border-t border-border pt-4 space-y-3">
+              <div>
+                <h3 className="font-medium text-text-primary">Held-out Provider Evaluation</h3>
+                <p className="text-xs text-text-muted mt-1">
+                  Evaluation calls two distinct provider model identifiers against the reviewed skill holdout and an unrelated-domain holdout (at least three examples in each). It records scores and model identity, but does not deploy anything. Deployment is a separate owner action and is cleared on restart until re-verified.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {([
+                  ['adapter_name', 'Adapter folder'], ['base_model', 'Provider base model ID'],
+                  ['adapter_model', 'Provider adapter/merged model ID'], ['skill_name', 'Skill dataset'],
+                  ['unrelated_skill_name', 'Unrelated regression dataset'],
+                ] as const).map(([field, placeholder]) => (
+                  <input
+                    key={field}
+                    value={evaluationForm[field]}
+                    onChange={(event) => setEvaluationForm((current) => ({ ...current, [field]: event.target.value }))}
+                    placeholder={placeholder}
+                    className="px-3 py-2 text-sm bg-background-surface border border-border rounded text-text-primary"
+                  />
+                ))}
+              </div>
+              <button
+                onClick={evaluateAdapter}
+                disabled={evaluationBusy || !evaluationForm.adapter_name || !evaluationForm.base_model || !evaluationForm.adapter_model || !evaluationForm.skill_name || !evaluationForm.unrelated_skill_name}
+                className="px-3 py-1.5 text-sm bg-background-surface border border-border text-text-primary rounded disabled:opacity-50"
+              >
+                {evaluationBusy ? 'Working…' : 'Evaluate only (no deployment)'}
+              </button>
+              {evaluationMessage && <p className="text-xs text-text-secondary">{evaluationMessage}</p>}
+              {evaluationReport && (
+                <div className="rounded border border-border p-3 text-xs text-text-secondary space-y-2">
+                  <p>Skill improvement: <strong>{evaluationReport.skill_improvement ?? 'unknown'}</strong> · unrelated regression: <strong>{evaluationReport.unrelated_regression ?? 'unknown'}</strong></p>
+                  <p>Provider identity verified: {evaluationReport.provider_model_identity_verified ? 'yes' : 'no'} · deployment eligible: {evaluationReport.deployment_eligible ? 'yes' : 'no'}</p>
+                  {evaluationReport.errors.length > 0 && <p className="text-red-600">{evaluationReport.errors.join('; ')}</p>}
+                  {evaluationReport.deployment_eligible && !evaluationReport.runtime_applied && (
+                    <button
+                      onClick={deployEvaluatedAdapter}
+                      disabled={evaluationBusy}
+                      className="px-3 py-1.5 text-sm bg-accent-primary text-white rounded disabled:opacity-50"
+                    >
+                      Deploy this evaluated provider model
+                    </button>
+                  )}
+                  {evaluationReport.runtime_applied && <p className="text-green-600">Applied and provider-probed for this process.</p>}
+                </div>
+              )}
+            </div>
 
             <div className="border-t border-border pt-4 space-y-3">
               <div>

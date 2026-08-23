@@ -7,9 +7,6 @@ from bs4 import BeautifulSoup
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
-from app.perception.speech_to_text import LocalSpeechToText
-from app.tools.ocr_reader import OCRReaderTool
-from app.tools.youtube_learner import YouTubeLearner
 from app.llm import llm_client, extract_reply
 from app.cognition.execution_control import (
     ExecutionCancelled,
@@ -92,6 +89,8 @@ class UniversalMediaLearner:
 
         # 1. Handle YouTube URLs using YouTubeLearner
         if "youtube.com" in target or "youtu.be" in target:
+            from app.tools.youtube_learner import YouTubeLearner
+
             app_logger.info(f"Delegating to YouTubeLearner for target: {target}")
             yt_res = YouTubeLearner.learn_from_video(target, prompt_focus=prompt_focus)
             yt_res["platform_type"] = "YouTube"
@@ -99,6 +98,8 @@ class UniversalMediaLearner:
 
         # 2. Handle Local Video / Media File Paths (.mp4, .mkv, .webm, .avi, .wav)
         if os.path.exists(target) and os.path.isfile(target):
+            from app.perception.speech_to_text import LocalSpeechToText
+
             app_logger.info(f"Processing local media file: {target}")
             stt_res = LocalSpeechToText.transcribe_file(target)
             transcript_text = stt_res.get("text", "")

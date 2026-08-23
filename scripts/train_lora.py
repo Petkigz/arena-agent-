@@ -23,10 +23,11 @@ Or directly via tool:
 Requirements (owner machine):
    pip install transformers peft accelerate datasets torch
 
-The adapter will be saved to data/loras/<adapter_name>/ and can be activated via:
-   POST /loras/activate with {adapter_name}
-
-Then set ARENA_LORA_ACTIVE=<adapter_name> or the backend will read data/loras/active.json
+The adapter will be saved to data/loras/<adapter_name>/. Selecting it via
+POST /loras/activate updates metadata only. To affect default model routing, run
+POST /loras/evaluations with distinct provider base/adapter model identifiers,
+review the held-out and unrelated-domain metrics, then separately call
+POST /loras/deploy-evaluated with the passing report id.
 """
 
 import argparse
@@ -97,9 +98,10 @@ def main():
         print(f"  Adapter: {result.get('adapter_name')}")
         print(f"  Path: {result.get('path')}")
         print(f"  Info: {result.get('training_info')}")
-        print(f"\nTo activate:")
-        print(f"  curl -X POST http://localhost:8000/loras/activate -H 'Content-Type: application/json' -d '{{\"adapter_name\": \"{args.adapter}\"}}'")
-        print(f"  export ARENA_LORA_ACTIVE={args.adapter}")
+        print(f"\nNext steps (selection alone does not change behavior):")
+        print("  1. Make the provider expose distinct base and adapter/merged model IDs.")
+        print("  2. POST /loras/evaluations with this adapter, both model IDs, the skill dataset, and an unrelated dataset.")
+        print("  3. Review the report, then separately POST /loras/deploy-evaluated only if deployment_eligible=true.")
         return 0
     else:
         print(f"\n❌ Training failed: {result.get('error')}")

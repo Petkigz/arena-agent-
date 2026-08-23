@@ -207,6 +207,14 @@ PYTHONPATH=. python scripts/demo_agi.py
 This is a local capability demonstration, not a human-level-AGI benchmark.
 For real external integrations, use `scripts/live_check.py` separately.
 
+LoRA behavior deployment is evidence-gated. `POST /loras/evaluations` compares
+distinct provider base and adapter/merged model IDs on reviewed skill and
+unrelated-domain holdouts (minimum three examples each). A passing report still
+does not deploy anything; the owner separately calls
+`POST /loras/deploy-evaluated`, which performs a fresh provider identity probe.
+The resulting default-model route is in-memory and is intentionally cleared on
+restart rather than claiming the external provider remains loaded.
+
 Run the isolated longitudinal regression suite separately:
 
 ```bash

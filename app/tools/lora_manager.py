@@ -108,12 +108,23 @@ class LoraManagerTool:
         try:
             if ACTIVE_FILE.exists():
                 data = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
+                from app.cognition.lora_evaluation import LoraEvaluationManager
+
+                binding = LoraEvaluationManager.runtime_binding()
+                runtime_applied = bool(
+                    binding and binding.get("adapter_name") == data.get("active")
+                )
                 return {
                     "success": True,
                     "active": data.get("active"),
-                    "runtime_applied": False,
+                    "runtime_applied": runtime_applied,
+                    "runtime_binding": binding if runtime_applied else None,
                     "info": data,
-                    "note": "Adapter is selected in Arena metadata but is not attached to the external LM Studio runtime.",
+                    "note": (
+                        "Adapter is verified and routed through the external provider."
+                        if runtime_applied else
+                        "Adapter is selected in Arena metadata but is not attached to the external LM Studio runtime."
+                    ),
                 }
             # Also check env var
             env_active = os.getenv("ARENA_LORA_ACTIVE", "").strip()
@@ -146,6 +157,13 @@ class LoraManagerTool:
             return {"success": False, "error": f"Not a valid LoRA adapter (missing adapter_config.json): {adapter_path}"}
 
         try:
+            from app.cognition.lora_evaluation import LoraEvaluationManager
+
+            binding = LoraEvaluationManager.runtime_binding()
+            if binding and binding.get("adapter_name") != safe_name:
+                # Metadata drift must never leave a different evaluated model
+                # silently routed in the live client.
+                LoraEvaluationManager.deactivate_runtime()
             ACTIVE_FILE.write_text(json.dumps({"active": safe_name, "path": str(adapter_path)}, indent=2), encoding="utf-8")
             app_logger.info(f"Activated LoRA adapter: {safe_name}")
 
@@ -173,7 +191,15 @@ class LoraManagerTool:
         try:
             if ACTIVE_FILE.exists():
                 ACTIVE_FILE.unlink()
-            return {"success": True, "active": None, "message": "Deactivated LoRA adapter — using base model"}
+            from app.cognition.lora_evaluation import LoraEvaluationManager
+
+            LoraEvaluationManager.deactivate_runtime()
+            return {
+                "success": True,
+                "active": None,
+                "runtime_applied": False,
+                "message": "Deactivated LoRA adapter — using base model",
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -507,7 +533,8 @@ class LoraManagerTool:
             "runtime_applied": active.get("runtime_applied", False),
             "datasets": [p.name for p in DATASETS_DIR.iterdir() if p.is_dir()] if DATASETS_DIR.exists() else [],
             "note": (
-                "Reviewed datasets and PEFT training are supported. Adapter selection is metadata only; "
-                "the external LM Studio/inference provider must load or merge the adapter before behavior changes."
+                "Reviewed datasets and PEFT training are supported. Metadata selection alone does not change behavior. "
+                "External-provider runtime routing requires a passing held-out evaluation, unrelated-domain regression gate, "
+                "a separate owner deployment action, and a fresh provider model-identity probe."
             ),
         }

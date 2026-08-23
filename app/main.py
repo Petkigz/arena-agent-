@@ -1780,6 +1780,18 @@ class OwnerCorrectionRequest(BaseModel):
 class TrainingDatasetExportRequest(BaseModel):
     skill_name: str
 
+class LoraEvaluationRequest(BaseModel):
+    adapter_name: str
+    base_model: str
+    adapter_model: str
+    skill_name: str
+    unrelated_skill_name: str
+    minimum_improvement: float = Field(0.02, ge=0.0, le=1.0)
+    maximum_regression: float = Field(0.03, ge=0.0, le=1.0)
+
+class LoraDeploymentRequest(BaseModel):
+    report_id: str
+
 @router.get("/loras")
 def list_loras_endpoint():
     """List LoRA adapters."""
@@ -1893,6 +1905,40 @@ def decide_training_candidate_endpoint(candidate_id: str, req: TrainingCandidate
 def export_training_candidates_endpoint(req: TrainingDatasetExportRequest):
     from app.cognition.runtime import CognitiveRuntime
     return CognitiveRuntime.get_instance().training_examples.export_approved(req.skill_name)
+
+
+@router.post("/loras/evaluations")
+def evaluate_lora_adapter_endpoint(req: LoraEvaluationRequest):
+    """Run base-vs-adapter held-out and unrelated-domain evaluation."""
+    from app.cognition.lora_evaluation import LoraEvaluationManager
+
+    return LoraEvaluationManager.evaluate(
+        adapter_name=req.adapter_name,
+        base_model=req.base_model,
+        adapter_model=req.adapter_model,
+        skill_name=req.skill_name,
+        unrelated_skill_name=req.unrelated_skill_name,
+        minimum_improvement=req.minimum_improvement,
+        maximum_regression=req.maximum_regression,
+    )
+
+
+@router.get("/loras/evaluations/{report_id}")
+def get_lora_evaluation_endpoint(report_id: str):
+    from app.cognition.lora_evaluation import LoraEvaluationManager
+
+    report = LoraEvaluationManager.get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="LoRA evaluation report not found")
+    return {"success": True, "report": report}
+
+
+@router.post("/loras/deploy-evaluated")
+def deploy_evaluated_lora_endpoint(req: LoraDeploymentRequest):
+    """Apply only an evaluation-gated provider model after a fresh probe."""
+    from app.cognition.lora_evaluation import LoraEvaluationManager
+
+    return LoraEvaluationManager.deploy(req.report_id)
 
 
 @router.post("/loras/dataset")
