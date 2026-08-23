@@ -971,6 +971,15 @@ def self_agency_history_endpoint(limit: int = Query(100, ge=1, le=1000)):
     return {"success": True, "attributions": [record.to_dict() for record in records]}
 
 
+@router.get("/self-awareness/embodied-boundary")
+def embodied_boundary_endpoint(refresh: bool = Query(True)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    if refresh:
+        runtime.refresh_embodied_boundary()
+    return {"success": True, "boundary": runtime.embodied_boundary.snapshot()}
+
+
 @router.get("/self-awareness/commitments")
 def self_commitments_endpoint(
     refresh: bool = Query(True),

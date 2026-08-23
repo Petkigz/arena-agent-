@@ -464,6 +464,23 @@ class IntelligenceBenchmarkSuite:
                 "self_belief_calibration", "self_awareness", self_belief_calibration,
             ))
 
+            def embodied_boundary_integrity():
+                from app.cognition.embodied_boundary import EmbodiedBoundaryModel
+                model = EmbodiedBoundaryModel(root / "boundary.db")
+                model.register("cursor", "actuator", "shared", can_write=True,
+                               available=True, evidence=["tool:mouse_click"])
+                command = model.record_event(
+                    "cursor", "mouse_click", actor="arena", execution_id="e1",
+                    authorized=True, observed=False, evidence=["command sent"])
+                verified = model.record_event(
+                    "cursor", "mouse_click", actor="arena", execution_id="e2",
+                    authorized=True, observed=True, evidence=["position observed"])
+                passed = command.actor == "unknown" and verified.actor == "arena"
+                return passed, "command alone is unknown; observed authorized control is Arena", {
+                    "command_actor": command.actor, "verified_actor": verified.actor}
+            checks.append(self._run_check(
+                "embodied_boundary_integrity", "self_awareness", embodied_boundary_integrity))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}

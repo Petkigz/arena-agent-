@@ -24,6 +24,9 @@ def test_runtime_seeds_live_self_knowledge(tmp_path):
     assert claims["authority.owner_policy"]["evidence"]
     assert claims["consciousness.evidence_available"]["value"] is False
     assert all(item["evidence"] for item in snapshot["claims"])
+    boundary = runtime.embodied_boundary.snapshot()
+    ids = {item["interface_id"] for item in boundary["interfaces"]}
+    assert {"desktop_screen", "desktop_pointer", "local_camera", "android_phone"} <= ids
 
 
 def test_self_awareness_api_is_grounded_and_disclaimed(tmp_path):

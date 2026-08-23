@@ -180,8 +180,11 @@ not authorized.
   reason across restart.
 - Introspection summaries quote persisted trace facts, actions, gates, evidence,
   and lessons. They never claim access to private chain-of-thought.
-- Functional self-knowledge never implies consciousness, sentience, emotion, or
-  subjective experience. The absence of a measurement remains explicit.
+- Sensor and actuator interfaces are modeled as Arena interfaces, owner devices,
+  shared surfaces, external environment, or unknown. Sending a command does not
+  prove control; an Arena-controlled event requires authority plus observed effect.
+- Functional self-knowledge never implies consciousness, sentience, emotion, a
+  biological body, or subjective experience. The absence of measurement remains explicit.
 
 ---
 

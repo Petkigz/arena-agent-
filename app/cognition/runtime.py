@@ -133,7 +133,12 @@ class CognitiveRuntime:
         self.commitments = CommitmentLedger(
             str(Path(path).parent / "commitments.db") if path else "data/commitments.db"
         )
+        from app.cognition.embodied_boundary import EmbodiedBoundaryModel
+        self.embodied_boundary = EmbodiedBoundaryModel(
+            str(Path(path).parent / "embodied_boundary.db") if path else "data/embodied_boundary.db"
+        )
         self.refresh_self_knowledge()
+        self.refresh_embodied_boundary()
 
         # Phase 6: Common Sense Knowledge Base for AGI
         from app.cognition.common_sense import CommonSenseKnowledgeBase
@@ -261,6 +266,38 @@ class CognitiveRuntime:
             "recorded_claim_ids": [claim.claim_id for claim in recorded],
             "snapshot": self.self_knowledge.snapshot(),
         }
+
+    @staticmethod
+    def _interface_for_action(action_type: str) -> Optional[str]:
+        mapping = {
+            "screen_capture": "desktop_screen", "mouse_click": "desktop_pointer",
+            "type_text": "desktop_keyboard", "press_hotkey": "desktop_keyboard",
+            "browser_extract": "web_browser", "web_workflow": "web_browser",
+            "camera_photo": "local_camera", "phone_command": "android_phone",
+            "phone_sms": "android_phone", "phone_call": "android_phone",
+            "phone_screenshot": "android_phone",
+        }
+        return mapping.get(action_type)
+
+    def refresh_embodied_boundary(self) -> Dict[str, Any]:
+        """Refresh the explicit sensor/actuator topology without claiming ownership."""
+        definitions = [
+            ("desktop_screen", "sensor", "owner_device", True, False, "screen_capture"),
+            ("desktop_pointer", "actuator", "shared", False, True, "mouse_click"),
+            ("desktop_keyboard", "actuator", "shared", False, True, "type_text"),
+            ("web_browser", "sensor_actuator", "shared", True, True, "browser_extract"),
+            ("local_camera", "sensor", "owner_device", True, False, "camera_photo"),
+            ("android_phone", "sensor_actuator", "owner_device", True, True, "phone_command"),
+        ]
+        records = []
+        for interface_id, kind, boundary, can_read, can_write, tool in definitions:
+            status = self.registry.get_tool_availability(tool, probe=False)
+            records.append(self.embodied_boundary.register(
+                interface_id, kind, boundary, can_read=can_read, can_write=can_write,
+                available=status.get("available"),
+                evidence=[f"tool:{tool}", f"availability:{status.get('status')}"]
+            ))
+        return {"interfaces": [item.to_dict() for item in records]}
 
     def refresh_commitments(self) -> Dict[str, Any]:
         """Reconcile persistent projects into the commitment ledger."""
@@ -2148,6 +2185,15 @@ class CognitiveRuntime:
                 goal_verified=verification.verified_success,
                 evidence=agency_evidence,
             ).to_dict()
+            interface_id = self._interface_for_action(proposal.action_type)
+            if interface_id:
+                execution["boundary_event"] = self.embodied_boundary.record_event(
+                    interface_id, proposal.action_type, actor="arena",
+                    execution_id=execution.get("controlled_execution_id"),
+                    authorized=True,
+                    observed=bool(observed_state) and verification.verified_success,
+                    evidence=agency_evidence,
+                ).to_dict()
         except Exception as exc:
             app_logger.warning(f"Agency attribution failed: {exc}")
         try:
@@ -2388,6 +2434,7 @@ class CognitiveRuntime:
             "cancellation_observed": execution.get("cancellation_observed", False),
             "rollback_receipt": execution.get("rollback_receipt"),
             "agency_attribution": execution.get("agency_attribution"),
+            "boundary_event": execution.get("boundary_event"),
             "replan_performed": False,
             "requires_new_authorization_for_retry": (
                 scoped_authorization and not verification.verified_success
@@ -2990,14 +3037,23 @@ class CognitiveRuntime:
         )
         trace.goal_verified = verify_res.verified_success
         try:
+            evidence = list(verify_res.met_conditions or [])
             agent_res["agency_attribution"] = self.self_knowledge.attribute_change(
                 f"Outcome of {proposal.action_type} for goal: {user_text[:160]}",
                 execution_id=agent_res.get("controlled_execution_id"),
                 execution_attempted=bool(agent_res.get("attempted", True)),
                 environment_observed=bool(obs_state),
                 goal_verified=verify_res.verified_success,
-                evidence=list(verify_res.met_conditions or []),
+                evidence=evidence,
             ).to_dict()
+            interface_id = self._interface_for_action(proposal.action_type)
+            if interface_id:
+                agent_res["boundary_event"] = self.embodied_boundary.record_event(
+                    interface_id, proposal.action_type, actor="arena",
+                    execution_id=agent_res.get("controlled_execution_id"),
+                    authorized=True, observed=bool(obs_state) and verify_res.verified_success,
+                    evidence=evidence,
+                ).to_dict()
         except Exception as exc:
             app_logger.warning(f"Agency attribution failed: {exc}")
 
@@ -3273,5 +3329,6 @@ class CognitiveRuntime:
             "cancellation_observed": control_result.get("cancellation_observed", False),
             "rollback_receipt": control_result.get("rollback_receipt"),
             "agency_attribution": agent_res.get("agency_attribution"),
+            "boundary_event": agent_res.get("boundary_event"),
             "model_used": trace.model_used
         }
