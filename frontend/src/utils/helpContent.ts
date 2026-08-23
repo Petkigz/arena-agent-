@@ -115,7 +115,7 @@ export const faqItems: FAQItem[] = [
   },
   {
     question: 'Can multiple people use Arena?',
-    answer: 'Yes! If you enable speaker identification in Settings → Voice, Arena can recognize different voices and provide personalized responses. Each user needs to enroll their voice first.',
+    answer: 'Multiple people can use Arena through separate conversations, but automatic speaker identification is currently unavailable until a verified speaker-embedding engine is installed. Arena will not guess an identity or report a fake confidence score.',
   },
   {
     question: 'How do I reset Arena to default settings?',

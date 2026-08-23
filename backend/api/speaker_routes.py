@@ -1,7 +1,5 @@
 """Speaker identification and voice enrollment."""
 
-import uuid
-from datetime import datetime
 from typing import List, Dict, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
@@ -29,9 +27,11 @@ class EnrollmentRequest(BaseModel):
 class IdentificationResult(BaseModel):
     """Result of speaker identification."""
     success: bool
+    available: bool = False
     speaker_id: Optional[str] = None
     speaker_name: Optional[str] = None
     confidence: Optional[float] = None
+    engine: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -45,62 +45,49 @@ async def list_speakers():
     return list(enrolled_speakers.values())
 
 
-@router.post("/enroll", response_model=Speaker)
+@router.post("/enroll")
 async def enroll_speaker(request: EnrollmentRequest):
-    """Enroll a new speaker."""
-    try:
-        if len(request.samples) < 3:
-            raise HTTPException(status_code=400, detail="At least 3 samples required")
-        
-        speaker_id = f"spk-{uuid.uuid4().hex[:8]}"
-        
-        # In production, this would use Resemblyzer to create speaker embedding
-        # For now, create placeholder
-        speaker = Speaker(
-            id=speaker_id,
-            name=request.name,
-            enrolled_at=datetime.now().isoformat(),
-            sample_count=len(request.samples),
-            embedding_path=f"./data/speakers/{speaker_id}.npy",
-            is_active=True,
-        )
-        
-        enrolled_speakers[speaker_id] = speaker
-        
-        app_logger.info(f"Enrolled speaker: {speaker_id} ({request.name})")
-        
-        return speaker
-    
-    except Exception as e:
-        app_logger.error(f"Failed to enroll speaker: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Reject enrollment until a real embedding engine is configured.
+
+    Metadata without a generated embedding is not enrollment. Returning HTTP 501
+    is safer than creating a nonexistent ``.npy`` path and later claiming a match.
+    """
+    if len(request.samples) < 3:
+        raise HTTPException(status_code=400, detail="At least 3 samples required")
+    if not request.name.strip():
+        raise HTTPException(status_code=400, detail="Speaker name is required")
+    app_logger.warning(
+        f"Speaker enrollment requested for '{request.name}' but no verified embedding engine is configured"
+    )
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Speaker enrollment is unavailable: no verified speaker-embedding engine is configured. "
+            "No speaker record or embedding was created."
+        ),
+    )
 
 
 @router.post("/identify", response_model=IdentificationResult)
 async def identify_speaker(audio: UploadFile = File(...)):
-    """Identify a speaker from audio."""
-    try:
-        # In production, this would use Resemblyzer to identify speaker
-        # For now, return placeholder
-        if not enrolled_speakers:
-            return IdentificationResult(
-                success=False,
-                error="No speakers enrolled"
-            )
-        
-        # Return first speaker as placeholder
-        speaker = list(enrolled_speakers.values())[0]
-        
-        return IdentificationResult(
-            success=True,
-            speaker_id=speaker.id,
-            speaker_name=speaker.name,
-            confidence=0.85,
-        )
-    
-    except Exception as e:
-        app_logger.error(f"Failed to identify speaker: {e}")
-        return IdentificationResult(success=False, error=str(e))
+    """Report identification unavailable rather than selecting a fake match."""
+    # Read a bounded amount so malformed/oversized uploads do not become a
+    # memory sink, but do not claim that merely receiving bytes identifies anyone.
+    audio_bytes = await audio.read(10 * 1024 * 1024 + 1)
+    if not audio_bytes:
+        return IdentificationResult(success=False, available=False, error="Audio sample is empty")
+    if len(audio_bytes) > 10 * 1024 * 1024:
+        return IdentificationResult(success=False, available=False, error="Audio sample exceeds 10 MB")
+    if not enrolled_speakers:
+        return IdentificationResult(success=False, available=False, error="No speakers enrolled")
+    return IdentificationResult(
+        success=False,
+        available=False,
+        error=(
+            "Speaker identification is unavailable: enrolled metadata has no verified embeddings. "
+            "No identity or confidence was inferred."
+        ),
+    )
 
 
 @router.delete("/{speaker_id}")

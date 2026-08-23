@@ -1358,7 +1358,8 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
         "audio_url": tts_res.get("audio_url", ""),
         "model_used": pipeline_res.get("model_used", ""),
         "executed_actions": pipeline_res.get("executed_actions", []),
-        "speaker_verified": speaker_check.get("verified", True)
+        "speaker_verified": speaker_check.get("verified", False),
+        "speaker_verification": speaker_check,
     }
 
 # 11. Mobile Network & Remote Access Endpoints

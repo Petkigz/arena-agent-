@@ -1,7 +1,6 @@
 """Custom wake word training and management."""
 
 import os
-import json
 import base64
 import uuid
 from datetime import datetime
@@ -38,6 +37,9 @@ class WakeWordTrainingResponse(BaseModel):
     model_id: Optional[str] = None
     model_path: Optional[str] = None
     accuracy: Optional[float] = None
+    available: bool = False
+    samples_validated: int = 0
+    requirements: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -64,80 +66,56 @@ wakeword_models: Dict[str, WakeWordModel] = {}
 
 @router.post("/train", response_model=WakeWordTrainingResponse)
 async def train_wake_word(request: WakeWordTrainingRequest):
-    """Train a custom wake word model from audio samples."""
-    try:
-        # Validate request
-        if len(request.samples) < 5:
-            return WakeWordTrainingResponse(
-                success=False,
-                error="At least 5 samples required for training"
-            )
-        
-        if not request.wake_word or len(request.wake_word.strip()) < 2:
-            return WakeWordTrainingResponse(
-                success=False,
-                error="Wake word must be at least 2 characters"
-            )
-        
-        # Generate model ID
-        model_id = f"ww-{uuid.uuid4().hex[:8]}"
-        model_path = str(WAKEWORD_DIR / f"{model_id}.onnx")
-        
-        # In production, this would use openWakeWord to train a custom model
-        # For now, create a placeholder model file
-        model_data = {
-            "id": model_id,
-            "wake_word": request.wake_word,
-            "sample_count": len(request.samples),
-            "sensitivity": request.sensitivity,
-            "trained_at": datetime.now().isoformat(),
-            "samples": [
-                {
-                    "id": sample.id,
-                    "duration": sample.duration,
-                    "sample_rate": sample.sample_rate,
-                }
-                for sample in request.samples
-            ],
-        }
-        
-        # Save model metadata
-        with open(model_path + ".json", "w") as f:
-            json.dump(model_data, f, indent=2)
-        
-        # Create placeholder model file (in production, this would be the trained ONNX model)
-        with open(model_path, "wb") as f:
-            f.write(b"PLACEHOLDER_MODEL")
-        
-        # Store model
-        model = WakeWordModel(
-            id=model_id,
-            name=f"{request.wake_word} (custom)",
-            wake_word=request.wake_word,
-            model_path=model_path,
-            created_at=datetime.now().isoformat(),
-            sample_count=len(request.samples),
-            accuracy=0.85,  # Placeholder accuracy
-            is_active=False,
-        )
-        
-        wakeword_models[model_id] = model
-        
-        app_logger.info(f"Trained custom wake word model: {model_id} for '{request.wake_word}'")
-        
-        return WakeWordTrainingResponse(
-            success=True,
-            model_id=model_id,
-            model_path=model_path,
-            accuracy=model.accuracy
-        )
-    
-    except Exception as e:
-        app_logger.error(f"Wake word training failed: {e}")
+    """Validate a training request without fabricating a trained ONNX model.
+
+    The installed ``openwakeword`` runtime performs inference; it does not expose
+    the complete custom-model training pipeline needed here. Until that pipeline
+    is installed and its output is validated, this endpoint must report
+    unavailable and create no model or accuracy claim.
+    """
+    if len(request.samples) < 5:
         return WakeWordTrainingResponse(
             success=False,
-            error=str(e)
+            samples_validated=len(request.samples),
+            error="At least 5 samples required for training",
         )
+    if not request.wake_word or len(request.wake_word.strip()) < 2:
+        return WakeWordTrainingResponse(
+            success=False,
+            samples_validated=len(request.samples),
+            error="Wake word must be at least 2 characters",
+        )
+
+    valid_samples = 0
+    for sample in request.samples:
+        try:
+            encoded = sample.audio.split(",", 1)[-1]
+            raw = base64.b64decode(encoded, validate=True)
+            if raw and sample.duration > 0 and sample.sample_rate > 0 and sample.channels > 0:
+                valid_samples += 1
+        except Exception:
+            continue
+    if valid_samples != len(request.samples):
+        return WakeWordTrainingResponse(
+            success=False,
+            samples_validated=valid_samples,
+            error="One or more wake-word samples are invalid base64 audio",
+        )
+
+    requirements = (
+        "Install and integrate a real openWakeWord custom training pipeline, "
+        "then validate the generated ONNX model against held-out positive and negative samples."
+    )
+    app_logger.warning(
+        f"Custom wake-word training requested for '{request.wake_word}' but no verified trainer is configured"
+    )
+    return WakeWordTrainingResponse(
+        success=False,
+        available=False,
+        samples_validated=valid_samples,
+        requirements=requirements,
+        error="Custom wake-word training is unavailable; no model was created.",
+    )
 
 
 @router.get("/models", response_model=List[WakeWordModel])
@@ -161,7 +139,20 @@ async def activate_wake_word_model(model_id: str):
     model = wakeword_models.get(model_id)
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
-    
+    model_file = Path(model.model_path)
+    if not model_file.is_file():
+        raise HTTPException(status_code=409, detail="Model artifact is missing")
+    try:
+        if model_file.read_bytes() == b"PLACEHOLDER_MODEL":
+            raise HTTPException(
+                status_code=409,
+                detail="Refusing to activate a legacy placeholder; provide a real validated ONNX model",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"Could not validate model artifact: {exc}") from exc
+
     # Deactivate all other models
     for m in wakeword_models.values():
         m.is_active = False

@@ -34,7 +34,12 @@ class LocalSpeechToText:
         """
         ref_path = settings.DATA_DIR / "audio" / "custom_voice_reference.wav"
         if not ref_path.exists():
-            return {"verified": True, "confidence": 1.0, "note": "No voice reference profile set; accepting all audio."}
+            return {
+                "verified": False,
+                "available": False,
+                "confidence": 0.0,
+                "note": "No voice reference profile is configured; speaker identity is unknown.",
+            }
 
         try:
             with wave.open(str(ref_path), 'rb') as ref_wav, wave.open(audio_path_str, 'rb') as input_wav:
@@ -63,18 +68,28 @@ class LocalSpeechToText:
 
                     centroid_diff = abs(ref_centroid - input_centroid)
                     is_verified_speaker = centroid_diff < 1500.0
+                    # This is a deterministic spectral similarity, not a
+                    # statistically calibrated speaker-identification confidence.
+                    spectral_similarity = max(0.0, min(1.0, 1.0 - centroid_diff / 3000.0))
 
                     return {
                         "verified": is_verified_speaker,
-                        "confidence": 0.95 if is_verified_speaker else 0.45,
+                        "available": True,
+                        "confidence": round(float(spectral_similarity), 3),
+                        "engine": "spectral_centroid_v1",
                         "centroid_distance": round(float(centroid_diff), 2),
                         "input_rms_energy": round(float(rms_input), 3),
-                        "note": "Verified primary user speaker profile in noisy environment" if is_verified_speaker else "Spectral mismatch: background chatter or unverified speaker."
+                        "note": "Spectral signature matched the primary reference" if is_verified_speaker else "Spectral signature did not match the primary reference."
                     }
         except Exception as e:
             app_logger.warning(f"Speaker voice verification notice: {e}")
 
-        return {"verified": True, "confidence": 0.85, "note": "Speaker verification fallback passed."}
+        return {
+            "verified": False,
+            "available": False,
+            "confidence": 0.0,
+            "note": "Speaker verification could not be performed; identity remains unknown.",
+        }
 
     @classmethod
     def transcribe_file(cls, audio_path_str: str, language: Optional[str] = None) -> Dict[str, Any]:

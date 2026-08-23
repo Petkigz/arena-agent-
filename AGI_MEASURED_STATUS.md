@@ -163,6 +163,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Owner authority and verified authorization execution**: Persistent control modes, emergency pause, per-action block/approval lists, revision-bound editable plan approval, and short-lived exact-payload authorization grants. Executing a grant now returns through the authoritative ActionGate → capability → independent observation → tri-state verification → prediction error → reflection/outcome/lesson/causal learning path. Tool success remains separate from goal verification, and retries/alternatives require fresh authorization.
 
+- ✅ **Placeholder-success removal**: Screenshot streaming analysis now decodes and validates real image bytes and calls the actual OCR/Vision tools. Custom wake-word training and speaker enrollment/identification explicitly report unavailable until verified model pipelines exist; no fake ONNX artifacts, arbitrary first-speaker matches, or invented `0.85` confidence/accuracy values are returned. Speaker verification without a reference is UNKNOWN, not implicitly accepted.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):

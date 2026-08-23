@@ -3,10 +3,13 @@
 import asyncio
 import base64
 import io
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from app.config import settings
 from app.utils.logger import app_logger
 
 router = APIRouter(prefix="/api/screenshots", tags=["screenshots"])
@@ -19,7 +22,7 @@ class ScreenshotMetadata(BaseModel):
     width: int
     height: int
     format: str = "png"
-    annotations: List[Dict[str, Any]] = []
+    annotations: List[Dict[str, Any]] = Field(default_factory=list)
     analysis: Optional[Dict[str, Any]] = None
 
 
@@ -112,11 +115,20 @@ async def screenshot_websocket(websocket: WebSocket, conversation_id: str):
             data = await websocket.receive_json()
             
             if data.get("type") == "screenshot":
+                image_payload = data.get("image")
+                if not isinstance(image_payload, str) or not image_payload:
+                    await websocket.send_json({"type": "error", "message": "Screenshot image is required"})
+                    continue
+                # Base64 expands bytes by ~4/3; cap encoded input before storing it
+                # in the process-wide screenshot cache.
+                if len(image_payload) > 20 * 1024 * 1024:
+                    await websocket.send_json({"type": "error", "message": "Screenshot exceeds size limit"})
+                    continue
                 # Process and broadcast screenshot
                 screenshot_data = {
                     "id": data.get("id", f"ss-{datetime.now().timestamp()}"),
                     "timestamp": datetime.now().isoformat(),
-                    "image": data.get("image"),  # Base64 encoded image
+                    "image": image_payload,  # Base64 encoded image
                     "width": data.get("width"),
                     "height": data.get("height"),
                     "format": data.get("format", "png"),
@@ -140,45 +152,118 @@ async def screenshot_websocket(websocket: WebSocket, conversation_id: str):
 
 @router.post("/analyze", response_model=ScreenshotAnalysisResponse)
 async def analyze_screenshot(request: ScreenshotAnalysisRequest):
-    """Analyze a screenshot using vision/OCR."""
+    """Analyze stored screenshot bytes with the real OCR/vision tools."""
     screenshot = screenshot_store.get(request.screenshot_id)
-    
     if not screenshot:
         return ScreenshotAnalysisResponse(
             success=False,
             screenshot_id=request.screenshot_id,
-            error="Screenshot not found"
+            error="Screenshot not found",
         )
-    
+
+    analysis_type = request.analysis_type.strip().lower()
+    if analysis_type not in {"vision", "ocr", "both"}:
+        return ScreenshotAnalysisResponse(
+            success=False,
+            screenshot_id=request.screenshot_id,
+            error="analysis_type must be one of: vision, ocr, both",
+        )
+
+    temp_path: Optional[Path] = None
     try:
-        # Decode base64 image
-        image_data = base64.b64decode(screenshot["image"])
-        
-        # In production, this would call the VisionAnalyzerTool or OCRReaderTool
-        # For now, return a placeholder analysis
+        encoded = screenshot.get("image")
+        if not isinstance(encoded, str) or not encoded.strip():
+            raise ValueError("Screenshot has no image data")
+        encoded = encoded.split(",", 1)[-1]
+        image_data = base64.b64decode(encoded, validate=True)
+        if not image_data:
+            raise ValueError("Screenshot image is empty")
+        if len(image_data) > 15 * 1024 * 1024:
+            raise ValueError("Screenshot image exceeds 15 MB")
+
+        # Decode and normalize with Pillow before any tool receives a path. This
+        # rejects arbitrary bytes and prevents user-controlled filenames.
+        from PIL import Image
+        with Image.open(io.BytesIO(image_data)) as image:
+            image.load()
+            width, height = image.size
+            if width <= 0 or height <= 0 or width * height > 40_000_000:
+                raise ValueError("Screenshot dimensions are invalid or too large")
+            screenshots_dir = settings.DATA_DIR / "screenshots" / "analysis"
+            screenshots_dir.mkdir(parents=True, exist_ok=True)
+            temp_path = screenshots_dir / f"ss_{uuid.uuid4().hex}.png"
+            image.convert("RGB").save(temp_path, format="PNG")
+
+        components: Dict[str, Any] = {}
+        errors: List[str] = []
+
+        if analysis_type in {"ocr", "both"}:
+            from app.tools.ocr_reader import OCRReaderTool
+            ocr_result = await asyncio.to_thread(
+                OCRReaderTool.extract_text_from_image, str(temp_path)
+            )
+            ocr_success = bool(ocr_result.get("success"))
+            components["ocr"] = {
+                "success": ocr_success,
+                "text": ocr_result.get("extracted_text", ""),
+                "error": ocr_result.get("error"),
+            }
+            if not ocr_success:
+                errors.append(f"OCR: {ocr_result.get('error', 'analysis failed')}")
+
+        if analysis_type in {"vision", "both"}:
+            from app.tools.vision_analyzer import VisionAnalyzerTool
+            vision_result = await asyncio.to_thread(
+                VisionAnalyzerTool.analyze_screen_image,
+                str(temp_path),
+                request.prompt_focus,
+                "main",
+                False,
+                True,
+            )
+            vision_success = bool(vision_result.get("success"))
+            components["vision"] = {
+                "success": vision_success,
+                "analysis": vision_result.get("ai_analysis", ""),
+                "detections": vision_result.get("detections", []),
+                "groundings_created": vision_result.get("groundings_created", []),
+                "engine": vision_result.get("engine") or vision_result.get("detection_engine"),
+                "error": vision_result.get("error"),
+            }
+            if not vision_success:
+                errors.append(f"Vision: {vision_result.get('error', 'analysis failed')}")
+
+        complete = not errors and all(
+            component.get("success") is True for component in components.values()
+        )
         analysis = {
-            "type": request.analysis_type,
-            "content": f"Analysis of screenshot {request.screenshot_id}",
+            "type": analysis_type,
             "prompt_focus": request.prompt_focus,
             "timestamp": datetime.now().isoformat(),
+            "image": {"width": width, "height": height, "normalized_format": "png"},
+            "components": components,
+            "complete": complete,
         }
-        
-        # Store analysis
         screenshot["analysis"] = analysis
-        
         return ScreenshotAnalysisResponse(
-            success=True,
+            success=complete,
             screenshot_id=request.screenshot_id,
-            analysis=analysis
+            analysis=analysis,
+            error="; ".join(errors) if errors else None,
         )
-    
     except Exception as e:
         app_logger.error(f"Screenshot analysis failed: {e}")
         return ScreenshotAnalysisResponse(
             success=False,
             screenshot_id=request.screenshot_id,
-            error=str(e)
+            error=str(e),
         )
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except Exception as exc:
+                app_logger.warning(f"Could not remove screenshot analysis temp file: {exc}")
 
 
 @router.get("/latest/{conversation_id}")
