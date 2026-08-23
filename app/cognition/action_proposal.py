@@ -126,9 +126,11 @@ class ActionGate:
     @classmethod
     def evaluate_proposal(cls, proposal: ActionProposal) -> GateResult:
         # Validate a supplied grant early, but consume it only after every other
-        # gate passes. The grant is exact-action, exact-payload, short-lived, and
-        # cannot override hard owner denials such as pause/block/observe-only.
+        # gate passes. The grant is exact-action, exact-payload, and short-lived.
+        # A sovereign owner grant may override the owner's own mode/block policy,
+        # but emergency pause and non-policy gates remain absolute.
         authorization_valid = False
+        authorization_override = False
         if proposal.authorization_id:
             auth = authorization_store.validate(
                 proposal.authorization_id,
@@ -146,13 +148,20 @@ class ActionGate:
                     decision_stage="rejected",
                 )
             authorization_valid = True
+            authorization_override = bool(
+                auth.grant and getattr(auth.grant, "override_owner_policy", False)
+            )
 
         # Owner control is evaluated independently from capability/safety policy.
         # A global pause or non-executing mode must stop the proposal before any
         # resource cleanup, prediction, or capability code can run.
         owner_preflight = owner_control_store.evaluate(proposal.action_type, 0)
+        override_owner_denial = (
+            authorization_override and not owner_control_store.get_policy().paused
+        )
         if not owner_preflight.allowed and not (
-            owner_preflight.requires_approval and authorization_valid
+            (owner_preflight.requires_approval and authorization_valid)
+            or override_owner_denial
         ):
             proposal.decision_stage = (
                 "awaiting_authorization" if owner_preflight.requires_approval else "rejected"
@@ -185,7 +194,8 @@ class ActionGate:
                 proposal.safety_level = max(proposal.safety_level, manifest_level)
                 owner_decision = owner_control_store.evaluate(act_key, manifest_level)
                 if not owner_decision.allowed and not (
-                    owner_decision.requires_approval and authorization_valid
+                    (owner_decision.requires_approval and authorization_valid)
+                    or override_owner_denial
                 ):
                     reason = owner_decision.reason
                     gate_name = "policy_gate" if manifest_level >= 3 else "owner_control_gate"
@@ -225,7 +235,8 @@ class ActionGate:
 
             owner_decision = owner_control_store.evaluate(act_key, level)
             if not owner_decision.allowed and not (
-                owner_decision.requires_approval and authorization_valid
+                (owner_decision.requires_approval and authorization_valid)
+                or override_owner_denial
             ):
                 proposal.decision_stage = (
                     "awaiting_authorization" if owner_decision.requires_approval else "rejected"

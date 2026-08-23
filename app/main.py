@@ -198,6 +198,7 @@ class ExplorationBudgetRequest(BaseModel):
 
 class AutonomyEnvelopeUpdate(BaseModel):
     cycles_enabled: Optional[bool] = None
+    limits_enabled: Optional[bool] = None
     max_goal_executions_per_cycle: Optional[int] = Field(None, ge=0, le=20)
     max_project_steps_per_cycle: Optional[int] = Field(None, ge=0, le=20)
     max_projects_per_cycle: Optional[int] = Field(None, ge=0, le=20)
@@ -211,6 +212,7 @@ class AuthorizationIssueRequest(BaseModel):
     ttl_seconds: int = Field(default=300, ge=1, le=3600)
     max_uses: int = Field(default=1, ge=1, le=100)
     plan_id: Optional[str] = None
+    override_owner_policy: bool = False
 
 class AuthorizedExecutionRequest(BaseModel):
     authorization_id: str = Field(min_length=1)
@@ -1294,11 +1296,25 @@ def issue_authorization_endpoint(req: AuthorizationIssueRequest):
             ttl_seconds=req.ttl_seconds,
             max_uses=req.max_uses,
             plan_id=req.plan_id,
+            override_owner_policy=req.override_owner_policy,
         )
         return {"success": True, "authorization": grant.to_dict()}
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+
+@router.post("/owner-control/sovereign-authorizations")
+def issue_sovereign_authorization_endpoint(req: AuthorizationIssueRequest):
+    """Owner override of owner-authored policy for one exact action; does not execute."""
+    try:
+        grant=authorization_store.issue(
+            req.action_type,req.payload,ttl_seconds=req.ttl_seconds,
+            max_uses=req.max_uses,plan_id=req.plan_id,override_owner_policy=True,
+        )
+        return {"success":True,"authorization":grant.to_dict(),"executed":False,
+          "note":"Exact sovereign override issued. Emergency pause, resource gates, capability availability, and verification remain enforced."}
+    except (TypeError,ValueError) as exc:
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
 
 @router.delete("/owner-control/authorizations/{authorization_id}")
 def revoke_authorization_endpoint(authorization_id: str):

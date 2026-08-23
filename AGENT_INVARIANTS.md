@@ -107,9 +107,13 @@ Owner Control Plane may always impose a stricter rule:
   with a deterministic compensation receipt and always requires fresh approval.
 - Curiosity thresholds may adapt only from verified outcomes, within conservative
   clamps. The owner's exploration maximum is absolute and may be set to zero.
-- Every autonomous cycle obeys a persistent owner envelope for cycle duration,
-  cooldown, goal executions, project work, and consecutive failures. Suggest-only
-  may generate recommendations but cannot execute them; a zero budget stays zero.
+- Autonomous resource limits are optional and disabled by default. When the owner
+  enables them, every cycle obeys the configured duration, cooldown, execution,
+  project, and failure budgets; a zero budget stays zero.
+- The owner may mint an explicit exact-payload `override_owner_policy` grant to
+  override their own block/mode/level policy. It remains short-lived and single-use,
+  cannot bypass emergency pause, resource-critical shutdown, unavailable capability,
+  payload binding, or evidence/verification honesty.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.

@@ -230,9 +230,12 @@ at `GET /self-awareness/claims/history`, structured belief changes at
 operational evidence and explicitly do not claim hidden chain-of-thought,
 consciousness, or subjective experience.
 
-Autonomous operation is bounded through `GET/PUT /owner-control/autonomy-envelope`.
-The owner can independently cap cycle duration, cooldown, goal execution, project
-work, and failure streaks without granting any new action authority.
+Autonomous resource limits are optional through `GET/PUT /owner-control/autonomy-envelope`
+and are disabled by default. The owner can cap cycle duration, cooldown, execution,
+project work, and failures when desired. For a specific command, the owner can issue
+an exact short-lived authorization with `override_owner_policy: true`; this overrides
+the owner's own mode/block/level rules but never emergency pause, resource-critical
+shutdown, missing capability, payload binding, or verification honesty.
 
 Run the isolated longitudinal regression suite separately:
 

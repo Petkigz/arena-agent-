@@ -251,6 +251,7 @@ class AuthorizationGrant:
     revoked: bool = False
     source_approval_id: Optional[str] = None
     plan_id: Optional[str] = None
+    override_owner_policy: bool = False
 
     @property
     def active(self) -> bool:
@@ -291,6 +292,7 @@ class AuthorizationStore:
         max_uses: int = 1,
         source_approval_id: Optional[str] = None,
         plan_id: Optional[str] = None,
+        override_owner_policy: bool = False,
     ) -> AuthorizationGrant:
         ttl = max(1, min(3600, int(ttl_seconds)))
         uses = max(1, min(100, int(max_uses)))
@@ -304,6 +306,7 @@ class AuthorizationStore:
             max_uses=uses,
             source_approval_id=source_approval_id,
             plan_id=plan_id,
+            override_owner_policy=bool(override_owner_policy),
         )
         with self._lock:
             self._grants[grant.authorization_id] = grant

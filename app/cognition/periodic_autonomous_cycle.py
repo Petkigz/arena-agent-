@@ -218,7 +218,12 @@ class PeriodicAutonomousCycle:
                 cycle.summary = "; ".join(envelope_decision["reasons"])
                 self._save_cycle(cycle)
                 return cycle
-        deadline = start_time + int(envelope_decision.get("policy", {}).get("max_cycle_seconds", 300))
+        envelope_policy = envelope_decision.get("policy", {})
+        limits_enabled = bool(envelope_policy.get("limits_enabled", False))
+        deadline = (
+            start_time + int(envelope_policy.get("max_cycle_seconds", 300))
+            if limits_enabled else float("inf")
+        )
         execution_allowed = bool(envelope_decision["execution_allowed"])
         app_logger.info(f"Starting autonomous cycle {cycle.cycle_id}")
         
@@ -302,12 +307,16 @@ class PeriodicAutonomousCycle:
             
             # Step 4: Execute approved goals (up to max_goals_per_cycle)
             executed_plans = []
-            envelope_goal_cap = int(envelope_decision.get("policy", {}).get(
+            envelope_goal_cap = int(envelope_policy.get(
                 "max_goal_executions_per_cycle", self.max_goals_per_cycle
             ))
             consecutive_failures = 0
-            failure_cap = int(envelope_decision.get("policy", {}).get("max_consecutive_failures", 2))
-            for _ in range(min(cycle.goals_approved, self.max_goals_per_cycle, envelope_goal_cap)):
+            failure_cap = int(envelope_policy.get("max_consecutive_failures", 2)) if limits_enabled else 0
+            execution_cap = (
+                min(cycle.goals_approved, self.max_goals_per_cycle, envelope_goal_cap)
+                if limits_enabled else cycle.goals_approved
+            )
+            for _ in range(execution_cap):
                 if time.time() >= deadline or (failure_cap and consecutive_failures >= failure_cap):
                     cycle.errors.append("Autonomy execution budget reached")
                     break
@@ -334,8 +343,8 @@ class PeriodicAutonomousCycle:
             # ActionGate, observation, and verification.
             if execution_allowed and cognitive_runtime and hasattr(cognitive_runtime, "project_scheduler"):
                 try:
-                    project_cap = int(envelope_decision.get("policy", {}).get("max_projects_per_cycle", 3))
-                    step_cap = int(envelope_decision.get("policy", {}).get("max_project_steps_per_cycle", 3))
+                    project_cap = int(envelope_policy.get("max_projects_per_cycle", 3)) if limits_enabled else 100
+                    step_cap = int(envelope_policy.get("max_project_steps_per_cycle", 3)) if limits_enabled else 1
                     project_cycle = (
                         cognitive_runtime.project_scheduler.run_cycle(
                             cognitive_runtime, max_projects=project_cap,

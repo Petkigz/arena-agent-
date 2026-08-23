@@ -8,6 +8,10 @@ def test_owner_envelope_persists_and_clamps(tmp_path):
  assert p.max_goal_executions_per_cycle==0
  assert AutonomyEnvelopeStore(tmp_path/'a.json').get().max_cycle_seconds==30
 
+def test_limits_are_optional_by_default(tmp_path):
+ s=AutonomyEnvelopeStore(tmp_path/'a.json')
+ assert s.get().limits_enabled is False
+
 def test_pause_and_suggest_mode_block_execution(tmp_path):
  s=AutonomyEnvelopeStore(tmp_path/'a.json')
  assert s.evaluate(owner_policy=policy(paused=True))['cycle_allowed'] is False
@@ -15,7 +19,7 @@ def test_pause_and_suggest_mode_block_execution(tmp_path):
  assert d['cycle_allowed'] is True and d['execution_allowed'] is False
 
 def test_cooldown_blocks_duplicate_cycle(tmp_path):
- s=AutonomyEnvelopeStore(tmp_path/'a.json'); now=datetime.now(timezone.utc)
+ s=AutonomyEnvelopeStore(tmp_path/'a.json'); s.update({'limits_enabled':True}); now=datetime.now(timezone.utc)
  d=s.evaluate(owner_policy=policy(),last_started_at=now.isoformat(),now=now)
  assert d['cycle_allowed'] is False
  assert 'cooldown' in d['reasons'][0].lower()
