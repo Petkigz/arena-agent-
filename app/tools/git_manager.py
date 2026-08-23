@@ -1,7 +1,7 @@
-import subprocess
 from pathlib import Path
 from typing import Dict, Any, List
 from app.config import settings
+from app.cognition.execution_control import run_cancellable_subprocess
 from app.utils.logger import app_logger, audit_logger
 
 class GitManagerTool:
@@ -12,12 +12,10 @@ class GitManagerTool:
         """
         try:
             cmd = ["git"] + args
-            res = subprocess.run(
+            res = run_cancellable_subprocess(
                 cmd,
                 cwd=str(settings.BASE_DIR),
-                capture_output=True,
-                text=True,
-                timeout=15
+                timeout=15,
             )
             return {
                 "success": res.returncode == 0,

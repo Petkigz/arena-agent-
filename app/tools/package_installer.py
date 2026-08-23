@@ -18,6 +18,7 @@ import re
 import subprocess
 from typing import Any, Dict, Optional
 
+from app.cognition.execution_control import run_cancellable_subprocess
 from app.utils.logger import app_logger, audit_logger
 
 # Conservative whitelist: letters, digits, and common package-spec punctuation.
@@ -38,9 +39,8 @@ class PackageInstaller:
 
         if manager == "pip":
             try:
-                out = subprocess.run(
-                    ["pip", "list", "--format=json"],
-                    capture_output=True, text=True, timeout=60,
+                out = run_cancellable_subprocess(
+                    ["pip", "list", "--format=json"], timeout=60,
                 )
                 if out.returncode != 0:
                     return {"success": False, "error": f"pip list failed: {(out.stderr or '').strip()[:300]}"}
@@ -53,9 +53,8 @@ class PackageInstaller:
 
         # npm
         try:
-            out = subprocess.run(
-                ["npm", "list", "--json", "--depth=0"],
-                capture_output=True, text=True, timeout=60,
+            out = run_cancellable_subprocess(
+                ["npm", "list", "--json", "--depth=0"], timeout=60,
             )
             if out.returncode != 0:
                 return {"success": False, "error": f"npm list failed: {(out.stderr or '').strip()[:300]}"}
@@ -80,8 +79,8 @@ class PackageInstaller:
 
         if manager == "pip":
             try:
-                out = subprocess.run(
-                    ["pip", "show", pkg], capture_output=True, text=True, timeout=30,
+                out = run_cancellable_subprocess(
+                    ["pip", "show", pkg], timeout=30,
                 )
             except FileNotFoundError:
                 return {"success": False, "error": "pip is not available on this system."}
@@ -95,9 +94,8 @@ class PackageInstaller:
             return {"success": True, "installed": True, "package": pkg, "version": info.get("version", "")}
         else:
             try:
-                out = subprocess.run(
-                    ["npm", "list", pkg, "--json", "--depth=0"],
-                    capture_output=True, text=True, timeout=30,
+                out = run_cancellable_subprocess(
+                    ["npm", "list", pkg, "--json", "--depth=0"], timeout=30,
                 )
             except FileNotFoundError:
                 return {"success": False, "error": "npm is not available on this system."}
@@ -128,7 +126,7 @@ class PackageInstaller:
             cmd.append(pkg)
 
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            out = run_cancellable_subprocess(cmd, timeout=600)
             audit_logger.info(f"Installed {pkg} via {manager} (rc={out.returncode})")
             if out.returncode != 0:
                 return {"success": False, "error": (out.stderr or out.stdout or "").strip()[:500]}
@@ -156,7 +154,7 @@ class PackageInstaller:
             cmd = ["npm", "uninstall", pkg]
 
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            out = run_cancellable_subprocess(cmd, timeout=300)
             audit_logger.info(f"Uninstalled {pkg} via {manager} (rc={out.returncode})")
             if out.returncode != 0:
                 return {"success": False, "error": (out.stderr or out.stdout or "").strip()[:500]}

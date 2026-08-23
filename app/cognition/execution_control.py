@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import sqlite3
+import subprocess
 import threading
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
@@ -265,6 +269,72 @@ class ExecutionControlRegistry:
                     (max(1, min(limit, 500)),),
                 ).fetchall()
             return [self._from_row(row) for row in rows]
+
+
+def run_cancellable_subprocess(
+    args: Any,
+    *,
+    shell: bool = False,
+    cwd: Optional[str] = None,
+    timeout: int = 60,
+    env: Optional[Dict[str, str]] = None,
+) -> subprocess.CompletedProcess:
+    """Run a subprocess with timeout and cooperative process-group cancellation."""
+    popen_kwargs: Dict[str, Any] = {
+        "shell": shell,
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "env": env,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+    process = subprocess.Popen(args, **popen_kwargs)
+    deadline = time.monotonic() + max(1, int(timeout))
+    while process.poll() is None:
+        if execution_control_registry.is_cancel_requested():
+            try:
+                if os.name == "nt":
+                    process.terminate()
+                else:
+                    os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=2)
+            except Exception:
+                try:
+                    if os.name == "nt":
+                        process.kill()
+                    else:
+                        os.killpg(process.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+            stdout, stderr = process.communicate()
+            try:
+                execution_control_registry.checkpoint("subprocess_terminated")
+            except ExecutionCancelled:
+                raise
+            raise ExecutionCancelled(
+                f"Subprocess cancelled by owner. stdout={stdout[:120]!r}; stderr={stderr[:120]!r}"
+            )
+        if time.monotonic() >= deadline:
+            try:
+                if os.name == "nt":
+                    process.kill()
+                else:
+                    os.killpg(process.pid, signal.SIGKILL)
+            except Exception:
+                process.kill()
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(args, timeout, output=stdout, stderr=stderr)
+        time.sleep(0.05)
+    stdout, stderr = process.communicate()
+    return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+
+
+def cooperative_checkpoint(label: str) -> None:
+    execution_control_registry.checkpoint(label)
 
 
 def current_execution_id() -> Optional[str]:

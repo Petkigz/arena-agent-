@@ -4,68 +4,13 @@ import uuid
 import subprocess
 import platform
 import datetime
-import signal
-import time
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
 
 
-def _run_cancellable_process(args, *, shell: bool, cwd: str, timeout: int):
-    """Popen loop that can terminate its process group on owner cancellation."""
-    from app.cognition.execution_control import (
-        ExecutionCancelled,
-        execution_control_registry,
-    )
-
-    popen_kwargs = {
-        "shell": shell,
-        "cwd": cwd,
-        "stdout": subprocess.PIPE,
-        "stderr": subprocess.PIPE,
-        "text": True,
-    }
-    if os.name == "nt":
-        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-    else:
-        popen_kwargs["start_new_session"] = True
-    process = subprocess.Popen(args, **popen_kwargs)
-    deadline = time.monotonic() + timeout
-    while process.poll() is None:
-        if execution_control_registry.is_cancel_requested():
-            try:
-                if os.name == "nt":
-                    process.terminate()
-                else:
-                    os.killpg(process.pid, signal.SIGTERM)
-                process.wait(timeout=2)
-            except Exception:
-                try:
-                    if os.name == "nt":
-                        process.kill()
-                    else:
-                        os.killpg(process.pid, signal.SIGKILL)
-                except Exception:
-                    pass
-            stdout, stderr = process.communicate()
-            execution_control_registry.checkpoint("sandbox_process_terminated")
-            raise ExecutionCancelled(
-                f"Sandbox process cancelled by owner. stdout={stdout[:120]!r}; stderr={stderr[:120]!r}"
-            )
-        if time.monotonic() >= deadline:
-            try:
-                if os.name == "nt":
-                    process.kill()
-                else:
-                    os.killpg(process.pid, signal.SIGKILL)
-            except Exception:
-                process.kill()
-            stdout, stderr = process.communicate()
-            raise subprocess.TimeoutExpired(args, timeout, output=stdout, stderr=stderr)
-        time.sleep(0.05)
-    stdout, stderr = process.communicate()
-    return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+from app.cognition.execution_control import run_cancellable_subprocess
 
 
 class DisposableSandbox:
@@ -198,7 +143,7 @@ class DisposableSandbox:
 
         # Attempt primary execution wrapper
         try:
-            res = _run_cancellable_process(
+            res = run_cancellable_subprocess(
                 cmd_args,
                 shell=use_shell if isinstance(cmd_args, str) else False,
                 cwd=str(sandbox_dir),
@@ -252,7 +197,7 @@ class DisposableSandbox:
         # API-key gated when ARENA_API_KEY is set.
         try:
             native_cmd = command if host_os != "windows" else f"cmd.exe /c {command}"
-            fallback_res = _run_cancellable_process(
+            fallback_res = run_cancellable_subprocess(
                 native_cmd,
                 shell=True,
                 cwd=str(sandbox_dir),

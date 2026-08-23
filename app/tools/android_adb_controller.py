@@ -1,8 +1,8 @@
 import os
-import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from app.config import settings
+from app.cognition.execution_control import run_cancellable_subprocess
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 
@@ -18,7 +18,7 @@ class AndroidADBController:
                 cmd.extend(["-s", target_device])
             cmd.extend(args)
 
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            res = run_cancellable_subprocess(cmd, timeout=15)
             return {
                 "success": res.returncode == 0,
                 "stdout": res.stdout.strip(),

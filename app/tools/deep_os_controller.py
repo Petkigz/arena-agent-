@@ -1,8 +1,8 @@
 import sys
 import os
 import re
-import subprocess
 from typing import Dict, Any, List, Optional
+from app.cognition.execution_control import run_cancellable_subprocess
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 
@@ -95,7 +95,7 @@ class DeepOSController:
             else:
                 args = ["sudo", "apt", "install", "--only-upgrade", "-y", package_name]
 
-            res = subprocess.run(args, capture_output=True, text=True, timeout=30)
+            res = run_cancellable_subprocess(args, timeout=30)
             audit_logger.info(f"Software update command executed for '{package_name}'")
 
             return {

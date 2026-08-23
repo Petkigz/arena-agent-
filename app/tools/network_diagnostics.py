@@ -17,6 +17,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+from app.cognition.execution_control import run_cancellable_subprocess
 from app.utils.logger import app_logger, audit_logger
 
 
@@ -73,7 +74,7 @@ class NetworkDiagnostics:
             cmd = ["ping", "-c", str(count), "-W", str(int(timeout)), host]
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout * count + 10)
+            proc = run_cancellable_subprocess(cmd, timeout=int(timeout * count + 10))
         except FileNotFoundError:
             return {"success": False, "error": "The system 'ping' utility is not available."}
         except subprocess.TimeoutExpired:
@@ -103,7 +104,7 @@ class NetworkDiagnostics:
             cmd = ["traceroute", "-m", str(max_hops), host]
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            proc = run_cancellable_subprocess(cmd, timeout=60)
         except FileNotFoundError:
             return {"success": False, "error": "The system 'traceroute' utility is not available (try 'traceroute' or 'tracert')."}
         except subprocess.TimeoutExpired:
