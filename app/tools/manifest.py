@@ -160,6 +160,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     DailyBriefingEngine = _LazyImportProxy("app.tools.daily_briefing", "DailyBriefingEngine")
     DataAnalysisEngine = _LazyImportProxy("app.tools.data_analyzer", "DataAnalysisEngine")
     DeepOSController = _LazyImportProxy("app.tools.deep_os_controller", "DeepOSController")
+    PrivilegeInspectorTool = _LazyImportProxy("app.tools.privilege_inspector", "PrivilegeInspectorTool")
     AccessibilityControlTool = _LazyImportProxy("app.tools.accessibility_control", "AccessibilityControlTool")
     DesktopControl = _LazyImportProxy("app.tools.desktop_control", "DesktopControl")
     DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
@@ -289,6 +290,10 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(PdfToolkit.extract_text, "file_path", "page", "max_chars"))
 
     # ── Process manager ─────────────────────────────────────────────────────
+    add("privilege_status", "system", 0, "Inspect current OS privilege without elevation",
+        _ignore_payload(PrivilegeInspectorTool.privilege_status))
+    add("process_ownership", "system", 0, "Inspect process owner and Arena launch provenance",
+        _wrap(PrivilegeInspectorTool.process_ownership, "pid"))
     add("list_processes", "system", 0, "List local processes (CPU/RAM)",
         _wrap(ProcessManager.list_processes, "filter", "limit", "sort_by"))
     add("get_process", "system", 0, "Inspect a process by PID",

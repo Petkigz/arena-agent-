@@ -16,6 +16,7 @@ process itself (os.getpid()), so a bad tool call can't take down the agent.
 from __future__ import annotations
 
 import os
+import getpass
 import subprocess
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +40,9 @@ class ProcessManager:
                 "num_threads": proc.num_threads() if proc.num_threads() else 0,
                 "create_time": proc.create_time(),
                 "cmdline": " ".join(proc.cmdline())[:500] if proc.cmdline() else "",
+                "username": proc.username() or "",
+                "executable_path": proc.exe() or "",
+                "parent_pid": proc.ppid(),
             }
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             return {"pid": proc.pid, "name": None, "status": "gone"}
@@ -104,6 +108,14 @@ class ProcessManager:
             return {"success": False, "error": f"No process with PID {pid}."}
 
         name = (proc.name() or "?") if proc.is_running() else "?"
+        try:
+            process_owner=proc.username()
+            from app.cognition.privilege_model import PrivilegeModel
+            privilege=PrivilegeModel.probe()
+            if process_owner and process_owner != getpass.getuser() and not privilege.is_elevated:
+                return {"success":False,"error":f"Process {pid} belongs to '{process_owner}'; current session is not elevated.","pid":pid,"process_owner":process_owner,"privilege":privilege.to_dict()}
+        except (psutil.AccessDenied,psutil.NoSuchProcess) as exc:
+            return {"success":False,"error":f"Could not verify process ownership: {exc}","pid":pid}
         try:
             if force:
                 proc.kill()

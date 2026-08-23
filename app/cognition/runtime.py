@@ -157,6 +157,10 @@ class CognitiveRuntime:
         self.os_grounding = OSGroundingStore(
             str(Path(path).parent / "os_grounding.db") if path else "data/os_grounding.db"
         )
+        from app.cognition.privilege_model import ProcessOwnershipStore
+        self.process_ownership = ProcessOwnershipStore(
+            str(Path(path).parent / "process_ownership.db") if path else "data/process_ownership.db"
+        )
         from app.cognition.identity_continuity import IdentityContinuityLedger
         self.identity_continuity = IdentityContinuityLedger(
             str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db"
@@ -304,11 +308,20 @@ class CognitiveRuntime:
         launch = (execution.get("outputs") or {}).get("launch_res") or execution.get("launch_res") or {}
         if not launch.get("success"):
             return {"success": False, "verified": False, "error": "Launch was not successful"}
-        return self.os_grounding.observe_application(
+        pid=launch.get("pid")
+        ownership=None
+        if pid:
+            ownership=self.process_ownership.register_arena_launch(
+                int(pid),task_id=task_id,
+                executable_path=str(launch.get("executable_path", "")),
+            )
+        result=self.os_grounding.observe_application(
             str(launch.get("app_name", "")),
             executable_path=str(launch.get("executable_path", "")),
-            pid=launch.get("pid"), task_id=task_id,
+            pid=pid, task_id=task_id,
         )
+        result["process_ownership"]=ownership
+        return result
 
     @staticmethod
     def _interface_for_action(action_type: str) -> Optional[str]:

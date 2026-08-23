@@ -107,6 +107,9 @@ Owner Control Plane may always impose a stricter rule:
   with a deterministic compensation receipt and always requires fresh approval.
 - Transactional file operations reject overwrite conflicts, verify post-action
   location/content hashes, and preserve exact reverse-move facts for owner-approved rollback.
+- Owner authorization never implies OS elevation. Cross-owner process changes
+  require verified elevated privilege; process identity includes owner, executable,
+  parent PID, and whether Arena launched it.
 - Curiosity thresholds may adapt only from verified outcomes, within conservative
   clamps. The owner's exploration maximum is absolute and may be set to zero.
 - Autonomous resource limits are optional and disabled by default. When the owner

@@ -1059,6 +1059,16 @@ def request_recovery_action_endpoint(assessment_id:str,req:RecoveryActionRequest
     return {"success":True,"assessment":item.to_dict(),"approval":approval.to_dict(),"executed":False}
 
 
+@router.get("/os-control/privilege")
+def os_privilege_endpoint():
+    from app.cognition.privilege_model import PrivilegeModel
+    return {"success":True,"privilege":PrivilegeModel.probe().to_dict(),"note":"Owner authorization does not create OS elevation."}
+
+@router.get("/os-control/process-ownership/{pid}")
+def process_ownership_endpoint(pid:int):
+    from app.cognition.runtime import CognitiveRuntime
+    return CognitiveRuntime.get_instance().process_ownership.inspect(pid)
+
 @router.get("/os-grounding/accessibility/status")
 def accessibility_status_endpoint():
     from app.tools.accessibility_control import AccessibilityControlTool
