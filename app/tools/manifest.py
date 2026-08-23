@@ -366,6 +366,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(BrowserAutomation.navigate_and_extract, "url"))
     add("browser_download", "web", 2, "Download one browser artifact and verify path/hash",
         _wrap(BrowserAutomation.download_file, "url", "click_selector"))
+    add("browser_upload", "web", 3, "Upload and submit one file with observed success selector",
+        _wrap(BrowserAutomation.upload_file, "url", "input_selector", "file_path", "submit_selector", "success_selector"))
     add("youtube_learn", "web", 0, "Learn from a YouTube video",
         _wrap(YouTubeLearner.learn_from_video, "video_url"))
     add("media_learn", "web", 0, "Analyze a media target",

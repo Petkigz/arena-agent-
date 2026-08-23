@@ -285,6 +285,13 @@ class BrowserDownloadRequest(BaseModel):
     url: str
     click_selector: str
 
+class BrowserUploadRequest(BaseModel):
+    url: str
+    input_selector: str
+    file_path: str
+    submit_selector: str
+    success_selector: str
+
 class BrowserNavigateRequest(BaseModel):
     url: str
     fill_inputs: Optional[Dict[str, str]] = None
@@ -2508,6 +2515,10 @@ def create_lora_job_endpoint(req: LoraJobRequest):
 @router.post("/automation/browser/download")
 def browser_download_endpoint(req: BrowserDownloadRequest):
     return BrowserAutomation.download_file(req.url, req.click_selector)
+
+@router.post("/automation/browser/upload")
+def browser_upload_endpoint(req: BrowserUploadRequest):
+    return BrowserAutomation.upload_file(req.url,req.input_selector,req.file_path,req.submit_selector,req.success_selector)
 
 @router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):

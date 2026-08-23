@@ -86,6 +86,42 @@ class BrowserAutomation:
                 except Exception: pass
 
     @classmethod
+    def upload_file(cls, url: str, input_selector: str, file_path: str,
+                    submit_selector: str, success_selector: str) -> Dict[str, Any]:
+        """Upload and submit one file; success requires an observed success selector."""
+        source = Path(file_path)
+        if not source.is_file():
+            return {"success": False, "request_success": False, "error": "Upload file not found"}
+        if not all((url, input_selector, submit_selector, success_selector)):
+            return {"success": False, "request_success": False, "error": "URL, input, submit and success selectors are required"}
+        if not url.startswith(("http://", "https://")): url = f"https://{url}"
+        browser = None
+        try:
+            import hashlib
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True); page = browser.new_page()
+                page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                cooperative_checkpoint("before_browser_upload")
+                page.set_input_files(input_selector, str(source))
+                page.click(submit_selector)
+                page.wait_for_selector(success_selector, timeout=30000, state="visible")
+                observed = page.is_visible(success_selector)
+                session_id=f"browser_session_{uuid.uuid4().hex[:12]}"
+                tab=cls.GROUNDING.observe_tab(session_id=session_id,url=page.url,title=page.title(),profile_type="ephemeral",evidence=["set_input_files completed","submit clicked",f"success selector visible:{success_selector}"])
+                event=cls.GROUNDING.record_event(tab.tab_id,"upload","completed" if observed else "unknown",evidence=[f"local_sha256:{digest}",f"success_selector:{success_selector}"])
+                browser.close();browser=None
+            return {"success":observed,"request_success":True,"environment_verified":observed,"verification_unknown":not observed,"uploaded_file":str(source),"uploaded_sha256":digest,"tab_grounding":tab.to_dict(),"upload_event":event,"auth_state":"unknown","side_effects":True,"rollback_supported":False,"rollback_reason":"Remote upload cannot be deterministically removed without a service-specific delete API."}
+        except ExecutionCancelled: raise
+        except Exception as exc:
+            return {"success":False,"request_success":True,"environment_verified":False,"verification_unknown":True,"side_effects":True,"error":str(exc),"note":"Submission may have reached the remote service; retry requires fresh observation and authorization."}
+        finally:
+            if browser is not None:
+                try:browser.close()
+                except Exception:pass
+
+    @classmethod
     def navigate_and_extract(
         cls,
         url: str,

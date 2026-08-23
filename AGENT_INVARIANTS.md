@@ -225,8 +225,9 @@ not authorized.
   require verified DPI scale and must remain inside the selected display.
 - Browser automation binds to an observed session/tab URL/title. Authentication is
   always unknown unless separately evidenced, and owner takeover pauses automation.
-- Browser downloads require a real download event, workspace-confined destination,
-  observed file/hash, and hash-guarded owner-approved removal for rollback.
+- Browser downloads require a real event, workspace-confined destination, observed
+  file/hash, and hash-guarded rollback. Upload submission is Level 3, requires a
+  success selector for verification, and preserves remote-side-effect uncertainty.
 - Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
 - Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a
