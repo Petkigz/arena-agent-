@@ -69,6 +69,12 @@ self-reported, and conversational claims are not promoted as facts. Repeated
 maintenance must be idempotent and must never teach the system from its own
 measurement probes.
 
+Verified success may propose a LoRA example, but never approve or train it.
+Training candidates are redacted, deduplicated, owner-editable, and excluded
+until explicitly approved. Dataset export includes a held-out evaluation split;
+adapter selection is not claimed to affect behavior until the inference provider
+actually loads it and before/after evaluation demonstrates improvement.
+
 ## 7. Typed, honest, degradable responses
 
 - Every tool/agent returns a `{"success": bool, ...}` dict, not exceptions and not

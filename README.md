@@ -129,7 +129,7 @@ arena-agent-/
 │   │   ├── object_detector.py   # Face via Haar + YOLO/SSD fallback + auto-grounding (P1-1)
 │   │   ├── vlm_analyzer.py      # True VLM Moondream2/Llava with OCR+LLM fallback (P3, optional)
 │   │   ├── prosody_analyzer.py  # Voice pitch/energy/ZCR → emotion from real signals (P2)
-│   │   ├── lora_manager.py      # Continual LoRA adapters without forgetting (P3)
+│   │   ├── lora_manager.py      # Owner-reviewed train/eval datasets + PEFT adapter tooling (P3)
 │   │   └── manifest.py          # Single source of truth for all tools
 │   ├── utils/            # Logging, hardware monitor/governor (P/E cores, VRAM)
 │   ├── main.py           # FastAPI core router (now 140+ routes: vision grounding, VLM, LoRA, projects)

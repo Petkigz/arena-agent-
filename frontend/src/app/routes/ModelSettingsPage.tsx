@@ -16,8 +16,22 @@ interface LoraStatus {
   adapters_count: number;
   adapters: LoraAdapter[];
   active?: string;
+  runtime_applied?: boolean;
   datasets: string[];
   note?: string;
+}
+
+interface TrainingCandidate {
+  candidate_id: string;
+  skill_name: string;
+  prompt: string;
+  response: string;
+  action_type: string;
+  status: 'pending' | 'approved' | 'rejected' | 'exported';
+  source_type: string;
+  verification_reason: string;
+  evidence: string[];
+  redactions: string[];
 }
 
 export function ModelSettingsPage() {
@@ -42,6 +56,10 @@ export function ModelSettingsPage() {
   const [testingModel, setTestingModel] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, ReturnType<typeof validateModelConfig>>>({});
   const [loraStatus, setLoraStatus] = useState<LoraStatus | null>(null);
+  const [trainingCandidates, setTrainingCandidates] = useState<TrainingCandidate[]>([]);
+  const [candidateBusy, setCandidateBusy] = useState<string | null>(null);
+  const [candidateMessage, setCandidateMessage] = useState('');
+  const [correction, setCorrection] = useState({ skill_name: 'general', prompt: '', response: '' });
   const [vlmStatus, setVlmStatus] = useState<{ available: boolean; model_id?: string; engine?: string; note?: string } | null>(null);
 
   useEffect(() => {
@@ -51,12 +69,111 @@ export function ModelSettingsPage() {
     fetch('/loras/status', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && data) setLoraStatus(data);
     }).catch(() => {});
+    fetch('/loras/training-candidates', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
+      if (!cancelled && Array.isArray(data?.candidates)) setTrainingCandidates(data.candidates);
+    }).catch(() => {});
     // Fetch VLM status — include API key
     fetch('/vision/vlm-status', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && data) setVlmStatus(data);
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  const refreshCandidates = async () => {
+    const response = await fetch('/loras/training-candidates', { headers: apiKeyHeader() });
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data?.candidates)) setTrainingCandidates(data.candidates);
+    }
+  };
+
+  const decideCandidate = async (candidate: TrainingCandidate, approved: boolean) => {
+    setCandidateBusy(candidate.candidate_id);
+    try {
+      if (approved) {
+        const saved = await fetch(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+          body: JSON.stringify({
+            prompt: candidate.prompt,
+            response: candidate.response,
+            skill_name: candidate.skill_name,
+            note: 'Saved before approval in Model Settings',
+          }),
+        });
+        if (!saved.ok) throw new Error('Could not save the exact pair before approval');
+      }
+      const response = await fetch(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify({ approved, note: approved ? 'Approved in Model Settings' : 'Rejected in Model Settings' }),
+      });
+      if (!response.ok) throw new Error('Could not update candidate');
+      setCandidateMessage(approved ? 'Exact edited pair approved' : 'Candidate rejected');
+      await refreshCandidates();
+    } catch (error) {
+      setCandidateMessage(error instanceof Error ? error.message : 'Could not update candidate');
+    } finally {
+      setCandidateBusy(null);
+    }
+  };
+
+  const updateCandidate = (candidateId: string, patch: Partial<TrainingCandidate>) => {
+    setTrainingCandidates((current) => current.map((item) =>
+      item.candidate_id === candidateId ? { ...item, ...patch } : item
+    ));
+  };
+
+  const saveCandidate = async (candidate: TrainingCandidate) => {
+    setCandidateBusy(candidate.candidate_id);
+    const response = await fetch(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({
+        prompt: candidate.prompt,
+        response: candidate.response,
+        skill_name: candidate.skill_name,
+        note: 'Edited in Model Settings',
+      }),
+    });
+    setCandidateMessage(response.ok ? 'Candidate edits saved; approval is still required' : 'Could not save candidate');
+    await refreshCandidates();
+    setCandidateBusy(null);
+  };
+
+  const exportSkill = async (skillName: string) => {
+    setCandidateBusy(`export:${skillName}`);
+    const response = await fetch('/loras/training-candidates/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify({ skill_name: skillName }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setCandidateMessage(response.ok && data?.success
+      ? `Exported ${data.count} reviewed examples for ${skillName}`
+      : data?.error || 'Dataset export failed');
+    await refreshCandidates();
+    setCandidateBusy(null);
+  };
+
+  const addOwnerCorrection = async () => {
+    setCandidateBusy('owner-correction');
+    try {
+      const response = await fetch('/loras/training-candidates/owner-correction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify(correction),
+      });
+      if (!response.ok) throw new Error('Could not add owner correction');
+      setCorrection({ skill_name: correction.skill_name, prompt: '', response: '' });
+      setCandidateMessage('Owner correction added to the review queue');
+      await refreshCandidates();
+    } catch (error) {
+      setCandidateMessage(error instanceof Error ? error.message : 'Could not add correction');
+    } finally {
+      setCandidateBusy(null);
+    }
+  };
 
   const handleTestModel = async (type: 'llm' | 'stt' | 'tts', model: ModelConfig) => {
     setTestingModel(model.id);
@@ -266,13 +383,16 @@ export function ModelSettingsPage() {
             <h2 className="text-2xl font-semibold text-text-primary">Continual Learning — LoRA Adapters</h2>
           </div>
           <p className="text-sm text-text-secondary mb-4">
-            LoRA enables the agent to get better at tasks it has seen before without catastrophic forgetting — a key human intelligence capability. Adapters live in <code>data/loras/</code> and are discovered automatically.
+            LoRA provides skill-specific adaptation tooling without modifying the base weights. Arena can build reviewed datasets and train PEFT adapters, but behavior changes only after the external inference provider loads or merges an adapter and held-out evaluation confirms improvement. Adapters live in <code>data/loras/</code>.
           </p>
           <Card className="space-y-4">
             {loraStatus ? (
               <>
                 <div className="text-sm text-text-primary">
-                  <span className="font-medium">Active:</span> {loraStatus.active || '(none — base model)'}
+                  <span className="font-medium">Selected:</span> {loraStatus.active || '(none — base model)'}
+                  {loraStatus.active && !loraStatus.runtime_applied && (
+                    <span className="text-xs text-amber-600 ml-2">not loaded by inference runtime</span>
+                  )}
                 </div>
                 <div className="text-sm text-text-secondary">
                   {loraStatus.adapters_count} adapter(s) — datasets: {loraStatus.datasets.join(', ') || '(none)'}
@@ -293,7 +413,7 @@ export function ModelSettingsPage() {
                             }}
                             className="px-2 py-1 text-xs bg-accent-primary text-white rounded"
                           >
-                            Activate
+                            Select
                           </button>
                         </div>
                       </li>
@@ -317,6 +437,113 @@ export function ModelSettingsPage() {
             ) : (
               <p className="text-xs text-text-muted">Loading LoRA status… (backend may be offline)</p>
             )}
+
+            <div className="border-t border-border pt-4 space-y-3">
+              <div>
+                <h3 className="font-medium text-text-primary">Reviewed Training Examples</h3>
+                <p className="text-xs text-text-muted mt-1">
+                  Verified outcomes only propose redacted candidates. Nothing enters a dataset until you edit and approve it. At least 5 approved examples are required so export includes a held-out evaluation split.
+                </p>
+              </div>
+              {candidateMessage && <p className="text-xs text-text-secondary">{candidateMessage}</p>}
+              <div className="rounded border border-border p-3 space-y-2">
+                <h4 className="text-sm font-medium text-text-primary">Add an owner correction</h4>
+                <input
+                  value={correction.skill_name}
+                  onChange={(event) => setCorrection({ ...correction, skill_name: event.target.value })}
+                  className="w-full px-3 py-2 rounded border border-border bg-background-primary text-xs"
+                  placeholder="Skill name"
+                />
+                <textarea
+                  value={correction.prompt}
+                  onChange={(event) => setCorrection({ ...correction, prompt: event.target.value })}
+                  className="w-full min-h-16 px-3 py-2 rounded border border-border bg-background-primary text-xs"
+                  placeholder="Prompt or situation"
+                />
+                <textarea
+                  value={correction.response}
+                  onChange={(event) => setCorrection({ ...correction, response: event.target.value })}
+                  className="w-full min-h-20 px-3 py-2 rounded border border-border bg-background-primary text-xs"
+                  placeholder="Preferred response"
+                />
+                <button
+                  disabled={candidateBusy === 'owner-correction' || correction.prompt.trim().length < 3 || correction.response.trim().length < 3}
+                  onClick={addOwnerCorrection}
+                  className="px-3 py-1.5 text-xs bg-background-secondary border border-border rounded disabled:opacity-50"
+                >
+                  Add to review queue
+                </button>
+              </div>
+              {trainingCandidates.filter((item) => item.status === 'pending').length === 0 ? (
+                <p className="text-xs text-text-muted">No candidates are waiting for review.</p>
+              ) : trainingCandidates.filter((item) => item.status === 'pending').map((candidate) => (
+                <div key={candidate.candidate_id} className="rounded border border-border bg-background-surface p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-text-primary">{candidate.action_type} · {candidate.source_type}</span>
+                    <span className="text-xs text-text-muted">{candidate.candidate_id}</span>
+                  </div>
+                  <input
+                    value={candidate.skill_name}
+                    onChange={(event) => updateCandidate(candidate.candidate_id, { skill_name: event.target.value })}
+                    className="w-full px-3 py-2 rounded border border-border bg-background-primary text-xs"
+                    aria-label="Training skill"
+                  />
+                  <textarea
+                    value={candidate.prompt}
+                    onChange={(event) => updateCandidate(candidate.candidate_id, { prompt: event.target.value })}
+                    className="w-full min-h-20 px-3 py-2 rounded border border-border bg-background-primary text-xs"
+                    aria-label="Training prompt"
+                  />
+                  <textarea
+                    value={candidate.response}
+                    onChange={(event) => updateCandidate(candidate.candidate_id, { response: event.target.value })}
+                    className="w-full min-h-24 px-3 py-2 rounded border border-border bg-background-primary text-xs"
+                    aria-label="Training response"
+                  />
+                  <p className="text-xs text-text-muted">Evidence: {candidate.verification_reason || candidate.evidence.join(', ')}</p>
+                  {candidate.redactions.length > 0 && (
+                    <p className="text-xs text-amber-600">Redacted: {candidate.redactions.join(', ')}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      disabled={candidateBusy === candidate.candidate_id}
+                      onClick={() => saveCandidate(candidate)}
+                      className="px-2 py-1 text-xs border border-border rounded"
+                    >
+                      Save edits
+                    </button>
+                    <button
+                      disabled={candidateBusy === candidate.candidate_id}
+                      onClick={() => decideCandidate(candidate, false)}
+                      className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      disabled={candidateBusy === candidate.candidate_id}
+                      onClick={() => decideCandidate(candidate, true)}
+                      className="px-2 py-1 text-xs bg-green-600 text-white rounded"
+                    >
+                      Approve exact pair
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {[...new Set(
+                trainingCandidates
+                  .filter((item) => item.status === 'approved')
+                  .map((item) => item.skill_name)
+              )].map((skill) => (
+                <button
+                  key={skill}
+                  disabled={candidateBusy === `export:${skill}`}
+                  onClick={() => exportSkill(skill)}
+                  className="mr-2 px-3 py-1.5 text-xs bg-accent-primary text-white rounded"
+                >
+                  Export approved “{skill}” dataset
+                </button>
+              ))}
+            </div>
           </Card>
         </section>
 

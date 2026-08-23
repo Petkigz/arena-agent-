@@ -1,10 +1,10 @@
 """LoRA manager — continual learning via LoRA adapters for Qwen.
 
-P2 AGI: Continual learning that changes behavior.
-Human intelligence gets better at tasks it has seen before. Previously the system
-recorded outcomes and lessons but did not update model weights. Full fine-tune on
-i9 alone causes catastrophic forgetting. LoRA (Low-Rank Adaptation) allows
-skill-specific tuning without forgetting.
+P2 AGI: Tooling toward continual learning that can change behavior once deployed.
+Human intelligence gets better at tasks it has seen before. Full fine-tuning on
+local hardware risks catastrophic forgetting; LoRA provides skill-specific
+adapter weights. Training an adapter here does not change the external LM Studio
+runtime until the provider loads or merges it, and improvement must be measured.
 
 This module is deterministic, typed, degradable, and safe for low-spec hardware:
 - Discovers adapters in data/loras/ (each adapter is a folder with adapter_config.json)
@@ -26,6 +26,7 @@ If not set up, this tool degrades gracefully (lists empty, training returns erro
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -107,12 +108,24 @@ class LoraManagerTool:
         try:
             if ACTIVE_FILE.exists():
                 data = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
-                return {"success": True, "active": data.get("active"), "info": data}
+                return {
+                    "success": True,
+                    "active": data.get("active"),
+                    "runtime_applied": False,
+                    "info": data,
+                    "note": "Adapter is selected in Arena metadata but is not attached to the external LM Studio runtime.",
+                }
             # Also check env var
             env_active = os.getenv("ARENA_LORA_ACTIVE", "").strip()
             if env_active:
-                return {"success": True, "active": env_active, "info": {"source": "env"}}
-            return {"success": True, "active": None, "info": {}}
+                return {
+                    "success": True,
+                    "active": env_active,
+                    "runtime_applied": False,
+                    "info": {"source": "env"},
+                    "note": "ARENA_LORA_ACTIVE is selection metadata; configure the inference provider separately.",
+                }
+            return {"success": True, "active": None, "runtime_applied": False, "info": {}}
         except Exception as e:
             return {"success": False, "error": str(e), "active": None}
 
@@ -143,7 +156,11 @@ class LoraManagerTool:
                 "success": True,
                 "active": safe_name,
                 "path": str(adapter_path),
-                "message": f"Activated adapter {safe_name}. Restart LM Studio with adapter loaded, or set ARENA_LORA_ACTIVE={safe_name}",
+                "runtime_applied": False,
+                "message": (
+                    f"Selected adapter {safe_name} in Arena metadata. It will not change model output "
+                    "until the adapter is merged/loaded by the external inference provider."
+                ),
             }
         except Exception as e:
             app_logger.error(f"Activate adapter failed: {e}")
@@ -199,21 +216,82 @@ class LoraManagerTool:
         safe_skill = "".join(c for c in skill_name.strip().lower() if c.isalnum() or c in ("_", "-")).strip() or "general"
         skill_dir = DATASETS_DIR / safe_skill
         try:
+            accepted: List[Dict[str, str]] = []
+            seen = set()
+            source_ids = []
+            for ex in examples:
+                if not isinstance(ex, dict):
+                    continue
+                prompt = str(ex.get("prompt", "")).strip()
+                response = str(ex.get("response", "")).strip()
+                if len(prompt) < 3 or len(response) < 3:
+                    continue
+                digest = hashlib.sha256(
+                    json.dumps(
+                        {"prompt": prompt, "response": response},
+                        sort_keys=True,
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                ).hexdigest()
+                if digest in seen:
+                    continue
+                seen.add(digest)
+                accepted.append({"prompt": prompt, "response": response})
+                if ex.get("candidate_id"):
+                    source_ids.append(str(ex["candidate_id"]))
+
+            if not accepted:
+                return {"success": False, "error": "No valid unique prompt/response examples supplied"}
+
+            # Stable hash ordering makes train/eval splits reproducible.
+            accepted.sort(key=lambda item: hashlib.sha256(
+                f"{item['prompt']}\n{item['response']}".encode("utf-8")
+            ).hexdigest())
+            eval_count = max(1, round(len(accepted) * 0.2)) if len(accepted) >= 5 else 0
+            eval_examples = accepted[:eval_count]
+            train_examples = accepted[eval_count:]
+
             skill_dir.mkdir(parents=True, exist_ok=True)
             train_path = skill_dir / "train.jsonl"
-            with open(train_path, "w", encoding="utf-8") as f:
-                for ex in examples:
-                    # Validate
-                    if not isinstance(ex, dict) or "prompt" not in ex or "response" not in ex:
-                        continue
-                    f.write(json.dumps({"prompt": ex["prompt"], "response": ex["response"]}, ensure_ascii=False) + "\n")
+            eval_path = skill_dir / "eval.jsonl"
+            with open(train_path, "w", encoding="utf-8") as file:
+                for example in train_examples:
+                    file.write(json.dumps(example, ensure_ascii=False) + "\n")
+            if eval_examples:
+                with open(eval_path, "w", encoding="utf-8") as file:
+                    for example in eval_examples:
+                        file.write(json.dumps(example, ensure_ascii=False) + "\n")
+            else:
+                eval_path.unlink(missing_ok=True)
+
+            dataset_hash = hashlib.sha256(
+                "\n".join(
+                    json.dumps(item, sort_keys=True, ensure_ascii=False)
+                    for item in accepted
+                ).encode("utf-8")
+            ).hexdigest()
+            manifest = {
+                "skill": safe_skill,
+                "total_count": len(accepted),
+                "train_count": len(train_examples),
+                "eval_count": len(eval_examples),
+                "dataset_sha256": dataset_hash,
+                "source_candidate_ids": sorted(set(source_ids)),
+            }
+            (skill_dir / "dataset_manifest.json").write_text(
+                json.dumps(manifest, indent=2), encoding="utf-8"
+            )
 
             return {
                 "success": True,
                 "skill": safe_skill,
                 "path": str(train_path),
-                "count": len(examples),
-                "message": f"Prepared dataset for skill {safe_skill} with {len(examples)} examples at {train_path}",
+                "eval_path": str(eval_path) if eval_examples else None,
+                "count": len(accepted),
+                "train_count": len(train_examples),
+                "eval_count": len(eval_examples),
+                "dataset_sha256": dataset_hash,
+                "message": f"Prepared reviewed dataset for skill {safe_skill} with {len(accepted)} unique examples",
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -426,6 +504,10 @@ class LoraManagerTool:
             "adapters_count": adapters.get("count", 0),
             "adapters": adapters.get("adapters", [])[:10],
             "active": active.get("active"),
+            "runtime_applied": active.get("runtime_applied", False),
             "datasets": [p.name for p in DATASETS_DIR.iterdir() if p.is_dir()] if DATASETS_DIR.exists() else [],
-            "note": "LoRA enables continual learning without catastrophic forgetting. Prepare dataset via prepare_dataset(), then train().",
+            "note": (
+                "Reviewed datasets and PEFT training are supported. Adapter selection is metadata only; "
+                "the external LM Studio/inference provider must load or merge the adapter before behavior changes."
+            ),
         }

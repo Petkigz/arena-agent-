@@ -1603,6 +1603,25 @@ class LoraJobRequest(BaseModel):
     epochs: int = 3
     learning_rate: float = 2e-4
 
+class TrainingCandidateEditRequest(BaseModel):
+    prompt: str
+    response: str
+    skill_name: str
+    note: str = ""
+
+class TrainingCandidateDecisionRequest(BaseModel):
+    approved: bool
+    note: str = ""
+
+class OwnerCorrectionRequest(BaseModel):
+    prompt: str
+    response: str
+    skill_name: str = "general"
+    note: str = ""
+
+class TrainingDatasetExportRequest(BaseModel):
+    skill_name: str
+
 @router.get("/loras")
 def list_loras_endpoint():
     """List LoRA adapters."""
@@ -1648,6 +1667,75 @@ def deactivate_lora_endpoint():
         return LoraManagerTool.deactivate_adapter()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/loras/training-candidates")
+def list_training_candidates_endpoint(
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    skill_name: Optional[str] = Query(default=None),
+):
+    from app.cognition.runtime import CognitiveRuntime
+    from app.cognition.training_examples import TrainingExampleStatus
+    try:
+        status_value = TrainingExampleStatus(status_filter) if status_filter else None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Unknown candidate status: {status_filter}") from exc
+    candidates = CognitiveRuntime.get_instance().training_examples.list(
+        status=status_value, skill_name=skill_name
+    )
+    return {"success": True, "candidates": [item.to_dict() for item in candidates]}
+
+
+@router.post("/loras/training-candidates/owner-correction")
+def create_owner_correction_endpoint(req: OwnerCorrectionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    candidate = CognitiveRuntime.get_instance().training_examples.propose_owner_correction(
+        prompt=req.prompt,
+        response=req.response,
+        skill_name=req.skill_name,
+        note=req.note,
+    )
+    if candidate is None:
+        raise HTTPException(status_code=400, detail="Prompt and response must each contain at least 3 characters")
+    return {"success": True, "candidate": candidate.to_dict()}
+
+
+@router.put("/loras/training-candidates/{candidate_id}")
+def edit_training_candidate_endpoint(candidate_id: str, req: TrainingCandidateEditRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        candidate = CognitiveRuntime.get_instance().training_examples.edit(
+            candidate_id,
+            prompt=req.prompt,
+            response=req.response,
+            skill_name=req.skill_name,
+            note=req.note,
+        )
+        return {"success": True, "candidate": candidate.to_dict()}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Training candidate not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/loras/training-candidates/{candidate_id}/decision")
+def decide_training_candidate_endpoint(candidate_id: str, req: TrainingCandidateDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        candidate = CognitiveRuntime.get_instance().training_examples.decide(
+            candidate_id, approved=req.approved, note=req.note
+        )
+        return {"success": True, "candidate": candidate.to_dict()}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Training candidate not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/loras/training-candidates/export")
+def export_training_candidates_endpoint(req: TrainingDatasetExportRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    return CognitiveRuntime.get_instance().training_examples.export_approved(req.skill_name)
+
 
 @router.post("/loras/dataset")
 def prepare_lora_dataset_endpoint(req: LoraDatasetRequest):

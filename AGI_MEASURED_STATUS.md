@@ -101,7 +101,7 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **self_evolution_verified** — SelfEvolvingAgent verified loop: synthesize→pytest→hotload only if green (P2)
 - **project_management** — ProjectManager + GoalDecomposer wired — complex goals → sub-goals DAG → Project (P2)
 - **vlm_integration** — VlmAnalyzerTool (Moondream2/Llava) with OCR+LLM fallback — true VLM when installed (P3)
-- **lora_continual_learning** — LoraManagerTool — continual learning via LoRA without forgetting (P3)
+- **lora_continual_learning** — verified outcomes propose redacted examples; owner review gates reproducible LoRA train/eval dataset export; PEFT training/selection is available, while external-runtime loading remains explicitly unverified (P3)
 
 Each check is tagged with one of seven evidence categories — structural / integration / behavioral / robustness / transfer / generalization / longitudinal — and the report returns a per-category summary so "the module exists" is never conflated with "it performs, transfers, or improves."
 
@@ -165,12 +165,14 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Placeholder-success removal**: Screenshot streaming analysis now decodes and validates real image bytes and calls the actual OCR/Vision tools. Custom wake-word training and speaker enrollment/identification explicitly report unavailable until verified model pipelines exist; no fake ONNX artifacts, arbitrary first-speaker matches, or invented `0.85` confidence/accuracy values are returned. Speaker verification without a reference is UNKNOWN, not implicitly accepted.
 
+- ✅ **Reviewed LoRA experience pipeline**: Verified successful outcomes propose deduplicated prompt/response candidates with deterministic secret, email, phone, and home-path redaction. Simulated/unverified responses are rejected. Candidates remain pending until the owner edits and approves the exact pair. Export requires at least five approved examples and produces reproducible train/eval JSONL plus a provenance manifest. Adapter selection is honestly reported as metadata-only until the external inference provider loads or merges it.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):
 
 1. Install and exercise the optional tiny VLM on the owner's hardware. The integration and honest OCR+detector fallback exist, but model quality/performance on the RX 580 has not been live-verified in this sandbox.
-2. Automatically derive reviewed LoRA training examples from successful outcomes and lessons; dataset preparation and training scaffolding currently require explicit examples.
+2. Add before/after held-out evaluation and an inference-provider loading path for trained LoRA adapters. Verified examples and owner-reviewed train/eval export now exist, but selecting an adapter in Arena metadata does not attach it to external LM Studio or prove behavioral improvement.
 3. Add evidence-reconciliation probes for project sub-goals left in `waiting_evidence`; the scheduler deliberately does not repeat an unverified action, but currently needs an owner/manual observation to resume it.
 4. Full end-to-end browser test of the multimodal round trip (text + image → grounded detection → reply) against a live server.
 5. Exercise external-API tools against live endpoints on the owner's machine.

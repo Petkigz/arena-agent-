@@ -5,6 +5,7 @@ import re
 import uuid
 import time
 import threading
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from app.config import settings
@@ -89,6 +90,10 @@ class CognitiveRuntime:
         # Phase 1C: Structured lesson extraction and behavior change
         from app.cognition.structured_lessons import LessonStore
         self.lessons = LessonStore(db_path=path)
+        from app.cognition.training_examples import TrainingExampleStore
+        self.training_examples = TrainingExampleStore(
+            db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db"
+        )
         # Phase 3: Transfer Learning
         from app.cognition.skill_classifier import SkillClassifier
         from app.cognition.analogical_memory import AnalogicalMemory
@@ -1087,8 +1092,11 @@ class CognitiveRuntime:
         try:
             from app.tools.lora_manager import LoraManagerTool
             _add("lora_continual_learning",
-                 hasattr(LoraManagerTool, "list_adapters") and hasattr(LoraManagerTool, "train"),
-                 "LoraManagerTool — continual learning via LoRA adapters (prepare_dataset, train, activate) without forgetting", "longitudinal")
+                 hasattr(LoraManagerTool, "list_adapters")
+                 and hasattr(LoraManagerTool, "train")
+                 and hasattr(self, "training_examples")
+                 and hasattr(self.training_examples, "export_approved"),
+                 "Verified outcomes → redacted owner-reviewed examples → reproducible LoRA train/eval datasets", "longitudinal")
         except Exception as e:
             _add("lora_continual_learning", False, f"LoRA probe failed: {e}", "longitudinal")
 
@@ -1565,6 +1573,29 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Perception→grounding loop failed (best-effort): {e}")
 
+    def _propose_training_example(
+        self,
+        *,
+        prompt: str,
+        response: str,
+        action_type: str,
+        verification_result: Any,
+        session_id: str,
+        trace_id: str,
+    ) -> None:
+        """Best-effort candidate creation; never auto-approves or trains."""
+        try:
+            self.training_examples.propose_verified(
+                prompt=prompt,
+                response=response,
+                action_type=action_type,
+                verification_result=verification_result,
+                source_session_id=session_id,
+                source_trace_id=trace_id,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Could not propose reviewed LoRA example: {exc}")
+
     def execute_authorized_proposal(
         self,
         proposal: ActionProposal,
@@ -1758,6 +1789,14 @@ class CognitiveRuntime:
             )
         except Exception as exc:
             app_logger.warning(f"Authorized execution episodic memory failed: {exc}")
+        self._propose_training_example(
+            prompt=goal_text,
+            response=assistant_reply,
+            action_type=proposal.action_type,
+            verification_result=verification,
+            session_id=session_id,
+            trace_id=trace.trace_id,
+        )
 
         actual_state = dict(observed_state or {})
         actual_state.update({
@@ -2163,6 +2202,14 @@ class CognitiveRuntime:
                 )
             except Exception as e:
                 app_logger.warning(f"Answer episodic memory failed: {e}")
+            self._propose_training_example(
+                prompt=user_text,
+                response=assistant_reply,
+                action_type="formulate_answer",
+                verification_result=verify_res,
+                session_id=session_id,
+                trace_id=trace.trace_id,
+            )
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -2229,6 +2276,14 @@ class CognitiveRuntime:
                 )
             except Exception as e:
                 app_logger.warning(f"Investigation episodic memory failed: {e}")
+            self._propose_training_example(
+                prompt=user_text,
+                response=assistant_reply,
+                action_type="investigate",
+                verification_result=verify_res,
+                session_id=session_id,
+                trace_id=trace.trace_id,
+            )
 
             try:
                 lesson_rec = self.learning.process_outcome_reflection(
@@ -2536,6 +2591,14 @@ class CognitiveRuntime:
             )
         except Exception as e:
             app_logger.warning(f"Cognitive cycle episodic memory failed: {e}")
+        self._propose_training_example(
+            prompt=user_text,
+            response=assistant_reply,
+            action_type=final_action_type,
+            verification_result=verify_res,
+            session_id=session_id,
+            trace_id=trace.trace_id,
+        )
 
         # Observe Reality & Calculate Prediction Error (Surprisal)
         try:

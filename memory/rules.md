@@ -144,6 +144,17 @@ an alternative or retry requires a new owner authorization.
 The default remains bounded autonomy through Level 2. Owner policy can tighten
 that authority but cannot silently make a manifest Level-3 action autonomous.
 
+## Continual-learning authority
+
+Verified success may create a **pending** LoRA training candidate only. Automatic
+approval, dataset inclusion, training, activation, and claims of improvement are
+forbidden. Candidates are deterministically redacted and deduplicated; the owner
+may edit, approve, or reject each exact pair. Export requires at least five
+approved examples and creates a reproducible held-out evaluation split with a
+source-candidate manifest. Selecting a PEFT adapter in Arena is metadata only
+until the external inference provider actually loads/merges it and a before/after
+held-out evaluation demonstrates improvement.
+
 ## Domain-Specific Policies (Optional)
 
 Users may define additional restrictions for specific domains. These are **user-configured**, not hardcoded:
