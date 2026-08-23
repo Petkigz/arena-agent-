@@ -52,10 +52,8 @@ class SecurityCanaryTrap:
         return -sum([p * math.log(p, 2) for p in prob])
 
     @classmethod
-    def inspect_clipboard_entropy(cls) -> Dict[str, Any]:
-        """
-        Inspects system clipboard for exposed API keys, secret hashes, or passwords and clears them if high entropy.
-        """
+    def inspect_clipboard_entropy(cls, clear_sensitive: bool = False) -> Dict[str, Any]:
+        """Inspect clipboard; clearing is a separate Level-3 exact action."""
         try:
             import pyperclip
             clip_text = pyperclip.paste() if hasattr(pyperclip, 'paste') else ""
@@ -67,14 +65,27 @@ class SecurityCanaryTrap:
             is_sensitive = entropy > 4.2 and len(clip_text) > 16
 
             if is_sensitive:
-                if hasattr(pyperclip, 'copy'):
-                    pyperclip.copy("")
-                db.create_audit_log("inspect_clipboard_entropy", "success", f"Wiped high-entropy clipboard string ({len(clip_text)} chars, entropy {entropy:.2f})", level=1)
+                if not clear_sensitive:
+                    return {
+                        "success": True, "clipboard_cleared": False,
+                        "sensitive_detected": True, "requires_approval": True,
+                        "entropy_score": round(entropy, 2),
+                        "note": "Sensitive-looking clipboard content detected; no change made. Clearing requires an exact Level-3 action."
+                    }
+                if not hasattr(pyperclip, 'copy'):
+                    return {"success": False, "error": "Clipboard clear operation unavailable"}
+                pyperclip.copy("")
+                verified_empty = not (pyperclip.paste() if hasattr(pyperclip, 'paste') else None)
+                if not verified_empty:
+                    return {"success": False, "error": "Clipboard clear command was not independently observed", "side_effects": True}
+                db.create_audit_log("clear_sensitive_clipboard", "success", f"Owner-authorized wipe of high-entropy clipboard string ({len(clip_text)} chars, entropy {entropy:.2f})", level=3)
                 return {
-                    "success": True,
-                    "clipboard_cleared": True,
-                    "entropy_score": round(entropy, 2),
-                    "note": "High-entropy API key or password detected on clipboard and safely wiped."
+                    "success": True, "clipboard_cleared": True,
+                    "sensitive_detected": True, "environment_verified": True,
+                    "entropy_score": round(entropy, 2), "side_effects": True,
+                    "rollback_supported": False,
+                    "rollback_reason": "Previous clipboard contents are intentionally not retained and cannot be restored.",
+                    "note": "Sensitive-looking clipboard content cleared and empty clipboard observed."
                 }
 
             return {
@@ -86,3 +97,7 @@ class SecurityCanaryTrap:
         except Exception as e:
             app_logger.warning(f"Clipboard entropy inspection notice: {e}")
             return {"success": False, "error": str(e)}
+
+    @classmethod
+    def clear_sensitive_clipboard(cls) -> Dict[str, Any]:
+        return cls.inspect_clipboard_entropy(clear_sensitive=True)

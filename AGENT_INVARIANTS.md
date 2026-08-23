@@ -107,6 +107,8 @@ Owner Control Plane may always impose a stricter rule:
   with a deterministic compensation receipt and always requires fresh approval.
 - Transactional file operations reject overwrite conflicts, verify post-action
   location/content hashes, and preserve exact reverse-move facts for owner-approved rollback.
+- Read-only clipboard inspection never mutates content. Clearing is a separate
+  Level-3 exact action, verifies empty state, and truthfully has no rollback.
 - Owner authorization never implies OS elevation. Cross-owner process changes
   require verified elevated privilege; process identity includes owner, executable,
   parent PID, creation time, and whether Arena launched it. Verified termination

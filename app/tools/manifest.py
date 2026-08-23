@@ -378,6 +378,10 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(GitManagerTool.rollback_checkpoint, "checkpoint_id"))
 
     # ── Security ────────────────────────────────────────────────────────────
+    add("clipboard_inspect", "security", 0, "Inspect clipboard entropy without changing content",
+        _ignore_payload(SecurityCanaryTrap.inspect_clipboard_entropy))
+    add("clipboard_clear_sensitive", "security", 3, "Clear sensitive-looking clipboard and verify empty state",
+        _ignore_payload(SecurityCanaryTrap.clear_sensitive_clipboard))
     add("lab_scan", "security", 3, "Scan an authorized lab target",
         _wrap(SecurityLabTool.scan_lab_target, "target", "ports"))
     add("opsec_audit", "security", 1, "Audit digital footprint",
