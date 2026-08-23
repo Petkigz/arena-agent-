@@ -28,8 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.config import settings
-from app.llm import llm_client, extract_reply
-from app.tools.data_analyzer import DataAnalysisEngine
+from app.llm import llm_client, ModelCompletionUnavailable, require_real_completion
 from app.tools.sql_query import SQLQueryTool
 from app.utils.logger import app_logger, audit_logger
 
@@ -189,6 +188,8 @@ class DataAnalysisAgent:
     def _inspect(self, path: Path) -> Dict[str, Any]:
         """Deterministic schema + summary statistics via DataAnalysisEngine."""
         try:
+            from app.tools.data_analyzer import DataAnalysisEngine
+
             return DataAnalysisEngine.analyze_dataset(str(path))
         except Exception as e:
             app_logger.warning(f"Inspection failed for {path}: {e}")
@@ -247,15 +248,18 @@ class DataAnalysisAgent:
             f"SQL run: {query}\n\n"
             f"Query results (exact): {rows[:50]}"
         )
-        answer = extract_reply(
-            self._llm.generate_chat_completion(
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-                complexity=self._select_complexity(), max_tokens=600,
-            ),
-            fallback="",
-        )
-        if answer.strip():
-            return answer.strip()
+        try:
+            answer = require_real_completion(
+                self._llm.generate_chat_completion(
+                    messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    complexity=self._select_complexity(), max_tokens=600,
+                )
+            )
+            if answer.strip():
+                return answer.strip()
+        except ModelCompletionUnavailable:
+            # Exact query rows remain usable without model prose.
+            pass
         # Deterministic fallback: describe the result shape, never fabricate values.
         if not rows:
             return "The query ran successfully but returned no rows."
@@ -282,10 +286,10 @@ class DataAnalysisAgent:
             f"Question: {question}\n\nSchema: {schema}\n\n"
             f"Prior query errors:\n{failures or '(none)'}"
         )
-        return extract_reply(self._llm.generate_chat_completion(
+        return require_real_completion(self._llm.generate_chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             complexity=self._select_complexity(), max_tokens=400,
-        ), fallback="Query the dataset and answer the question.")
+        ))
 
     def _generate_query(self, question: str, plan: str, inspection: Dict[str, Any],
                         attempts: List[Dict[str, Any]]) -> str:
@@ -306,10 +310,10 @@ class DataAnalysisAgent:
             f"Question: {question}\n\nPlan: {plan}\n\nSchema: {schema}\n\n"
             f"Prior query errors:\n{failures or '(none)'}\n\nSQL:"
         )
-        query = extract_reply(self._llm.generate_chat_completion(
+        query = require_real_completion(self._llm.generate_chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             complexity=self._select_complexity(), max_tokens=400,
-        ), fallback="")
+        ))
         return self._strip_fences(query)
 
     @staticmethod

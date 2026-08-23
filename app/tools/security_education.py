@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
 
@@ -54,7 +54,7 @@ Provide:
                 max_tokens=1000
             )
 
-            audit_report = extract_reply(llm_res, fallback="Defensive audit completed.")
+            audit_report = require_real_completion(llm_res)
 
             # Index findings in SQLite memory
             mem_id = db.create_memory({

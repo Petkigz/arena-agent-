@@ -23,7 +23,10 @@ class TestPhase1EndToEndCognitiveIntegration:
         user_query = "Can you open Firefox and search for ordinary on YouTube?"
         result = runtime.process_cognitive_cycle(user_query, session_id="sess_p1_h_e2e")
 
-        assert result["success"] is True
+        # Firefox/network are unavailable in headless CI. The closed loop must
+        # return a truthful unverified failure rather than browser theater.
+        assert result["success"] is False
+        assert result.get("goal_verified") is not True
         assert result["session_id"] == "sess_p1_h_e2e"
         assert result["trace_id"].startswith("trace_")
         assert isinstance(result["executed_actions"], list)

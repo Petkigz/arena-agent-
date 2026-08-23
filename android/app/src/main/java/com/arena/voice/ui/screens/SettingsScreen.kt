@@ -131,7 +131,7 @@ class SettingsViewModel @Inject constructor(
                 val policy = JSONObject(raw).optJSONObject("policy") ?: JSONObject()
                 ownerMode = policy.optString("mode", ownerMode)
                 ownerPaused = policy.optBoolean("paused", false)
-                maxAutonomousSafety = policy.optInt("max_autonomous_safety_level", 0).toString()
+                maxAutonomousSafety = policy.optInt("max_autonomous_level", 0).toString()
             }
         }
         api.getAdaptiveAutonomy()?.let { raw ->

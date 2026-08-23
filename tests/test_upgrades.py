@@ -18,7 +18,15 @@ def test_proactive_scheduler():
     jobs = ProactiveScheduler.list_jobs()
     assert isinstance(jobs, list)
 
-def test_multi_agent_team_simulation():
+def test_multi_agent_team_with_real_completion_contract(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.llm_client.generate_chat_completion",
+        lambda **kwargs: {
+            "success": True,
+            "model": "test-model",
+            "choices": [{"message": {"content": "Verified collaborative output"}}],
+        },
+    )
     res = MultiAgentTeam.run_collaborative_workflow("Test multi-agent collaboration")
     assert res["success"] is True
     assert "final_verified_solution" in res

@@ -6,7 +6,7 @@ from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
 from app.tools.disposable_sandbox import DisposableSandbox
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 
 class SkillTeachingEngine:
     """
@@ -164,7 +164,16 @@ class SkillTeachingEngine:
             complexity="main",
             max_tokens=600
         )
-        ai_synthesis = extract_reply(llm_res, fallback="Skill playbook executed.")
+        try:
+            ai_synthesis = require_real_completion(llm_res)
+        except Exception as exc:
+            return {
+                "success": False,
+                "available": False,
+                "error_type": "model_unavailable",
+                "error": str(exc),
+                "sandbox_execution": sandbox_res,
+            }
 
         db.create_audit_log("execute_taught_skill", "success", f"Executed taught skill '{skill_name}'", level=1)
 

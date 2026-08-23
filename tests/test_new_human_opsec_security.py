@@ -5,6 +5,19 @@ from app.tools.universal_media_learner import UniversalMediaLearner
 from app.tools.opsec_manager import OpSecManagerTool
 from app.tools.pentest_company_assistant import PentestCompanyAssistant
 
+
+@pytest.fixture(autouse=True)
+def real_model_completion(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.llm_client.generate_chat_completion",
+        lambda **kwargs: {
+            "success": True,
+            "model": "test-model",
+            "choices": [{"message": {"content": "Right to Erasure\nVerified test report"}}],
+        },
+    )
+
+
 def test_human_nature_engine():
     # Test emotional tone analysis
     analysis = HumanNatureEngine.analyze_emotional_tone("I'm really stressed and overwhelmed with this urgent deadline")

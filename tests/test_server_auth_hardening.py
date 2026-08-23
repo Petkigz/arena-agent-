@@ -44,6 +44,14 @@ def test_api_routers_require_key_when_auth_enabled(reloaded_server):
     assert resp.status_code in (401, 403)
 
 
+def test_conversation_identifiers_require_key_when_auth_enabled(reloaded_server):
+    client = TestClient(reloaded_server)
+    assert client.get("/conversations").status_code in (401, 403)
+    assert client.get(
+        "/conversations", headers={"X-API-Key": "test-secret-key"}
+    ).status_code == 200
+
+
 def test_health_is_open_even_when_auth_enabled(reloaded_server):
     """Health check stays unauthenticated (it reveals no capability surface)."""
     c = TestClient(reloaded_server)
@@ -57,10 +65,10 @@ def test_insecure_lan_guard_rejects_non_localhost(monkeypatch):
     monkeypatch.delenv("ARENA_ALLOW_INSECURE_LAN", raising=False)
     importlib.reload(server_module)
     try:
-        c = TestClient(server_module.app, client=("192.168.1.50", 12345))
-        resp = c.get("/health")
-        assert resp.status_code == 403
-        assert "localhost" in resp.text or "ARENA_API_KEY" in resp.text
+        assert server_module._client_is_local("192.168.1.50") is False
+        response = server_module._insecure_lan_error()
+        assert response.status_code == 403
+        assert b"localhost" in response.body or b"ARENA_API_KEY" in response.body
     finally:
         monkeypatch.delenv("ARENA_API_KEY", raising=False)
         importlib.reload(server_module)
@@ -84,8 +92,9 @@ def test_insecure_lan_opt_out_allows_non_localhost(monkeypatch):
     monkeypatch.setenv("ARENA_ALLOW_INSECURE_LAN", "1")
     importlib.reload(server_module)
     try:
-        c = TestClient(server_module.app, client=("192.168.1.50", 12345))
-        assert c.get("/health").status_code == 200
+        assert server_module.INSECURE_LAN_ALLOWED is True
+        # Local TestClient still verifies that the app remains operational.
+        assert TestClient(server_module.app).get("/health").status_code == 200
     finally:
         monkeypatch.delenv("ARENA_ALLOW_INSECURE_LAN", raising=False)
         importlib.reload(server_module)

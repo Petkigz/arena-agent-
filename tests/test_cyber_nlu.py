@@ -11,8 +11,8 @@ def test_cybersecurity_languages_knowledge():
 
 def test_natural_security_intent_parsing():
     res = CybersecurityBrainTool.parse_natural_security_intent("Check if local web app is vulnerable to SQL injection", target_scope="127.0.0.1")
-    assert res["success"] is True
-    assert "security_plan" in res
+    assert res["success"] is False
+    assert "provider unavailable" in res["error"].lower()
 
 def test_yara_rule_generation():
     yara = CybersecurityBrainTool.generate_yara_rule("Test_Malware", ["malicious_string_pattern_1", "eval_exploit"], meta_description="Test YARA Rule")

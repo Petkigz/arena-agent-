@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
-from app.llm import llm_client
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger
 
 
@@ -29,7 +29,7 @@ class TranslatorTool:
                 complexity="fast",
                 max_tokens=1024,
             )
-            translation = res.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            translation = require_real_completion(res)
             return {
                 "success": True,
                 "translation": translation,

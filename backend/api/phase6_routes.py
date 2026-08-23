@@ -23,10 +23,18 @@ from collections import defaultdict
 import hashlib
 
 from app.utils.logger import app_logger
-from app.tools.universal_filesystem import UniversalFilesystem
-from app.tools.disposable_sandbox import DisposableSandbox
-from app.tools.vision_analyzer import VisionAnalyzerTool
-from app.tools.ocr_reader import OCRReaderTool
+from app.cognition.execution_control import run_cancellable_subprocess
+from app.tools.manifest import _LazyImportProxy
+
+# Route registration must remain core-safe. Optional tool modules resolve only
+# when their specific endpoint is invoked.
+DisposableSandbox = _LazyImportProxy(
+    "app.tools.disposable_sandbox", "DisposableSandbox"
+)
+VisionAnalyzerTool = _LazyImportProxy(
+    "app.tools.vision_analyzer", "VisionAnalyzerTool"
+)
+OCRReaderTool = _LazyImportProxy("app.tools.ocr_reader", "OCRReaderTool")
 
 router = APIRouter(prefix="/api", tags=["phase6"])
 
@@ -847,8 +855,7 @@ async def _extract_file_metadata(file_path: Path, file_info: Dict[str, Any]) -> 
     # Try to extract additional metadata using ffprobe for media files
     if file_info['category'] in ['video', 'audio']:
         try:
-            import subprocess
-            result = subprocess.run(
+            result = run_cancellable_subprocess(
                 ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', str(file_path)],
                 capture_output=True,
                 text=True,

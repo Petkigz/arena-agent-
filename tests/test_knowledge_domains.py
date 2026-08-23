@@ -4,6 +4,23 @@ from app.tools.coder_brain import CoderBrainTool
 from app.tools.media_studio import MediaStudioTool
 from app.tools.knowledge_domains import KnowledgeDomainsTool
 
+
+@pytest.fixture(autouse=True)
+def real_model_completion(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.llm_client.generate_chat_completion",
+        lambda **kwargs: {
+            "success": True,
+            "model": "test-model",
+            "choices": [{"message": {"content": "Verified test completion"}}],
+        },
+    )
+    monkeypatch.setattr(
+        "app.tools.coder_brain.DocumentManager.create_document",
+        lambda *args, **kwargs: {"success": True, "path": "test-only"},
+    )
+
+
 def test_defensive_code_audit():
     code = "def login(user, pwd):\n    query = f'SELECT * FROM users WHERE u={user} AND p={pwd}'"
     res = SecurityEducationTool.audit_code_defensively(code, language="python")

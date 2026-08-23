@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.utils.logger import app_logger, audit_logger
 from app.cognition.execution_control import run_cancellable_blocking_call
 
@@ -139,13 +139,15 @@ class RssAggregator:
             "the items. Output only the summary."
         )
         user = f"Feed title: {parsed.get('title', '')}\n\nItems:\n{digest}"
-        summary = extract_reply(
-            llm.generate_chat_completion(
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-                complexity="fast", max_tokens=400,
-            ),
-            fallback="",
-        )
-        if not summary.strip():
+        try:
+            summary = require_real_completion(
+                llm.generate_chat_completion(
+                    messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    complexity="fast", max_tokens=400,
+                )
+            )
+        except Exception:
+            # This fallback is derived solely from fetched titles; it is not a
+            # claimed model summary.
             summary = "Items: " + "; ".join(it.get("title", "") for it in items)
         return {**parsed, "summary": summary.strip()}

@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from app.main import app
 from app.config import settings
@@ -156,7 +157,15 @@ def test_workflow_execute_api():
     assert data["workflow_name"] == "API Test Flow"
     assert data["overall_success"] is True
 
-def test_human_and_opsec_and_pentest_apis():
+@patch(
+    "app.llm.llm_client.generate_chat_completion",
+    return_value={
+        "success": True,
+        "model": "test-model",
+        "choices": [{"message": {"content": "Verified generated test content"}}],
+    },
+)
+def test_human_and_opsec_and_pentest_apis(_model):
     # Human assimilate API
     resp_h = client.post("/human/assimilate", json={
         "user_text": "I am working on cybersecurity and AI",
@@ -203,7 +212,15 @@ def test_human_and_opsec_and_pentest_apis():
     assert resp_p2.status_code == 200
     assert resp_p2.json()["success"] is True
 
-def test_sandbox_and_skills_apis():
+@patch(
+    "app.llm.llm_client.generate_chat_completion",
+    return_value={
+        "success": True,
+        "model": "test-model",
+        "choices": [{"message": {"content": "Verified skill analysis"}}],
+    },
+)
+def test_sandbox_and_skills_apis(_model):
     # 1. Create Sandbox
     sb_resp = client.post("/sandbox/create", json={"sandbox_name": "API_Sandbox"})
     assert sb_resp.status_code == 200

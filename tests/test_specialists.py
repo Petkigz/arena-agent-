@@ -32,10 +32,10 @@ def test_finance_paper_trade():
 
 def test_music_studio_guide():
     res = MusicStudioTool.generate_vocal_chain_guide("hiphop", "male_rap", "FL Studio")
-    assert res["success"] is True
-    assert "quick_frequency_cheatsheet" in res
+    assert res["success"] is False
+    assert "unavailable" in res["error"].lower()
 
 def test_content_creator_script():
     res = ContentCreatorTool.generate_content_script("Local AI Assistant Development", platform="youtube", auto_save_workspace=True)
-    assert res["success"] is True
-    assert res["draft_file"] is not None
+    assert res["success"] is False
+    assert "unavailable" in res["error"].lower()

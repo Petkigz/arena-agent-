@@ -25,9 +25,9 @@ class TestFullPipelineIntegration:
         )
         
         assert result["request_success"] is True
-        assert result["reasoning_action"] in ["answer", "act"]
-        assert result["assistant_reply"] is not None
-        assert len(result["assistant_reply"]) > 0
+        assert result["reasoning_action"] == "defer"
+        assert result.get("goal_verified") is not True
+        assert "simulated response" in result["assistant_reply"].lower()
 
     def test_file_search_goes_through_act_branch(self, tmp_path):
         """Test that a file search request produces a complete, well-formed trace.

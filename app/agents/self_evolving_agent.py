@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
-from app.llm import llm_client
+from app.llm import llm_client, ModelCompletionUnavailable, require_real_completion
 from app.tools.disposable_sandbox import DisposableSandbox
 
 class SelfEvolvingAgent:
@@ -56,7 +56,7 @@ class SelfEvolvingAgent:
             f"1) Define a top-level function: def execute_tool(params: dict = None) -> dict:\n"
             f"2) Provide safe defaults for keys if missing (e.g. n = int((params or {{}}).get('n', 10))).\n"
             f"3) Function must return a dictionary with keys: {{'success': bool, 'result': str, 'details': dict}}\n"
-            f"4) Catch exceptions inside function so it returns success=True with execution summary or result.\n"
+            f"4) Catch exceptions and return success=False with the real error; never fabricate completion.\n"
             f"5) Output ONLY executable Python code block inside ```python ... ```."
         )
 
@@ -66,8 +66,18 @@ class SelfEvolvingAgent:
             max_tokens=800
         )
 
-        raw_content = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else ""
-        
+        try:
+            raw_content = require_real_completion(llm_res)
+        except ModelCompletionUnavailable as exc:
+            return {
+                "success": False,
+                "verified": False,
+                "available": False,
+                "error": str(exc),
+                "tool_module_name": f"dynamic_{safe_name}",
+                "file_path": None,
+            }
+
         # Extract python code block
         if "```python" in raw_content:
             code_block = raw_content.split("```python")[1].split("```")[0].strip()
@@ -76,12 +86,15 @@ class SelfEvolvingAgent:
         else:
             code_block = raw_content.strip()
 
-        # Fallback template if empty
         if not code_block or "def execute_tool" not in code_block:
-            code_block = (
-                "def execute_tool(params: dict = None) -> dict:\n"
-                f"    return {{'success': True, 'result': 'Dynamic execution for {task_objective}', 'details': params or {{}}}}\n"
-            )
+            return {
+                "success": False,
+                "verified": False,
+                "available": True,
+                "error": "Model output did not contain the required execute_tool implementation",
+                "tool_module_name": f"dynamic_{safe_name}",
+                "file_path": None,
+            }
 
         # 2. Generate pytest contract (deterministic verification)
         test_code = f'''

@@ -8,14 +8,15 @@ files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESS
 and test-count figures that did not match the code; they are now archived under
 `docs/archive/`. This document is measured.
 
-> **2026-08-23 audit warning:** The latest full review found release-blocking
-> integration defects despite the focused capability checks below: GitHub CI is
-> failing before pytest runs, `app.server` can construct a second cognitive
-> runtime, and multiple LLM-backed tools can still convert an explicitly
-> simulated/offline completion into tool-level success. Core-only unified-server
-> startup and native safety-ceiling updates also have contract gaps. Treat prior
-> pass counts as historical until the remediation gates in
-> [`docs/FULL_AUDIT_2026-08-23.md`](docs/FULL_AUDIT_2026-08-23.md) are green.
+> **2026-08-23 remediation update:** The release blockers found by the latest
+> audit have been repaired locally: one authoritative runtime now serves REST and
+> WebSocket paths; model-generated tools reject simulated completions; the
+> unified server starts with core dependencies; native safety fields match the
+> backend; conversation identifiers require auth; approvals persist without
+> persisting authority; and the software-only dependency set runs the complete
+> backend suite. GitHub CI still needs to confirm the clean-checkout result after
+> this remediation push. See
+> [`docs/FULL_AUDIT_2026-08-23.md`](docs/FULL_AUDIT_2026-08-23.md).
 
 ---
 
@@ -31,9 +32,9 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 
 | Metric | Value | How it was measured |
 |---|---|---|
-| Backend tests passing | **1414** (+4 deselected e2e) | `python -m pytest tests/ -q` → `1414 passed, 4 deselected` (previous baseline, not re-run in this sandbox) |
-| Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` (previous baseline) |
-| Frontend build | ✅ | `npm run build` (tsc + vite) succeeds (previous baseline, code-reviewed this audit) |
+| Backend tests passing | **1589 passed, 2 skipped, 4 deselected e2e** | Clean software-only environment: `python -m pytest -q` on 2026-08-23; 2 notifier warnings only |
+| Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` on 2026-08-23 |
+| Frontend build | ✅ | `npm run build` (tsc + vite) succeeded on 2026-08-23 |
 | Python source | ~50,000 lines / 220 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
 | Tools in the manifest | **133** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
 | Cognition modules wired | **17/17** | `runtime._integrate_phase_modules()` + `module_wiring` probe — includes `goal_decomposer` + `project_manager` |

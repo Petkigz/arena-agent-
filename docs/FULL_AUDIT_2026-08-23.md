@@ -17,7 +17,29 @@ It is **not ready for unattended or LAN deployment yet**. This audit found three
 
 Four additional high-priority problems should be resolved before deployment: the unified server cannot start from the advertised core-only dependency set, native safety-ceiling controls use the wrong API field, `/conversations` bypasses API-key authentication, and the default full test suite cannot collect with core dependencies.
 
-**Release recommendation:** continue local development, but do not treat the current branch as deployment-ready until all P0 and P1 findings below are fixed and CI is green from a clean checkout.
+**Release recommendation at audit time:** continue local development, but do not treat the audited commit as deployment-ready until all P0 and P1 findings below are fixed and CI is green from a clean checkout.
+
+## Remediation update — later on 2026-08-23
+
+The following findings were repaired immediately after the audit:
+
+- **P0-1:** default CI/developer dependencies are now software-only; GPU/audio hardware packages moved behind `requirements-all.txt`.
+- **P0-2:** `app.server` now uses `CognitiveRuntime.get_instance()`, with an identity regression test.
+- **P0-3:** a central `require_real_completion()` contract now rejects simulated/failed model responses across every model call site; fake dynamic-capability fallbacks were removed.
+- **P1-1/P1-4:** optional phase-6 tools and data analysis imports are lazy; the unified server starts core-only; broad software test dependencies are explicitly separated.
+- **P1-2:** desktop and Android now use the actual `max_autonomous_level` policy field.
+- **P1-3:** `/conversations` now carries API-key verification.
+- **P1-6:** recommendation and decision records persist atomically, while grants remain memory-only and are never restored.
+- **P2-1:** remaining ADB observation and ffprobe subprocesses use the cancellable process-group runner.
+
+Post-remediation evidence:
+
+- Backend: **1589 passed, 2 skipped, 4 deselected**, with two desktop-notifier environment warnings.
+- Frontend: **184 passed** and production build succeeded.
+- Intelligence benchmark: **10/10 passed**, no regressions.
+- Focused execution/project/memory/LoRA/benchmark suites: **35 passed**.
+
+GitHub CI confirmation remains pending until the remediation commit is pushed and its clean runner completes. Android compilation and real owner-hardware checks remain open.
 
 ---
 

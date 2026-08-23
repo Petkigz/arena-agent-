@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client
+from app.llm import llm_client, require_real_completion
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
@@ -29,7 +29,10 @@ You are the Lead Planner Agent. Formulate a 3-step execution plan for the object
             complexity=complexity,
             max_tokens=400
         )
-        plan_text = plan_res["choices"][0]["message"]["content"] if plan_res.get("choices") else "Plan formulated."
+        try:
+            plan_text = require_real_completion(plan_res)
+        except Exception as exc:
+            return {"success": False, "available": False, "error": str(exc)}
 
         # Step 3: Specialist Coder/Writer Agent
         specialist_prompt = f"""
@@ -45,7 +48,10 @@ Draft the complete solution, code, or technical response.
             complexity=complexity,
             max_tokens=800
         )
-        draft_solution = spec_res["choices"][0]["message"]["content"] if spec_res.get("choices") else "Draft solution created."
+        try:
+            draft_solution = require_real_completion(spec_res)
+        except Exception as exc:
+            return {"success": False, "available": False, "error": str(exc)}
 
         # Step 4: Critic / Safety Inspector Agent
         critic_prompt = f"""
@@ -64,7 +70,10 @@ Verify compliance with safety rules, accuracy, and clarity. Output the finalized
             complexity=complexity,
             max_tokens=800
         )
-        final_solution = critic_res["choices"][0]["message"]["content"] if critic_res.get("choices") else draft_solution
+        try:
+            final_solution = require_real_completion(critic_res)
+        except Exception as exc:
+            return {"success": False, "available": False, "error": str(exc)}
 
         audit_logger.info(f"Multi-Agent collaboration completed for '{objective}'")
 

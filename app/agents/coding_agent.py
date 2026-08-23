@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.config import settings
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, require_real_completion
 from app.tools.disposable_sandbox import DisposableSandbox
 from app.tools.git_manager import GitManagerTool
 from app.utils.logger import app_logger, audit_logger
@@ -237,10 +237,10 @@ class CodingAgent:
             "specific test errors listed. Output ONLY the plan, no code."
         )
         user = f"Task: {task}\n\nExisting context:\n{context}\n\nPrior test failures:\n{failures or '(none)'}"
-        return extract_reply(self._llm.generate_chat_completion(
+        return require_real_completion(self._llm.generate_chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             complexity=self._select_complexity(), max_tokens=600,
-        ), fallback="Implement the task directly.")
+        ))
 
     def _generate_code(self, task: str, plan: str, context: str, attempts: List[Dict[str, Any]]) -> str:
         failures = "\n".join(
@@ -255,10 +255,10 @@ class CodingAgent:
             f"Task: {task}\n\nPlan:\n{plan}\n\nExisting context:\n{context}\n\n"
             f"Prior test failures:\n{failures or '(none)'}\n\nCode:"
         )
-        code = extract_reply(self._llm.generate_chat_completion(
+        code = require_real_completion(self._llm.generate_chat_completion(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             complexity=self._select_complexity(), max_tokens=2000,
-        ), fallback="")
+        ))
         # Strip markdown fences if the model wrapped the code anyway.
         return self._strip_fences(code)
 

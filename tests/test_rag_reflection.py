@@ -36,5 +36,5 @@ def test_reflection_engine():
         outcome_summary="RAG engine built and tested.",
         user_feedback="Works great!"
     )
-    assert res["success"] is True
-    assert res["memory_id"] is not None
+    assert res["success"] is False
+    assert "provider unavailable" in res["error"].lower()

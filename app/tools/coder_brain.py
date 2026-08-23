@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.tools.doc_manager import DocumentManager
 from app.utils.logger import app_logger, audit_logger
 
@@ -51,7 +51,7 @@ Provide:
                 max_tokens=1000
             )
 
-            refactored_code = extract_reply(llm_res, fallback="Code refactored.")
+            refactored_code = require_real_completion(llm_res)
 
             return {
                 "success": True,
@@ -101,7 +101,7 @@ Generate a complete, executable unit test file for this code.
                 max_tokens=900
             )
 
-            test_code = extract_reply(llm_res, fallback="Unit tests generated.")
+            test_code = require_real_completion(llm_res)
 
             # Save test file draft (best-effort — never fail the whole result).
             ext = ".py" if language == "python" else ".js" if language in ["javascript", "typescript"] else ".txt"

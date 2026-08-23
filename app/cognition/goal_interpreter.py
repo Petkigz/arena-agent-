@@ -479,7 +479,12 @@ class SemanticGoalInterpreter:
                     complexity="fast",
                     max_tokens=300
                 )
-                if llm_res and llm_res.get("choices"):
+                if (
+                    llm_res
+                    and llm_res.get("success") is not False
+                    and not llm_res.get("simulated")
+                    and llm_res.get("choices")
+                ):
                     content = llm_res["choices"][0]["message"]["content"]
                     parsed_json = cls.extract_json_object(content)
                     if parsed_json:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.utils.logger import app_logger
 
 
@@ -165,7 +165,7 @@ class Recipes:
             }
 
         llm = llm or llm_client
-        digest = extract_reply(
+        digest = require_real_completion(
             llm.generate_chat_completion(
                 messages=[
                     {"role": "system", "content": (
@@ -181,7 +181,6 @@ class Recipes:
                 ],
                 complexity="main", max_tokens=400,
             ),
-            fallback="",
         )
         if not digest.strip():
             digest = "Sources: " + "; ".join(s["title"] for s in sources)

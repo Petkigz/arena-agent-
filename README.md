@@ -142,10 +142,12 @@ arena-agent-/
 ├── memory/               # User rules & operating manual
 │   ├── rules.md          # Permission boundaries
 │   └── user_operating_manual.md
-├── tests/                # pytest suite (1414 tests) + frontend vitest (184 tests)
-├── requirements.txt                 # Full install (core + optional tools)
+├── tests/                # backend pytest suite + frontend Vitest suite
+├── requirements.txt                 # Core + software-only developer/CI tools
 ├── requirements-core.txt            # Minimal API/cognitive runtime
-├── requirements-optional-tools.txt   # Media/browser/office/speech/hardware tools
+├── requirements-test.txt            # Software-only broad test dependencies
+├── requirements-optional-tools.txt   # Media/speech/hardware tools
+├── requirements-all.txt             # Complete owner-machine installation
 └── README.md
 ```
 
@@ -166,18 +168,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-For a headless/core-only installation, use:
+`requirements.txt` is the software-only developer/CI environment. It avoids GPU
+and native audio stacks so a clean runner can install it reliably. For the
+smallest core runtime, or every owner-machine capability, use respectively:
 
 ```bash
 pip install -r requirements-core.txt
+pip install -r requirements-all.txt
 ```
 
-Optional tool modules are loaded only when invoked. A missing optional package
-marks that capability unavailable without preventing the API or
-`CognitiveRuntime` from starting. Inspect status without loading tool modules at
-`GET /tools/availability`; explicitly probe one tool with, for example,
-`GET /tools/availability?tool=web_search&probe=true`. Installing
-`requirements.txt` remains the full, backward-compatible setup.
+The full owner-machine install may need platform packages first (for example,
+PortAudio development headers before PyAudio). Optional tool modules are loaded
+only when invoked. A missing optional package marks that capability unavailable
+without preventing the API or `CognitiveRuntime` from starting. Inspect status
+without loading tool modules at `GET /tools/availability`; explicitly probe one
+tool with, for example,
+`GET /tools/availability?tool=web_search&probe=true`.
 
 ### Run Tests
 
@@ -186,7 +192,7 @@ source .venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-Current baseline: **1414 backend + 184 frontend tests passing** (previous baseline, now 27/27 scorecard checks, 133 tools, 17 modules)
+Current software-only baseline (2026-08-23): **1589 backend passed, 2 skipped, 4 e2e deselected; 184 frontend passed; production frontend build passed**. The measured architecture retains 27/27 deterministic scorecard checks, 133 manifest tools, and 17 wired cognition modules.
 
 > **Live verification:** tools that hit external APIs (prices, RSS, search,
 > Telegram/WhatsApp) are unit-tested for degradation only in CI — run

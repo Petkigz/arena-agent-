@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.policy import PolicyEvaluator
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
@@ -55,7 +55,7 @@ Analyze the request and provide:
                 max_tokens=850
             )
 
-            plan_text = extract_reply(llm_res, fallback="Security plan generated.")
+            plan_text = require_real_completion(llm_res)
 
             audit_logger.info(f"Parsed natural language security intent for '{natural_prompt[:50]}'")
 

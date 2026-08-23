@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Dict, Any, List, Optional
 
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.tools.doc_manager import DocumentManager
 from app.utils.logger import app_logger, audit_logger
 
@@ -77,12 +77,12 @@ class ContentCreatorTool:
         )
 
         try:
-            text = extract_reply(llm_client.generate_chat_completion(
+            text = require_real_completion(llm_client.generate_chat_completion(
                 messages=[{"role": "system", "content": system_prompt},
                           {"role": "user", "content": user_prompt}],
                 complexity=complexity,
                 max_tokens=1200,
-            ), fallback="")
+            ))
 
             if not text:
                 return {"success": False, "error": "The model returned no content."}

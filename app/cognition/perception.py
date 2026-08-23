@@ -10,13 +10,13 @@ Phase 1: Uses canonical SourceType enum for all observation sources.
 
 from __future__ import annotations
 import os
-import subprocess
 import psutil
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from app.cognition.world_model import WorldModel, Observation
 from app.cognition.source_types import SourceType
 from app.utils.logger import app_logger
+from app.cognition.execution_control import run_cancellable_subprocess
 
 
 class ObservationCollector:
@@ -435,7 +435,7 @@ class ObservationCollector:
         # Battery status probe — measurable postcondition
         if any(k in phone_query for k in ["battery", "charge", "power", "level"]):
             try:
-                result = subprocess.run(
+                result = run_cancellable_subprocess(
                     ["adb", "shell", "dumpsys", "battery"],
                     capture_output=True, text=True, timeout=10
                 )
@@ -470,7 +470,7 @@ class ObservationCollector:
         # Phone call state probe — check telephony registry
         if any(k in phone_query for k in ["call", "dial"]) or "call" in str(payload.get("action_type", "")):
             try:
-                result = subprocess.run(
+                result = run_cancellable_subprocess(
                     ["adb", "shell", "dumpsys", "telephony.registry"],
                     capture_output=True, text=True, timeout=10
                 )
@@ -505,7 +505,7 @@ class ObservationCollector:
         # Android app launch probe — check foreground package
         if any(k in phone_query for k in ["open", "launch", "start"]):
             try:
-                result = subprocess.run(
+                result = run_cancellable_subprocess(
                     ["adb", "shell", "dumpsys", "window", "displays"],
                     capture_output=True, text=True, timeout=10
                 )
@@ -539,7 +539,7 @@ class ObservationCollector:
 
         # Device availability probe (generic fallback)
         try:
-            result = subprocess.run(
+            result = run_cancellable_subprocess(
                 ["adb", "get-state"], capture_output=True, text=True, timeout=5
             )
             device_state = result.stdout.strip() if result.returncode == 0 else "offline"

@@ -13,7 +13,7 @@ import sys
 from app.config import settings
 from app.database import db
 from app.tasks import TaskManager, TaskCreate, TaskUpdate, Task
-from app.llm import llm_client
+from app.llm import llm_client, require_real_completion
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 
@@ -1061,6 +1061,7 @@ def list_pending_approvals_endpoint():
     return {
         "success": True,
         "approvals": [request.to_dict() for request in approval_store.list_pending()],
+        "history": [request.to_dict() for request in approval_store.list_all(limit=500)],
     }
 
 
@@ -1503,7 +1504,7 @@ def read_doc_endpoint(req: DocReadRequest):
                 complexity="main",
                 max_tokens=600
             )
-            ai_summary = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Document content ingested."
+            ai_summary = require_real_completion(llm_res)
             mem_id = KnowledgeIndexer.index_doc_knowledge(result, ai_summary)
             result["memory_id"] = mem_id
             result["ai_summary"] = ai_summary

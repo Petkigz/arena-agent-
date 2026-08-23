@@ -143,7 +143,7 @@ class ApiClient @Inject constructor(
         call(
             "/owner-control", "PUT",
             JSONObject().put("mode", mode)
-                .put("max_autonomous_safety_level", maxSafetyLevel).toString(),
+                .put("max_autonomous_level", maxSafetyLevel).toString(),
         )
     suspend fun setEmergencyPause(paused: Boolean): String? =
         call("/owner-control/pause", "POST", JSONObject().put("paused", paused).toString())

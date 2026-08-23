@@ -46,6 +46,8 @@ def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
     return real_import(name, globals, locals, fromlist, level)
 builtins.__import__ = guarded_import
 import app.main
+import app.server
+assert app.server.runtime is app.server.CognitiveRuntime.get_instance()
 print("api-import-ok")
 '''
     completed = subprocess.run(

@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.utils.logger import app_logger
 
 class MusicStudioTool:
@@ -59,7 +59,7 @@ Provide exact recommended parameter settings for:
                 max_tokens=800
             )
 
-            chain_guide = extract_reply(llm_res, fallback="Vocal guide generated.")
+            chain_guide = require_real_completion(llm_res)
 
             return {
                 "success": True,

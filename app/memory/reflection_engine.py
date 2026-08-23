@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional
 from app.database import db
-from app.llm import llm_client
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger, audit_logger
 
 class ReflectionEngine:
@@ -85,7 +85,7 @@ Reflect on this execution and summarize:
                 max_tokens=600
             )
 
-            reflection_text = llm_res["choices"][0]["message"]["content"] if llm_res.get("choices") else "Reflection completed."
+            reflection_text = require_real_completion(llm_res)
 
             # Save lesson learned to SQLite permanent memory
             mem_content = f"🧠 [SELF-REFLECTION :: {task_title}]\n{reflection_text}"

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.utils.logger import app_logger
 
 _VERDICTS = ("supported", "refuted", "unverifiable")
@@ -75,12 +75,11 @@ class FactChecker:
             "Do not cite any source number that is not in the list, and do not invent facts."
         )
         user = f"Claim: {claim}\n\nSources:\n{digest}"
-        reply = extract_reply(
+        reply = require_real_completion(
             llm.generate_chat_completion(
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
                 complexity="main", max_tokens=300,
             ),
-            fallback="",
         )
         verdict, justification = cls._parse_verdict(reply)
 

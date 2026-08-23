@@ -183,7 +183,7 @@ class OwnerControlPage(QWidget):
             policy = self._client.owner_control().get("policy", {})
             self._paused = bool(policy.get("paused", False))
             self.mode.setCurrentText(str(policy.get("mode", "approve_every_action")))
-            self.safety.setValue(int(policy.get("max_autonomous_safety_level", 0)))
+            self.safety.setValue(int(policy.get("max_autonomous_level", 0)))
             adaptive = self._client.adaptive_autonomy().get("profile", {})
             self.exploration.setValue(int(adaptive.get("owner_max_exploration_goals", 0)))
             self.pause_btn.setText("Resume under policy" if self._paused else "Emergency pause")
@@ -229,7 +229,7 @@ class OwnerControlPage(QWidget):
         try:
             self._client.update_owner_control({
                 "mode": self.mode.currentText(),
-                "max_autonomous_safety_level": self.safety.value(),
+                "max_autonomous_level": self.safety.value(),
             })
             self._client.set_exploration_budget(self.exploration.value())
             self.status.setText("Policy saved; this did not authorize or execute an action")

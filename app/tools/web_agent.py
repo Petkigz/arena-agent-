@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
-from app.llm import llm_client
+from app.llm import llm_client, require_real_completion
 from app.tools.browser_automation import BrowserAutomation
 from app.tools.knowledge_indexer import KnowledgeIndexer
 from app.utils.logger import app_logger, audit_logger
@@ -142,7 +142,7 @@ class WebAgent:
                 complexity=complexity,
                 max_tokens=800,
             )
-            summary = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "") or "No summary."
+            summary = require_real_completion(llm_res)
         except Exception as e:
             app_logger.warning(f"WebAgent LLM synthesis failed: {e}")
             summary = f"Web workflow executed, but summarization failed: {e}"

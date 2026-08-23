@@ -21,7 +21,15 @@ def test_disposable_sandbox_lifecycle():
     assert destroy_res["success"] is True
     assert not os.path.exists(sandbox_path)
 
-def test_skill_teaching_engine():
+def test_skill_teaching_engine(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.llm_client.generate_chat_completion",
+        lambda **kwargs: {
+            "success": True,
+            "model": "test-model",
+            "choices": [{"message": {"content": "Verified skill execution analysis"}}],
+        },
+    )
     # 1. Teach custom pentesting skill
     teach_res = SkillTeachingEngine.teach_skill(
         skill_name="Web Reconnaissance Methodology",

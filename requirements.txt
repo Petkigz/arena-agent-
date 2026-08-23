@@ -1,4 +1,5 @@
-# Full installation (backward-compatible): core runtime plus every optional
-# tool dependency. For a minimal headless runtime, install requirements-core.txt.
+# Default developer/CI installation: core runtime plus software-only test tools.
+# This intentionally excludes GPU, wake-word, and native audio-driver stacks so
+# clean CI can install and run without downloading CUDA or compiling PyAudio.
 -r requirements-core.txt
--r requirements-optional-tools.txt
+-r requirements-test.txt

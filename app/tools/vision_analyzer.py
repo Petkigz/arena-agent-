@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.tools.ocr_reader import OCRReaderTool
 from app.tools.screen_capture import ScreenCaptureTool
 from app.tools.knowledge_indexer import KnowledgeIndexer
@@ -162,7 +162,7 @@ Please provide:
                 max_tokens=600
             )
 
-            ai_analysis = extract_reply(llm_res, fallback="No visual analysis generated.")
+            ai_analysis = require_real_completion(llm_res)
 
             res = {
                 "success": True,

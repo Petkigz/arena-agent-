@@ -128,6 +128,28 @@ class LocalLLMClient:
         return extract_reply(result)
 
 
+class ModelCompletionUnavailable(RuntimeError):
+    """The provider did not produce a real, usable model completion."""
+
+
+def require_real_completion(result: Any) -> str:
+    """Return completion text only for an explicitly non-simulated response.
+
+    Outcome-producing tools must use this instead of treating diagnostic offline
+    text or success-sounding fallback strings as generated content.
+    """
+    if not isinstance(result, dict):
+        raise ModelCompletionUnavailable("Model provider returned an invalid response")
+    if result.get("simulated") is True or result.get("success") is False:
+        raise ModelCompletionUnavailable(
+            str(result.get("error") or "Model provider is unavailable")
+        )
+    text = extract_reply(result).strip()
+    if not text:
+        raise ModelCompletionUnavailable("Model provider returned no completion text")
+    return text
+
+
 def extract_reply(result: Any, fallback: str = "") -> str:
     """Safely extract assistant text from an OpenAI-style completion dict.
 

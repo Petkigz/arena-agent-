@@ -7,6 +7,7 @@ Security regression tests for the fixes applied in the security audit:
 4. API routers are gated behind verify_api_key (auth dependency applied).
 """
 
+import subprocess
 import pytest
 from unittest.mock import patch
 
@@ -25,7 +26,10 @@ def test_rejects_shell_injection_in_package_name():
 
 def test_accepts_legitimate_package_name():
     with patch("app.policy.PolicyEvaluator.evaluate_action", return_value=(True, "allowed", 3)), \
-         patch("subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()):
+         patch(
+             "app.tools.deep_os_controller.run_cancellable_subprocess",
+             return_value=subprocess.CompletedProcess(["update"], 0, "", ""),
+         ):
         res = DeepOSController.check_and_update_software("vlc")
         # With policy allowing it, it proceeds to execution (no shell=True).
         assert res["success"] is True
@@ -73,16 +77,13 @@ def test_api_routers_have_auth_dependency():
     was registered WITHOUT verify_api_key, leaving a large capability surface
     unauthenticated even when ARENA_API_KEY was set. Now it is gated too.
     """
-    import backend.main as bm
-    assert hasattr(bm, "verify_api_key")
+    import app.server as server
 
-    # FastAPI 0.112 stores included routers as _IncludedRouter objects; the
-    # dependencies live on their include_context.
-    gated = 0
-    for route in bm.app.routes:
-        ctx = getattr(route, "include_context", None)
-        deps = getattr(ctx, "dependencies", None) or []
-        if deps:
-            gated += 1
-    # 7 /api/* routers + the core router = 8 gated include-contexts.
-    assert gated == 8, f"Expected 8 routers gated (7 API + core), found {gated}"
+    routes = {
+        getattr(route, "path", ""): route
+        for route in server.app.routes
+    }
+    for path in ("/api/status", "/api/wakeword/models", "/conversations"):
+        route = routes[path]
+        dependencies = getattr(getattr(route, "dependant", None), "dependencies", [])
+        assert dependencies, f"Expected {path} to carry API-key verification"

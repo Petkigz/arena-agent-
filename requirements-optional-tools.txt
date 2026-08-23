@@ -29,7 +29,7 @@ torch>=2.0.0
 torchaudio>=2.0.0
 
 # Native webcam capture.
-opencv-python>=4.8.0
+opencv-python-headless>=4.8.0
 
 # Tesseract OCR is also a separate system binary. Optional VLM dependencies
 # remain owner-installed because model/hardware choice is machine-specific:

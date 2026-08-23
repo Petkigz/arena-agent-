@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 
 from app.config import settings
 from app.database import db
-from app.llm import llm_client
+from app.llm import llm_client, ModelCompletionUnavailable, require_real_completion
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 from app.utils.hardware_monitor import HardwareMonitor
@@ -373,9 +373,17 @@ class MasterAgentOrchestrator:
         system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
         messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
         llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
-        assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.").strip()
-
-        HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)
+        try:
+            assistant_reply = require_real_completion(llm_res)
+            HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)
+        except ModelCompletionUnavailable:
+            # Preserve real action facts without laundering offline diagnostic
+            # text into conversation, social learning, or memory.
+            assistant_reply = (
+                " ".join(executed_actions)
+                if executed_actions else
+                "Capability execution finished without a model-generated summary."
+            )
 
         status = ExecutionStatus.SUCCEEDED if execution_success else ExecutionStatus.FAILED
         return ExecutionResult(

@@ -8,7 +8,7 @@ from app.database import db
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger
 from app.tools.web_research import WebResearcher
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 
 class OpSecManagerTool:
     """
@@ -103,7 +103,15 @@ class OpSecManagerTool:
             complexity="main",
             max_tokens=600
         )
-        erasure_letter = extract_reply(llm_res, fallback="Erasure request drafted.")
+        try:
+            erasure_letter = require_real_completion(llm_res)
+        except Exception as exc:
+            return {
+                "success": False,
+                "available": False,
+                "error_type": "model_unavailable",
+                "error": str(exc),
+            }
 
         # Safety Policy Check for Level 3 submission approval
         allowed, reason, level = PolicyEvaluator.evaluate_action(

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, Any, List, Optional
 
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.tools.web_research import WebResearcher
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
@@ -49,12 +49,12 @@ class BusinessGrowthEngine:
         )
 
         try:
-            analysis = extract_reply(llm_client.generate_chat_completion(
+            analysis = require_real_completion(llm_client.generate_chat_completion(
                 messages=[{"role": "system", "content": system_prompt},
                           {"role": "user", "content": user_prompt}],
                 complexity=complexity,
                 max_tokens=1000,
-            ), fallback="")
+            ))
 
             if not analysis:
                 return {"success": False, "error": "No analysis produced.", "niche": niche}
@@ -104,12 +104,12 @@ class BusinessGrowthEngine:
         )
 
         try:
-            plan = extract_reply(llm_client.generate_chat_completion(
+            plan = require_real_completion(llm_client.generate_chat_completion(
                 messages=[{"role": "system", "content": system_prompt},
                           {"role": "user", "content": user_prompt}],
                 complexity="main",
                 max_tokens=1000,
-            ), fallback="")
+            ))
 
             if not plan:
                 return {"success": False, "error": "No plan produced."}

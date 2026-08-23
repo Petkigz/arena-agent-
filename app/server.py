@@ -109,7 +109,9 @@ async def verify_api_key(request: Request, api_key: str = Depends(api_key_header
 # Runtime & lifespan
 # ============================================================================
 
-runtime = CognitiveRuntime()
+# The server, REST routes, WebSocket router, projects, memory, and owner-control
+# endpoints must all share the exact same composition root.
+runtime = CognitiveRuntime.get_instance()
 
 
 @asynccontextmanager
@@ -205,6 +207,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    from app.tools.manifest import ToolDependencyUnavailable
+
+    @app.exception_handler(ToolDependencyUnavailable)
+    async def _optional_tool_unavailable(_request: Request, exc: ToolDependencyUnavailable):
+        return JSONResponse(status_code=503, content=exc.as_result())
+
     # ── Insecure-LAN guard: unauthenticated instances are localhost-only ──
     # When ARENA_API_KEY is unset (auth off), reject requests from non-loopback
     # clients unless the owner explicitly opted into an insecure LAN binding.
@@ -262,7 +270,7 @@ def create_app() -> FastAPI:
             "auth_enabled": API_KEY_ENABLED,
         }
 
-    @app.get("/conversations")
+    @app.get("/conversations", dependencies=_auth_deps)
     async def list_conversations():
         return {"conversations": ws_manager.get_active_conversations()}
 

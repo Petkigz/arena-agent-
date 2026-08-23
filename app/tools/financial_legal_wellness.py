@@ -5,14 +5,27 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
-from app.llm import llm_client, extract_reply
+from app.llm import (
+    ModelCompletionUnavailable,
+    llm_client,
+    extract_reply,
+    require_real_completion,
+)
 
 class FinancialLegalWellnessSuite:
-    """
-    Advanced Financial, Legal ToS Delta, Tone Calibration & Anki Flashcard Engine.
-    Implements subscription trial audits, privacy policy analysis, Socratic messaging sounding board,
-    and Anki flashcard generation.
-    """
+    """Financial, legal, tone-calibration, and flashcard tools."""
+
+    @staticmethod
+    def _completion(result: Dict[str, Any]) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+        try:
+            return require_real_completion(result), None
+        except ModelCompletionUnavailable as exc:
+            return None, {
+                "success": False,
+                "available": False,
+                "error_type": "model_unavailable",
+                "error": str(exc),
+            }
 
     @staticmethod
     def audit_subscriptions_and_trials(
@@ -80,7 +93,9 @@ class FinancialLegalWellnessSuite:
             complexity="main",
             max_tokens=600
         )
-        audit_summary = extract_reply(llm_res, fallback="ToS audit completed.")
+        audit_summary, failure = FinancialLegalWellnessSuite._completion(llm_res)
+        if failure:
+            return failure
 
         db.create_audit_log("audit_tos_and_privacy_policy", "success", "Audited Terms of Service / Privacy Policy text", level=0)
 
@@ -112,7 +127,9 @@ class FinancialLegalWellnessSuite:
             complexity="main",
             max_tokens=500
         )
-        critique = extract_reply(llm_res, fallback="Tone critique generated.")
+        critique, failure = FinancialLegalWellnessSuite._completion(llm_res)
+        if failure:
+            return failure
 
         return {
             "success": True,
@@ -141,7 +158,9 @@ class FinancialLegalWellnessSuite:
             complexity="fast",
             max_tokens=500
         )
-        raw_qa = extract_reply(llm_res, fallback="Question\tAnswer")
+        raw_qa, failure = FinancialLegalWellnessSuite._completion(llm_res)
+        if failure:
+            return failure
 
         export_dir = settings.DATA_DIR / "workspace" / "anki_decks"
         export_dir.mkdir(parents=True, exist_ok=True)

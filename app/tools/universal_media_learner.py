@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
-from app.llm import llm_client, extract_reply
+from app.llm import llm_client, extract_reply, require_real_completion
 from app.cognition.execution_control import (
     ExecutionCancelled,
     run_cancellable_blocking_call,
@@ -117,7 +117,7 @@ class UniversalMediaLearner:
                 complexity="main",
                 max_tokens=600
             )
-            analysis = extract_reply(llm_res, fallback="Media transcript analyzed.")
+            analysis = require_real_completion(llm_res)
 
             db.create_audit_log("analyze_media_target", "success", f"Analyzed local media file: {os.path.basename(target)}", level=0)
 
@@ -151,7 +151,7 @@ class UniversalMediaLearner:
             complexity="main",
             max_tokens=700
         )
-        ai_summary = extract_reply(llm_res, fallback="Web media analyzed.")
+        ai_summary = require_real_completion(llm_res)
 
         db.create_memory({
             "content": f"Universal Media Analysis ({web_media.get('title')}): {ai_summary[:300]}",

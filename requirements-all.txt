@@ -1,0 +1,4 @@
+# Full owner-machine installation. Platform audio packages may also require
+# system libraries (for example portaudio19-dev before installing PyAudio).
+-r requirements.txt
+-r requirements-optional-tools.txt
