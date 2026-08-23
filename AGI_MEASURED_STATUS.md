@@ -167,6 +167,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Reviewed LoRA experience pipeline**: Verified successful outcomes propose deduplicated prompt/response candidates with deterministic secret, email, phone, and home-path redaction. Simulated/unverified responses are rejected. Candidates remain pending until the owner edits and approves the exact pair. Export requires at least five approved examples and produces reproducible train/eval JSONL plus a provenance manifest. Adapter selection is honestly reported as metadata-only until the external inference provider loads or merges it.
 
+- ✅ **Longitudinal intelligence regression history**: An isolated deterministic suite now measures paraphrased memory retrieval, success/failure utility adaptation, outcome-calibrated autonomy, evidence-linked consolidation, authorization replay resistance, temporal continuity, LoRA review boundaries, project dependency unlocking, and owner curiosity limits. Each run persists per-check evidence/metrics/duration and reports pass→fail regressions against the previous run. It reports factual pass counts, never an “AGI percentage,” and does not mutate the live brain.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):

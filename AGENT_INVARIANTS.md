@@ -71,7 +71,9 @@ Automatic consolidation may promote only verifier-authored terminal episodes.
 Every semantic/procedural/lesson target keeps source-memory links; UNKNOWN,
 self-reported, and conversational claims are not promoted as facts. Repeated
 maintenance must be idempotent and must never teach the system from its own
-measurement probes.
+measurement probes. Longitudinal benchmarks run only against throwaway stores,
+persist evidence and metrics separately, and report pass counts/regressions—not
+an invented intelligence or AGI percentage.
 
 Verified success may propose a LoRA example, but never approve or train it.
 Training candidates are redacted, deduplicated, owner-editable, and excluded

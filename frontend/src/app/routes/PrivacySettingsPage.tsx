@@ -26,6 +26,21 @@ type ControlMode =
   | 'bounded_autonomy'
   | 'custom';
 
+interface IntelligenceBenchmarkReport {
+  run_id: string;
+  created_at: string;
+  passed_count: number;
+  total_count: number;
+  regressions: string[];
+  checks: Array<{
+    name: string;
+    category: string;
+    passed: boolean;
+    evidence: string;
+    duration_ms: number;
+  }>;
+}
+
 interface AdaptiveAutonomyProfile {
   prediction_error_threshold: number;
   low_success_rate_threshold: number;
@@ -68,6 +83,8 @@ export function PrivacySettingsPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [ownerPolicy, setOwnerPolicy] = useState<OwnerControlPolicy | null>(null);
   const [adaptiveProfile, setAdaptiveProfile] = useState<AdaptiveAutonomyProfile | null>(null);
+  const [benchmarkReport, setBenchmarkReport] = useState<IntelligenceBenchmarkReport | null>(null);
+  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
@@ -84,6 +101,10 @@ export function PrivacySettingsPage() {
     fetch('/owner-control/adaptive-autonomy', { headers: apiKeyHeader() })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => { if (!cancelled && data?.profile) setAdaptiveProfile(data.profile); })
+      .catch(() => {});
+    fetch('/benchmarks/intelligence/latest', { headers: apiKeyHeader() })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled && data?.report) setBenchmarkReport(data.report); })
       .catch(() => {});
     listPendingApprovals().then((approvals) => {
       if (!cancelled) setPendingApprovals(approvals);
@@ -173,6 +194,28 @@ export function PrivacySettingsPage() {
       notifications.error(error instanceof Error ? error.message : 'Could not execute plan');
     } finally {
       setPlanBusy(null);
+    }
+  };
+
+  const runIntelligenceBenchmark = async () => {
+    setBenchmarkBusy(true);
+    try {
+      const response = await fetch('/benchmarks/intelligence/run', {
+        method: 'POST',
+        headers: apiKeyHeader(),
+      });
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      setBenchmarkReport(data.report);
+      notifications.success(
+        data.report.regressions.length
+          ? `Benchmark completed with ${data.report.regressions.length} regression(s)`
+          : 'Benchmark completed without detected regressions',
+      );
+    } catch {
+      notifications.error('Could not run intelligence benchmark');
+    } finally {
+      setBenchmarkBusy(false);
     }
   };
 
@@ -443,6 +486,55 @@ export function PrivacySettingsPage() {
 
                 <p className="text-xs text-text-muted">Policy revision {ownerPolicy.revision}</p>
               </>
+            )}
+          </Card>
+        </section>
+
+        {/* Longitudinal intelligence benchmark */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <BarChart3 className="w-6 h-6 text-accent-primary" />
+            <h2 className="text-2xl font-semibold text-text-primary">Intelligence Regression Benchmark</h2>
+          </div>
+          <Card className="space-y-4">
+            <p className="text-sm text-text-secondary">
+              Runs isolated deterministic checks for memory benefit, learning from success and failure,
+              adaptive thresholds, consolidation, authorization replay, temporal continuity, project dependencies,
+              LoRA review boundaries, and owner curiosity limits. This is a pass count—not an “AGI percentage.”
+            </p>
+            <button
+              type="button"
+              disabled={benchmarkBusy}
+              onClick={runIntelligenceBenchmark}
+              className="px-4 py-2 rounded bg-accent-primary text-white disabled:opacity-50"
+            >
+              {benchmarkBusy ? 'Running isolated checks…' : 'Run benchmark now'}
+            </button>
+            {benchmarkReport && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-4 text-sm text-text-primary">
+                  <span>{benchmarkReport.passed_count}/{benchmarkReport.total_count} checks passed</span>
+                  <span>{benchmarkReport.regressions.length} regression(s)</span>
+                  <span className="text-text-muted">{new Date(benchmarkReport.created_at).toLocaleString()}</span>
+                </div>
+                {benchmarkReport.regressions.length > 0 && (
+                  <p className="text-sm text-red-500">Regressions: {benchmarkReport.regressions.join(', ')}</p>
+                )}
+                <div className="grid gap-2 md:grid-cols-2">
+                  {benchmarkReport.checks.map((check) => (
+                    <div key={check.name} className="rounded border border-border bg-background-secondary p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-text-primary">{check.name}</span>
+                        <span className={check.passed ? 'text-green-500' : 'text-red-500'}>
+                          {check.passed ? 'PASS' : 'FAIL'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-muted mt-1">{check.category} · {check.duration_ms.toFixed(1)} ms</p>
+                      <p className="text-xs text-text-secondary mt-1">{check.evidence}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </Card>
         </section>

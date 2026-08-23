@@ -102,6 +102,16 @@ class CognitiveRuntime:
         self.temporal_vision = TemporalVisionTracker(
             db_path=str(Path(path).parent / "temporal_vision.db") if path else "data/temporal_vision.db"
         )
+        from app.cognition.intelligence_benchmark import (
+            BenchmarkHistoryStore,
+            IntelligenceBenchmarkSuite,
+        )
+        self.intelligence_benchmarks = IntelligenceBenchmarkSuite(
+            BenchmarkHistoryStore(
+                str(Path(path).parent / "intelligence_benchmarks.db")
+                if path else "data/intelligence_benchmarks.db"
+            )
+        )
         # Phase 3: Transfer Learning
         from app.cognition.skill_classifier import SkillClassifier
         from app.cognition.analogical_memory import AnalogicalMemory
@@ -971,9 +981,10 @@ class CognitiveRuntime:
             for _ in range(3):
                 _os.record_outcome("__probe_goal__", "__probe_action__", success=False)
             _add("learning_changes_behavior",
-                 _os.adjustment_factor("__probe_goal__", "__probe_action__") < 1.0,
-                 "repeated failures lower the action's future utility weight "
-                 "(state calibrated by experience)", "longitudinal")
+                 _os.adjustment_factor("__probe_goal__", "__probe_action__") < 1.0
+                 and hasattr(self, "intelligence_benchmarks"),
+                 "repeated failures lower utility; isolated longitudinal benchmark history is wired",
+                 "longitudinal")
         except Exception as e:
             _add("learning_changes_behavior", False, f"longitudinal probe failed: {e}", "longitudinal")
 

@@ -192,6 +192,15 @@ PYTHONPATH=. python scripts/demo_agi.py
 This is a local capability demonstration, not a human-level-AGI benchmark.
 For real external integrations, use `scripts/live_check.py` separately.
 
+Run the isolated longitudinal regression suite separately:
+
+```bash
+PYTHONPATH=. python scripts/benchmark_intelligence.py
+```
+
+It persists per-check evidence and pass→fail regressions. The pass count is not
+an “AGI percentage” and the probes do not mutate the live cognitive stores.
+
 ### Run Server
 
 A single unified entry point serves everything — the WebSocket chat, the 127 core
