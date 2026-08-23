@@ -232,7 +232,8 @@ consciousness, or subjective experience.
 
 Autonomous resource limits are optional through `GET/PUT /owner-control/autonomy-envelope`
 and are disabled by default. The owner can cap cycle duration, cooldown, execution,
-project work, and failures when desired. For a specific command, the owner can issue
+project work, and failures when desired, and inspect/approve/reject/reprioritize the
+planning queue at `GET /owner-control/autonomous-goals`. For a specific command, the owner can issue
 an exact short-lived authorization with `override_owner_policy: true`; this overrides
 the owner's own mode/block/level rules but never emergency pause, resource-critical
 shutdown, missing capability, payload binding, or verification honesty.

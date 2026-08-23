@@ -38,6 +38,7 @@ class GoalSource(str, Enum):
     SYSTEM_OPTIMIZATION = "system_optimization"  # Performance improvement
     CURIOSITY = "curiosity"  # Exploratory drive
     MAINTENANCE = "maintenance"  # Routine upkeep
+    OWNER_DIRECTIVE = "owner_directive"  # Explicit owner-created goal/task
 
 
 class GoalPriority(str, Enum):
@@ -873,6 +874,32 @@ class AutonomousGoalGenerator:
         else:
             app_logger.info(f"Goal requires manual approval: {goal.title} (score: {goal.overall_score:.2f})")
             return False
+
+    def owner_decide_goal(self, goal_id: str, approved: bool) -> Optional[AutonomousGoal]:
+        """Owner decision for planning only; resulting actions remain separately gated."""
+        goal = self.get_goal(goal_id)
+        if not goal:
+            return None
+        if goal.status not in (GoalStatus.PROPOSED, GoalStatus.EVALUATED, GoalStatus.DEFERRED):
+            raise ValueError(f"Goal is already {goal.status.value}")
+        if approved:
+            approval = self.build_goal_approval(goal)
+            goal.max_action_level = approval.max_action_level
+            goal.requires_owner_approval = True
+            goal.status = GoalStatus.APPROVED
+            goal.approved_at = _now()
+        else:
+            goal.status = GoalStatus.REJECTED
+        self.update_goal(goal)
+        return goal
+
+    def owner_set_priority(self, goal_id: str, priority: str) -> Optional[AutonomousGoal]:
+        goal = self.get_goal(goal_id)
+        if not goal:
+            return None
+        goal.priority = GoalPriority(priority)
+        self.update_goal(goal)
+        return goal
 
     def build_goal_approval(self, goal: AutonomousGoal) -> GoalApproval:
         """Build the explicit approval boundary for a goal.

@@ -196,6 +196,18 @@ class ApprovalDecisionRequest(BaseModel):
 class ExplorationBudgetRequest(BaseModel):
     max_exploration_goals: int = Field(ge=0, le=10)
 
+class OwnerAutonomousGoalRequest(BaseModel):
+    title: str = Field(min_length=1,max_length=300)
+    description: str = Field(default="",max_length=2000)
+    priority: str = "normal"
+    approve_for_planning: bool = True
+
+class AutonomousGoalDecisionRequest(BaseModel):
+    approved: bool
+
+class AutonomousGoalPriorityRequest(BaseModel):
+    priority: str
+
 class AutonomyEnvelopeUpdate(BaseModel):
     cycles_enabled: Optional[bool] = None
     limits_enabled: Optional[bool] = None
@@ -1170,6 +1182,49 @@ def update_autonomy_envelope_endpoint(req: AutonomyEnvelopeUpdate):
     from app.cognition.runtime import CognitiveRuntime
     policy=CognitiveRuntime.get_instance().autonomy_envelope.update(req.model_dump(exclude_none=True))
     return {"success": True, "envelope": policy.to_dict(), "note": "Limits constrain future cycles and grant no new authority."}
+
+@router.post("/owner-control/autonomous-goals")
+def create_owner_autonomous_goal_endpoint(req:OwnerAutonomousGoalRequest):
+    from app.cognition.autonomous_goal_generator import AutonomousGoal,GoalPriority,GoalSource,IntrinsicMotivation
+    from app.cognition.runtime import CognitiveRuntime
+    try: priority=GoalPriority(req.priority)
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+    runtime=CognitiveRuntime.get_instance()
+    goal=AutonomousGoal(title=req.title,description=req.description,source=GoalSource.OWNER_DIRECTIVE,motivation=IntrinsicMotivation.HELPFULNESS,priority=priority,user_benefit="Explicit owner directive")
+    runtime.goal_generator.add_goal(goal); runtime.goal_generator.evaluate_goal(goal)
+    if req.approve_for_planning: goal=runtime.goal_generator.owner_decide_goal(goal.goal_id,True)
+    return {"success":True,"goal":goal.to_dict(),"execution_authorized":False}
+
+@router.get("/owner-control/autonomous-goals")
+def list_autonomous_goal_queue_endpoint(status_filter: Optional[str]=Query(None,alias="status"),limit:int=Query(100,ge=1,le=1000)):
+    from app.cognition.autonomous_goal_generator import GoalStatus
+    from app.cognition.runtime import CognitiveRuntime
+    try: status=GoalStatus(status_filter) if status_filter else None
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+    goals=CognitiveRuntime.get_instance().goal_generator.list_goals(status=status,limit=limit)
+    return {"success":True,"goals":[goal.to_dict() for goal in goals],"note":"Goal approval permits planning only; actions remain separately gated."}
+
+@router.post("/owner-control/autonomous-goals/{goal_id}/decision")
+def decide_autonomous_goal_endpoint(goal_id:str,req:AutonomousGoalDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try: goal=CognitiveRuntime.get_instance().goal_generator.owner_decide_goal(goal_id,req.approved)
+    except ValueError as exc: raise HTTPException(status_code=409,detail=str(exc)) from exc
+    if not goal: raise HTTPException(status_code=404,detail="Autonomous goal not found")
+    return {"success":True,"goal":goal.to_dict(),"execution_authorized":False}
+
+@router.put("/owner-control/autonomous-goals/{goal_id}/priority")
+def prioritize_autonomous_goal_endpoint(goal_id:str,req:AutonomousGoalPriorityRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try: goal=CognitiveRuntime.get_instance().goal_generator.owner_set_priority(goal_id,req.priority)
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+    if not goal: raise HTTPException(status_code=404,detail="Autonomous goal not found")
+    return {"success":True,"goal":goal.to_dict()}
+
+@router.post("/owner-control/autonomous-goals/execute-next")
+def execute_next_autonomous_goal_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    runtime=CognitiveRuntime.get_instance(); plan=runtime.execute_autonomous_goal()
+    return {"success":plan is not None,"plan":plan.to_dict() if plan else None,"note":"Every plan action still passes Owner Control and ActionGate."}
 
 @router.put("/owner-control/adaptive-autonomy/exploration-budget")
 def set_exploration_budget_endpoint(req: ExplorationBudgetRequest):

@@ -114,6 +114,8 @@ Owner Control Plane may always impose a stricter rule:
   override their own block/mode/level policy. It remains short-lived and single-use,
   cannot bypass emergency pause, resource-critical shutdown, unavailable capability,
   payload binding, or evidence/verification honesty.
+- Autonomous goals remain an owner-visible queue. The owner can approve planning,
+  reject, reprioritize, or request the next goal; goal approval never authorizes its actions.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.
