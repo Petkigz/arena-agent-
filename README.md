@@ -228,7 +228,8 @@ at `GET /self-awareness/claims/history`, structured belief changes at
 `GET/POST /self-awareness/commitments`, and trace-grounded explanations at
 `GET /self-awareness/introspection/{trace_id}`. These endpoints report
 operational evidence and explicitly do not claim hidden chain-of-thought,
-consciousness, or subjective experience.
+consciousness, or subjective experience. Verified application/process/window targets
+are inspectable through `GET /os-grounding` and `GET /os-grounding/resolve`.
 
 Autonomous resource limits are optional through `GET/PUT /owner-control/autonomy-envelope`
 and are disabled by default. The owner can cap cycle duration, cooldown, execution,

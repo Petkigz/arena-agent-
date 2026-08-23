@@ -1059,6 +1059,16 @@ def request_recovery_action_endpoint(assessment_id:str,req:RecoveryActionRequest
     return {"success":True,"assessment":item.to_dict(),"approval":approval.to_dict(),"executed":False}
 
 
+@router.get("/os-grounding")
+def list_os_groundings_endpoint(app_name:Optional[str]=Query(None),limit:int=Query(200,ge=1,le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {"success":True,"groundings":[g.to_dict() for g in CognitiveRuntime.get_instance().os_grounding.list(app_name,limit)]}
+
+@router.get("/os-grounding/resolve")
+def resolve_os_grounding_endpoint(app_name:str=Query(...),require_window:bool=Query(False)):
+    from app.cognition.runtime import CognitiveRuntime
+    return CognitiveRuntime.get_instance().os_grounding.resolve_target(app_name,require_window=require_window)
+
 @router.get("/self-awareness/embodied-boundary")
 def embodied_boundary_endpoint(refresh: bool = Query(True)):
     from app.cognition.runtime import CognitiveRuntime

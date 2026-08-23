@@ -153,6 +153,10 @@ class CognitiveRuntime:
         self.embodied_boundary = EmbodiedBoundaryModel(
             str(Path(path).parent / "embodied_boundary.db") if path else "data/embodied_boundary.db"
         )
+        from app.cognition.os_grounding import OSGroundingStore
+        self.os_grounding = OSGroundingStore(
+            str(Path(path).parent / "os_grounding.db") if path else "data/os_grounding.db"
+        )
         from app.cognition.identity_continuity import IdentityContinuityLedger
         self.identity_continuity = IdentityContinuityLedger(
             str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db"
@@ -293,6 +297,18 @@ class CognitiveRuntime:
             "recorded_claim_ids": [claim.claim_id for claim in recorded],
             "snapshot": self.self_knowledge.snapshot(),
         }
+
+    def ground_os_execution(self, action_type: str, execution: Dict[str, Any], task_id: str) -> Optional[Dict[str, Any]]:
+        if action_type not in ("launch_app", "open_application"):
+            return None
+        launch = (execution.get("outputs") or {}).get("launch_res") or execution.get("launch_res") or {}
+        if not launch.get("success"):
+            return {"success": False, "verified": False, "error": "Launch was not successful"}
+        return self.os_grounding.observe_application(
+            str(launch.get("app_name", "")),
+            executable_path=str(launch.get("executable_path", "")),
+            pid=launch.get("pid"), task_id=task_id,
+        )
 
     @staticmethod
     def _interface_for_action(action_type: str) -> Optional[str]:
@@ -2187,6 +2203,9 @@ class CognitiveRuntime:
         executed_actions = execution.get("executed_actions", [])
         assistant_reply = execution.get("assistant_reply", "")
         execution_success = bool(execution.get("success", False))
+        os_grounding = self.ground_os_execution(proposal.action_type, execution, session_id)
+        if os_grounding is not None:
+            execution["os_grounding"] = os_grounding
 
         observation_error = ""
         try:
@@ -2475,6 +2494,7 @@ class CognitiveRuntime:
             "rollback_receipt": execution.get("rollback_receipt"),
             "agency_attribution": execution.get("agency_attribution"),
             "boundary_event": execution.get("boundary_event"),
+            "os_grounding": execution.get("os_grounding"),
             "replan_performed": False,
             "requires_new_authorization_for_retry": (
                 scoped_authorization and not verification.verified_success
@@ -3063,6 +3083,9 @@ class CognitiveRuntime:
         control_result = agent_res
         executed_actions = agent_res.get("executed_actions", [])
         assistant_reply = agent_res.get("assistant_reply", "Done.")
+        os_grounding = self.ground_os_execution(proposal.action_type, agent_res, session_id)
+        if os_grounding is not None:
+            agent_res["os_grounding"] = os_grounding
 
         # Perception Layer: Ingest Environmental Observations from ExecutionResult into WorldModel
         from app.cognition.perception import ObservationCollector
@@ -3370,5 +3393,6 @@ class CognitiveRuntime:
             "rollback_receipt": control_result.get("rollback_receipt"),
             "agency_attribution": agent_res.get("agency_attribution"),
             "boundary_event": agent_res.get("boundary_event"),
+            "os_grounding": agent_res.get("os_grounding"),
             "model_used": trace.model_used
         }

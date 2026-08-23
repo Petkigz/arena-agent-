@@ -199,6 +199,8 @@ not authorized.
 - Sensor and actuator interfaces are modeled as Arena interfaces, owner devices,
   shared surfaces, external environment, or unknown. Sending a command does not
   prove control; an Arena-controlled event requires authority plus observed effect.
+- OS targeting requires a unique live process grounding and, for UI interaction,
+  observed window/display/region evidence. Ambiguous application names never select a target.
 - Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
 - Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a

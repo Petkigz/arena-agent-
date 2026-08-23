@@ -239,6 +239,7 @@ class SystemAppInventory:
         app_logger.info(f"Attempting to launch application '{app_name}' (Target: {exec_path}) on {host_os}...")
 
         try:
+            launched_process = None
             # SECURITY: exec_path is resolved from the installed-app inventory
             # (or, in the fallback path, from a user query) — pass it as an argv
             # element, never through a shell, to prevent command injection.
@@ -248,15 +249,15 @@ class SystemAppInventory:
                 else:
                     # `start` is a cmd.exe builtin; invoke it with /c and argv so
                     # exec_path is not shell-interpreted.
-                    subprocess.Popen(["cmd.exe", "/c", "start", "", exec_path])
+                    launched_process = subprocess.Popen(["cmd.exe", "/c", "start", "", exec_path])
             elif host_os == "darwin":
                 if exec_path.endswith(".app"):
-                    subprocess.Popen(["open", exec_path])
+                    launched_process = subprocess.Popen(["open", exec_path])
                 else:
-                    subprocess.Popen([exec_path])
+                    launched_process = subprocess.Popen([exec_path])
             else:
                 # Linux — exec_path must be a resolvable executable.
-                subprocess.Popen([exec_path])
+                launched_process = subprocess.Popen([exec_path])
 
             audit_logger.info(f"Successfully launched application '{app_name}'")
 
@@ -265,6 +266,7 @@ class SystemAppInventory:
                 "app_name": app_name,
                 "executable_path": exec_path,
                 "launch_command_executed": True,
+                "pid": launched_process.pid if launched_process is not None else None,
                 "message": f"Successfully launched '{app_name}' on your {platform.system()} system!"
             }
 
