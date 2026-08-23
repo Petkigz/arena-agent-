@@ -8,6 +8,15 @@ files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESS
 and test-count figures that did not match the code; they are now archived under
 `docs/archive/`. This document is measured.
 
+> **2026-08-23 audit warning:** The latest full review found release-blocking
+> integration defects despite the focused capability checks below: GitHub CI is
+> failing before pytest runs, `app.server` can construct a second cognitive
+> runtime, and multiple LLM-backed tools can still convert an explicitly
+> simulated/offline completion into tool-level success. Core-only unified-server
+> startup and native safety-ceiling updates also have contract gaps. Treat prior
+> pass counts as historical until the remediation gates in
+> [`docs/FULL_AUDIT_2026-08-23.md`](docs/FULL_AUDIT_2026-08-23.md) are green.
+
 ---
 
 ## What this system is
