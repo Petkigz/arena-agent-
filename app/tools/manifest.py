@@ -12,17 +12,124 @@ Safety levels mirror policy.py: 0=read, 1=draft, 2=reversible, 3=sensitive.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+import importlib
+from threading import RLock
+from typing import Any, Callable, Dict, Optional
 
 from app.utils.logger import app_logger
+
+
+class ToolDependencyUnavailable(ImportError):
+    """A tool module could not load because an optional dependency is absent."""
+
+    def __init__(
+        self,
+        tool_module: str,
+        tool_symbol: str,
+        cause: ImportError,
+    ) -> None:
+        self.tool_module = tool_module
+        self.tool_symbol = tool_symbol
+        self.missing_dependency = getattr(cause, "name", None)
+        detail = str(cause) or cause.__class__.__name__
+        super().__init__(
+            f"Optional tool {tool_module}.{tool_symbol} is unavailable: {detail}"
+        )
+
+    def as_result(self) -> Dict[str, Any]:
+        return {
+            "success": False,
+            "available": False,
+            "error_type": "dependency_unavailable",
+            "error": str(self),
+            "tool_module": self.tool_module,
+            "tool_symbol": self.tool_symbol,
+            "missing_dependency": self.missing_dependency,
+        }
+
+
+class _LazyImportProxy:
+    """Resolve a tool class only when one of its actions is actually invoked.
+
+    Manifest construction intentionally performs no tool-module imports.  A
+    missing optional package therefore disables only actions backed by that
+    module instead of preventing ToolRegistry or CognitiveRuntime startup.
+    """
+
+    def __init__(self, module: str, symbol: str) -> None:
+        self.module = module
+        self.symbol = symbol
+        self._resolved: Optional[Any] = None
+        self._load_error: Optional[ToolDependencyUnavailable] = None
+        self._lock = RLock()
+
+    def _load(self) -> Any:
+        with self._lock:
+            if self._resolved is not None:
+                return self._resolved
+            if self._load_error is not None:
+                raise self._load_error
+            try:
+                self._resolved = getattr(importlib.import_module(self.module), self.symbol)
+            except ImportError as exc:
+                self._load_error = ToolDependencyUnavailable(
+                    self.module, self.symbol, exc
+                )
+                raise self._load_error from exc
+            return self._resolved
+
+    def availability(self, *, probe: bool = False) -> Dict[str, Any]:
+        if self._resolved is not None:
+            return {"available": True, "status": "available"}
+        if self._load_error is not None:
+            return {
+                "available": False,
+                "status": "dependency_unavailable",
+                "error": str(self._load_error),
+                "missing_dependency": self._load_error.missing_dependency,
+            }
+        if not probe:
+            return {"available": None, "status": "not_checked"}
+        try:
+            self._load()
+        except ToolDependencyUnavailable as exc:
+            return {
+                "available": False,
+                "status": "dependency_unavailable",
+                "error": str(exc),
+                "missing_dependency": exc.missing_dependency,
+            }
+        return {"available": True, "status": "available"}
+
+    def __getattr__(self, method_name: str) -> Callable[..., Any]:
+        def invoke(*args: Any, **kwargs: Any) -> Any:
+            return getattr(self._load(), method_name)(*args, **kwargs)
+
+        invoke.tool_availability = self.availability  # type: ignore[attr-defined]
+        return invoke
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._load()(*args, **kwargs)
+
+
+def _copy_availability(
+    handler: Callable[..., Any], source: Callable[..., Any]
+) -> Callable[..., Any]:
+    checker = getattr(source, "tool_availability", None)
+    if checker is not None:
+        handler.tool_availability = checker  # type: ignore[attr-defined]
+    return handler
 
 
 def _wrap(fn: Callable[..., Any], *key_args: str) -> Callable[[Dict[str, Any]], Any]:
     """Adapt a keyword-arg method to a payload-dict handler."""
     def handler(payload: Dict[str, Any]) -> Any:
         kwargs = {k: payload.get(k) for k in key_args if payload.get(k) is not None}
-        return fn(**kwargs)
-    return handler
+        try:
+            return fn(**kwargs)
+        except ToolDependencyUnavailable as exc:
+            return exc.as_result()
+    return _copy_availability(handler, fn)
 
 
 def _ignore_payload(fn: Callable[[], Any]) -> Callable[[Dict[str, Any]], Any]:
@@ -31,92 +138,99 @@ def _ignore_payload(fn: Callable[[], Any]) -> Callable[[Dict[str, Any]], Any]:
     ToolRegistry always calls handler(payload); zero-arg methods must drop it.
     """
     def handler(payload: Dict[str, Any]) -> Any:
-        return fn()
-    return handler
+        try:
+            return fn()
+        except ToolDependencyUnavailable as exc:
+            return exc.as_result()
+    return _copy_availability(handler, fn)
 
 
 def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     """Return the full action_type → tool mapping (lazy imports inside)."""
-    from app.tools.android_adb_controller import AndroidADBController
-    from app.tools.app_inventory import SystemAppInventory
-    from app.tools.ast_janitor import ASTJanitor
-    from app.tools.browser_automation import BrowserAutomation
-    from app.tools.business_growth import BusinessGrowthEngine
-    from app.tools.camera_capture import CameraCaptureTool
-    from app.tools.coder_brain import CoderBrainTool
-    from app.tools.connectors import ConnectorsTool
-    from app.tools.content_creator import ContentCreatorTool
-    from app.tools.cybersecurity_brain import CybersecurityBrainTool
-    from app.tools.daily_briefing import DailyBriefingEngine
-    from app.tools.data_analyzer import DataAnalysisEngine
-    from app.tools.deep_os_controller import DeepOSController
-    from app.tools.desktop_control import DesktopControl
-    from app.tools.disposable_sandbox import DisposableSandbox
-    from app.tools.doc_manager import DocumentManager
-    from app.tools.finance_trader import FinanceTraderTool
-    from app.tools.financial_legal_wellness import FinancialLegalWellnessSuite
-    from app.tools.git_manager import GitManagerTool
-    from app.tools.knowledge_domains import KnowledgeDomainsTool
-    from app.tools.knowledge_indexer import KnowledgeIndexer
-    from app.tools.location_service import LocationService
-    from app.tools.notes_manager import NotesManager
-    from app.tools.weather_service import WeatherService
-    from app.tools.translator import TranslatorTool
-    from app.tools.email_service import EmailService
-    from app.tools.sql_query import SQLQueryTool
-    from app.tools.database_connector import DatabaseConnector
-    from app.tools.invoice_generator import InvoiceGenerator
-    from app.tools.network_diagnostics import NetworkDiagnostics
-    from app.tools.budget_tracker import BudgetTracker
-    from app.tools.backup_manager import BackupManager
-    from app.tools.presentation_generator import PresentationGenerator
-    from app.tools.package_installer import PackageInstaller
-    from app.tools.rss_aggregator import RssAggregator
-    from app.tools.fact_checker import FactChecker
-    from app.tools.price_lookup import PriceLookup
-    from app.tools.messaging import Messaging
-    from app.tools.recipes import Recipes
-    from app.tools.pdf_toolkit import PdfToolkit
-    from app.tools.process_manager import ProcessManager
-    from app.tools.calendar_service import CalendarService
-    from app.tools.document_generator import DocumentGenerator
-    from app.tools.local_executor import LocalExecutor
-    from app.tools.contacts import ContactsTool
-    from app.tools.spreadsheet import SpreadsheetTool
-    from app.agents.coding_agent import CodingAgent
-    from app.agents.data_analysis_agent import DataAnalysisAgent
-    from app.tools.media_studio import MediaStudioTool
-    from app.tools.music_studio import MusicStudioTool
-    from app.tools.ocr_reader import OCRReaderTool
-    from app.tools.opsec_manager import OpSecManagerTool
-    from app.tools.pentest_company_assistant import PentestCompanyAssistant
-    from app.tools.screen_capture import ScreenCaptureTool
-    from app.tools.security_canary import SecurityCanaryTrap
-    from app.tools.security_education import SecurityEducationTool
-    from app.tools.security_lab import SecurityLabTool
-    from app.tools.skill_teaching_engine import SkillTeachingEngine
-    from app.tools.universal_filesystem import UniversalFilesystem
-    from app.tools.universal_media_learner import UniversalMediaLearner
-    from app.tools.vision_analyzer import VisionAnalyzerTool
-    from app.tools.object_detector import ObjectDetectorTool
-    from app.tools.prosody_analyzer import ProsodyAnalyzerTool
-    from app.tools.vlm_analyzer import VlmAnalyzerTool
-    from app.tools.lora_manager import LoraManagerTool
-    from app.tools.web_agent import WebAgent
-    from app.tools.web_research import WebResearcher
-    from app.tools.win32_ghost_operator import Win32GhostOperator
-    from app.tools.workflow_engine import WorkflowEngine
-    from app.tools.youtube_learner import YouTubeLearner
+    AndroidADBController = _LazyImportProxy("app.tools.android_adb_controller", "AndroidADBController")
+    SystemAppInventory = _LazyImportProxy("app.tools.app_inventory", "SystemAppInventory")
+    ASTJanitor = _LazyImportProxy("app.tools.ast_janitor", "ASTJanitor")
+    BrowserAutomation = _LazyImportProxy("app.tools.browser_automation", "BrowserAutomation")
+    BusinessGrowthEngine = _LazyImportProxy("app.tools.business_growth", "BusinessGrowthEngine")
+    CameraCaptureTool = _LazyImportProxy("app.tools.camera_capture", "CameraCaptureTool")
+    CoderBrainTool = _LazyImportProxy("app.tools.coder_brain", "CoderBrainTool")
+    ConnectorsTool = _LazyImportProxy("app.tools.connectors", "ConnectorsTool")
+    ContentCreatorTool = _LazyImportProxy("app.tools.content_creator", "ContentCreatorTool")
+    CybersecurityBrainTool = _LazyImportProxy("app.tools.cybersecurity_brain", "CybersecurityBrainTool")
+    DailyBriefingEngine = _LazyImportProxy("app.tools.daily_briefing", "DailyBriefingEngine")
+    DataAnalysisEngine = _LazyImportProxy("app.tools.data_analyzer", "DataAnalysisEngine")
+    DeepOSController = _LazyImportProxy("app.tools.deep_os_controller", "DeepOSController")
+    DesktopControl = _LazyImportProxy("app.tools.desktop_control", "DesktopControl")
+    DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
+    DocumentManager = _LazyImportProxy("app.tools.doc_manager", "DocumentManager")
+    FinanceTraderTool = _LazyImportProxy("app.tools.finance_trader", "FinanceTraderTool")
+    FinancialLegalWellnessSuite = _LazyImportProxy("app.tools.financial_legal_wellness", "FinancialLegalWellnessSuite")
+    GitManagerTool = _LazyImportProxy("app.tools.git_manager", "GitManagerTool")
+    KnowledgeDomainsTool = _LazyImportProxy("app.tools.knowledge_domains", "KnowledgeDomainsTool")
+    KnowledgeIndexer = _LazyImportProxy("app.tools.knowledge_indexer", "KnowledgeIndexer")
+    LocationService = _LazyImportProxy("app.tools.location_service", "LocationService")
+    NotesManager = _LazyImportProxy("app.tools.notes_manager", "NotesManager")
+    WeatherService = _LazyImportProxy("app.tools.weather_service", "WeatherService")
+    TranslatorTool = _LazyImportProxy("app.tools.translator", "TranslatorTool")
+    EmailService = _LazyImportProxy("app.tools.email_service", "EmailService")
+    SQLQueryTool = _LazyImportProxy("app.tools.sql_query", "SQLQueryTool")
+    DatabaseConnector = _LazyImportProxy("app.tools.database_connector", "DatabaseConnector")
+    InvoiceGenerator = _LazyImportProxy("app.tools.invoice_generator", "InvoiceGenerator")
+    NetworkDiagnostics = _LazyImportProxy("app.tools.network_diagnostics", "NetworkDiagnostics")
+    BudgetTracker = _LazyImportProxy("app.tools.budget_tracker", "BudgetTracker")
+    BackupManager = _LazyImportProxy("app.tools.backup_manager", "BackupManager")
+    PresentationGenerator = _LazyImportProxy("app.tools.presentation_generator", "PresentationGenerator")
+    PackageInstaller = _LazyImportProxy("app.tools.package_installer", "PackageInstaller")
+    RssAggregator = _LazyImportProxy("app.tools.rss_aggregator", "RssAggregator")
+    FactChecker = _LazyImportProxy("app.tools.fact_checker", "FactChecker")
+    PriceLookup = _LazyImportProxy("app.tools.price_lookup", "PriceLookup")
+    Messaging = _LazyImportProxy("app.tools.messaging", "Messaging")
+    Recipes = _LazyImportProxy("app.tools.recipes", "Recipes")
+    PdfToolkit = _LazyImportProxy("app.tools.pdf_toolkit", "PdfToolkit")
+    ProcessManager = _LazyImportProxy("app.tools.process_manager", "ProcessManager")
+    CalendarService = _LazyImportProxy("app.tools.calendar_service", "CalendarService")
+    DocumentGenerator = _LazyImportProxy("app.tools.document_generator", "DocumentGenerator")
+    LocalExecutor = _LazyImportProxy("app.tools.local_executor", "LocalExecutor")
+    ContactsTool = _LazyImportProxy("app.tools.contacts", "ContactsTool")
+    SpreadsheetTool = _LazyImportProxy("app.tools.spreadsheet", "SpreadsheetTool")
+    CodingAgent = _LazyImportProxy("app.agents.coding_agent", "CodingAgent")
+    DataAnalysisAgent = _LazyImportProxy("app.agents.data_analysis_agent", "DataAnalysisAgent")
+    MediaStudioTool = _LazyImportProxy("app.tools.media_studio", "MediaStudioTool")
+    MusicStudioTool = _LazyImportProxy("app.tools.music_studio", "MusicStudioTool")
+    OCRReaderTool = _LazyImportProxy("app.tools.ocr_reader", "OCRReaderTool")
+    OpSecManagerTool = _LazyImportProxy("app.tools.opsec_manager", "OpSecManagerTool")
+    PentestCompanyAssistant = _LazyImportProxy("app.tools.pentest_company_assistant", "PentestCompanyAssistant")
+    ScreenCaptureTool = _LazyImportProxy("app.tools.screen_capture", "ScreenCaptureTool")
+    SecurityCanaryTrap = _LazyImportProxy("app.tools.security_canary", "SecurityCanaryTrap")
+    SecurityEducationTool = _LazyImportProxy("app.tools.security_education", "SecurityEducationTool")
+    SecurityLabTool = _LazyImportProxy("app.tools.security_lab", "SecurityLabTool")
+    SkillTeachingEngine = _LazyImportProxy("app.tools.skill_teaching_engine", "SkillTeachingEngine")
+    UniversalFilesystem = _LazyImportProxy("app.tools.universal_filesystem", "UniversalFilesystem")
+    UniversalMediaLearner = _LazyImportProxy("app.tools.universal_media_learner", "UniversalMediaLearner")
+    VisionAnalyzerTool = _LazyImportProxy("app.tools.vision_analyzer", "VisionAnalyzerTool")
+    ObjectDetectorTool = _LazyImportProxy("app.tools.object_detector", "ObjectDetectorTool")
+    ProsodyAnalyzerTool = _LazyImportProxy("app.tools.prosody_analyzer", "ProsodyAnalyzerTool")
+    VlmAnalyzerTool = _LazyImportProxy("app.tools.vlm_analyzer", "VlmAnalyzerTool")
+    LoraManagerTool = _LazyImportProxy("app.tools.lora_manager", "LoraManagerTool")
+    WebAgent = _LazyImportProxy("app.tools.web_agent", "WebAgent")
+    WebResearcher = _LazyImportProxy("app.tools.web_research", "WebResearcher")
+    Win32GhostOperator = _LazyImportProxy("app.tools.win32_ghost_operator", "Win32GhostOperator")
+    WorkflowEngine = _LazyImportProxy("app.tools.workflow_engine", "WorkflowEngine")
+    YouTubeLearner = _LazyImportProxy("app.tools.youtube_learner", "YouTubeLearner")
 
     manifest: Dict[str, Dict[str, Any]] = {}
 
     def add(action: str, category: str, level: int, desc: str, handler: Callable) -> None:
+        checker = getattr(handler, "tool_availability", None)
         manifest[action] = {
             "name": action,
             "category": category,
             "safety_level": level,
             "description": desc,
             "handler": handler,
+            # None means this is an in-manifest/custom/plugin handler rather
+            # than a lazily imported optional tool module.
+            "availability": checker,
         }
 
     # ── OS / system ─────────────────────────────────────────────────────────
@@ -454,6 +568,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
             test_command=test_command,
             context_files=context_files or [],
         )
+    _run_coding_agent.tool_availability = CodingAgent.availability  # type: ignore[attr-defined]
     add("run_coding_agent", "agent", 2, "Plan→write→test→iterate on a coding task",
         _wrap(_run_coding_agent, "task", "target_file", "test_command", "context_files"))
 
@@ -469,6 +584,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
             dataset_path=dataset_path,
             question=question or "",
         )
+    _run_data_analysis_agent.tool_availability = DataAnalysisAgent.availability  # type: ignore[attr-defined]
     add("run_data_analysis", "agent", 0, "Read-only dataset analysis (inspect→query→answer)",
         _wrap(_run_data_analysis_agent, "dataset_path", "question"))
 

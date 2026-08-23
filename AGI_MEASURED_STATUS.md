@@ -1,6 +1,6 @@
 # Arena Agent — Measured Status
 
-**Updated:** 2026-08-22 · Branch `arena/01a02b25-arena-agent`
+**Updated:** 2026-08-23 · Branch `arena/01a02b25-arena-agent`
 **This is the canonical status document.** It supersedes the percentage-based status
 files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,
 `AGI_FINAL_SUMMARY.md`, `PHASES.md`, `PROJECT_REVIEW.md`, and the recovered branch's
@@ -170,6 +170,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 - ✅ **Longitudinal intelligence regression history**: An isolated deterministic suite now measures paraphrased memory retrieval, success/failure utility adaptation, outcome-calibrated autonomy, evidence-linked consolidation, authorization replay resistance, temporal continuity, LoRA review boundaries, project dependency unlocking, and owner curiosity limits. Each run persists per-check evidence/metrics/duration and reports pass→fail regressions against the previous run. It reports factual pass counts, never an “AGI percentage,” and does not mutate the live brain.
 
 - ✅ **Cooperative execution control + rollback receipts**: Every runtime capability execution now receives a persistent execution ID, cancellation state, and rollback receipt. Owner stop requests are visible while work runs; ToolRegistry checks cancellation around handlers. A shared cancellable process-group runner now covers disposable sandbox, package manager, ADB/device, system update, git, ping, and traceroute subprocesses. Cancellation arriving after the final checkpoint is reported honestly because side effects may exist. Rollback is never implied: unsupported actions receive a reason, while supported compensation creates a new exact approval request rather than auto-running.
+
+- ✅ **Optional-tool startup isolation**: The API, manifest, `ToolRegistry`, and `CognitiveRuntime` no longer import every optional tool package at startup. Tool classes resolve only when invoked or explicitly probed; missing packages return typed `dependency_unavailable` results for that capability alone. `GET /tools/availability` reports per-tool status without probing by default. Full and core-only requirement sets are now separate while `requirements.txt` preserves the full-install behavior.
 
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 

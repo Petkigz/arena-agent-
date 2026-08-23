@@ -10,24 +10,8 @@ from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 from app.utils.hardware_monitor import HardwareMonitor
 
-from app.tools.app_inventory import SystemAppInventory
-from app.tools.desktop_control import DesktopControl
-from app.tools.universal_filesystem import UniversalFilesystem
-from app.tools.screen_capture import ScreenCaptureTool
-from app.tools.vision_analyzer import VisionAnalyzerTool
-from app.tools.web_research import WebResearcher
-from app.tools.youtube_learner import YouTubeLearner
-from app.tools.universal_media_learner import UniversalMediaLearner
-from app.tools.cybersecurity_brain import CybersecurityBrainTool
-from app.tools.security_lab import SecurityLabTool
-from app.tools.pentest_company_assistant import PentestCompanyAssistant
-from app.tools.opsec_manager import OpSecManagerTool
-from app.tools.data_analyzer import DataAnalysisEngine
-from app.tools.disposable_sandbox import DisposableSandbox
-from app.tools.skill_teaching_engine import SkillTeachingEngine
-from app.tools.daily_briefing import DailyBriefingEngine
-from app.tools.workflow_engine import WorkflowEngine
-from app.memory.semantic_rag import SemanticRAGEngine
+# Tool modules are imported inside the branch that invokes them.  Importing the
+# orchestrator must not require every optional tool dependency to be installed.
 from app.memory.human_nature_engine import HumanNatureEngine
 from app.memory.coworker_brain import CoworkerBrain
 from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction, ReasoningDecision
@@ -66,6 +50,8 @@ class MasterAgentOrchestrator:
         execution_success = True
 
         if action_type in ["open_application", "launch_app"]:
+            from app.tools.app_inventory import SystemAppInventory
+
             app_name = payload.get("app_name") or payload.get("app") or payload.get("app_query") or payload.get("query")
             if not app_name:
                 match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
@@ -91,6 +77,8 @@ class MasterAgentOrchestrator:
                 })
 
         elif action_type == "web_search":
+            from app.tools.desktop_control import DesktopControl
+
             query_term = payload.get("query_term") or payload.get("query") or user_text
             url = f"https://www.youtube.com/results?search_query={str(query_term).replace(' ', '+')}" if "youtube" in str(query_term).lower() or "youtube" in user_text.lower() else f"https://www.google.com/search?q={str(query_term).replace(' ', '+')}"
             d_res = DesktopControl.launch_application("firefox")
@@ -110,6 +98,8 @@ class MasterAgentOrchestrator:
                 executed_actions.append(f"Failed to open web browser for search '{query_term}'.")
 
         elif action_type == "search_files":
+            from app.tools.universal_filesystem import UniversalFilesystem
+
             search_query = payload.get("query") or payload.get("file_name") or payload.get("search_term") or user_text
 
             # Determine search limit: normal=5, "all" or all_matches=up to 1000
@@ -255,6 +245,8 @@ class MasterAgentOrchestrator:
                 })
 
         elif action_type == "screen_capture":
+            from app.tools.screen_capture import ScreenCaptureTool
+
             cap_res = ScreenCaptureTool.capture_screen()
             raw_output_data["cap_res"] = cap_res
             if cap_res.get("success"):
@@ -270,6 +262,8 @@ class MasterAgentOrchestrator:
                 executed_actions.append(f"Failed to capture desktop screen window: {cap_res.get('error', 'Capture error')}")
 
         elif action_type == "opsec_audit":
+            from app.tools.opsec_manager import OpSecManagerTool
+
             audit_res = OpSecManagerTool.audit_digital_footprint("user@example.com")
             raw_output_data["audit_res"] = audit_res
             if audit_res.get("success", True):
@@ -279,6 +273,8 @@ class MasterAgentOrchestrator:
                 executed_actions.append(f"OpSec audit failed: {audit_res.get('error', 'Audit failed')}")
 
         elif action_type == "daily_briefing":
+            from app.tools.daily_briefing import DailyBriefingEngine
+
             brief_res = DailyBriefingEngine.generate_briefing(generate_audio=False)
             raw_output_data["brief_res"] = brief_res
             if brief_res.get("success", True):
@@ -288,6 +284,8 @@ class MasterAgentOrchestrator:
                 executed_actions.append("Failed to generate Daily Executive Briefing.")
 
         elif action_type in ["investigate", "diagnostic"]:
+            from app.tools.universal_filesystem import UniversalFilesystem
+
             probe_query = payload.get("query") or user_text
             matched_evidence = UniversalFilesystem.search_filesystem(probe_query, max_results=3)
             hw_stats = HardwareMonitor.get_hardware_stats()
@@ -311,6 +309,8 @@ class MasterAgentOrchestrator:
             executed_actions.append("Formulated direct conversational answer.")
 
         elif action_type == "workflow_execute":
+            from app.tools.workflow_engine import WorkflowEngine
+
             wf_res = WorkflowEngine.execute_workflow(payload.get("workflow_name", "Task Workflow"), payload.get("steps", []))
             raw_output_data["wf_res"] = wf_res
             if wf_res.get("overall_success", True):

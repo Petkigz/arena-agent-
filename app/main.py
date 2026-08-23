@@ -17,33 +17,34 @@ from app.llm import llm_client
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 
-from app.tools.youtube_learner import YouTubeLearner
-from app.tools.web_research import WebResearcher
-from app.tools.doc_reader import DocumentReader
-from app.tools.doc_manager import DocumentManager
-from app.tools.knowledge_indexer import KnowledgeIndexer
+from app.tools.manifest import _LazyImportProxy
+YouTubeLearner = _LazyImportProxy("app.tools.youtube_learner", "YouTubeLearner")
+WebResearcher = _LazyImportProxy("app.tools.web_research", "WebResearcher")
+DocumentReader = _LazyImportProxy("app.tools.doc_reader", "DocumentReader")
+DocumentManager = _LazyImportProxy("app.tools.doc_manager", "DocumentManager")
+KnowledgeIndexer = _LazyImportProxy("app.tools.knowledge_indexer", "KnowledgeIndexer")
 
-from app.perception.speech_to_text import LocalSpeechToText
-from app.perception.text_to_speech import LocalTextToSpeech
+LocalSpeechToText = _LazyImportProxy("app.perception.speech_to_text", "LocalSpeechToText")
+LocalTextToSpeech = _LazyImportProxy("app.perception.text_to_speech", "LocalTextToSpeech")
 
-from app.tools.screen_capture import ScreenCaptureTool
-from app.tools.ocr_reader import OCRReaderTool
-from app.tools.vision_analyzer import VisionAnalyzerTool
+ScreenCaptureTool = _LazyImportProxy("app.tools.screen_capture", "ScreenCaptureTool")
+OCRReaderTool = _LazyImportProxy("app.tools.ocr_reader", "OCRReaderTool")
+VisionAnalyzerTool = _LazyImportProxy("app.tools.vision_analyzer", "VisionAnalyzerTool")
 
-from app.tools.browser_automation import BrowserAutomation
-from app.tools.desktop_control import DesktopControl
-from app.tools.web_agent import WebAgent
+BrowserAutomation = _LazyImportProxy("app.tools.browser_automation", "BrowserAutomation")
+DesktopControl = _LazyImportProxy("app.tools.desktop_control", "DesktopControl")
+WebAgent = _LazyImportProxy("app.tools.web_agent", "WebAgent")
 
-from app.tools.security_lab import SecurityLabTool
-from app.tools.finance_trader import FinanceTraderTool
-from app.tools.music_studio import MusicStudioTool
-from app.tools.content_creator import ContentCreatorTool
-from app.tools.cybersecurity_brain import CybersecurityBrainTool
+SecurityLabTool = _LazyImportProxy("app.tools.security_lab", "SecurityLabTool")
+FinanceTraderTool = _LazyImportProxy("app.tools.finance_trader", "FinanceTraderTool")
+MusicStudioTool = _LazyImportProxy("app.tools.music_studio", "MusicStudioTool")
+ContentCreatorTool = _LazyImportProxy("app.tools.content_creator", "ContentCreatorTool")
+CybersecurityBrainTool = _LazyImportProxy("app.tools.cybersecurity_brain", "CybersecurityBrainTool")
 
-from app.tools.security_education import SecurityEducationTool
-from app.tools.coder_brain import CoderBrainTool
-from app.tools.media_studio import MediaStudioTool
-from app.tools.knowledge_domains import KnowledgeDomainsTool
+SecurityEducationTool = _LazyImportProxy("app.tools.security_education", "SecurityEducationTool")
+CoderBrainTool = _LazyImportProxy("app.tools.coder_brain", "CoderBrainTool")
+MediaStudioTool = _LazyImportProxy("app.tools.media_studio", "MediaStudioTool")
+KnowledgeDomainsTool = _LazyImportProxy("app.tools.knowledge_domains", "KnowledgeDomainsTool")
 
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.memory.reflection_engine import ReflectionEngine
@@ -52,32 +53,32 @@ from app.memory.decision_constitution import DecisionConstitution
 from app.utils.hardware_monitor import HardwareMonitor
 from app.utils.notifier import SystemNotifier
 from app.scheduler import ProactiveScheduler
-from app.agents.multi_agent import MultiAgentTeam
+MultiAgentTeam = _LazyImportProxy("app.agents.multi_agent", "MultiAgentTeam")
 
-from app.tools.deep_os_controller import DeepOSController
-from app.tools.android_adb_controller import AndroidADBController
-from app.tools.universal_filesystem import UniversalFilesystem
-from app.tools.data_analyzer import DataAnalysisEngine
-from app.tools.daily_briefing import DailyBriefingEngine
-from app.tools.workflow_engine import WorkflowEngine
+DeepOSController = _LazyImportProxy("app.tools.deep_os_controller", "DeepOSController")
+AndroidADBController = _LazyImportProxy("app.tools.android_adb_controller", "AndroidADBController")
+UniversalFilesystem = _LazyImportProxy("app.tools.universal_filesystem", "UniversalFilesystem")
+DataAnalysisEngine = _LazyImportProxy("app.tools.data_analyzer", "DataAnalysisEngine")
+DailyBriefingEngine = _LazyImportProxy("app.tools.daily_briefing", "DailyBriefingEngine")
+WorkflowEngine = _LazyImportProxy("app.tools.workflow_engine", "WorkflowEngine")
 from app.memory.human_nature_engine import HumanNatureEngine
-from app.tools.universal_media_learner import UniversalMediaLearner
-from app.tools.opsec_manager import OpSecManagerTool
-from app.tools.pentest_company_assistant import PentestCompanyAssistant
-from app.tools.disposable_sandbox import DisposableSandbox
-from app.tools.skill_teaching_engine import SkillTeachingEngine
-from app.tools.app_inventory import SystemAppInventory
-from app.agents.master_agent import MasterAgentOrchestrator
+UniversalMediaLearner = _LazyImportProxy("app.tools.universal_media_learner", "UniversalMediaLearner")
+OpSecManagerTool = _LazyImportProxy("app.tools.opsec_manager", "OpSecManagerTool")
+PentestCompanyAssistant = _LazyImportProxy("app.tools.pentest_company_assistant", "PentestCompanyAssistant")
+DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
+SkillTeachingEngine = _LazyImportProxy("app.tools.skill_teaching_engine", "SkillTeachingEngine")
+SystemAppInventory = _LazyImportProxy("app.tools.app_inventory", "SystemAppInventory")
+MasterAgentOrchestrator = _LazyImportProxy("app.agents.master_agent", "MasterAgentOrchestrator")
 from app.utils.hardware_governor import HardwareGovernor
-from app.tools.security_canary import SecurityCanaryTrap
-from app.tools.financial_legal_wellness import FinancialLegalWellnessSuite
-from app.agents.self_evolving_agent import SelfEvolvingAgent
+SecurityCanaryTrap = _LazyImportProxy("app.tools.security_canary", "SecurityCanaryTrap")
+FinancialLegalWellnessSuite = _LazyImportProxy("app.tools.financial_legal_wellness", "FinancialLegalWellnessSuite")
+SelfEvolvingAgent = _LazyImportProxy("app.agents.self_evolving_agent", "SelfEvolvingAgent")
 from app.scheduler.self_healer import AutonomousSelfHealer
-from app.cognition.experiment_engine import ExperimentEngine
+ExperimentEngine = _LazyImportProxy("app.cognition.experiment_engine", "ExperimentEngine")
 from app.cognition.capability_factory import CapabilityFactory
-from app.agents.proactive_coworker_daemon import ProactiveCoworkerDaemon
-from app.tools.win32_ghost_operator import Win32GhostOperator
-from app.tools.ast_janitor import ASTJanitor
+ProactiveCoworkerDaemon = _LazyImportProxy("app.agents.proactive_coworker_daemon", "ProactiveCoworkerDaemon")
+Win32GhostOperator = _LazyImportProxy("app.tools.win32_ghost_operator", "Win32GhostOperator")
+ASTJanitor = _LazyImportProxy("app.tools.ast_janitor", "ASTJanitor")
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.pipeline import CognitivePipeline
 from app.cognition.world_model import WorldModel
@@ -845,6 +846,33 @@ def run_project_ready_steps_endpoint(project_id: str, req: ProjectRunRequest):
     return runtime.project_scheduler.run_project(
         runtime, project_id, max_steps=req.max_steps
     )
+
+
+# ── Capability availability ─────────────────────────────────────────────────
+@router.get("/tools/availability")
+def tool_availability_endpoint(
+    tool: Optional[str] = Query(None),
+    probe: bool = Query(False),
+):
+    """Report tool-local dependency status without eager probing by default."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    registry = CognitiveRuntime.get_instance().registry
+    if tool:
+        record = registry.get_tool_availability(tool, probe=probe)
+        if record["status"] == "not_registered":
+            raise HTTPException(status_code=404, detail=record["error"])
+        return {"success": True, "tool": record}
+    records = registry.list_tool_availability(probe=probe)
+    return {
+        "success": True,
+        "probe": probe,
+        "count": len(records),
+        "available": sum(item["available"] is True for item in records),
+        "unavailable": sum(item["available"] is False for item in records),
+        "not_checked": sum(item["available"] is None for item in records),
+        "tools": records,
+    }
 
 
 # ── Longitudinal intelligence benchmarks ────────────────────────────────────

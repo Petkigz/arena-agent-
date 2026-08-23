@@ -1,0 +1,42 @@
+# Optional capability dependencies. Missing packages disable only their tool;
+# inspect GET /tools/availability?probe=true for capability-local status.
+beautifulsoup4>=4.12.0
+youtube-transcript-api>=1.2.0
+pypdf>=5.0.0
+reportlab>=4.0.0
+python-docx>=1.1.0
+python-pptx>=1.0.0
+pyttsx3>=2.90
+faster-whisper>=1.0.0
+pystray>=0.19.0
+Pillow>=10.0.0
+pytesseract>=0.3.10
+mss>=9.0.0
+playwright>=1.40.0
+plyer>=2.1.0
+pyautogui>=0.9.50
+pandas>=2.0.0
+matplotlib>=3.7.0
+openpyxl>=3.1.0
+
+# Voice pipeline.
+openwakeword>=0.6.0
+silero-vad>=5.1.0
+piper-tts>=1.2.0
+pyaudio>=0.2.14
+soundfile>=0.12.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Native webcam capture.
+opencv-python>=4.8.0
+
+# Tesseract OCR is also a separate system binary. Optional VLM dependencies
+# remain owner-installed because model/hardware choice is machine-specific:
+# transformers>=4.40.0
+# accelerate>=0.27.0
+# einops>=0.7.0
+# timm>=0.9.0
+
+# Native desktop window (optional GUI client):
+# PySide6>=6.6.0

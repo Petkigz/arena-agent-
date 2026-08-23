@@ -21,14 +21,16 @@ class ToolRegistry:
         category: str,
         handler: Callable[[Dict[str, Any]], Dict[str, Any]],
         description: str = "",
-        safety_level: int = 0
+        safety_level: int = 0,
+        availability: Optional[Callable[..., Dict[str, Any]]] = None,
     ) -> None:
         self._registry[name.lower()] = {
             "name": name,
             "category": category,
             "handler": handler,
             "description": description,
-            "safety_level": safety_level
+            "safety_level": safety_level,
+            "availability": availability,
         }
 
     def _register_default_tools(self) -> None:
@@ -43,7 +45,40 @@ class ToolRegistry:
                 entry["handler"],
                 description=entry.get("description", ""),
                 safety_level=entry.get("safety_level", 0),
+                availability=entry.get("availability"),
             )
+
+    def get_tool_availability(
+        self, tool_name: str, *, probe: bool = False
+    ) -> Dict[str, Any]:
+        """Report one capability's availability without probing by default.
+
+        ``probe=True`` imports only that tool module, never the rest of the
+        manifest. This makes diagnostics explicit while keeping normal startup
+        isolated from optional packages and heavyweight model libraries.
+        """
+        key = tool_name.lower().strip()
+        entry = self._registry.get(key)
+        if entry is None:
+            return {
+                "name": key,
+                "available": False,
+                "status": "not_registered",
+                "error": f"Tool '{tool_name}' not registered in capability registry.",
+            }
+        checker = entry.get("availability")
+        if checker is None:
+            status = {"available": True, "status": "available"}
+        else:
+            status = checker(probe=probe)
+        return {"name": key, **status}
+
+    def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
+        """Return deterministic per-tool availability records."""
+        return [
+            self.get_tool_availability(name, probe=probe)
+            for name in sorted(self._registry)
+        ]
 
     def execute_registered_tool(self, tool_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         key = tool_name.lower().strip()
@@ -73,6 +108,15 @@ class ToolRegistry:
             result = tool_entry["handler"](payload)
             execution_control_registry.checkpoint(f"after_tool:{key}")
 
+            # Dependency availability is an execution precondition, not an
+            # observed action outcome. Preserve the typed result and do not run
+            # prediction scoring over a capability that never executed.
+            if isinstance(result, dict) and result.get("available") is False:
+                audit_logger.info(
+                    f"ToolRegistry could not execute '{key}': dependency unavailable"
+                )
+                return result
+
             # Calculate prediction surprisal
             pe = PredictionEngine()
             surprisal = pe.evaluate_surprisal(
@@ -84,6 +128,21 @@ class ToolRegistry:
 
             audit_logger.info(f"ToolRegistry executed tool '{key}' (Surprisal: {surprisal})")
             return result
+        except ImportError as e:
+            # Optional dependencies are capability-local failures.  Import the
+            # typed exception lazily so ToolRegistry itself remains core-only.
+            from app.tools.manifest import ToolDependencyUnavailable
+
+            if isinstance(e, ToolDependencyUnavailable):
+                app_logger.warning(str(e))
+                return e.as_result()
+            app_logger.error(f"Import error executing registered tool '{key}': {e}")
+            return {
+                "success": False,
+                "available": False,
+                "error_type": "dependency_unavailable",
+                "error": str(e),
+            }
         except Exception as e:
             app_logger.error(f"Error executing registered tool '{key}': {e}")
             return {"success": False, "error": str(e)}

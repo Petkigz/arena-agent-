@@ -143,7 +143,9 @@ arena-agent-/
 │   ├── rules.md          # Permission boundaries
 │   └── user_operating_manual.md
 ├── tests/                # pytest suite (1414 tests) + frontend vitest (184 tests)
-├── requirements.txt
+├── requirements.txt                 # Full install (core + optional tools)
+├── requirements-core.txt            # Minimal API/cognitive runtime
+├── requirements-optional-tools.txt   # Media/browser/office/speech/hardware tools
 └── README.md
 ```
 
@@ -163,6 +165,19 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+For a headless/core-only installation, use:
+
+```bash
+pip install -r requirements-core.txt
+```
+
+Optional tool modules are loaded only when invoked. A missing optional package
+marks that capability unavailable without preventing the API or
+`CognitiveRuntime` from starting. Inspect status without loading tool modules at
+`GET /tools/availability`; explicitly probe one tool with, for example,
+`GET /tools/availability?tool=web_search&probe=true`. Installing
+`requirements.txt` remains the full, backward-compatible setup.
 
 ### Run Tests
 
