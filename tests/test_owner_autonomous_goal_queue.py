@@ -18,6 +18,11 @@ def test_owner_directive_api_creates_planning_goal_not_action_authority(tmp_path
  assert result['goal']['status']=='approved'
  assert result['execution_authorized'] is False
 
+def test_owner_can_defer_and_later_reapprove_planning(tmp_path):
+ g=AutonomousGoalGenerator(str(tmp_path/'goals.db'));goal=AutonomousGoal(title='Later');g.add_goal(goal);g.owner_decide_goal(goal.goal_id,True)
+ assert g.owner_defer_goal(goal.goal_id).status==GoalStatus.DEFERRED
+ assert g.owner_decide_goal(goal.goal_id,True).status==GoalStatus.APPROVED
+
 def test_owner_priority_preempts_higher_scored_goal(tmp_path):
  g=AutonomousGoalGenerator(str(tmp_path/'goals.db')); a=AutonomousGoal(title='A',overall_score=.1); b=AutonomousGoal(title='B',overall_score=.9)
  g.add_goal(a); g.add_goal(b)

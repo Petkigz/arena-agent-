@@ -626,6 +626,11 @@ export function PrivacySettingsPage() {
                       <button onClick={() => decideAutonomousGoal(goal.goal_id, true)} className="px-2 py-1 bg-accent-primary text-white rounded">Approve planning</button>
                       <button onClick={() => decideAutonomousGoal(goal.goal_id, false)} className="px-2 py-1 border border-border rounded">Reject</button>
                     </div>}
+                    {goal.status === 'approved' && <button onClick={async () => {
+                      const response = await fetch(`/owner-control/autonomous-goals/${encodeURIComponent(goal.goal_id)}/defer`, { method: 'POST', headers: apiKeyHeader() });
+                      const data = await response.json().catch(() => ({}));
+                      if (response.ok) setAutonomousGoals((current) => current.map((item) => item.goal_id === goal.goal_id ? data.goal : item));
+                    }} className="px-2 py-1 border border-border rounded">Defer before execution</button>}
                   </div>
                 ))}
               </div>

@@ -1341,6 +1341,14 @@ def decide_autonomous_goal_endpoint(goal_id:str,req:AutonomousGoalDecisionReques
     if not goal: raise HTTPException(status_code=404,detail="Autonomous goal not found")
     return {"success":True,"goal":goal.to_dict(),"execution_authorized":False}
 
+@router.post("/owner-control/autonomous-goals/{goal_id}/defer")
+def defer_autonomous_goal_endpoint(goal_id:str):
+    from app.cognition.runtime import CognitiveRuntime
+    try:goal=CognitiveRuntime.get_instance().goal_generator.owner_defer_goal(goal_id)
+    except ValueError as exc:raise HTTPException(status_code=409,detail=str(exc)) from exc
+    if not goal:raise HTTPException(status_code=404,detail="Autonomous goal not found")
+    return {"success":True,"goal":goal.to_dict(),"executed":False}
+
 @router.put("/owner-control/autonomous-goals/{goal_id}/priority")
 def prioritize_autonomous_goal_endpoint(goal_id:str,req:AutonomousGoalPriorityRequest):
     from app.cognition.runtime import CognitiveRuntime

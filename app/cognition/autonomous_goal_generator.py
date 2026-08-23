@@ -893,6 +893,16 @@ class AutonomousGoalGenerator:
         self.update_goal(goal)
         return goal
 
+    def owner_defer_goal(self, goal_id: str) -> Optional[AutonomousGoal]:
+        goal = self.get_goal(goal_id)
+        if not goal:
+            return None
+        if goal.status in (GoalStatus.IN_PROGRESS, GoalStatus.COMPLETED, GoalStatus.FAILED, GoalStatus.REJECTED):
+            raise ValueError(f"Goal is {goal.status.value}; use execution cancellation or create a new directive")
+        goal.status = GoalStatus.DEFERRED
+        self.update_goal(goal)
+        return goal
+
     def owner_set_priority(self, goal_id: str, priority: str) -> Optional[AutonomousGoal]:
         goal = self.get_goal(goal_id)
         if not goal:
