@@ -257,6 +257,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DisplayTopologyTool.transform_window_point, "display_id", "window_region", "local_x", "local_y"))
     add("accessibility_status", "os_control", 0, "Check native semantic accessibility adapter availability",
         _ignore_payload(AccessibilityControlTool.status))
+    add("accessibility_capture", "os_control", 0, "Capture a bounded native accessibility tree",
+        _wrap(AccessibilityControlTool.capture_desktop, "window_id", "max_nodes"))
     add("accessibility_ingest", "os_control", 0, "Ingest an observed accessibility-tree snapshot",
         _wrap(AccessibilityControlTool.ingest_snapshot, "nodes", "interface", "window_id", "evidence"))
     add("accessibility_resolve", "os_control", 0, "Resolve one unique semantic UI target",

@@ -126,7 +126,7 @@ arena-agent-/
 │   ├── runtime/          # Runtime state management
 │   ├── scheduler/        # Task scheduling + autonomous cycle (hourly)
 │   ├── static/           # Dashboard UI (HTML/JS PWA)
-│   ├── tools/            # 147 capability tools (manifest) — vision grounding + VLM + LoRA + prosody
+│   ├── tools/            # 148 capability tools (manifest) — vision grounding + VLM + LoRA + prosody
 │   │   ├── object_detector.py   # Face via Haar + YOLO/SSD fallback + auto-grounding (P1-1)
 │   │   ├── vlm_analyzer.py      # True VLM Moondream2/Llava with OCR+LLM fallback (P3, optional)
 │   │   ├── prosody_analyzer.py  # Voice pitch/energy/ZCR → emotion from real signals (P2)
@@ -192,7 +192,7 @@ source .venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-Current software-only baseline (2026-08-23): **1589 backend passed, 2 skipped, 4 e2e deselected; 184 frontend passed; production frontend build passed**. The measured architecture retains 27/27 deterministic scorecard checks, 147 manifest tools, and 17 wired cognition modules.
+Current software-only baseline (2026-08-23): **1589 backend passed, 2 skipped, 4 e2e deselected; 184 frontend passed; production frontend build passed**. The measured architecture retains 27/27 deterministic scorecard checks, 148 manifest tools, and 17 wired cognition modules.
 
 > **Live verification:** tools that hit external APIs (prices, RSS, search,
 > Telegram/WhatsApp) are unit-tested for degradation only in CI — run

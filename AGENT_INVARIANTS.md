@@ -218,8 +218,9 @@ not authorized.
   prove control; an Arena-controlled event requires authority plus observed effect.
 - OS targeting requires a unique live process grounding and, for UI interaction,
   observed window/display/region evidence. Ambiguous application names never select a target.
-- Prefer semantic accessibility role/name targeting over raw coordinates. A semantic
-  target must be unique and have observed bounds before activation.
+- Prefer semantic accessibility role/name targeting over raw coordinates. Native
+  UIA/AT-SPI captures are bounded and evidenced; a target must be unique and have
+  observed bounds before activation.
 - Multi-monitor coordinates use observed physical topology. Window-local transforms
   require verified DPI scale and must remain inside the selected display.
 - Browser automation binds to an observed session/tab URL/title. Authentication is

@@ -1105,6 +1105,11 @@ def accessibility_status_endpoint():
     from app.tools.accessibility_control import AccessibilityControlTool
     return AccessibilityControlTool.status()
 
+@router.post("/os-grounding/accessibility/capture")
+def accessibility_capture_endpoint(window_id:Optional[str]=Query(None),max_nodes:int=Query(1000,ge=1,le=5000)):
+    from app.tools.accessibility_control import AccessibilityControlTool
+    return AccessibilityControlTool.capture_desktop(window_id,max_nodes)
+
 @router.get("/os-grounding/accessibility/resolve")
 def accessibility_resolve_endpoint(role:str=Query(...),name:str=Query(...),window_id:Optional[str]=Query(None)):
     from app.tools.accessibility_control import AccessibilityControlTool

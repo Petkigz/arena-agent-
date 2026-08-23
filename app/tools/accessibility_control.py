@@ -46,6 +46,42 @@ class AccessibilityStore:
 class AccessibilityControlTool:
  store=AccessibilityStore()
  @classmethod
+ def capture_desktop(cls,window_id=None,max_nodes=1000):
+  import platform
+  system=platform.system().lower();nodes=[]
+  try:
+   if system=='linux':
+    import pyatspi # type: ignore
+    root=pyatspi.Registry.getDesktop(0)
+    def walk(item):
+     if len(nodes)>=max(1,min(int(max_nodes),5000)):return
+     try:
+      role=item.getRoleName();name=item.name or '';bounds=None
+      try:
+       ext=item.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
+       bounds={'x':int(ext.x),'y':int(ext.y),'width':int(ext.width),'height':int(ext.height)}
+      except Exception:pass
+      nodes.append({'role':role,'name':name,'bounds':bounds,'enabled':True})
+      for index in range(item.childCount):walk(item.getChildAtIndex(index))
+     except Exception:return
+    walk(root);engine='linux_atspi'
+   elif system=='windows':
+    import uiautomation as auto # type: ignore
+    root=auto.GetRootControl()
+    def walk(item):
+     if len(nodes)>=max(1,min(int(max_nodes),5000)):return
+     try:
+      rect=item.BoundingRectangle
+      bounds={'x':int(rect.left),'y':int(rect.top),'width':int(rect.right-rect.left),'height':int(rect.bottom-rect.top)} if rect else None
+      nodes.append({'role':str(item.ControlTypeName or ''),'name':str(item.Name or ''),'bounds':bounds,'enabled':bool(item.IsEnabled)})
+      for child in item.GetChildren():walk(child)
+     except Exception:return
+    walk(root);engine='windows_uia'
+   else:return {'success':False,'available':False,'error':'Native accessibility capture not integrated for this platform'}
+  except ImportError as exc:return {'success':False,'available':False,'error':str(exc),'nodes':[]}
+  result=cls.store.ingest(nodes,interface=engine,window_id=window_id,evidence=[f'{engine} native accessibility tree'])
+  result.update({'available':True,'engine':engine});return result
+ @classmethod
  def status(cls):
   system=platform.system().lower();engine='windows_uia' if system=='windows' else 'linux_atspi' if system=='linux' else 'macos_accessibility'
   try:

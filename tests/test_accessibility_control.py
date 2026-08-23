@@ -1,3 +1,5 @@
+import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 from app.tools.accessibility_control import AccessibilityStore,AccessibilityControlTool
 
@@ -20,3 +22,16 @@ def test_no_bounds_means_no_fake_activation(tmp_path,monkeypatch):
  s=AccessibilityStore(tmp_path/'a.db');s.ingest([{'role':'button','name':'Submit'}],interface='test',evidence=['tree'])
  monkeypatch.setattr(AccessibilityControlTool,'store',s)
  assert AccessibilityControlTool.activate_target('button','Submit')['success'] is False
+
+def test_linux_atspi_capture_is_bounded_and_evidenced(tmp_path,monkeypatch):
+ class Node:
+  name='Save';childCount=0
+  def getRoleName(self):return 'push button'
+  def queryComponent(self):return SimpleNamespace(getExtents=lambda coords:SimpleNamespace(x=1,y=2,width=30,height=10))
+ fake=SimpleNamespace(DESKTOP_COORDS=0,Registry=SimpleNamespace(getDesktop=lambda index:Node()))
+ monkeypatch.setitem(sys.modules,'pyatspi',fake);monkeypatch.setattr('platform.system',lambda:'Linux')
+ monkeypatch.setattr(AccessibilityControlTool,'store',AccessibilityStore(tmp_path/'native.db'))
+ result=AccessibilityControlTool.capture_desktop(max_nodes=5)
+ assert result['success'] is True and result['engine']=='linux_atspi'
+ assert result['nodes'][0]['bounds']['x']==1
+ assert 'native accessibility tree' in result['nodes'][0]['evidence'][0]
