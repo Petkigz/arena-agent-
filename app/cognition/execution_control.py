@@ -234,7 +234,7 @@ class ExecutionControlRegistry:
                 "destination_path": result.get("rollback_destination"),
             }
             reason = "Verified move can be reversed to its original path; reversal requires fresh approval."
-        elif action_type in ("copy_file_verified", "compress_files") and result.get("environment_verified"):
+        elif action_type in ("copy_file_verified", "compress_files", "browser_download") and result.get("environment_verified"):
             compensation_action = "remove_verified_copy"
             compensation_payload = {
                 "file_path": result.get("rollback_path"),

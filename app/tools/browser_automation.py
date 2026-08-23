@@ -14,11 +14,76 @@ from app.cognition.execution_control import (
 
 class BrowserAutomation:
     SCREENSHOTS_DIR = settings.DATA_DIR / "workspace" / "screenshots"
+    DOWNLOADS_DIR = settings.DATA_DIR / "workspace" / "downloads"
     GROUNDING = BrowserGroundingStore(settings.DATA_DIR / "browser_grounding.db")
+
+    @classmethod
+    def _download_destination(cls, suggested_filename: str) -> Path:
+        cls.DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(suggested_filename or "download.bin").name
+        candidate = cls.DOWNLOADS_DIR / safe_name
+        if candidate.exists():
+            candidate = cls.DOWNLOADS_DIR / f"{candidate.stem}_{uuid.uuid4().hex[:8]}{candidate.suffix}"
+        return candidate
 
     @classmethod
     def ensure_dir(cls):
         cls.SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def download_file(cls, url: str, click_selector: str) -> Dict[str, Any]:
+        """Download one file through an ephemeral tab and verify the local artifact."""
+        if not url or not click_selector:
+            return {"success": False, "error": "URL and click selector are required"}
+        if not url.startswith(("http://", "https://")):
+            url = f"https://{url}"
+        browser = None
+        try:
+            import hashlib
+            cooperative_checkpoint("before_browser_download")
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                cooperative_checkpoint("before_download_click")
+                with page.expect_download(timeout=30000) as download_info:
+                    page.click(click_selector)
+                download = download_info.value
+                destination = cls._download_destination(download.suggested_filename)
+                download.save_as(str(destination))
+                cooperative_checkpoint("after_download_save")
+                if not destination.is_file():
+                    return {"success": False, "error": "Download completed but file was not observed"}
+                digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+                session_id = f"browser_session_{uuid.uuid4().hex[:12]}"
+                tab = cls.GROUNDING.observe_tab(
+                    session_id=session_id, url=page.url, title=page.title(),
+                    profile_type="ephemeral",
+                    evidence=["Playwright download event", "page.url", "page.title"],
+                )
+                event = cls.GROUNDING.record_event(
+                    tab.tab_id, "download", "completed",
+                    evidence=[f"path:{destination}", f"sha256:{digest}"],
+                )
+                browser.close(); browser = None
+            return {
+                "success": True, "environment_verified": True,
+                "download_path": str(destination), "download_sha256": digest,
+                "size_bytes": destination.stat().st_size,
+                "browser_session_id": session_id, "tab_grounding": tab.to_dict(),
+                "download_event": event, "profile_type": "ephemeral",
+                "auth_state": "unknown", "side_effects": True,
+                "rollback_path": str(destination), "rollback_sha256": digest,
+            }
+        except ExecutionCancelled:
+            raise
+        except Exception as exc:
+            return {"success": False, "available": False, "error": str(exc)}
+        finally:
+            if browser is not None:
+                try: browser.close()
+                except Exception: pass
 
     @classmethod
     def navigate_and_extract(

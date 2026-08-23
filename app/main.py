@@ -281,6 +281,10 @@ class BrowserEventRequest(BaseModel):
     state: str
     evidence: List[str]
 
+class BrowserDownloadRequest(BaseModel):
+    url: str
+    click_selector: str
+
 class BrowserNavigateRequest(BaseModel):
     url: str
     fill_inputs: Optional[Dict[str, str]] = None
@@ -2501,6 +2505,10 @@ def create_lora_job_endpoint(req: LoraJobRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
+@router.post("/automation/browser/download")
+def browser_download_endpoint(req: BrowserDownloadRequest):
+    return BrowserAutomation.download_file(req.url, req.click_selector)
+
 @router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):
     return BrowserAutomation.navigate_and_extract(
