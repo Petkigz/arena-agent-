@@ -61,7 +61,15 @@ Every non-trivial agent step is verified by an executor, not by the model:
 - Data analysis: run read-only SQL via `SQLQueryTool` / pandas and inspect real rows.
 - Anything else: add a real checker before trusting the output.
 
-## 6. Typed, honest, degradable responses
+## 6. Evidence-linked memory consolidation
+
+Automatic consolidation may promote only verifier-authored terminal episodes.
+Every semantic/procedural/lesson target keeps source-memory links; UNKNOWN,
+self-reported, and conversational claims are not promoted as facts. Repeated
+maintenance must be idempotent and must never teach the system from its own
+measurement probes.
+
+## 7. Typed, honest, degradable responses
 
 - Every tool/agent returns a `{"success": bool, ...}` dict, not exceptions and not
   bare strings.
@@ -69,7 +77,7 @@ Every non-trivial agent step is verified by an executor, not by the model:
 - Degrade gracefully: offline LLM → simulated/empty reply handled; missing file →
   clean error; git unavailable → continue best-effort.
 
-## 7. Permissions are owner-controlled and capability-aware
+## 8. Permissions are owner-controlled and capability-aware
 
 Nothing is off-limits for consideration, but execution authority belongs to the
 owner. The tool manifest's `safety_level` is authoritative, while the persistent
@@ -97,7 +105,7 @@ Owner Control Plane may always impose a stricter rule:
   dependency-aware, and restart-safe. UNKNOWN waits for evidence rather than
   re-executing; sensitive steps wait for exact single-use authorization.
 
-## 8. Honesty over AGI theater
+## 9. Honesty over AGI theater
 
 - Never claim "human-level AGI", "conscious", or "zero bugs". None of those are
   true today.
@@ -109,7 +117,7 @@ Owner Control Plane may always impose a stricter rule:
   `success: false` / unavailable responses. Never create placeholder artifacts,
   select an arbitrary identity, or invent accuracy/confidence values.
 
-## 9. Consideration is not authority
+## 10. Consideration is not authority
 
 The agent may consider uncomfortable, sensitive, or policy-restricted
 alternatives in its private counterfactual analysis. It should explain why an

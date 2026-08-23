@@ -465,6 +465,10 @@ class CognitiveRuntime:
             "beliefs_changed": 0,
             "pruned_memories": 0,
             "consolidated": 0,
+            "semantic_created": 0,
+            "procedures_created": 0,
+            "lessons_created": 0,
+            "episodes_examined": 0,
         }
         try:
             summary["beliefs_changed"] = self.beliefs.maintain()
@@ -477,10 +481,14 @@ class CognitiveRuntime:
             app_logger.warning(f"Consolidation: memory decay/prune failed: {e}")
 
         try:
-            episodes = self.memory.search("", kinds={"episodic"}, limit=50)
+            episodes = self.memory.unconsolidated_episodes(limit=100)
             if episodes:
-                created = self.learning.consolidate(episodes)
+                created = self.learning.consolidate_verified_episodes(episodes)
                 summary["consolidated"] = len(created)
+                summary["semantic_created"] = sum(1 for item in created if item.kind == "semantic")
+                summary["procedures_created"] = sum(1 for item in created if item.kind == "procedural")
+                summary["lessons_created"] = sum(1 for item in created if item.kind == "lesson")
+                summary["episodes_examined"] = len(episodes)
         except Exception as e:
             app_logger.warning(f"Consolidation: episodic consolidation failed: {e}")
 
@@ -551,7 +559,10 @@ class CognitiveRuntime:
         app_logger.info(
             f"Memory consolidation: {summary['beliefs_changed']} beliefs decayed, "
             f"{summary['pruned_memories']} memories pruned, "
-            f"{summary['consolidated']} consolidated, "
+            f"{summary['consolidated']} consolidated "
+            f"({summary.get('semantic_created',0)} semantic, "
+            f"{summary.get('procedures_created',0)} procedural, "
+            f"{summary.get('lessons_created',0)} lessons), "
             f"{summary.get('associations_created',0)} associations, "
             f"causal {summary.get('causal_total',0)} edges ({summary.get('causal_weak_edges',0)} weak)."
         )
@@ -971,14 +982,40 @@ class CognitiveRuntime:
         except Exception as e:
             _add("causal_learning", False, f"causal learning probe failed: {e}", "behavioral")
 
-        # 19. Memory association (P1-3): consolidate_memory creates associations
+        # 19. Memory consolidation/association: isolated verified episodes must
+        # become provenance-linked semantic and procedural memory.
         try:
-            summary = self.consolidate_memory()
-            _add("memory_association",
-                 "associations_created" in summary or "causal_total" in summary,
-                 f"consolidate_memory() creates associations ({summary.get('associations_created',0)}) + causal stats ({summary.get('causal_total',0)} edges)", "behavioral")
+            from app.cognition.memory_learning import MemoryLearner as _MemoryLearner
+            from app.cognition.goal_lifecycle import GoalLifecycleState as _GoalState
+            from types import SimpleNamespace as _SimpleNamespace
+            _memory_learner = _MemoryLearner(_iso_memory)
+            _verification = _SimpleNamespace(
+                verified_success=True,
+                final_state=_GoalState.ACHIEVED,
+                met_conditions=["probe = true"],
+                failed_conditions=[],
+                verification_reason="isolated direct probe",
+            )
+            for _index in range(2):
+                _memory_learner.record_verified_episode(
+                    goal=f"__scorecard_memory_{_index}",
+                    action_type="search_files",
+                    verification_result=_verification,
+                    task_id=f"__memory_task_{_index}",
+                    task_type="search_intent",
+                )
+            _created = _memory_learner.consolidate_verified_episodes(
+                _iso_memory.unconsolidated_episodes()
+            )
+            _kinds = {item.kind for item in _created}
+            _add(
+                "memory_association",
+                "semantic" in _kinds and "procedural" in _kinds,
+                "isolated verified episodes → provenance-linked semantic + procedural memory",
+                "behavioral",
+            )
         except Exception as e:
-            _add("memory_association", False, f"memory association probe failed: {e}", "behavioral")
+            _add("memory_association", False, f"memory consolidation probe failed: {e}", "behavioral")
 
         # 20. Curiosity info-gain (P1-4): generate_goals_from_information_gain
         try:
@@ -1711,6 +1748,16 @@ class CognitiveRuntime:
             failed_payload=proposal.payload,
         )
         trace.goal_verified = verification.verified_success
+        try:
+            self.learning.record_verified_episode(
+                goal=goal_text,
+                action_type=proposal.action_type,
+                verification_result=verification,
+                task_id=session_id,
+                task_type=intent_type,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Authorized execution episodic memory failed: {exc}")
 
         actual_state = dict(observed_state or {})
         actual_state.update({
@@ -2106,6 +2153,16 @@ class CognitiveRuntime:
             obs_state = self.capture_observed_world_state([], assistant_reply, goal_rep)
             verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)
             trace.goal_verified = verify_res.verified_success
+            try:
+                self.learning.record_verified_episode(
+                    goal=user_text,
+                    action_type="formulate_answer",
+                    verification_result=verify_res,
+                    task_id=session_id,
+                    task_type=query_pred,
+                )
+            except Exception as e:
+                app_logger.warning(f"Answer episodic memory failed: {e}")
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -2162,6 +2219,16 @@ class CognitiveRuntime:
             obs_state = self.capture_observed_world_state([investigation_summary], assistant_reply, goal_rep)
             verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [investigation_summary], assistant_reply, tracker=tracker, observed_state=obs_state)
             trace.goal_verified = verify_res.verified_success
+            try:
+                self.learning.record_verified_episode(
+                    goal=user_text,
+                    action_type="investigate",
+                    verification_result=verify_res,
+                    task_id=session_id,
+                    task_type=query_pred,
+                )
+            except Exception as e:
+                app_logger.warning(f"Investigation episodic memory failed: {e}")
 
             try:
                 lesson_rec = self.learning.process_outcome_reflection(
@@ -2426,6 +2493,7 @@ class CognitiveRuntime:
         trace.goal_verified = verify_res.verified_success
 
         # Reassessment & Replanning on Goal Verification Failure
+        final_action_type = proposal.action_type
         if not verify_res.verified_success:
             replan_proposal = GoalReplanner.execute_reassessment_and_replan(
                 user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory,
@@ -2437,6 +2505,7 @@ class CognitiveRuntime:
             if replan_proposal:
                 replan_gate_res = ActionGate.evaluate_proposal(replan_proposal)
                 if replan_gate_res.allowed:
+                    final_action_type = replan_proposal.action_type
                     tracker.transition(GoalLifecycleState.EXECUTING, f"Executing Plan B proposal '{replan_proposal.action_type}'")
                     replan_agent_res = MasterAgentOrchestrator.execute_proposal(
                         replan_proposal, user_text, complexity=complexity, world_model=self.world
@@ -2456,6 +2525,17 @@ class CognitiveRuntime:
                     app_logger.warning(
                         f"Replan proposal '{replan_proposal.action_type}' blocked by gate {replan_gate_res.gate_name}: {replan_gate_res.reason}"
                     )
+
+        try:
+            self.learning.record_verified_episode(
+                goal=user_text,
+                action_type=final_action_type,
+                verification_result=verify_res,
+                task_id=session_id,
+                task_type=query_pred,
+            )
+        except Exception as e:
+            app_logger.warning(f"Cognitive cycle episodic memory failed: {e}")
 
         # Observe Reality & Calculate Prediction Error (Surprisal)
         try:

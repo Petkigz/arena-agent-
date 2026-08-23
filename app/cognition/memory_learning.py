@@ -1,5 +1,6 @@
 """Phase 4/P1-F: Memory Learning & Reflection Integration Engine."""
 from __future__ import annotations
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Dict, Any, List, Optional
 from .memory import MemoryRecord, MemoryStore
@@ -106,6 +107,126 @@ class MemoryLearner:
 
         audit_logger.info(f"MemoryLearner processed outcome reflection for '{task_title}' (Lesson saved)")
         return self.learn_lesson(Lesson(content=lesson_text, importance=importance, tags=(task_title.lower(),)))
+
+    def record_verified_episode(
+        self,
+        *,
+        goal: str,
+        action_type: str,
+        verification_result: Any,
+        task_id: str | None = None,
+        task_type: str = "unknown",
+    ) -> MemoryRecord:
+        """Persist a structured episode whose authority comes from GoalVerifier."""
+        verified = bool(getattr(verification_result, "verified_success", False))
+        final_state = getattr(verification_result, "final_state", None)
+        state = final_state.value if hasattr(final_state, "value") else str(final_state or "unknown")
+        met = [str(item) for item in getattr(verification_result, "met_conditions", [])]
+        failed = [str(item) for item in getattr(verification_result, "failed_conditions", [])]
+        reason = str(getattr(verification_result, "verification_reason", ""))
+        content = (
+            f"Goal: {goal[:300]} | Action: {action_type} | Verified: {verified} | "
+            f"State: {state} | Met: {'; '.join(met[:3]) or 'none'} | "
+            f"Failed: {'; '.join(failed[:3]) or 'none'} | Reason: {reason[:300]}"
+        )
+        return self.record_episode(
+            content,
+            task_id=task_id,
+            source="goal_verifier",
+            importance=0.85 if verified else 0.7,
+            tags=(task_type, action_type, "verified_outcome"),
+            outcome=state,
+            success=verified,
+        )
+
+    def consolidate_verified_episodes(
+        self, episodes: list[MemoryRecord]
+    ) -> list[MemoryRecord]:
+        """Promote only verifier-authored terminal episodes with provenance.
+
+        No LLM is used to invent facts. Successful episodes become durable
+        verified-experience semantics; failed episodes become lessons. Repeated
+        verified successes for the same action also produce a reusable procedure.
+        Every target is linked to its source episode, making the operation
+        idempotent and auditable.
+        """
+        eligible = [
+            episode for episode in episodes
+            if episode.kind == "episodic"
+            and episode.source == "goal_verifier"
+            and episode.success is not None
+            and (episode.outcome or "") in {"achieved", "failed", "blocked"}
+        ]
+        eligible_ids = {episode.memory_id for episode in eligible}
+        for episode in episodes:
+            if episode.memory_id not in eligible_ids:
+                # Mark reviewed so unverifiable/self-reported episodes cannot
+                # starve later verified memories in the bounded consolidation batch.
+                self.store.link_consolidation(
+                    episode.memory_id,
+                    episode.memory_id,
+                    relation="not_promoted",
+                )
+        created: list[MemoryRecord] = []
+        successful_by_action: dict[str, list[MemoryRecord]] = defaultdict(list)
+
+        for episode in eligible:
+            task_type = episode.tags[0] if len(episode.tags) > 0 else "unknown"
+            action_type = episode.tags[1] if len(episode.tags) > 1 else "unknown"
+            if episode.success:
+                kind = "semantic"
+                content = (
+                    f"Verified experience [{task_type}/{action_type}]: {episode.content}"
+                )
+                successful_by_action[action_type].append(episode)
+            else:
+                kind = "lesson"
+                content = (
+                    f"Verified failure lesson [{task_type}/{action_type}]: {episode.content}"
+                )
+
+            target = self.store.find_exact(kind, content)
+            if target is None:
+                target = self.store.add(
+                    kind,
+                    content,
+                    source="consolidation",
+                    importance=max(0.7, episode.importance),
+                    tags=(task_type, action_type, f"evidence:{episode.memory_id}"),
+                    outcome=episode.outcome,
+                    success=episode.success,
+                )
+                created.append(target)
+            self.store.link_consolidation(episode.memory_id, target.memory_id)
+
+        for action_type in successful_by_action:
+            action_episodes = self.store.verified_success_episodes_for_action(action_type)
+            if len(action_episodes) < 2:
+                continue
+            task_types = sorted({
+                episode.tags[0] if episode.tags else "unknown"
+                for episode in action_episodes
+            })
+            procedure = (
+                f"Verified procedure pattern: action '{action_type}' repeatedly "
+                f"achieved its goal for task types {', '.join(task_types)}. Reuse "
+                f"only when current preconditions and postcondition probes match."
+            )
+            target = self.store.find_exact("procedural", procedure)
+            if target is None:
+                target = self.store.add(
+                    "procedural",
+                    procedure,
+                    source="consolidation",
+                    importance=0.8,
+                    tags=(action_type, "verified_pattern"),
+                    success=True,
+                )
+                created.append(target)
+            for episode in action_episodes:
+                self.store.link_consolidation(episode.memory_id, target.memory_id)
+
+        return created
 
     def consolidate(self, episodes: list[MemoryRecord], *, semantic_facts: Iterable[str] = (),
                     procedures: Iterable[str] = (), lessons: Iterable[Lesson] = ()) -> list[MemoryRecord]:

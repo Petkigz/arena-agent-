@@ -120,7 +120,7 @@ arena-agent-/
 │   │   ├── language_grounding.py # Perceptual/motor/multimodal groundings (populated via detector)
 │   │   ├── social_cognition.py  # Theory of mind + emotion from prosody + text (P2)
 │   │   └── action_proposal.py   # ActionGate safety evaluation
-│   ├── memory/           # Memory systems (episodic, semantic, procedural) + association
+│   ├── memory/           # Verifier-authored episodes → provenance-linked semantic/procedural memory
 │   ├── perception/       # Low-level perception (screen, OCR, audio, Piper)
 │   ├── runtime/          # Runtime state management
 │   ├── scheduler/        # Task scheduling + autonomous cycle (hourly)
