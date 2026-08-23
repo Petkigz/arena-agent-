@@ -305,7 +305,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(ProcessManager.list_processes, "filter", "limit", "sort_by"))
     add("get_process", "system", 0, "Inspect a process by PID",
         _wrap(ProcessManager.get_process, "pid"))
-    add("kill_process", "system", 3, "Terminate/force-kill a process (irreversible)",
+    add("terminate_process_verified", "system", 3, "Terminate one exact observed process instance and verify it stopped",
+        _wrap(ProcessManager.terminate_verified, "pid", "expected_create_time", "expected_executable_path", "force"))
+    add("kill_process", "system", 3, "Terminate/force-kill a process (irreversible, legacy PID-only path)",
         _wrap(ProcessManager.kill_process, "pid", "force"))
     add("restart_process", "system", 3, "Restart a process (irreversible)",
         _wrap(ProcessManager.restart_process, "pid"))

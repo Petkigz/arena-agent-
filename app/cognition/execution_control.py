@@ -211,7 +211,12 @@ class ExecutionControlRegistry:
                 requires_approval=True,
             )
 
-        if action_type == "activate_lora":
+        if action_type == "terminate_process_verified":
+            reason = result.get(
+                "rollback_reason",
+                "Terminated process memory and unsaved state cannot be restored.",
+            )
+        elif action_type == "activate_lora":
             compensation_action = "deactivate_lora"
             reason = "Adapter selection can be reversed by selecting the base model."
         elif action_type == "create_note" and result.get("note_id"):

@@ -109,7 +109,8 @@ Owner Control Plane may always impose a stricter rule:
   location/content hashes, and preserve exact reverse-move facts for owner-approved rollback.
 - Owner authorization never implies OS elevation. Cross-owner process changes
   require verified elevated privilege; process identity includes owner, executable,
-  parent PID, and whether Arena launched it.
+  parent PID, creation time, and whether Arena launched it. Verified termination
+  binds PID + creation time + executable and confirms the exact instance stopped.
 - Curiosity thresholds may adapt only from verified outcomes, within conservative
   clamps. The owner's exploration maximum is absolute and may be set to zero.
 - Autonomous resource limits are optional and disabled by default. When the owner

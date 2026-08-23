@@ -91,6 +91,61 @@ class ProcessManager:
 
     # ── write (Level 3) ─────────────────────────────────────────────────────
     @classmethod
+    def terminate_verified(
+        cls, pid: int, expected_create_time: float,
+        expected_executable_path: str = "", force: bool = False,
+    ) -> Dict[str, Any]:
+        """Terminate only the exact observed process instance and verify it stopped."""
+        try:
+            pid = int(pid); expected_create_time = float(expected_create_time)
+        except (TypeError, ValueError):
+            return {"success": False, "error": "pid and expected_create_time are required"}
+        guard = cls._guard(pid)
+        if guard:
+            return {"success": False, "error": guard}
+        try:
+            proc = psutil.Process(pid)
+            actual_create = float(proc.create_time())
+            actual_exe = proc.exe() or ""
+            name = proc.name() or "?"
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+            return {"success": False, "error": f"Could not verify exact process identity: {exc}"}
+        if abs(actual_create - expected_create_time) > 0.001:
+            return {"success": False, "error": "PID instance changed; refusing termination", "pid": pid}
+        if expected_executable_path and os.path.normcase(actual_exe) != os.path.normcase(expected_executable_path):
+            return {"success": False, "error": "Executable path does not match authorized process", "pid": pid, "actual_executable_path": actual_exe}
+        from app.cognition.privilege_model import PrivilegeModel
+        privilege = PrivilegeModel.probe()
+        try:
+            owner = proc.username()
+            if owner and owner != getpass.getuser() and not privilege.is_elevated:
+                return {"success": False, "error": f"Process belongs to '{owner}' and session is not elevated", "pid": pid}
+            proc.kill() if force else proc.terminate()
+            proc.wait(timeout=5)
+        except psutil.TimeoutExpired:
+            return {"success": False, "error": "Termination requested but process is still running", "pid": pid, "side_effects": True}
+        except psutil.NoSuchProcess:
+            pass
+        except psutil.Error as exc:
+            return {"success": False, "error": str(exc), "pid": pid}
+        # PID reuse does not count as the old process surviving.
+        still_same = False
+        try:
+            still_same = abs(psutil.Process(pid).create_time() - actual_create) <= 0.001
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            still_same = False
+        if still_same:
+            return {"success": False, "error": "Process still observed after termination", "pid": pid, "side_effects": True}
+        audit_logger.info(f"Verified termination of process {pid} ({name})")
+        return {
+            "success": True, "pid": pid, "name": name,
+            "executable_path": actual_exe, "create_time": actual_create,
+            "environment_verified": True, "side_effects": True,
+            "rollback_supported": False,
+            "rollback_reason": "A terminated process cannot be restored with its prior in-memory state.",
+        }
+
+    @classmethod
     def kill_process(cls, pid: int, force: bool = False) -> Dict[str, Any]:
         """Terminate (SIGTERM) or force-kill (SIGKILL) a process by PID."""
         try:
