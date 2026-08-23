@@ -222,6 +222,13 @@ class ExecutionControlRegistry:
             compensation_action = "restore_backup"
             compensation_payload = {"backup_path": result["backup_path"]}
             reason = "Backup can be restored explicitly; restore requires owner approval."
+        elif action_type == "move_file" and result.get("environment_verified"):
+            compensation_action = "move_file"
+            compensation_payload = {
+                "source_path": result.get("rollback_source"),
+                "destination_path": result.get("rollback_destination"),
+            }
+            reason = "Verified move can be reversed to its original path; reversal requires fresh approval."
 
         return RollbackReceipt(
             receipt_id=f"rollback_{uuid4().hex[:12]}",

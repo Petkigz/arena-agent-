@@ -3,7 +3,6 @@ import shutil
 import zipfile
 import subprocess
 from pathlib import Path
-from PIL import Image
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.policy import PolicyEvaluator
@@ -49,15 +48,29 @@ class UniversalFilesystem:
 
         if not src.exists():
             return {"success": False, "error": f"Source file/folder not found: '{src}'"}
+        if dst.exists():
+            return {"success": False, "error": f"Destination already exists; refusing overwrite: '{dst}'"}
 
         try:
+            import hashlib
+            source_sha256 = hashlib.sha256(src.read_bytes()).hexdigest() if src.is_file() else None
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
+            verified = dst.exists() and not src.exists()
+            destination_sha256 = hashlib.sha256(dst.read_bytes()).hexdigest() if dst.is_file() else None
+            if source_sha256 and destination_sha256 != source_sha256:
+                return {"success": False, "error": "Move completed but content hash verification failed", "side_effects": True}
             audit_logger.info(f"Moved/Renamed '{src.name}' -> '{dst.name}'")
             return {
-                "success": True,
+                "success": verified,
                 "old_path": str(src),
                 "new_path": str(dst),
+                "source_sha256": source_sha256,
+                "destination_sha256": destination_sha256,
+                "environment_verified": verified,
+                "side_effects": verified,
+                "rollback_source": str(dst),
+                "rollback_destination": str(src),
                 "message": f"Successfully moved '{src.name}' to '{dst.name}'."
             }
         except Exception as e:
@@ -103,6 +116,7 @@ class UniversalFilesystem:
             return {"success": False, "error": f"Image file not found: '{img_path}'"}
 
         try:
+            from PIL import Image
             img = Image.open(img_path)
             resized_img = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
             output_path = img_path.parent / f"resized_{img_path.name}"
