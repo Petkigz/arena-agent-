@@ -192,6 +192,9 @@ class ApprovalDecisionRequest(BaseModel):
     note: str = ""
     ttl_seconds: int = Field(default=300, ge=1, le=3600)
 
+class ExplorationBudgetRequest(BaseModel):
+    max_exploration_goals: int = Field(ge=0, le=10)
+
 class AuthorizationIssueRequest(BaseModel):
     action_type: str = Field(min_length=1)
     payload: Dict[str, Any]
@@ -887,6 +890,23 @@ def pause_owner_control_endpoint(req: OwnerPauseRequest):
         "policy": policy.to_dict(),
         "message": "All action execution paused and grants revoked." if policy.paused else "Action execution resumed under owner policy.",
     }
+
+
+@router.get("/owner-control/adaptive-autonomy")
+def get_adaptive_autonomy_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    profile = runtime.adaptive_autonomy.get_profile()
+    return {"success": True, "profile": profile.to_dict()}
+
+
+@router.put("/owner-control/adaptive-autonomy/exploration-budget")
+def set_exploration_budget_endpoint(req: ExplorationBudgetRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    profile = CognitiveRuntime.get_instance().adaptive_autonomy.set_owner_max_exploration_goals(
+        req.max_exploration_goals
+    )
+    return {"success": True, "profile": profile.to_dict()}
 
 
 @router.get("/owner-control/approvals")

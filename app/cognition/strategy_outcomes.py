@@ -236,6 +236,10 @@ class StrategyOutcomeStore:
         ]
         return matching[-limit:]
 
+    def all_outcomes(self, limit: int = 500) -> List[StrategyOutcome]:
+        """Return a bounded chronological snapshot for calibration/measurement."""
+        return list(self._outcomes[-max(1, min(limit, 5000)):])
+
     def total_recorded(self) -> int:
         """Total number of recorded outcomes."""
         return len(self._outcomes)

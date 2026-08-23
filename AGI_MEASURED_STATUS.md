@@ -94,7 +94,7 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **perception_grounding** — ObjectDetectorTool.analyze_image_grounded() + language_grounding wired (P1-1)
 - **causal_learning** — CausalInferenceEngine learns from execution + surprisal (Bayesian, not just storage) (P1-2)
 - **memory_association** — consolidate_memory() creates co_occurs_with associations + causal stats (P1-3)
-- **curiosity_info_gain** — information-gain curiosity (unknown entities, low-confidence groundings, weak causal edges, unexplored files) (P1-4)
+- **curiosity_info_gain** — information-gain curiosity with outcome-calibrated thresholds and owner-bounded exploration budget (P1-4)
 - **resource_aware_planning** — RESOURCE_COSTS + hardware pressure penalties (P2)
 - **prosody_emotion** — ProsodyAnalyzerTool (pitch/energy/ZCR→emotion) + social_cognition wired (P2)
 - **multimodal_chat** — process_cognitive_cycle(image_path, attachments) — multimodal through ONE brain (P2)
@@ -149,7 +149,7 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **P1-3 Evidence-linked semantic memory consolidation**: Every terminal GoalVerifier result now records a structured episodic memory. Sleep-like consolidation promotes only verifier-authored terminal episodes into provenance-linked semantic memories or failure lessons; repeated verified successes create reusable procedures. A consolidation-link ledger makes this idempotent and prevents unverified/self-reported episodes from being promoted or starving the queue. Retrieval now combines exact tokens, normalized concepts, character n-grams, and importance locally, with no cloud/model dependency. Causal statistics and `co_occurs_with` world associations remain part of the same maintenance pass.
 
-- ✅ **P1-4 Curiosity via information gain**: `generate_goals_from_signals()` now handles `unknown_entities`, `low_confidence_groundings`, `unexplored_files`, `weak_causal_edges`, `prediction_error_clusters`. New `generate_goals_from_information_gain()` scans WorldModel low-confidence, LanguageGrounding low count/confidence, causal weak edges → curiosity goals. `PeriodicAutonomousCycle` now calls info-gain goals + `_observe_signals()` emits those signals.
+- ✅ **P1-4 Adaptive curiosity via information gain**: Structured signals cover unknown entities, low-confidence groundings, unexplored files, weak causal edges, and prediction-error clusters. Prediction-error, low-success, and goal auto-approval thresholds now calibrate from verified strategy outcomes after a minimum sample count, using bounded smoothing and conservative clamps. A persistent owner maximum caps the combined exploratory goals per cycle (including zero), and free-text keyword generation is a true fallback rather than an extra unbounded channel.
 
 - ✅ **P2 Resource-aware planning**: `CounterfactualSimulator` has `RESOURCE_COSTS` per action, penalizes high-memory when RAM>80% (0.6×), high-cpu when CPU>75% (0.7×), file-writing when disk>85% (0.8×), budget>90% (0.7×). `ActionPlanner` auto-fetches `hardware_self_model` + `ResourceManager`. `GoalReplanner` signature extended, call sites pass outcome_store, hardware, resource_manager.
 

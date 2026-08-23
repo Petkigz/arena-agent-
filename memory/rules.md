@@ -100,6 +100,8 @@ The authenticated control surface is:
 GET    /owner-control
 PUT    /owner-control
 POST   /owner-control/pause
+GET    /owner-control/adaptive-autonomy
+PUT    /owner-control/adaptive-autonomy/exploration-budget
 GET    /owner-control/approvals
 POST   /owner-control/approvals/{action_id}/decision
 GET    /owner-control/authorizations
@@ -129,6 +131,12 @@ blindly repeated; Level-3 steps enter `waiting_approval` and resume only with th
 matching single-use authorization. `POST /projects/{id}/run-ready` runs a bounded
 batch manually. Pending project/action approvals are available under
 `/owner-control/approvals`.
+
+Curiosity thresholds calibrate only from verified strategy outcomes after enough
+samples exist. Calibration is smoothed and clamped; it cannot exceed the owner's
+persistent maximum exploratory goals per cycle. Setting that maximum to zero
+turns off curiosity/information-gap goal creation while leaving deterministic
+maintenance and optimization signals available.
 
 Explicit approval creates a short-lived grant bound to the exact action type and
 SHA-256 digest of the canonical payload. Grants are single-use by default,

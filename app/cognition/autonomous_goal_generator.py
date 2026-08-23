@@ -339,7 +339,11 @@ class AutonomousGoalGenerator:
         
         return generated_goals
     
-    def generate_goals_from_signals(self, signals: Dict[str, Any]) -> List[AutonomousGoal]:
+    def generate_goals_from_signals(
+        self,
+        signals: Dict[str, Any],
+        thresholds: Optional[Dict[str, Any]] = None,
+    ) -> List[AutonomousGoal]:
         """
         Generate goals from STRUCTURED cognitive signals instead of string keyword
         matching. This is the evidence-driven path: signals come straight from the
@@ -361,6 +365,21 @@ class AutonomousGoalGenerator:
         """
         generated: List[AutonomousGoal] = []
         signals = signals or {}
+        threshold_values = thresholds or {}
+
+        def _threshold(name: str, default: float) -> float:
+            value = threshold_values.get(name, default) if isinstance(threshold_values, dict) else getattr(threshold_values, name, default)
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        ram_threshold = _threshold("ram_pressure_threshold", 85.0)
+        cpu_threshold = _threshold("cpu_pressure_threshold", 80.0)
+        disk_threshold = _threshold("disk_pressure_threshold", 90.0)
+        prediction_threshold = _threshold("prediction_error_threshold", 0.5)
+        success_threshold = _threshold("low_success_rate_threshold", 0.6)
+        exploration_budget = max(0, int(_threshold("exploration_budget", 3)))
 
         # 1. Resource pressure → optimization.
         resource = signals.get("resource_pressure") or {}
@@ -368,7 +387,7 @@ class AutonomousGoalGenerator:
             ram = float(resource.get("ram_percent", 0) or 0)
             cpu = float(resource.get("cpu_percent", 0) or 0)
             disk = float(resource.get("disk_percent", 0) or 0)
-            if ram > 85 or cpu > 80 or disk > 90:
+            if ram > ram_threshold or cpu > cpu_threshold or disk > disk_threshold:
                 evidence = (
                     f"measured resource pressure: RAM {ram:.0f}%, CPU {cpu:.0f}%, disk {disk:.0f}%"
                 )
@@ -397,7 +416,7 @@ class AutonomousGoalGenerator:
             surprisal = float(signals.get("prediction_error", 0) or 0)
         except (TypeError, ValueError):
             surprisal = 0.0
-        if surprisal >= 0.5:
+        if surprisal >= prediction_threshold:
             goal = self._create_curiosity_goal(
                 f"high prediction error (surprisal {surprisal:.2f}) — investigate mismatch",
                 {"signal": "prediction_error"},
@@ -409,7 +428,7 @@ class AutonomousGoalGenerator:
             success_rate = float(signals.get("low_success_rate", 1.0) or 1.0)
         except (TypeError, ValueError):
             success_rate = 1.0
-        if success_rate < 0.6:
+        if success_rate < success_threshold:
             goal = self._create_optimization_goal(
                 f"low success rate ({success_rate:.0%}) — investigate root cause",
                 {"signal": "low_success_rate"},
@@ -468,13 +487,34 @@ class AutonomousGoalGenerator:
                 )
                 generated.append(goal)
 
+        if exploration_budget >= 0:
+            bounded: List[AutonomousGoal] = []
+            exploratory_count = 0
+            for goal in generated:
+                is_exploratory = goal.source in (
+                    GoalSource.CURIOSITY,
+                    GoalSource.INFORMATION_GAP,
+                )
+                if is_exploratory:
+                    if exploratory_count >= exploration_budget:
+                        continue
+                    exploratory_count += 1
+                bounded.append(goal)
+            generated = bounded
+
         for goal in generated:
             self.add_goal(goal)
             app_logger.info(f"Generated goal from signals: {goal.title} (source: {goal.source.value})")
 
         return generated
 
-    def generate_goals_from_information_gain(self, world_model=None, language_grounding=None, causal_engine=None) -> List[AutonomousGoal]:
+    def generate_goals_from_information_gain(
+        self,
+        world_model=None,
+        language_grounding=None,
+        causal_engine=None,
+        thresholds: Optional[Dict[str, Any]] = None,
+    ) -> List[AutonomousGoal]:
         """
         P1-4 AGI: Generate curiosity-driven goals that maximize expected information gain.
 
@@ -486,6 +526,19 @@ class AutonomousGoalGenerator:
         Returns goals that would most reduce uncertainty.
         """
         generated: List[AutonomousGoal] = []
+        threshold_values = thresholds or {}
+
+        def _value(name: str, default: float) -> float:
+            raw = threshold_values.get(name, default) if isinstance(threshold_values, dict) else getattr(threshold_values, name, default)
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return default
+
+        entity_threshold = _value("unknown_entity_confidence", 0.5)
+        grounding_threshold = _value("grounding_confidence", 0.6)
+        causal_threshold = _value("weak_causal_confidence", 0.4)
+        exploration_budget = max(0, int(_value("exploration_budget", 3)))
 
         # Scan WorldModel for unknown/low-confidence entities
         try:
@@ -494,7 +547,7 @@ class AutonomousGoalGenerator:
                 all_entities = world_model.find_entities()[:50]
                 unknown = []
                 for ent in all_entities:
-                    if ent.confidence < 0.5:
+                    if ent.confidence < entity_threshold:
                         unknown.append(ent.name)
                 if unknown:
                     for name in unknown[:3]:
@@ -519,7 +572,7 @@ class AutonomousGoalGenerator:
                     )
                     generated.append(goal)
                 # Low confidence groundings
-                if summary.get("average_perceptual_confidence", 1.0) < 0.6:
+                if summary.get("average_perceptual_confidence", 1.0) < grounding_threshold:
                     goal = self._create_information_gap_goal(
                         f"average grounding confidence low ({summary.get('average_perceptual_confidence',0):.2f}) — re-observe",
                         {"signal": "low_grounding_confidence"},
@@ -533,7 +586,7 @@ class AutonomousGoalGenerator:
             if causal_engine:
                 weak = []
                 for edge in causal_engine.graph.edges.values():
-                    if edge.confidence < 0.4:
+                    if edge.confidence < causal_threshold:
                         weak.append(f"{causal_engine.graph.nodes[edge.source_id].name} → {causal_engine.graph.nodes[edge.target_id].name}")
                 if weak:
                     for edge_desc in weak[:2]:
@@ -545,6 +598,7 @@ class AutonomousGoalGenerator:
         except Exception as e:
             app_logger.warning(f"Info-gain scan causal failed: {e}")
 
+        generated = generated[:exploration_budget]
         for goal in generated:
             self.add_goal(goal)
             app_logger.info(f"Generated curiosity goal (info-gain): {goal.title}")

@@ -94,6 +94,10 @@ class CognitiveRuntime:
         self.training_examples = TrainingExampleStore(
             db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db"
         )
+        from app.cognition.adaptive_autonomy import AdaptiveAutonomyCalibrator
+        self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
+            path=str(Path(path).parent / "adaptive_autonomy.json") if path else "data/adaptive_autonomy.json"
+        )
         # Phase 3: Transfer Learning
         from app.cognition.skill_classifier import SkillClassifier
         from app.cognition.analogical_memory import AnalogicalMemory
@@ -1025,8 +1029,10 @@ class CognitiveRuntime:
         # 20. Curiosity info-gain (P1-4): generate_goals_from_information_gain
         try:
             _add("curiosity_info_gain",
-                 hasattr(self.goal_generator, "generate_goals_from_information_gain") and hasattr(self.goal_generator, "generate_goals_from_signals"),
-                 "AutonomousGoalGenerator has information-gain curiosity (unknown entities, low-confidence groundings, weak causal edges, unexplored files)", "behavioral")
+                 hasattr(self.goal_generator, "generate_goals_from_information_gain")
+                 and hasattr(self.goal_generator, "generate_goals_from_signals")
+                 and hasattr(self, "adaptive_autonomy"),
+                 "Information-gain curiosity uses outcome-calibrated thresholds and an owner-bounded exploration budget", "behavioral")
         except Exception as e:
             _add("curiosity_info_gain", False, f"curiosity probe failed: {e}", "behavioral")
 

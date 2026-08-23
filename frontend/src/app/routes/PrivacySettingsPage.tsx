@@ -26,6 +26,17 @@ type ControlMode =
   | 'bounded_autonomy'
   | 'custom';
 
+interface AdaptiveAutonomyProfile {
+  prediction_error_threshold: number;
+  low_success_rate_threshold: number;
+  goal_auto_approve_threshold: number;
+  exploration_budget: number;
+  owner_max_exploration_goals: number;
+  sample_count: number;
+  observed_success_rate: number;
+  source: string;
+}
+
 interface OwnerControlPolicy {
   mode: ControlMode;
   paused: boolean;
@@ -56,6 +67,7 @@ export function PrivacySettingsPage() {
   const [importData, setImportData] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [ownerPolicy, setOwnerPolicy] = useState<OwnerControlPolicy | null>(null);
+  const [adaptiveProfile, setAdaptiveProfile] = useState<AdaptiveAutonomyProfile | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
@@ -69,6 +81,10 @@ export function PrivacySettingsPage() {
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Control policy unavailable')))
       .then((data) => { if (!cancelled) setOwnerPolicy(data.policy); })
       .catch(() => { if (!cancelled) notifications.error('Could not load owner control policy'); });
+    fetch('/owner-control/adaptive-autonomy', { headers: apiKeyHeader() })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled && data?.profile) setAdaptiveProfile(data.profile); })
+      .catch(() => {});
     listPendingApprovals().then((approvals) => {
       if (!cancelled) setPendingApprovals(approvals);
     });
@@ -157,6 +173,25 @@ export function PrivacySettingsPage() {
       notifications.error(error instanceof Error ? error.message : 'Could not execute plan');
     } finally {
       setPlanBusy(null);
+    }
+  };
+
+  const updateExplorationBudget = async (maximum: number) => {
+    setControlBusy(true);
+    try {
+      const response = await fetch('/owner-control/adaptive-autonomy/exploration-budget', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+        body: JSON.stringify({ max_exploration_goals: maximum }),
+      });
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      setAdaptiveProfile(data.profile);
+      notifications.success('Exploration budget updated');
+    } catch {
+      notifications.error('Could not update exploration budget');
+    } finally {
+      setControlBusy(false);
     }
   };
 
@@ -310,6 +345,41 @@ export function PrivacySettingsPage() {
                     Level 3 always requires explicit approval and cannot be delegated here.
                   </p>
                 </div>
+
+                {adaptiveProfile && (
+                  <div className="rounded border border-border bg-background-secondary p-4 space-y-2">
+                    <h3 className="text-sm font-medium text-text-primary">Adaptive curiosity</h3>
+                    <p className="text-xs text-text-muted">
+                      Thresholds calibrate from verified outcomes, while your maximum exploration budget is absolute.
+                    </p>
+                    <label className="block text-xs text-text-secondary">
+                      Maximum exploratory goals per cycle: {adaptiveProfile.owner_max_exploration_goals}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      value={adaptiveProfile.owner_max_exploration_goals}
+                      disabled={controlBusy}
+                      onChange={(event) => setAdaptiveProfile({
+                        ...adaptiveProfile,
+                        owner_max_exploration_goals: Number(event.target.value),
+                      })}
+                      onMouseUp={(event) => updateExplorationBudget(Number(event.currentTarget.value))}
+                      onTouchEnd={(event) => updateExplorationBudget(Number(event.currentTarget.value))}
+                      onBlur={(event) => updateExplorationBudget(Number(event.currentTarget.value))}
+                      className="w-full"
+                    />
+                    <div className="grid grid-cols-2 gap-2 text-xs text-text-muted">
+                      <span>Current budget: {adaptiveProfile.exploration_budget}</span>
+                      <span>Samples: {adaptiveProfile.sample_count}</span>
+                      <span>Surprisal trigger: {adaptiveProfile.prediction_error_threshold.toFixed(2)}</span>
+                      <span>Goal approval: {adaptiveProfile.goal_auto_approve_threshold.toFixed(2)}</span>
+                      <span>Observed success: {(adaptiveProfile.observed_success_rate * 100).toFixed(0)}%</span>
+                      <span>Source: {adaptiveProfile.source}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>

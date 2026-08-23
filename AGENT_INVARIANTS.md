@@ -96,6 +96,8 @@ Owner Control Plane may always impose a stricter rule:
 - Per-action approval and block lists override the default delegation.
 - Emergency pause blocks all capability execution before resource or prediction
   work. A malformed control policy fails closed in paused mode.
+- Curiosity thresholds may adapt only from verified outcomes, within conservative
+  clamps. The owner's exploration maximum is absolute and may be set to zero.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.

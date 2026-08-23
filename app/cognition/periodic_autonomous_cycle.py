@@ -210,11 +210,22 @@ class PeriodicAutonomousCycle:
             app_logger.info(f"Cycle {cycle.cycle_id}: {len(observations)} observation(s)")
             
             # Step 2: Generate goals — evidence-driven (structured signals) first,
-            # then information-gain curiosity, then keyword fallback.
+            # then information-gain curiosity, then keyword fallback. Thresholds
+            # are calibrated from verified outcomes and bounded by owner budget.
             all_goals = []
+            threshold_profile: Dict[str, Any] = {}
+            if cognitive_runtime and hasattr(cognitive_runtime, "adaptive_autonomy"):
+                try:
+                    threshold_profile = cognitive_runtime.adaptive_autonomy.calibrate(
+                        cognitive_runtime.outcomes
+                    ).to_dict()
+                except Exception as e:
+                    app_logger.warning(f"Adaptive autonomy calibration failed: {e}")
             try:
-                signals = self._observe_signals(cognitive_runtime)
-                signal_goals = self.goal_generator.generate_goals_from_signals(signals)
+                signals = self._observe_signals(cognitive_runtime, threshold_profile)
+                signal_goals = self.goal_generator.generate_goals_from_signals(
+                    signals, thresholds=threshold_profile
+                )
                 all_goals.extend(signal_goals)
                 cycle.goals_generated += len(signal_goals)
             except Exception as e:
@@ -223,27 +234,47 @@ class PeriodicAutonomousCycle:
             # P1-4 AGI: Information-gain curiosity — goals that maximize learning
             try:
                 if cognitive_runtime:
+                    budget = int(threshold_profile.get("exploration_budget", 3))
+                    used = sum(
+                        1 for goal in all_goals
+                        if goal.source.value in ("curiosity", "information_gap")
+                    )
+                    info_thresholds = {
+                        **threshold_profile,
+                        "exploration_budget": max(0, budget - used),
+                    }
                     info_goals = self.goal_generator.generate_goals_from_information_gain(
                         world_model=cognitive_runtime.world,
                         language_grounding=cognitive_runtime.language_grounding,
                         causal_engine=cognitive_runtime.causal_inference,
+                        thresholds=info_thresholds,
                     )
                     all_goals.extend(info_goals)
                     cycle.goals_generated += len(info_goals)
             except Exception as e:
                 app_logger.warning(f"Information-gain goal generation failed: {e}")
 
-            for observation in observations[:5]:  # Limit to top 5 observations
-                goals = self.goal_generator.generate_goals_from_observation(observation)
-                all_goals.extend(goals)
-                cycle.goals_generated += len(goals)
+            # Free-text keyword generation is a true fallback, not an additional
+            # unbounded curiosity channel.
+            fallback_budget = int(threshold_profile.get("exploration_budget", 3))
+            if not all_goals and fallback_budget > 0:
+                for observation in observations[:fallback_budget]:
+                    goals = self.goal_generator.generate_goals_from_observation(observation)
+                    all_goals.extend(goals)
+                    cycle.goals_generated += len(goals)
             
             app_logger.info(f"Cycle {cycle.cycle_id}: {cycle.goals_generated} goal(s) generated")
             
-            # Step 3: Evaluate and approve goals
+            # Step 3: Evaluate and approve goals using the calibrated threshold.
+            approval_threshold = float(
+                threshold_profile.get("goal_auto_approve_threshold", 0.7)
+            )
             for goal in all_goals:
                 self.goal_generator.evaluate_goal(goal)
-                if self.goal_generator.approve_goal(goal.goal_id, auto_approve_threshold=0.7):
+                if self.goal_generator.approve_goal(
+                    goal.goal_id,
+                    auto_approve_threshold=approval_threshold,
+                ):
                     cycle.goals_approved += 1
             
             app_logger.info(f"Cycle {cycle.cycle_id}: {cycle.goals_approved} goal(s) approved")
@@ -396,7 +427,11 @@ class PeriodicAutonomousCycle:
         
         return observations
     
-    def _observe_signals(self, cognitive_runtime=None) -> Dict[str, Any]:
+    def _observe_signals(
+        self,
+        cognitive_runtime=None,
+        thresholds: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Observe the environment as STRUCTURED signals (not flattened strings), so
         goal generation can use the evidence-driven path (generate_goals_from_signals)
@@ -408,6 +443,10 @@ class PeriodicAutonomousCycle:
         agent generates curiosity-driven goals that maximize learning.
         """
         signals: Dict[str, Any] = {}
+        threshold_values = thresholds or {}
+        entity_threshold = float(threshold_values.get("unknown_entity_confidence", 0.5))
+        grounding_threshold = float(threshold_values.get("grounding_confidence", 0.6))
+        causal_threshold = float(threshold_values.get("weak_causal_confidence", 0.4))
         try:
             import psutil
             signals["resource_pressure"] = {
@@ -430,7 +469,10 @@ class PeriodicAutonomousCycle:
             # Unknown / low-confidence entities from WorldModel
             try:
                 entities = cognitive_runtime.world.find_entities()[:50]
-                unknown = [ent.name for ent in entities if ent.confidence < 0.5]
+                unknown = [
+                    ent.name for ent in entities
+                    if ent.confidence < entity_threshold
+                ]
                 if unknown:
                     signals["unknown_entities"] = unknown[:5]
             except Exception as e:
@@ -441,10 +483,13 @@ class PeriodicAutonomousCycle:
                 lg_summary = cognitive_runtime.language_grounding.get_grounding_summary()
                 if lg_summary.get("total_perceptual_groundings", 0) < 10:
                     signals["low_grounding_count"] = lg_summary.get("total_perceptual_groundings", 0)
-                if lg_summary.get("average_perceptual_confidence", 1.0) < 0.6:
+                if lg_summary.get("average_perceptual_confidence", 1.0) < grounding_threshold:
                     # Get low confidence symbols
                     groundings = cognitive_runtime.language_grounding.get_perceptual_groundings(limit=20)
-                    low_conf = [g.symbol for g in groundings if g.confidence < 0.5]
+                    low_conf = [
+                        g.symbol for g in groundings
+                        if g.confidence < grounding_threshold
+                    ]
                     if low_conf:
                         signals["low_confidence_groundings"] = low_conf[:3]
             except Exception as e:
@@ -454,7 +499,7 @@ class PeriodicAutonomousCycle:
             try:
                 weak = []
                 for edge in cognitive_runtime.causal_inference.graph.edges.values():
-                    if edge.confidence < 0.4:
+                    if edge.confidence < causal_threshold:
                         src = cognitive_runtime.causal_inference.graph.nodes.get(edge.source_id)
                         tgt = cognitive_runtime.causal_inference.graph.nodes.get(edge.target_id)
                         if src and tgt:
