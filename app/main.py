@@ -911,6 +911,11 @@ def tool_availability_endpoint(
 
 
 # ── Evidence-linked functional self-awareness ────────────────────────────────
+class ExplicitCommitmentRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    source_id: str = Field(min_length=1, max_length=200)
+
+
 @router.get("/self-awareness")
 def self_awareness_endpoint(refresh: bool = Query(True)):
     """Return evidence-backed self-claims, agency records, and performance."""
@@ -950,6 +955,46 @@ def self_agency_history_endpoint(limit: int = Query(100, ge=1, le=1000)):
 
     records = CognitiveRuntime.get_instance().self_knowledge.recent_attributions(limit)
     return {"success": True, "attributions": [record.to_dict() for record in records]}
+
+
+@router.get("/self-awareness/commitments")
+def self_commitments_endpoint(
+    refresh: bool = Query(True),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    from app.cognition.runtime import CognitiveRuntime
+
+    runtime = CognitiveRuntime.get_instance()
+    if refresh:
+        runtime.refresh_commitments()
+    try:
+        commitments = runtime.commitments.list(status_filter, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "commitments": [item.to_dict() for item in commitments]}
+
+
+@router.post("/self-awareness/commitments")
+def create_explicit_commitment_endpoint(req: ExplicitCommitmentRequest):
+    """Record an explicit owner commitment; model prose cannot call this implicitly."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    commitment = CognitiveRuntime.get_instance().commitments.upsert(
+        req.title, source_type="explicit_owner", source_id=req.source_id,
+        status="active", evidence=[f"owner_api:{req.source_id}"],
+    )
+    return {"success": True, "commitment": commitment.to_dict()}
+
+
+@router.get("/self-awareness/introspection/{trace_id}")
+def grounded_introspection_endpoint(trace_id: str):
+    from app.cognition.commitment_ledger import GroundedIntrospection
+
+    result = GroundedIntrospection.explain_trace(settings.DB_PATH, trace_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("error", "Trace not found"))
+    return result
 
 
 # ── Longitudinal intelligence benchmarks ────────────────────────────────────
@@ -1299,15 +1344,48 @@ def execute_approved_plan_endpoint(plan_id: str):
     if review.status != PlanReviewStatus.APPROVED:
         raise HTTPException(status_code=409, detail=f"Plan is {review.status.value}, not approved")
     runtime = CognitiveRuntime.get_instance()
+    try:
+        runtime.commitments.upsert(
+            review.goal_title or plan_id, source_type="approved_plan",
+            source_id=plan_id, status="active",
+            evidence=[f"approved_plan_revision:{review.revision}"],
+        )
+    except Exception as exc:
+        app_logger.warning(f"Could not record approved-plan commitment: {exc}")
     if plan_id.startswith("project_dag_"):
         project_id = plan_id[len("project_dag_"):]
-        return runtime.project_scheduler.run_project(
+        result = runtime.project_scheduler.run_project(
             runtime, project_id, max_steps=10
         )
+        runtime.refresh_commitments()
+        return result
     plan = runtime.goal_executor.get_plan(plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Execution plan not found")
     result = runtime.goal_executor.execute_plan(plan, runtime)
+    try:
+        if result.status.value == "completed":
+            runtime.commitments.upsert(
+                review.goal_title or plan_id, source_type="approved_plan",
+                source_id=plan_id, status="completed",
+                evidence=[f"execution_plan_status:{result.status.value}"],
+                completion_verified=True,
+            )
+        elif result.status.value in ("blocked", "paused"):
+            runtime.commitments.upsert(
+                review.goal_title or plan_id, source_type="approved_plan",
+                source_id=plan_id, status="blocked",
+                evidence=[f"execution_plan_status:{result.status.value}"],
+                blocked_reason=f"Execution plan is {result.status.value}.",
+            )
+        elif result.status.value == "failed":
+            runtime.commitments.upsert(
+                review.goal_title or plan_id, source_type="approved_plan",
+                source_id=plan_id, status="failed",
+                evidence=["execution_plan_status:failed"],
+            )
+    except Exception as exc:
+        app_logger.warning(f"Could not update approved-plan commitment: {exc}")
     return {
         "success": True,
         "request_success": True,

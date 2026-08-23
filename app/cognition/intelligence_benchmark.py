@@ -398,6 +398,40 @@ class IntelligenceBenchmarkSuite:
                 agency_attribution_integrity,
             ))
 
+            def commitment_continuity():
+                from app.cognition.commitment_ledger import CommitmentLedger
+                path = root / "commitments.db"
+                first = CommitmentLedger(path)
+                first.upsert(
+                    "Finish report", source_type="explicit_owner", source_id="owner-1",
+                    status="blocked", evidence=["owner_api:owner-1"],
+                    blocked_reason="Waiting for evidence",
+                )
+                restored = CommitmentLedger(path).get_by_source(
+                    "explicit_owner", "owner-1"
+                )
+                completion_blocked = False
+                try:
+                    first.upsert(
+                        "Finish report", source_type="explicit_owner", source_id="owner-1",
+                        status="completed", evidence=[], completion_verified=False,
+                    )
+                except ValueError:
+                    completion_blocked = True
+                passed = bool(
+                    restored and restored.status == "blocked"
+                    and restored.blocked_reason == "Waiting for evidence"
+                    and completion_blocked
+                )
+                return passed, "blocked commitment survived restart; unverified completion rejected", {
+                    "restored_status": restored.status if restored else None,
+                    "unverified_completion_rejected": completion_blocked,
+                }
+
+            checks.append(self._run_check(
+                "commitment_continuity", "self_awareness", commitment_continuity,
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}

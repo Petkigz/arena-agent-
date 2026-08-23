@@ -129,6 +129,10 @@ class CognitiveRuntime:
         self.self_knowledge = SelfKnowledgeLedger(
             str(Path(path).parent / "self_knowledge.db") if path else "data/self_knowledge.db"
         )
+        from app.cognition.commitment_ledger import CommitmentLedger
+        self.commitments = CommitmentLedger(
+            str(Path(path).parent / "commitments.db") if path else "data/commitments.db"
+        )
         self.refresh_self_knowledge()
 
         # Phase 6: Common Sense Knowledge Base for AGI
@@ -256,6 +260,23 @@ class CognitiveRuntime:
         return {
             "recorded_claim_ids": [claim.claim_id for claim in recorded],
             "snapshot": self.self_knowledge.snapshot(),
+        }
+
+    def refresh_commitments(self) -> Dict[str, Any]:
+        """Reconcile persistent projects into the commitment ledger."""
+        synced = []
+        manager = getattr(self, "project_manager", None)
+        if manager is not None:
+            for project in list(manager._projects.values()):
+                try:
+                    synced.append(self.commitments.sync_project(project))
+                except Exception as exc:
+                    app_logger.warning(
+                        f"Could not reconcile project commitment {project.project_id}: {exc}"
+                    )
+        return {
+            "synced": len(synced),
+            "commitments": [item.to_dict() for item in self.commitments.list()],
         }
 
     def get_hardware_self_report(self) -> Dict[str, Any]:
@@ -2068,6 +2089,17 @@ class CognitiveRuntime:
             GoalLifecycleState.EXECUTING,
             f"Executing exact owner-authorized proposal '{proposal.proposal_id}'",
         )
+        try:
+            self.commitments.upsert(
+                goal_text, source_type="owner_authorized_action",
+                source_id=proposal.proposal_id, status="active",
+                evidence=[
+                    f"authorization:{proposal.authorization_id}",
+                    f"action:{proposal.action_type}",
+                ],
+            )
+        except Exception as exc:
+            app_logger.warning(f"Could not record authorized commitment: {exc}")
         from app.cognition.perception import ObservationCollector
 
         execution = self._execute_capability_controlled(
@@ -2118,6 +2150,32 @@ class CognitiveRuntime:
             ).to_dict()
         except Exception as exc:
             app_logger.warning(f"Agency attribution failed: {exc}")
+        try:
+            commitment_evidence = list(verification.met_conditions or [])
+            if verification.verified_success and not commitment_evidence:
+                commitment_evidence = [f"GoalVerifier: {verification.verification_reason}"]
+            if verification.verified_success:
+                self.commitments.upsert(
+                    goal_text, source_type="owner_authorized_action",
+                    source_id=proposal.proposal_id, status="completed",
+                    evidence=commitment_evidence,
+                    completion_verified=True,
+                )
+            elif tracker.current_state == GoalLifecycleState.WAITING_FOR_EVIDENCE:
+                self.commitments.upsert(
+                    goal_text, source_type="owner_authorized_action",
+                    source_id=proposal.proposal_id, status="blocked",
+                    evidence=list(verification.failed_conditions or []),
+                    blocked_reason="Execution finished, but independent verification remains unknown.",
+                )
+            else:
+                self.commitments.upsert(
+                    goal_text, source_type="owner_authorized_action",
+                    source_id=proposal.proposal_id, status="failed",
+                    evidence=list(verification.failed_conditions or []),
+                )
+        except Exception as exc:
+            app_logger.warning(f"Could not update authorized commitment: {exc}")
         try:
             self.learning.record_verified_episode(
                 goal=goal_text,

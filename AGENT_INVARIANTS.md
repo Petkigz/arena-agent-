@@ -170,6 +170,12 @@ not authorized.
   goal-verifying evidence; otherwise causation remains unknown.
 - Owner-caused and identified external changes remain distinct from self-caused
   changes.
+- Commitments originate only from explicit owner entries, exact authorized
+  actions, approved plans, or persistent projects. Model prose cannot create a
+  promise. Completion requires verification evidence; blocked work keeps its
+  reason across restart.
+- Introspection summaries quote persisted trace facts, actions, gates, evidence,
+  and lessons. They never claim access to private chain-of-thought.
 - Functional self-knowledge never implies consciousness, sentience, emotion, or
   subjective experience. The absence of a measurement remains explicit.
 

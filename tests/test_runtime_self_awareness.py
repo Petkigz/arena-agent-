@@ -3,7 +3,13 @@
 from unittest.mock import patch
 
 from app.cognition.runtime import CognitiveRuntime
-from app.main import self_awareness_endpoint, self_agency_history_endpoint
+from app.main import (
+    ExplicitCommitmentRequest,
+    create_explicit_commitment_endpoint,
+    self_awareness_endpoint,
+    self_agency_history_endpoint,
+    self_commitments_endpoint,
+)
 
 
 def test_runtime_seeds_live_self_knowledge(tmp_path):
@@ -29,8 +35,16 @@ def test_self_awareness_api_is_grounded_and_disclaimed(tmp_path):
     with patch("app.cognition.runtime.CognitiveRuntime.get_instance", return_value=runtime):
         report = self_awareness_endpoint(refresh=False)
         agency = self_agency_history_endpoint(limit=10)
+        created = create_explicit_commitment_endpoint(
+            ExplicitCommitmentRequest(title="Finish owner review", source_id="review-1")
+        )
+        commitments = self_commitments_endpoint(
+            refresh=False, status_filter="active", limit=10
+        )
 
     assert report["success"] is True
     assert report["self_knowledge"]["claims"]
     assert "does not demonstrate consciousness" in report["disclaimer"]
     assert agency["attributions"][0]["cause_type"] == "unknown"
+    assert created["commitment"]["source_type"] == "explicit_owner"
+    assert commitments["commitments"][0]["title"] == "Finish owner review"
