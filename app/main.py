@@ -208,6 +208,13 @@ class ScheduledDirectiveRequest(BaseModel):
 class ScheduleStatusRequest(BaseModel):
     status: str
 
+class PreemptionRequest(BaseModel):
+    execution_id: str = Field(min_length=1)
+    urgent_goal_id: str = Field(min_length=1)
+    interrupted_goal_id: Optional[str] = None
+    plan_id: Optional[str] = None
+    reason: str = "Urgent owner priority"
+
 class OwnerAutonomousGoalRequest(BaseModel):
     title: str = Field(min_length=1,max_length=300)
     description: str = Field(default="",max_length=2000)
@@ -1298,6 +1305,41 @@ def cancel_controlled_execution_endpoint(execution_id: str):
         ),
     }
 
+
+@router.post("/owner-control/preemptions")
+def create_autonomy_preemption_endpoint(req:PreemptionRequest):
+    from app.cognition.execution_control import execution_control_registry
+    from app.cognition.runtime import CognitiveRuntime
+    runtime=CognitiveRuntime.get_instance()
+    urgent=runtime.goal_generator.owner_set_priority(req.urgent_goal_id,"critical")
+    if urgent is None:raise HTTPException(status_code=404,detail="Urgent goal not found")
+    record=execution_control_registry.request_cancel(req.execution_id)
+    if record is None:raise HTTPException(status_code=404,detail="Execution not found")
+    receipt=runtime.autonomy_preemptions.create(req.execution_id,req.urgent_goal_id,interrupted_goal_id=req.interrupted_goal_id,plan_id=req.plan_id,reason=req.reason)
+    return {"success":True,"preemption":receipt.to_dict(),"note":"Cancellation requested; resume is separate and never repeats work automatically."}
+
+@router.get("/owner-control/preemptions")
+def list_autonomy_preemptions_endpoint(limit:int=Query(200,ge=1,le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {"success":True,"preemptions":[x.to_dict() for x in CognitiveRuntime.get_instance().autonomy_preemptions.list(limit)]}
+
+@router.post("/owner-control/preemptions/{preemption_id}/refresh")
+def refresh_autonomy_preemption_endpoint(preemption_id:str):
+    from app.cognition.execution_control import execution_control_registry
+    from app.cognition.runtime import CognitiveRuntime
+    store=CognitiveRuntime.get_instance().autonomy_preemptions; item=store.get(preemption_id)
+    if not item:raise HTTPException(status_code=404,detail="Preemption not found")
+    execution=execution_control_registry.get(item.execution_id)
+    if not execution:raise HTTPException(status_code=404,detail="Execution not found")
+    return {"success":True,"preemption":store.refresh(preemption_id,execution.to_dict()).to_dict()}
+
+@router.post("/owner-control/preemptions/{preemption_id}/request-resume")
+def request_autonomy_resume_endpoint(preemption_id:str):
+    from app.cognition.runtime import CognitiveRuntime
+    try:item=CognitiveRuntime.get_instance().autonomy_preemptions.request_resume(preemption_id)
+    except KeyError as exc:raise HTTPException(status_code=404,detail="Preemption not found") from exc
+    except ValueError as exc:raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return {"success":True,"preemption":item.to_dict(),"executed":False,"note":"Resume request recorded. Reconcile evidence, then separately execute the approved plan."}
 
 @router.post("/owner-control/executions/{execution_id}/request-rollback")
 def request_execution_rollback_endpoint(execution_id: str):

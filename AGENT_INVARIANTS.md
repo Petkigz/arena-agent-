@@ -120,6 +120,9 @@ Owner Control Plane may always impose a stricter rule:
   recommendation, planning approval, execution, blocking, budget stops, and outcome.
 - Owner schedules are timezone-aware and persistent. Recurrence and missed-run
   policy release owner-directive goals; schedule approval still authorizes planning only.
+- Urgent preemption requests cooperative cancellation and persists a receipt.
+  Resume remains separate, requires cancellation observation and evidence reconciliation,
+  and never blindly repeats completed or uncertain side effects.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.
