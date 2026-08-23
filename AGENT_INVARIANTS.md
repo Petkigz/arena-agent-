@@ -163,8 +163,12 @@ not authorized.
   timestamp, freshness/expiry, and revision history.
 - Free-form model statements such as “I can,” “I remember,” or “I caused” are not
   privileged introspection and cannot create self-knowledge by themselves.
-- Changed self-beliefs supersede rather than erase earlier claims so contradiction
-  and correction history stays inspectable.
+- Changed self-beliefs supersede rather than erase earlier claims. A structured
+  revision records old/new values, evidence, confidence delta, and why the belief
+  changed.
+- Competence claims derive from prediction/outcome calibration. Sample-poor
+  estimates remain explicitly insufficient and cannot become confident ability
+  claims.
 - Temporal proximity never proves agency. Arena may mark a change `self_caused`
   only when a controlled execution is followed by environmental observation and
   goal-verifying evidence; otherwise causation remains unknown.

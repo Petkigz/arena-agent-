@@ -60,6 +60,25 @@ class SelfClaim:
 
 
 @dataclass(frozen=True)
+class BeliefRevision:
+    revision_id: str
+    predicate: str
+    old_claim_id: str
+    new_claim_id: str
+    change_type: str
+    old_value: Any
+    new_value: Any
+    confidence_delta: float
+    old_evidence: List[str]
+    new_evidence: List[str]
+    created_at: str
+    explanation: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class AgencyAttribution:
     attribution_id: str
     change_summary: str
@@ -96,6 +115,23 @@ class SelfKnowledgeLedger:
             )""")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_self_claim_predicate ON self_claims(predicate, status, created_at)"
+            )
+            conn.execute("""CREATE TABLE IF NOT EXISTS belief_revisions (
+                revision_id TEXT PRIMARY KEY,
+                predicate TEXT NOT NULL,
+                old_claim_id TEXT NOT NULL,
+                new_claim_id TEXT NOT NULL,
+                change_type TEXT NOT NULL,
+                old_value_json TEXT NOT NULL,
+                new_value_json TEXT NOT NULL,
+                confidence_delta REAL NOT NULL,
+                old_evidence_json TEXT NOT NULL,
+                new_evidence_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                explanation TEXT NOT NULL
+            )""")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_revision_predicate ON belief_revisions(predicate, created_at)"
             )
             conn.execute("""CREATE TABLE IF NOT EXISTS agency_attributions (
                 attribution_id TEXT PRIMARY KEY,
@@ -175,6 +211,24 @@ class SelfKnowledgeLedger:
                     claim.created_at, claim.valid_until, claim.supersedes_claim_id,
                 ),
             )
+            if previous:
+                changed = _canonical(previous.value) != value_json
+                change_type = "contradiction" if changed else "refresh"
+                explanation = (
+                    f"Evidence changed the value of '{predicate}' from the prior claim."
+                    if changed else
+                    f"Expired evidence for '{predicate}' was refreshed without changing its value."
+                )
+                conn.execute(
+                    "INSERT INTO belief_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        f"revision_{uuid4().hex[:16]}", predicate, previous.claim_id,
+                        claim.claim_id, change_type, _canonical(previous.value), value_json,
+                        round(claim.confidence - previous.confidence, 6),
+                        json.dumps(previous.evidence), json.dumps(claim.evidence),
+                        claim.created_at, explanation,
+                    ),
+                )
             conn.commit()
             return claim
 
@@ -199,6 +253,34 @@ class SelfKnowledgeLedger:
                     (max(1, min(limit, 1000)),),
                 ).fetchall()
         return [self._claim(row) for row in rows]
+
+    def recent_revisions(
+        self, predicate: Optional[str] = None, limit: int = 100
+    ) -> List[BeliefRevision]:
+        bounded = max(1, min(limit, 1000))
+        with sqlite3.connect(self.db_path) as conn:
+            if predicate:
+                rows = conn.execute(
+                    "SELECT * FROM belief_revisions WHERE predicate=? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (predicate.lower().strip(), bounded),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM belief_revisions ORDER BY created_at DESC LIMIT ?",
+                    (bounded,),
+                ).fetchall()
+        return [
+            BeliefRevision(
+                revision_id=row[0], predicate=row[1], old_claim_id=row[2],
+                new_claim_id=row[3], change_type=row[4],
+                old_value=json.loads(row[5]), new_value=json.loads(row[6]),
+                confidence_delta=float(row[7]), old_evidence=json.loads(row[8]),
+                new_evidence=json.loads(row[9]), created_at=row[10],
+                explanation=row[11],
+            )
+            for row in rows
+        ]
 
     def attribute_change(
         self,
@@ -272,6 +354,7 @@ class SelfKnowledgeLedger:
             "claims": [claim.to_dict() for claim in claims],
             "fresh_claims": sum(claim.fresh for claim in claims),
             "stale_claims": sum(not claim.fresh for claim in claims),
+            "belief_revisions": [item.to_dict() for item in self.recent_revisions(limit=20)],
             "agency_attributions": [item.to_dict() for item in self.recent_attributions(20)],
             "note": "Evidence-linked functional self-knowledge; not consciousness or subjective experience.",
         }

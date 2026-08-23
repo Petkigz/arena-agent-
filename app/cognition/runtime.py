@@ -2204,6 +2204,14 @@ class CognitiveRuntime:
         })
         surprisal = self.prediction.evaluate_surprisal(prediction, actual_state)
         trace.prediction_surprisal = surprisal
+        try:
+            self.confidence_calibrator.record(
+                proposal.action_type, prediction.confidence,
+                verification.verified_success, surprisal=surprisal,
+                goal_type=intent_type,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Competence calibration record failed: {exc}")
 
         try:
             self.world_ingest.ingest(
@@ -3068,6 +3076,14 @@ class CognitiveRuntime:
 
         surprisal = self.prediction.evaluate_surprisal(pred, actual_state)
         trace.prediction_surprisal = surprisal
+        try:
+            self.confidence_calibrator.record(
+                proposal.action_type, pred.confidence, verify_res.verified_success,
+                surprisal=surprisal,
+                goal_type=goal_rep.primary_intent_type if goal_rep else "unknown",
+            )
+        except Exception as exc:
+            app_logger.warning(f"Competence calibration record failed: {exc}")
 
         # P1-2 AGI: Causal learning from surprisal — low surprisal strengthens cause→effect,
         # high surprisal weakens and flags for investigation. This is how the agent learns

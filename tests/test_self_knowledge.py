@@ -46,6 +46,12 @@ def test_claim_revision_preserves_contradiction_history(tmp_path):
     assert history[1].claim_id == first.claim_id
     assert history[1].status == "superseded"
     assert second.supersedes_claim_id == first.claim_id
+    revisions = ledger.recent_revisions("capability.camera")
+    assert len(revisions) == 1
+    assert revisions[0].change_type == "contradiction"
+    assert revisions[0].old_value is True
+    assert revisions[0].new_value is False
+    assert revisions[0].new_evidence == ["camera probe unavailable"]
 
 
 def test_identical_fresh_claim_is_idempotent(tmp_path):

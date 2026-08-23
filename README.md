@@ -222,8 +222,9 @@ The resulting default-model route is in-memory and is intentionally cleared on
 restart rather than claiming the external provider remains loaded.
 
 Functional self-awareness is exposed at `GET /self-awareness`, with claim history
-at `GET /self-awareness/claims/history`, conservative agency records at
-`GET /self-awareness/agency`, restart-safe commitments at
+at `GET /self-awareness/claims/history`, structured belief changes at
+`GET /self-awareness/belief-revisions`, conservative agency records at
+`GET /self-awareness/agency`, calibrated competence in the main report, and restart-safe commitments at
 `GET/POST /self-awareness/commitments`, and trace-grounded explanations at
 `GET /self-awareness/introspection/{trace_id}`. These endpoints report
 operational evidence and explicitly do not claim hidden chain-of-thought,

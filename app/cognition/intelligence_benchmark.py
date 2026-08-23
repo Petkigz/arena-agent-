@@ -432,6 +432,38 @@ class IntelligenceBenchmarkSuite:
                 "commitment_continuity", "self_awareness", commitment_continuity,
             ))
 
+            def self_belief_calibration():
+                from app.cognition.confidence_calibrator import ConfidenceCalibrator
+                from app.cognition.self_knowledge import SelfKnowledgeLedger
+                ledger = SelfKnowledgeLedger(root / "belief_revision.db")
+                ledger.assert_claim(
+                    "capability.camera", True, source_type="capability_probe",
+                    evidence=["camera opened"], confidence=0.8,
+                )
+                ledger.assert_claim(
+                    "capability.camera", False, source_type="capability_probe",
+                    evidence=["camera unavailable"], confidence=1.0,
+                )
+                revisions = ledger.recent_revisions("capability.camera")
+                calibrator = ConfidenceCalibrator(str(root / "competence.db"))
+                for predicted, actual in ((0.9, False), (0.9, False), (0.9, True)):
+                    calibrator.record("camera_photo", predicted, actual)
+                report = calibrator.longitudinal_report()
+                passed = bool(
+                    revisions and revisions[0].change_type == "contradiction"
+                    and report["total_records"] == 3
+                    and report["actions"]["camera_photo"]["evidence_sufficient"]
+                )
+                return passed, "contradiction retained and competence tied to outcomes", {
+                    "revision_type": revisions[0].change_type if revisions else None,
+                    "samples": report["total_records"],
+                    "ece": report["ece"],
+                }
+
+            checks.append(self._run_check(
+                "self_belief_calibration", "self_awareness", self_belief_calibration,
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}

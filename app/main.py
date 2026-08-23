@@ -931,6 +931,7 @@ def self_awareness_endpoint(refresh: bool = Query(True)):
         "success": True,
         "self_knowledge": snapshot,
         "performance_self_model": asdict(runtime.self_model.generate_report()),
+        "competence_calibration": runtime.confidence_calibrator.longitudinal_report(),
         "disclaimer": (
             "Functional evidence-linked self-knowledge only; this does not "
             "demonstrate consciousness, sentience, emotion, or subjective experience."
@@ -947,6 +948,19 @@ def self_claim_history_endpoint(
 
     claims = CognitiveRuntime.get_instance().self_knowledge.history(predicate, limit)
     return {"success": True, "claims": [claim.to_dict() for claim in claims]}
+
+
+@router.get("/self-awareness/belief-revisions")
+def self_belief_revisions_endpoint(
+    predicate: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    from app.cognition.runtime import CognitiveRuntime
+
+    revisions = CognitiveRuntime.get_instance().self_knowledge.recent_revisions(
+        predicate, limit
+    )
+    return {"success": True, "revisions": [item.to_dict() for item in revisions]}
 
 
 @router.get("/self-awareness/agency")

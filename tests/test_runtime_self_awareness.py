@@ -8,6 +8,7 @@ from app.main import (
     create_explicit_commitment_endpoint,
     self_awareness_endpoint,
     self_agency_history_endpoint,
+    self_belief_revisions_endpoint,
     self_commitments_endpoint,
 )
 
@@ -31,10 +32,18 @@ def test_self_awareness_api_is_grounded_and_disclaimed(tmp_path):
         "Unverified nearby event", execution_id="exec-x",
         execution_attempted=True, evidence=["timestamp"],
     )
+    runtime.self_knowledge.assert_claim(
+        "capabilities.registered_tool_count", 999,
+        source_type="capability_probe", evidence=["test changed probe"],
+        confidence=1.0,
+    )
 
     with patch("app.cognition.runtime.CognitiveRuntime.get_instance", return_value=runtime):
         report = self_awareness_endpoint(refresh=False)
         agency = self_agency_history_endpoint(limit=10)
+        revisions = self_belief_revisions_endpoint(
+            predicate="capabilities.registered_tool_count", limit=10
+        )
         created = create_explicit_commitment_endpoint(
             ExplicitCommitmentRequest(title="Finish owner review", source_id="review-1")
         )
@@ -44,7 +53,9 @@ def test_self_awareness_api_is_grounded_and_disclaimed(tmp_path):
 
     assert report["success"] is True
     assert report["self_knowledge"]["claims"]
+    assert "competence_calibration" in report
     assert "does not demonstrate consciousness" in report["disclaimer"]
+    assert revisions["revisions"][0]["change_type"] == "contradiction"
     assert agency["attributions"][0]["cause_type"] == "unknown"
     assert created["commitment"]["source_type"] == "explicit_owner"
     assert commitments["commitments"][0]["title"] == "Finish owner review"

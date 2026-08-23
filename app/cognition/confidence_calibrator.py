@@ -307,5 +307,48 @@ class ConfidenceCalibrator:
             ece=round(ece, 4),
         )
 
+    def longitudinal_report(self) -> Dict[str, Any]:
+        """Compare predicted competence with verified outcomes over time."""
+        global_report = self.generate_report()
+        actions = sorted({record.action_type for record in self._records})
+        action_reports = {}
+        for action in actions:
+            report = self.generate_report(action)
+            action_reports[action] = {
+                "samples": report.total_records,
+                "ece": report.ece,
+                "is_calibrated": report.is_calibrated,
+                "evidence_sufficient": report.total_records >= self.MIN_RECORDS_PER_BIN,
+            }
+
+        midpoint = len(self._records) // 2
+        def ece(records: List[CalibrationRecord]) -> Optional[float]:
+            if not records:
+                return None
+            total = sum(abs(float(item.actual_outcome) - item.predicted_confidence) for item in records)
+            return round(total / len(records), 4)
+
+        earlier = ece(self._records[:midpoint]) if midpoint else None
+        recent = ece(self._records[midpoint:])
+        if earlier is None or recent is None:
+            trend = "insufficient_history"
+        elif recent < earlier - 0.02:
+            trend = "improving"
+        elif recent > earlier + 0.02:
+            trend = "worsening"
+        else:
+            trend = "stable"
+        return {
+            "total_records": global_report.total_records,
+            "ece": global_report.ece,
+            "is_calibrated": global_report.is_calibrated,
+            "evidence_sufficient": global_report.total_records >= self.MIN_RECORDS_PER_BIN,
+            "earlier_absolute_error": earlier,
+            "recent_absolute_error": recent,
+            "trend": trend,
+            "actions": action_reports,
+            "note": "Calibration uses recorded predictions and verified outcomes, not self-reported competence.",
+        }
+
     def total_records(self) -> int:
         return len(self._records)
