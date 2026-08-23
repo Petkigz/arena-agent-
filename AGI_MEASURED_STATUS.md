@@ -36,7 +36,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` on 2026-08-23 |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeded on 2026-08-23 |
 | Python source | ~50,000 lines / 220 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
-| Tools in the manifest | **139** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
+| Tools in the manifest | **142** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
 | Cognition modules wired | **17/17** | `runtime._integrate_phase_modules()` + `module_wiring` probe — includes `goal_decomposer` + `project_manager` |
 | Capability scorecard | **27/27 verified** across 7 evidence categories | `runtime.measure_capabilities()` → `verified_count == total_count`; includes grounding, causal learning, memory association, curiosity, resource-aware planning, prosody, multimodal chat, verified self-evolution, projects, VLM integration, and LoRA management |
 | Live verification of external APIs | script | `scripts/live_check.py` + `LIVE_VERIFICATION.md` |
@@ -64,7 +64,7 @@ User / WebSocket chat (now multimodal: text + image_path + attachments)
       → reasoning loop (ANSWER / INVESTIGATE / DEFER / ACT)
       → counterfactual strategy simulation (resource-aware: penalizes heavy actions under RAM/CPU/disk pressure)
       → action gate (policy: Level 0–3)
-      → capability execution (139 manifest tools)
+      → capability execution (142 manifest tools)
       → observation → tri-state verification (SATISFIED / FAILED / UNKNOWN)
       → causal learning from execution + surprisal (learns action→effect, intent→outcome)
       → replan on failure (resource-aware)
@@ -95,7 +95,7 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **hardware_self_awareness** — self-model of CPU/RAM/GPU present
 - **memory_consolidation** — decay + prune + episodic integration
 - **autonomy_loop** — generate → execute → reflect wired
-- **tools_wired** — 139 tools registered in the capability registry (from the manifest) — was 118
+- **tools_wired** — 142 tools registered in the capability registry (from the manifest) — was 118
 - **tier1_tool_manifest** — all expected deterministic tools present (data, PDF, process, backup, finance, network, messaging, agents)
 - **deterministic_degradation** — invalid inputs to deterministic tools return typed `{success: False}` results, never raise
 - **persistence_roundtrip** — a structured lesson survives a SQLite save/reload (robustness)

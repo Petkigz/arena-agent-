@@ -161,6 +161,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     DataAnalysisEngine = _LazyImportProxy("app.tools.data_analyzer", "DataAnalysisEngine")
     DeepOSController = _LazyImportProxy("app.tools.deep_os_controller", "DeepOSController")
     PrivilegeInspectorTool = _LazyImportProxy("app.tools.privilege_inspector", "PrivilegeInspectorTool")
+    DisplayTopologyTool = _LazyImportProxy("app.tools.display_topology", "DisplayTopologyTool")
     AccessibilityControlTool = _LazyImportProxy("app.tools.accessibility_control", "AccessibilityControlTool")
     DesktopControl = _LazyImportProxy("app.tools.desktop_control", "DesktopControl")
     DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
@@ -248,6 +249,12 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DeepOSController.press_hotkey, "keys"))
     add("open_url", "os_control", 2, "Open a URL in the default browser",
         _wrap(DesktopControl.open_url, "url"))
+    add("display_topology", "os_control", 0, "Capture physical multi-monitor topology",
+        _ignore_payload(DisplayTopologyTool.capture))
+    add("display_scale", "os_control", 0, "Attach verified DPI scale evidence to a display",
+        _wrap(DisplayTopologyTool.ingest_verified_scale, "display_id", "scale", "evidence"))
+    add("display_transform", "os_control", 0, "Transform window-local coordinates using verified display scale",
+        _wrap(DisplayTopologyTool.transform_window_point, "display_id", "window_region", "local_x", "local_y"))
     add("accessibility_status", "os_control", 0, "Check native semantic accessibility adapter availability",
         _ignore_payload(AccessibilityControlTool.status))
     add("accessibility_ingest", "os_control", 0, "Ingest an observed accessibility-tree snapshot",

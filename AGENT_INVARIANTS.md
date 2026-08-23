@@ -208,6 +208,8 @@ not authorized.
   observed window/display/region evidence. Ambiguous application names never select a target.
 - Prefer semantic accessibility role/name targeting over raw coordinates. A semantic
   target must be unique and have observed bounds before activation.
+- Multi-monitor coordinates use observed physical topology. Window-local transforms
+  require verified DPI scale and must remain inside the selected display.
 - Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
 - Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a
