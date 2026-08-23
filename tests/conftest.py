@@ -5,10 +5,13 @@ from __future__ import annotations
 import os
 
 
-def pytest_runtest_logreport(report):
+def pytest_terminal_summary(terminalreporter):
     """Expose CI failure details as check annotations when log blobs are unavailable."""
-    if not os.getenv("GITHUB_ACTIONS") or report.when != "call" or not report.failed:
+    if not os.getenv("GITHUB_ACTIONS"):
         return
-    message = str(report.longrepr).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    node = report.nodeid.split("::", 1)[0]
-    print(f"::error file={node},title=pytest failure::{message[:7000]}")
+    for report in terminalreporter.stats.get("failed", []):
+        message = str(report.longrepr).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        node = report.nodeid.split("::", 1)[0]
+        terminalreporter.write_line(
+            f"::error file={node},title=pytest failure::{message[:7000]}"
+        )
