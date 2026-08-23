@@ -1080,11 +1080,31 @@ def decide_pending_approval_endpoint(action_id: str, req: ApprovalDecisionReques
 
 @router.get("/owner-control/authorizations")
 def list_authorizations_endpoint():
-    """List only currently active, short-lived execution grants."""
-    return {
-        "success": True,
-        "authorizations": [grant.to_dict() for grant in authorization_store.list_active()],
-    }
+    """List active grants and recover their exact reviewed scope when available."""
+    from app.cognition.approval_store import approval_store
+    from app.cognition.owner_control import payload_digest
+
+    authorizations = []
+    for grant in authorization_store.list_active():
+        item = grant.to_dict()
+        approval = (
+            approval_store.get(grant.source_approval_id)
+            if grant.source_approval_id else None
+        )
+        # The approval payload is returned only when it still hashes to the
+        # immutable grant digest. This gives owner clients an executable exact
+        # scope without broadening or reconstructing authority from a hash.
+        if (
+            approval is not None
+            and approval.action_type == grant.action_type
+            and payload_digest(approval.payload) == grant.payload_sha256
+        ):
+            item["payload"] = approval.payload
+            item["scope_recoverable"] = True
+        else:
+            item["scope_recoverable"] = False
+        authorizations.append(item)
+    return {"success": True, "authorizations": authorizations}
 
 
 @router.post("/owner-control/authorizations")

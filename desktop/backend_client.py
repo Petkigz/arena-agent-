@@ -323,8 +323,38 @@ class ArenaBackendClient:
             {"approved": approved, "note": note, "ttl_seconds": 300},
         )
 
+    def active_authorizations(self) -> Dict[str, Any]:
+        return self._get_json("/owner-control/authorizations")
+
+    def execute_authorized(
+        self,
+        authorization_id: str,
+        action_type: str,
+        payload: Dict[str, Any],
+        plan_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return self._post_json("/owner-control/execute-authorized", {
+            "authorization_id": authorization_id,
+            "action_type": action_type,
+            "payload": payload,
+            "user_text": "Desktop owner-authorized action",
+            "complexity": "fast",
+            "plan_id": plan_id,
+        })
+
+    def revoke_authorization(self, authorization_id: str) -> Dict[str, Any]:
+        return self._delete_json(
+            f"/owner-control/authorizations/{quote(authorization_id, safe='')}"
+        )
+
     def reviewed_plans(self) -> Dict[str, Any]:
         return self._get_json("/owner-control/plans")
+
+    def edit_plan(self, plan_id: str, revision: int, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return self._put_json(
+            f"/owner-control/plans/{quote(plan_id, safe='')}",
+            {"expected_revision": revision, "steps": steps},
+        )
 
     def decide_plan(self, plan_id: str, revision: int, approved: bool, note: str = "") -> Dict[str, Any]:
         return self._post_json(
@@ -390,6 +420,14 @@ class ArenaBackendClient:
             return r.json()
         except httpx.HTTPError as e:
             raise BackendConnectionError(f"PUT {path} failed: {e}") from e
+
+    def _delete_json(self, path: str) -> Dict[str, Any]:
+        try:
+            r = self._client.delete(f"{self.base_url}{path}")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"DELETE {path} failed: {e}") from e
 
     def close(self) -> None:
         self._client.close()

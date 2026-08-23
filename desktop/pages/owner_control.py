@@ -74,7 +74,7 @@ class OwnerControlPage(QWidget):
         self.pause_btn.clicked.connect(self._toggle_pause)
         actions.addWidget(self.pause_btn)
         self.refresh_btn = QPushButton("Refresh")
-        self.refresh_btn.clicked.connect(self.refresh)
+        self.refresh_btn.clicked.connect(self._manual_refresh)
         actions.addWidget(self.refresh_btn)
         layout.addLayout(actions)
 
@@ -83,6 +83,21 @@ class OwnerControlPage(QWidget):
         self.plans = self._section(columns, "Plan reviews")
         self.executions = self._section(columns, "Execution history")
         layout.addLayout(columns, 1)
+
+        authorization_row = QHBoxLayout()
+        authorization_column = QVBoxLayout()
+        authorization_column.addWidget(QLabel("Active exact-scope authorizations"))
+        self.authorizations = QListWidget()
+        self.authorizations.setFixedHeight(95)
+        authorization_column.addWidget(self.authorizations)
+        authorization_row.addLayout(authorization_column, 1)
+        self.execute_authorization_btn = QPushButton("Execute selected authorization")
+        self.execute_authorization_btn.clicked.connect(self._execute_authorization)
+        authorization_row.addWidget(self.execute_authorization_btn)
+        self.revoke_authorization_btn = QPushButton("Revoke selected authorization")
+        self.revoke_authorization_btn.clicked.connect(self._revoke_authorization)
+        authorization_row.addWidget(self.revoke_authorization_btn)
+        layout.addLayout(authorization_row)
 
         approval_actions = QHBoxLayout()
         self.approve_btn = QPushButton("Approve selected")
@@ -111,6 +126,14 @@ class OwnerControlPage(QWidget):
         execution_actions.addWidget(self.rollback_btn)
         layout.addLayout(execution_actions)
 
+        layout.addWidget(QLabel("Selected plan steps JSON (editable before execution)"))
+        self.plan_editor = QTextEdit()
+        self.plan_editor.setFixedHeight(170)
+        layout.addWidget(self.plan_editor)
+        self.save_plan_edits_btn = QPushButton("Save selected plan as a new revision")
+        self.save_plan_edits_btn.clicked.connect(self._save_plan_edits)
+        layout.addWidget(self.save_plan_edits_btn)
+
         self.detail = QTextEdit()
         self.detail.setReadOnly(True)
         self.detail.setFixedHeight(150)
@@ -119,8 +142,9 @@ class OwnerControlPage(QWidget):
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
 
-        for widget in (self.approvals, self.plans, self.executions):
+        for widget in (self.approvals, self.executions, self.authorizations):
             widget.itemClicked.connect(self._show_detail)
+        self.plans.itemClicked.connect(self._show_plan_detail)
         self.refresh_theme()
         self.refresh()
 
@@ -144,6 +168,16 @@ class OwnerControlPage(QWidget):
         data = self._data(item)
         self.detail.setPlainText(json.dumps(data or {}, indent=2, ensure_ascii=False))
 
+    def _show_plan_detail(self, item):
+        plan = self._data(item) or {}
+        self.detail.setPlainText(json.dumps(plan, indent=2, ensure_ascii=False))
+        steps = plan.get("snapshot", {}).get("steps", [])
+        self.plan_editor.setPlainText(json.dumps(steps, indent=2, ensure_ascii=False))
+
+    def _manual_refresh(self):
+        self.status.setText("")
+        self.refresh()
+
     def refresh(self):
         try:
             policy = self._client.owner_control().get("policy", {})
@@ -162,6 +196,15 @@ class OwnerControlPage(QWidget):
                 item.setData(Qt.ItemDataRole.UserRole, approval)
                 self.approvals.addItem(item)
 
+            self.authorizations.clear()
+            for authorization in self._client.active_authorizations().get("authorizations", []):
+                scope = "executable" if authorization.get("scope_recoverable") else "scope unavailable"
+                item = QListWidgetItem(
+                    f"{authorization.get('action_type', '')} [{scope}] expires {authorization.get('expires_at', '')}"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, authorization)
+                self.authorizations.addItem(item)
+
             self.plans.clear()
             for plan in self._client.reviewed_plans().get("plans", []):
                 item = QListWidgetItem(
@@ -177,7 +220,8 @@ class OwnerControlPage(QWidget):
                 )
                 item.setData(Qt.ItemDataRole.UserRole, execution)
                 self.executions.addItem(item)
-            self.status.setText("Owner-control state refreshed")
+            if not self.status.text():
+                self.status.setText("Owner-control state refreshed")
         except Exception as exc:
             self.status.setText(f"Could not load Owner Control: {exc}")
 
@@ -213,6 +257,62 @@ class OwnerControlPage(QWidget):
             self.refresh()
         except Exception as exc:
             self.status.setText(f"Approval decision failed: {exc}")
+
+    def _execute_authorization(self):
+        authorization = self._selected(self.authorizations)
+        if not authorization:
+            return
+        if not authorization.get("scope_recoverable"):
+            self.status.setText(
+                "This direct grant has no recoverable reviewed payload; execute it only from the client that issued it"
+            )
+            return
+        try:
+            result = self._client.execute_authorized(
+                authorization["authorization_id"], authorization["action_type"],
+                authorization["payload"], authorization.get("plan_id"),
+            )
+            self.status.setText(
+                "Execution returned: tool success=%s, goal verified=%s, verification unknown=%s"
+                % (
+                    result.get("execution_success"), result.get("goal_verified"),
+                    result.get("verification_unknown"),
+                )
+            )
+            self.detail.setPlainText(json.dumps(result, indent=2, ensure_ascii=False))
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Authorized execution failed: {exc}")
+
+    def _revoke_authorization(self):
+        authorization = self._selected(self.authorizations)
+        if not authorization:
+            return
+        try:
+            self._client.revoke_authorization(authorization["authorization_id"])
+            self.status.setText("Authorization revoked without execution")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Could not revoke authorization: {exc}")
+
+    def _save_plan_edits(self):
+        plan = self._selected(self.plans)
+        if not plan:
+            return
+        try:
+            steps = json.loads(self.plan_editor.toPlainText())
+            if not isinstance(steps, list) or not steps:
+                raise ValueError("Plan steps must be a non-empty JSON array")
+            result = self._client.edit_plan(
+                plan["plan_id"], int(plan["revision"]), steps
+            )
+            updated = result.get("plan", {})
+            self.status.setText(
+                f"Plan edits saved as revision {updated.get('revision', '?')}; not approved or executed"
+            )
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Could not save plan edits: {exc}")
 
     def _decide_plan(self, approved):
         plan = self._selected(self.plans)
@@ -268,5 +368,6 @@ class OwnerControlPage(QWidget):
         self.status.setStyleSheet(f"color: {TEXT_MUTED};")
         self.mode.setStyleSheet(_input_style())
         self.detail.setStyleSheet(_textarea_style())
+        self.plan_editor.setStyleSheet(_textarea_style())
         for button in self.findChildren(QPushButton):
             button.setStyleSheet(_button_style(ACCENT if button is self.pause_btn else BG_SURFACE, TEXT_PRIMARY))

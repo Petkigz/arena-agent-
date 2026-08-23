@@ -24,6 +24,10 @@ def test_desktop_owner_control_uses_separate_decision_and_execution_routes():
     client.update_owner_control({"mode": "approve_every_action"})
     client.set_emergency_pause(True)
     client.decide_approval("action/1", True, "reviewed")
+    client.active_authorizations()
+    client.execute_authorized("grant/1", "create_note", {"title": "Exact"})
+    client.revoke_authorization("grant/2")
+    client.edit_plan("plan/1", 4, [{"step_id": "step-1"}])
     client.decide_plan("plan/1", 4, True, "reviewed")
     client.execute_plan("plan/1")
     client.cancel_execution("exec/1")
@@ -36,6 +40,14 @@ def test_desktop_owner_control_uses_separate_decision_and_execution_routes():
         ("PUT", "/owner-control", {"mode": "approve_every_action"}),
         ("POST", "/owner-control/pause", {"paused": True}),
         ("POST", "/owner-control/approvals/action/1/decision", {"approved": True, "note": "reviewed", "ttl_seconds": 300}),
+        ("GET", "/owner-control/authorizations", None),
+        ("POST", "/owner-control/execute-authorized", {
+            "authorization_id": "grant/1", "action_type": "create_note",
+            "payload": {"title": "Exact"}, "user_text": "Desktop owner-authorized action",
+            "complexity": "fast", "plan_id": None,
+        }),
+        ("DELETE", "/owner-control/authorizations/grant/2", None),
+        ("PUT", "/owner-control/plans/plan/1", {"expected_revision": 4, "steps": [{"step_id": "step-1"}]}),
         ("POST", "/owner-control/plans/plan/1/decision", {"expected_revision": 4, "approved": True, "note": "reviewed"}),
         ("POST", "/owner-control/plans/plan/1/execute", {}),
         ("POST", "/owner-control/executions/exec/1/cancel", {}),

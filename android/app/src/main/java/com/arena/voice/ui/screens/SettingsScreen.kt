@@ -30,11 +30,21 @@ data class OwnerApproval(
     val payload: String,
 )
 
+data class OwnerAuthorization(
+    val authorizationId: String,
+    val actionType: String,
+    val payload: String,
+    val planId: String?,
+    val expiresAt: String,
+    val scopeRecoverable: Boolean,
+)
+
 data class OwnerPlanReview(
     val planId: String,
     val title: String,
     val revision: Int,
     val status: String,
+    val steps: String,
 )
 
 data class OwnerExecution(
@@ -63,8 +73,13 @@ class SettingsViewModel @Inject constructor(
     var explorationBudget by mutableStateOf("0")
     var ownerApprovals by mutableStateOf<List<OwnerApproval>>(emptyList())
         private set
+    var ownerAuthorizations by mutableStateOf<List<OwnerAuthorization>>(emptyList())
+        private set
     var ownerPlans by mutableStateOf<List<OwnerPlanReview>>(emptyList())
         private set
+    var selectedPlanId by mutableStateOf<String?>(null)
+    var selectedPlanRevision by mutableStateOf(0)
+    var planStepsJson by mutableStateOf("")
     var ownerExecutions by mutableStateOf<List<OwnerExecution>>(emptyList())
         private set
 
@@ -138,6 +153,21 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+        api.getAuthorizations()?.let { raw ->
+            runCatching {
+                val array = JSONObject(raw).optJSONArray("authorizations") ?: JSONArray()
+                ownerAuthorizations = (0 until array.length()).mapNotNull { index ->
+                    array.optJSONObject(index)?.let { item ->
+                        OwnerAuthorization(
+                            item.optString("authorization_id"), item.optString("action_type"),
+                            item.optJSONObject("payload")?.toString(2) ?: "{}",
+                            item.optString("plan_id").ifBlank { null }, item.optString("expires_at"),
+                            item.optBoolean("scope_recoverable", false),
+                        )
+                    }
+                }
+            }
+        }
         api.getReviewedPlans()?.let { raw ->
             runCatching {
                 val array = JSONObject(raw).optJSONArray("plans") ?: JSONArray()
@@ -146,6 +176,7 @@ class SettingsViewModel @Inject constructor(
                         OwnerPlanReview(
                             item.optString("plan_id"), item.optString("goal_title", item.optString("plan_id")),
                             item.optInt("revision"), item.optString("status"),
+                            item.optJSONObject("snapshot")?.optJSONArray("steps")?.toString(2) ?: "[]",
                         )
                     }
                 }
@@ -201,6 +232,61 @@ class SettingsViewModel @Inject constructor(
             status = if (api.decideApproval(approval.actionId, approved) != null) {
                 if (approved) "Exact action authorized; nothing executed" else "Recommendation rejected"
             } else "Approval decision failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun executeAuthorization(authorization: OwnerAuthorization) {
+        if (!authorization.scopeRecoverable) {
+            status = "This grant has no recoverable reviewed payload; use the issuing client"
+            return
+        }
+        viewModelScope.launch {
+            val result = runCatching {
+                api.executeAuthorized(
+                    authorization.authorizationId, authorization.actionType,
+                    JSONObject(authorization.payload), authorization.planId,
+                )
+            }.getOrNull()
+            status = if (result != null) {
+                val data = runCatching { JSONObject(result) }.getOrDefault(JSONObject())
+                "Execution success=${data.optBoolean("execution_success", false)}, " +
+                    "goal verified=${data.optBoolean("goal_verified", false)}, " +
+                    "verification unknown=${data.optBoolean("verification_unknown", false)}"
+            } else "Authorized execution failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun revokeAuthorization(authorization: OwnerAuthorization) {
+        viewModelScope.launch {
+            status = if (api.revokeAuthorization(authorization.authorizationId) != null)
+                "Authorization revoked without execution" else "Authorization revocation failed"
+            loadOwnerControlState()
+        }
+    }
+
+    fun selectPlanForEditing(plan: OwnerPlanReview) {
+        selectedPlanId = plan.planId
+        selectedPlanRevision = plan.revision
+        planStepsJson = plan.steps
+        status = "Editing revision ${plan.revision}; saving creates a new unapproved revision"
+    }
+
+    fun savePlanEdits() {
+        val planId = selectedPlanId ?: return
+        val steps = runCatching { JSONArray(planStepsJson) }.getOrElse {
+            status = "Plan steps must be a valid JSON array"
+            return
+        }
+        if (steps.length() == 0) {
+            status = "Plan steps cannot be empty"
+            return
+        }
+        viewModelScope.launch {
+            status = if (api.editPlan(planId, selectedPlanRevision, steps) != null)
+                "Plan edits saved as a new revision; not approved or executed"
+            else "Plan edit failed (revision may be stale or a started step immutable)"
             loadOwnerControlState()
         }
     }
@@ -396,11 +482,44 @@ fun SettingsScreen(
             }
         }
 
+        Text("Active exact-scope authorizations", fontWeight = FontWeight.SemiBold)
+        viewModel.ownerAuthorizations.forEach { authorization ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${authorization.actionType} · expires ${authorization.expiresAt}")
+                    if (authorization.scopeRecoverable) {
+                        Text(authorization.payload, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Text(
+                            "Exact payload is retained only by the issuing client.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            onClick = { viewModel.executeAuthorization(authorization) },
+                            enabled = authorization.scopeRecoverable,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Execute exact scope") }
+                        OutlinedButton(
+                            onClick = { viewModel.revokeAuthorization(authorization) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Revoke") }
+                    }
+                }
+            }
+        }
+
         Text("Plan reviews", fontWeight = FontWeight.SemiBold)
         viewModel.ownerPlans.forEach { plan ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("${plan.title} [${plan.status}] r${plan.revision}")
+                    OutlinedButton(
+                        onClick = { viewModel.selectPlanForEditing(plan) },
+                        enabled = plan.status == "pending",
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Edit exact plan steps JSON") }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = { viewModel.decidePlan(plan, true) },
@@ -420,6 +539,19 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        viewModel.selectedPlanId?.let { planId ->
+            OutlinedTextField(
+                value = viewModel.planStepsJson,
+                onValueChange = { viewModel.planStepsJson = it },
+                label = { Text("Plan $planId steps JSON") },
+                minLines = 5,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = { viewModel.savePlanEdits() }, modifier = Modifier.fillMaxWidth()
+            ) { Text("Save as new unapproved revision") }
         }
 
         Text("Execution control", fontWeight = FontWeight.SemiBold)

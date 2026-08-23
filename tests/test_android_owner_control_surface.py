@@ -14,6 +14,10 @@ def test_android_api_exposes_stage_specific_owner_control_routes():
         '"/owner-control", "PUT"',
         'call("/owner-control/pause", "POST"',
         '"/owner-control/approvals/${segment(actionId)}/decision"',
+        'call("/owner-control/authorizations")',
+        '"/owner-control/execute-authorized"',
+        '"/owner-control/authorizations/${segment(authorizationId)}", "DELETE"',
+        '"/owner-control/plans/${segment(planId)}", "PUT"',
         '"/owner-control/plans/${segment(planId)}/decision"',
         '"/owner-control/plans/${segment(planId)}/execute"',
         '"/owner-control/executions/${segment(executionId)}/cancel"',
@@ -27,15 +31,18 @@ def test_android_api_exposes_stage_specific_owner_control_routes():
 def test_android_ui_states_that_decision_is_not_execution():
     assert "Approval authorizes only the exact recommendation. It does not execute it." in SETTINGS
     assert 'Text("Authorize only")' in SETTINGS
+    assert 'Text("Execute exact scope")' in SETTINGS
     assert 'Text("Execute approved plan separately")' in SETTINGS
+    assert 'Text("Save as new unapproved revision")' in SETTINGS
     assert '"Exact action authorized; nothing executed"' in SETTINGS
     assert '"Plan decision recorded; nothing executed"' in SETTINGS
     assert '"Rollback compensation added to approvals; not executed"' in SETTINGS
 
 
 def test_approval_and_plan_decision_functions_do_not_call_execution_routes():
-    approval_block = SETTINGS.split("fun decideApproval", 1)[1].split("fun decidePlan", 1)[0]
+    approval_block = SETTINGS.split("fun decideApproval", 1)[1].split("fun executeAuthorization", 1)[0]
     plan_block = SETTINGS.split("fun decidePlan", 1)[1].split("fun executePlan", 1)[0]
+    assert "executeAuthorized" not in approval_block
     assert "executeApprovedPlan" not in approval_block
     assert "executeApprovedPlan" not in plan_block
     assert "api.decideApproval" in approval_block

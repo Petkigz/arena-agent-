@@ -8,6 +8,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -159,7 +160,27 @@ class ApiClient @Inject constructor(
             JSONObject().put("approved", approved).put("note", "Android owner decision")
                 .put("ttl_seconds", 300).toString(),
         )
+    suspend fun getAuthorizations(): String? = call("/owner-control/authorizations")
+    suspend fun executeAuthorized(
+        authorizationId: String,
+        actionType: String,
+        payload: JSONObject,
+        planId: String?,
+    ): String? = call(
+        "/owner-control/execute-authorized", "POST",
+        JSONObject().put("authorization_id", authorizationId)
+            .put("action_type", actionType).put("payload", payload)
+            .put("user_text", "Android owner-authorized action")
+            .put("complexity", "fast").put("plan_id", planId).toString(),
+    )
+    suspend fun revokeAuthorization(authorizationId: String): String? =
+        call("/owner-control/authorizations/${segment(authorizationId)}", "DELETE")
     suspend fun getReviewedPlans(): String? = call("/owner-control/plans")
+    suspend fun editPlan(planId: String, revision: Int, steps: JSONArray): String? =
+        call(
+            "/owner-control/plans/${segment(planId)}", "PUT",
+            JSONObject().put("expected_revision", revision).put("steps", steps).toString(),
+        )
     suspend fun decidePlan(planId: String, revision: Int, approved: Boolean): String? =
         call(
             "/owner-control/plans/${segment(planId)}/decision", "POST",
