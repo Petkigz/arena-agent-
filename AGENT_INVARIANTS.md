@@ -116,6 +116,8 @@ Owner Control Plane may always impose a stricter rule:
   payload binding, or evidence/verification honesty.
 - Autonomous goals remain an owner-visible queue. The owner can approve planning,
   reject, reprioritize, or request the next goal; goal approval never authorizes its actions.
+- Every autonomous cycle persists stage events for observation, consideration,
+  recommendation, planning approval, execution, blocking, budget stops, and outcome.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.

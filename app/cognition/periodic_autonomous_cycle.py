@@ -131,6 +131,7 @@ class PeriodicAutonomousCycle:
         interval_seconds: int = 3600,  # Default: 1 hour
         max_goals_per_cycle: int = 3,
         autonomy_envelope=None,
+        run_ledger=None,
     ):
         """
         Initialize the periodic autonomous cycle.
@@ -150,6 +151,7 @@ class PeriodicAutonomousCycle:
         self.interval_seconds = interval_seconds
         self.max_goals_per_cycle = max_goals_per_cycle
         self.autonomy_envelope = autonomy_envelope
+        self.run_ledger = run_ledger
         self._running = False
         
         self._ensure_db()
@@ -186,6 +188,11 @@ class PeriodicAutonomousCycle:
             """)
             conn.commit()
     
+    def _record_event(self, cycle_id, stage, **kwargs):
+        if self.run_ledger is not None:
+            try: self.run_ledger.record(cycle_id, stage, **kwargs)
+            except Exception as exc: app_logger.warning(f"Autonomy ledger record failed: {exc}")
+
     def run_cycle(self, cognitive_runtime=None) -> AutonomousCycle:
         """
         Run a single autonomous cycle.
@@ -201,6 +208,7 @@ class PeriodicAutonomousCycle:
         cycle.started_at = _now()
         start_time = time.time()
         envelope_decision = {"cycle_allowed": True, "execution_allowed": True, "policy": {}}
+        self._record_event(cycle.cycle_id,"cycle_started",details={"started_at":cycle.started_at})
         if self.autonomy_envelope is not None:
             from app.cognition.owner_control import owner_control_store
             with sqlite3.connect(self.db_path) as conn:
@@ -216,6 +224,7 @@ class PeriodicAutonomousCycle:
                 cycle.status = CycleStatus.SKIPPED
                 cycle.completed_at = _now()
                 cycle.summary = "; ".join(envelope_decision["reasons"])
+                self._record_event(cycle.cycle_id,"cycle_skipped",reason=cycle.summary,details=envelope_decision)
                 self._save_cycle(cycle)
                 return cycle
         envelope_policy = envelope_decision.get("policy", {})
@@ -289,6 +298,9 @@ class PeriodicAutonomousCycle:
                     all_goals.extend(goals)
                     cycle.goals_generated += len(goals)
             
+            self._record_event(cycle.cycle_id,"observed",details={"observations":observations,"sources":cycle.observation_sources})
+            for goal in all_goals:
+                self._record_event(cycle.cycle_id,"considered",goal_id=goal.goal_id,details={"title":goal.title,"source":goal.source.value})
             app_logger.info(f"Cycle {cycle.cycle_id}: {cycle.goals_generated} goal(s) generated")
             
             # Step 3: Evaluate and approve goals using the calibrated threshold.
@@ -302,6 +314,9 @@ class PeriodicAutonomousCycle:
                     auto_approve_threshold=approval_threshold,
                 ):
                     cycle.goals_approved += 1
+                    self._record_event(cycle.cycle_id,"approved_for_planning",goal_id=goal.goal_id,details={"score":goal.overall_score,"execution_authorized":False})
+                else:
+                    self._record_event(cycle.cycle_id,"recommended",goal_id=goal.goal_id,reason="Owner review or score threshold required",details={"score":goal.overall_score,"execution_allowed":execution_allowed})
             
             app_logger.info(f"Cycle {cycle.cycle_id}: {cycle.goals_approved} goal(s) approved")
             
@@ -319,11 +334,13 @@ class PeriodicAutonomousCycle:
             for _ in range(execution_cap):
                 if time.time() >= deadline or (failure_cap and consecutive_failures >= failure_cap):
                     cycle.errors.append("Autonomy execution budget reached")
+                    self._record_event(cycle.cycle_id,"budget_stopped",reason="Autonomy execution budget reached",details={"elapsed":time.time()-start_time,"consecutive_failures":consecutive_failures})
                     break
                 plan = self.goal_executor.execute_next_goal(self.goal_generator, cognitive_runtime)
                 if plan:
                     cycle.goals_executed += 1
                     executed_plans.append(plan)
+                    self._record_event(cycle.cycle_id,"execution_started",goal_id=plan.goal_id,details={"plan_id":plan.plan_id})
                     
                     from app.cognition.autonomous_goal_executor import ExecutionStatus
                     if plan.status == ExecutionStatus.COMPLETED:
@@ -332,6 +349,7 @@ class PeriodicAutonomousCycle:
                     elif plan.status == ExecutionStatus.FAILED:
                         cycle.goals_failed += 1
                         consecutive_failures += 1
+                    self._record_event(cycle.cycle_id,"executed" if plan.status==ExecutionStatus.COMPLETED else "blocked",goal_id=plan.goal_id,reason=f"plan status {plan.status.value}",details={"plan_id":plan.plan_id,"status":plan.status.value})
             
             app_logger.info(
                 f"Cycle {cycle.cycle_id}: {cycle.goals_executed} executed, "
@@ -415,6 +433,7 @@ class PeriodicAutonomousCycle:
             cycle.completed_at = _now()
             cycle.duration_seconds = time.time() - start_time
             
+            self._record_event(cycle.cycle_id,"cycle_completed" if cycle.status==CycleStatus.COMPLETED else "cycle_failed",reason=cycle.summary or "; ".join(cycle.errors),details={"status":cycle.status.value,"goals_generated":cycle.goals_generated,"goals_executed":cycle.goals_executed,"goals_completed":cycle.goals_completed,"goals_failed":cycle.goals_failed})
             # Save cycle
             self._save_cycle(cycle)
             

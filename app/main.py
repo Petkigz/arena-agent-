@@ -1195,6 +1195,12 @@ def create_owner_autonomous_goal_endpoint(req:OwnerAutonomousGoalRequest):
     if req.approve_for_planning: goal=runtime.goal_generator.owner_decide_goal(goal.goal_id,True)
     return {"success":True,"goal":goal.to_dict(),"execution_authorized":False}
 
+@router.get("/owner-control/autonomy-runs")
+def list_autonomy_run_events_endpoint(cycle_id:Optional[str]=Query(None),goal_id:Optional[str]=Query(None),limit:int=Query(500,ge=1,le=2000)):
+    from app.cognition.runtime import CognitiveRuntime
+    events=CognitiveRuntime.get_instance().autonomy_run_ledger.list(cycle_id=cycle_id,goal_id=goal_id,limit=limit)
+    return {"success":True,"events":[event.to_dict() for event in events]}
+
 @router.get("/owner-control/autonomous-goals")
 def list_autonomous_goal_queue_endpoint(status_filter: Optional[str]=Query(None,alias="status"),limit:int=Query(100,ge=1,le=1000)):
     from app.cognition.autonomous_goal_generator import GoalStatus
