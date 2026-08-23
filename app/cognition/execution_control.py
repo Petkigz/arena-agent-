@@ -234,6 +234,13 @@ class ExecutionControlRegistry:
                 "destination_path": result.get("rollback_destination"),
             }
             reason = "Verified move can be reversed to its original path; reversal requires fresh approval."
+        elif action_type in ("copy_file_verified", "compress_files") and result.get("environment_verified"):
+            compensation_action = "remove_verified_copy"
+            compensation_payload = {
+                "file_path": result.get("rollback_path"),
+                "expected_sha256": result.get("rollback_sha256"),
+            }
+            reason = "Created artifact may be removed only if its content hash is unchanged; removal requires fresh approval."
 
         return RollbackReceipt(
             receipt_id=f"rollback_{uuid4().hex[:12]}",

@@ -271,6 +271,10 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(UniversalFilesystem.search_filesystem, "query", "root_dir", "max_results"))
     add("move_file", "filesystem", 2, "Rename/move a file",
         _wrap(UniversalFilesystem.rename_or_move, "source_path", "destination_path"))
+    add("copy_file_verified", "filesystem", 2, "Copy a file without overwrite and verify its hash",
+        _wrap(UniversalFilesystem.copy_file_verified, "source_path", "destination_path"))
+    add("remove_verified_copy", "filesystem", 3, "Remove an exact unchanged copied artifact",
+        _wrap(UniversalFilesystem.remove_verified_copy, "file_path", "expected_sha256"))
     add("compress_files", "filesystem", 2, "Compress files to a zip",
         _wrap(UniversalFilesystem.compress_zip, "source_paths", "output_zip_path"))
     add("resize_image", "filesystem", 2, "Resize an image",

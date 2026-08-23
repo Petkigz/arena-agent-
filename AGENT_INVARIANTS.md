@@ -105,8 +105,9 @@ Owner Control Plane may always impose a stricter rule:
 - Cancellation is cooperative and must report whether a checkpoint observed it;
   never claim a late cancellation undid prior side effects. Rollback exists only
   with a deterministic compensation receipt and always requires fresh approval.
-- Transactional file operations reject overwrite conflicts, verify post-action
-  location/content hashes, and preserve exact reverse-move facts for owner-approved rollback.
+- Transactional move/copy/archive operations reject overwrite or missing-source
+  conflicts, verify paths and hashes, and preserve exact compensation facts.
+  Removal rollback is allowed only while the created artifact hash is unchanged.
 - Read-only clipboard inspection never mutates content. Clearing is a separate
   Level-3 exact action, verifies empty state, and truthfully has no rollback.
 - Owner authorization never implies OS elevation. Cross-owner process changes
