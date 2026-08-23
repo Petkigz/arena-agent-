@@ -18,8 +18,10 @@ def test_owner_directive_api_creates_planning_goal_not_action_authority(tmp_path
  assert result['goal']['status']=='approved'
  assert result['execution_authorized'] is False
 
-def test_owner_can_reject_and_reprioritize(tmp_path):
- g=AutonomousGoalGenerator(str(tmp_path/'goals.db')); a=AutonomousGoal(title='A'); b=AutonomousGoal(title='B')
+def test_owner_priority_preempts_higher_scored_goal(tmp_path):
+ g=AutonomousGoalGenerator(str(tmp_path/'goals.db')); a=AutonomousGoal(title='A',overall_score=.1); b=AutonomousGoal(title='B',overall_score=.9)
  g.add_goal(a); g.add_goal(b)
  assert g.owner_set_priority(a.goal_id,'critical').priority==GoalPriority.CRITICAL
- assert g.owner_decide_goal(b.goal_id,False).status==GoalStatus.REJECTED
+ assert g.owner_decide_goal(a.goal_id,True).status==GoalStatus.APPROVED
+ assert g.owner_decide_goal(b.goal_id,True).status==GoalStatus.APPROVED
+ assert g.get_next_goal().goal_id==a.goal_id

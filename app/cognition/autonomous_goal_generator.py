@@ -933,7 +933,10 @@ class AutonomousGoalGenerator:
             cursor = conn.execute("""
                 SELECT * FROM autonomous_goals
                 WHERE status = ?
-                ORDER BY overall_score DESC, created_at ASC
+                ORDER BY CASE priority
+                    WHEN 'critical' THEN 4 WHEN 'high' THEN 3
+                    WHEN 'normal' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC,
+                    overall_score DESC, created_at ASC
                 LIMIT 1
             """, (GoalStatus.APPROVED.value,))
             
@@ -1024,7 +1027,7 @@ class AutonomousGoalGenerator:
                 query += " AND source = ?"
                 params.append(source.value)
             
-            query += " ORDER BY overall_score DESC, created_at DESC LIMIT ?"
+            query += " ORDER BY CASE priority WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'normal' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC, overall_score DESC, created_at DESC LIMIT ?"
             params.append(limit)
             
             cursor = conn.execute(query, params)
