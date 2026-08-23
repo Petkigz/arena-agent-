@@ -263,8 +263,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(AccessibilityControlTool.resolve_target, "role", "name", "window_id"))
     add("accessibility_activate", "os_control", 2, "Activate a uniquely grounded semantic UI target",
         _wrap(AccessibilityControlTool.activate_target, "role", "name", "window_id"))
-    add("system_update", "os_control", 3, "Update installed software",
-        _wrap(DeepOSController.check_and_update_software, "package_name"))
+    add("system_update", "os_control", 3, "Update installed software and verify installed version when observable",
+        _wrap(DeepOSController.check_and_update_software, "package_name", "expected_version"))
 
     # ── Filesystem ──────────────────────────────────────────────────────────
     add("search_files", "filesystem", 0, "Search the filesystem",

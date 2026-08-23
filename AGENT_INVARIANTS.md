@@ -111,6 +111,8 @@ Owner Control Plane may always impose a stricter rule:
   Removal rollback is allowed only while the created artifact hash is unchanged.
 - Read-only clipboard inspection never mutates content. Clearing is a separate
   Level-3 exact action, verifies empty state, and truthfully has no rollback.
+- Package-update command success is never installed-version verification. Before/after
+  versions or exact expected-version evidence determine whether the environment changed.
 - Owner authorization never implies OS elevation. Cross-owner process changes
   require verified elevated privilege; process identity includes owner, executable,
   parent PID, creation time, and whether Arena launched it. Verified termination

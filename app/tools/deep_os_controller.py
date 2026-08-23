@@ -74,8 +74,22 @@ class DeepOSController:
                 "keys": keys,
             }
 
+    @staticmethod
+    def _installed_version(package_name: str) -> Optional[str]:
+        try:
+            if sys.platform == "win32": args=["winget","list","--id",package_name,"--exact"]
+            elif sys.platform == "darwin": args=["brew","list","--versions",package_name]
+            else: args=["dpkg-query","-W","-f=${Version}",package_name]
+            result=run_cancellable_subprocess(args,timeout=8)
+            if result.returncode!=0:return None
+            output=(result.stdout or "").strip()
+            if sys.platform=="darwin": return output.rsplit(" ",1)[-1] if output else None
+            if sys.platform=="win32": return None  # winget table parsing is locale-dependent; unknown stays unknown.
+            return output or None
+        except Exception:return None
+
     @classmethod
-    def check_and_update_software(cls, package_name: str = "vlc") -> Dict[str, Any]:
+    def check_and_update_software(cls, package_name: str = "vlc", expected_version: str = "") -> Dict[str, Any]:
         """
         Checks for software updates (e.g., VLC) using native package managers (winget/apt/brew)
         and initiates update under Level 3 Policy Approval.
@@ -102,6 +116,7 @@ class DeepOSController:
             }
 
         try:
+            before_version = cls._installed_version(package_name)
             app_logger.info(f"Checking for software update for '{package_name}'...")
             # Argument-list form (no shell) — package_name is validated above and
             # passed as a single argv element, so it cannot be interpreted by a shell.
@@ -114,13 +129,24 @@ class DeepOSController:
                 args = ["sudo", "apt", "install", "--only-upgrade", "-y", package_name]
 
             res = run_cancellable_subprocess(args, timeout=30)
+            after_version = cls._installed_version(package_name) if res.returncode == 0 else before_version
+            version_verified = bool(after_version and (
+                (expected_version and after_version == expected_version)
+                or (not expected_version and before_version and after_version != before_version)
+            ))
             audit_logger.info(f"Software update command executed for '{package_name}'")
 
             return {
                 "success": res.returncode == 0,
                 "package": package_name,
                 "output": res.stdout[:2000] if res.stdout else res.stderr[:2000],
-                "command": " ".join(args)
+                "command": " ".join(args),
+                "before_version": before_version,
+                "after_version": after_version,
+                "expected_version": expected_version or None,
+                "environment_verified": version_verified,
+                "verification_unknown": res.returncode == 0 and not version_verified,
+                "note": "Command success is separate from installed-version verification."
             }
         except Exception as e:
             app_logger.error(f"Error checking update for '{package_name}': {e}")
