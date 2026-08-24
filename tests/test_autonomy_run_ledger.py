@@ -9,6 +9,12 @@ def test_ledger_preserves_stage_separation(tmp_path):
  assert stages==['considered','approved_for_planning','blocked']
  assert l.list(goal_id='g1')[1].details['execution_authorized'] is False
 
+def test_execution_links_preserve_authorization_trace_verification_and_rollback():
+ result={'authorization_id':'a1','controlled_execution_id':'e1','trace_id':'t1','goal_verified':True,'verification_unknown':False,'rollback_receipt':{'receipt_id':'r1'}}
+ step=SimpleNamespace(step_id='s1',action_type='move_file',result=result)
+ links=PeriodicAutonomousCycle._execution_links(SimpleNamespace(steps=[step]))
+ assert links==[{'step_id':'s1','action_type':'move_file','authorization_id':'a1','controlled_execution_id':'e1','trace_id':'t1','goal_verified':True,'verification_unknown':False,'rollback_receipt_id':'r1'}]
+
 def test_disabled_cycle_records_skip(tmp_path,monkeypatch):
  envelope=AutonomyEnvelopeStore(tmp_path/'e.json'); envelope.update({'cycles_enabled':False})
  ledger=AutonomyRunLedger(tmp_path/'l.db')

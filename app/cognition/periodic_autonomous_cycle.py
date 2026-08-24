@@ -195,6 +195,16 @@ class PeriodicAutonomousCycle:
             try: self.run_ledger.record(cycle_id, stage, **kwargs)
             except Exception as exc: app_logger.warning(f"Autonomy ledger record failed: {exc}")
 
+    @staticmethod
+    def _execution_links(plan):
+        links=[]
+        for step in getattr(plan,"steps",[]):
+            result=getattr(step,"result",None)
+            if not isinstance(result,dict):continue
+            receipt=result.get("rollback_receipt") or {}
+            links.append({"step_id":step.step_id,"action_type":getattr(step,"action_type",""),"authorization_id":result.get("authorization_id"),"controlled_execution_id":result.get("controlled_execution_id"),"trace_id":result.get("trace_id"),"goal_verified":result.get("goal_verified"),"verification_unknown":result.get("verification_unknown"),"rollback_receipt_id":receipt.get("receipt_id") if isinstance(receipt,dict) else None})
+        return links
+
     def run_cycle(self, cognitive_runtime=None) -> AutonomousCycle:
         """
         Run a single autonomous cycle.
@@ -372,7 +382,7 @@ class PeriodicAutonomousCycle:
                     elif plan.status == ExecutionStatus.FAILED:
                         cycle.goals_failed += 1
                         consecutive_failures += 1
-                    self._record_event(cycle.cycle_id,"executed" if plan.status==ExecutionStatus.COMPLETED else "blocked",goal_id=plan.goal_id,reason=f"plan status {plan.status.value}",details={"plan_id":plan.plan_id,"status":plan.status.value})
+                    self._record_event(cycle.cycle_id,"executed" if plan.status==ExecutionStatus.COMPLETED else "blocked",goal_id=plan.goal_id,reason=f"plan status {plan.status.value}",details={"plan_id":plan.plan_id,"status":plan.status.value,"execution_links":self._execution_links(plan)})
             
             app_logger.info(
                 f"Cycle {cycle.cycle_id}: {cycle.goals_executed} executed, "

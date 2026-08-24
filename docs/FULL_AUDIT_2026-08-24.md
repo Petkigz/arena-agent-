@@ -112,11 +112,12 @@ exists, remains blocked while evidence is unknown, and returns a recommendation 
 skip a verified step, wait, or create a fresh replan. Automatic mutation of plan-step
 status remains intentionally deferred pending stronger plan reconciliation tests.
 
-## P2 — Autonomy run events need stronger cross-links
+## Mostly fixed after audit — Autonomy provenance links
 
-The ledger records cycle, goal, plan and allocation details, but not every final authorization ID, execution trace ID, verification record, rollback receipt, or commitment ID in one queryable chain.
-
-**Fix:** persist canonical foreign keys for end-to-end provenance and expose a cycle timeline endpoint.
+Cycle execution events now include step/action, authorization ID, controlled execution
+ID, trace ID, goal verification/unknown state, and rollback receipt ID. A chronological
+`/owner-control/autonomy-runs/{cycle_id}/timeline` endpoint exposes the chain.
+Commitment and recovery IDs are not yet attached to every cycle event.
 
 ## P2 — Frontend is tested locally but not in GitHub CI
 

@@ -1313,6 +1313,12 @@ def update_autonomy_schedule_status_endpoint(schedule_id:str,req:ScheduleStatusR
     except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
     return {"success":True,"schedule":item.to_dict()}
 
+@router.get("/owner-control/autonomy-runs/{cycle_id}/timeline")
+def autonomy_cycle_timeline_endpoint(cycle_id:str,limit:int=Query(2000,ge=1,le=5000)):
+    from app.cognition.runtime import CognitiveRuntime
+    events=CognitiveRuntime.get_instance().autonomy_run_ledger.list(cycle_id=cycle_id,limit=limit)
+    return {"success":True,"cycle_id":cycle_id,"timeline":[event.to_dict() for event in reversed(events)]}
+
 @router.get("/owner-control/autonomy-runs")
 def list_autonomy_run_events_endpoint(cycle_id:Optional[str]=Query(None),goal_id:Optional[str]=Query(None),limit:int=Query(500,ge=1,le=2000)):
     from app.cognition.runtime import CognitiveRuntime
