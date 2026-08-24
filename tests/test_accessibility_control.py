@@ -23,6 +23,15 @@ def test_no_bounds_means_no_fake_activation(tmp_path,monkeypatch):
  monkeypatch.setattr(AccessibilityControlTool,'store',s)
  assert AccessibilityControlTool.activate_target('button','Submit')['success'] is False
 
+def test_stale_snapshot_and_ungrounded_native_window_are_rejected(tmp_path,monkeypatch):
+ s=AccessibilityStore(tmp_path/'stale.db');result=s.ingest([{'role':'button','name':'Old','bounds':{'x':0,'y':0,'width':10,'height':10}}],interface='linux_atspi',window_id='w1',evidence=['tree'])
+ import sqlite3
+ with sqlite3.connect(s.path) as c:c.execute("UPDATE accessibility_nodes SET created_at='2020-01-01T00:00:00+00:00'");c.commit()
+ assert s.resolve(role='button',name='Old')['success'] is False
+ fresh=AccessibilityStore(tmp_path/'fresh.db');fresh.ingest([{'role':'button','name':'Save','bounds':{'x':0,'y':0,'width':10,'height':10}}],interface='linux_atspi',window_id='missing',evidence=['tree'])
+ monkeypatch.setattr(AccessibilityControlTool,'store',fresh);monkeypatch.setattr(AccessibilityControlTool,'os_grounding',SimpleNamespace(get_by_window=lambda wid:None))
+ assert 'grounding' in AccessibilityControlTool.activate_target('button','Save','missing')['error'].lower()
+
 def test_linux_atspi_capture_is_bounded_and_evidenced(tmp_path,monkeypatch):
  class Node:
   name='Save';childCount=0

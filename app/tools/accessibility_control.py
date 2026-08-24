@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any,Dict,List,Optional
 from uuid import uuid4
 from app.config import settings
+from app.cognition.os_grounding import OSGroundingStore
 
 def _now():return datetime.now(timezone.utc).isoformat()
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class AccessibilityStore:
     c.execute('INSERT INTO accessibility_nodes VALUES (?,?,?,?,?,?,?,?,?,?)',(node.node_id,sid,interface,window_id,role,name,json.dumps(bounds) if bounds else None,int(node.enabled),json.dumps(node.evidence),created));saved.append(node)
    c.commit()
   return {'success':True,'snapshot_id':sid,'count':len(saved),'nodes':[n.to_dict() for n in saved]}
- def resolve(self,*,role,name,window_id=None):
+ def resolve(self,*,role,name,window_id=None,max_age_seconds=30):
   q='SELECT * FROM accessibility_nodes WHERE lower(role)=lower(?)';p=[role]
   if window_id:q+=' AND window_id=?';p.append(window_id)
   q+=' ORDER BY created_at DESC LIMIT 5000'
@@ -38,6 +39,8 @@ class AccessibilityStore:
   def node(r):return AccessibilityNode(r[0],r[1],r[2],r[3],r[4],r[5],json.loads(r[6]) if r[6] else None,bool(r[7]),json.loads(r[8]),r[9])
   candidates=[node(r) for r in rows];exact=[n for n in candidates if n.name.lower()==name.lower()]
   selected=exact or [n for n in candidates if name.lower() in n.name.lower()]
+  now=datetime.now(timezone.utc)
+  selected=[n for n in selected if (now-datetime.fromisoformat(n.created_at)).total_seconds()<=max(1,int(max_age_seconds))]
   # Only nodes from the newest matching snapshot may compete.
   if selected:
    newest=selected[0].snapshot_id;selected=[n for n in selected if n.snapshot_id==newest]
@@ -45,6 +48,7 @@ class AccessibilityStore:
   return {'success':True,'target':selected[0].to_dict()}
 class AccessibilityControlTool:
  store=AccessibilityStore()
+ os_grounding=OSGroundingStore(settings.DATA_DIR/'os_grounding.db')
  @classmethod
  def capture_desktop(cls,window_id=None,max_nodes=1000):
   import platform
@@ -94,13 +98,17 @@ class AccessibilityControlTool:
  def ingest_snapshot(cls,nodes,interface='browser_accessibility',window_id=None,evidence=None):
   return cls.store.ingest(nodes,interface=interface,window_id=window_id,evidence=evidence or ['owner_or_browser_accessibility_snapshot'])
  @classmethod
- def resolve_target(cls,role,name,window_id=None):return cls.store.resolve(role=role,name=name,window_id=window_id)
+ def resolve_target(cls,role,name,window_id=None,max_age_seconds=30):return cls.store.resolve(role=role,name=name,window_id=window_id,max_age_seconds=max_age_seconds)
  @classmethod
  def activate_target(cls,role,name,window_id=None):
-  resolved=cls.resolve_target(role,name,window_id)
+  resolved=cls.resolve_target(role,name,window_id,max_age_seconds=10)
   if not resolved.get('success'):return resolved
   target=resolved['target'];bounds=target.get('bounds')
   if not bounds:return {'success':False,'available':False,'error':'Semantic target has no observed screen bounds','target':target}
+  if target.get('interface') in ('linux_atspi','windows_uia'):
+   if not target.get('window_id'):return {'success':False,'error':'Native semantic activation requires a grounded window ID','target':target}
+   grounding=cls.os_grounding.get_by_window(target['window_id'])
+   if not grounding:return {'success':False,'error':'Window/process grounding is missing or stale','target':target}
   from app.tools.deep_os_controller import DeepOSController
   result=DeepOSController.mouse_click(int(bounds['x']+bounds['width']/2),int(bounds['y']+bounds['height']/2))
   return {'success':bool(result.get('success')),'target':target,'activation_result':result,'semantic_target_verified':True}

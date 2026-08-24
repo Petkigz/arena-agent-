@@ -5,9 +5,18 @@ a payload dict (the zero-arg classmethod bug).
 """
 
 import inspect
+from unittest.mock import patch
+import pytest
 
 from app.cognition.action_proposal import ActionGate, ActionProposal
+from app.cognition.owner_control import OwnerControlStore
 from app.tools.manifest import get_tool_manifest
+
+@pytest.fixture(autouse=True)
+def conservative_owner_policy(tmp_path):
+    store=OwnerControlStore(tmp_path/'owner.json')
+    with patch('app.cognition.action_proposal.owner_control_store',store):
+        yield
 
 
 def test_manifest_is_authoritative_for_safety():

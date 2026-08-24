@@ -45,17 +45,13 @@ executing duplicate work. Owner schedules now atomically claim due rows, recover
 stale claims, use deterministic per-occurrence goal IDs, and advance daily/weekly
 recurrence to the next future local wall time using an explicit IANA timezone.
 
-## P1 — Legacy mouse/keyboard/hotkey actions bypass semantic target grounding
+## Partially fixed after audit — Legacy input and snapshot freshness
 
-`mouse_click`, `type_text`, and `press_hotkey` still act on coordinates or the active window without requiring an OS/window/accessibility grounding ID. The new semantic path is safer, but autonomous plans can still select legacy actions.
-
-**Fix:** add `target_grounding_id`, expected window/process identity, topology digest, and freshness requirement. Keep raw-coordinate actions only as explicit owner sovereign commands or a compatibility mode.
-
-## P1 — Accessibility and display snapshots can become stale
-
-Accessibility nodes and display topology have no enforced expiry. UI layout, active window, monitor arrangement, DPI, or process identity can change after capture. `accessibility_activate` can therefore click old bounds.
-
-**Fix:** timestamp and expire snapshots, bind each tree to process/window grounding plus display-topology digest, and re-observe immediately before activation.
+Raw `mouse_click`, `type_text`, and `press_hotkey` are now Level 3 compatibility
+paths rather than ordinary reversible autonomy. Accessibility resolution expires
+snapshots, and native UIA/AT-SPI activation requires a live process/window grounding.
+The remaining work is to require topology digest and immediate re-observation for
+every raw-coordinate path, or remove those paths from autonomous planning entirely.
 
 ## P1 — Browser upload confirmation can be a false positive
 

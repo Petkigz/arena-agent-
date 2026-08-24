@@ -48,6 +48,10 @@ class OSGroundingStore:
  def get(self,i):
   with sqlite3.connect(self.path) as c:r=c.execute('SELECT * FROM os_groundings WHERE grounding_id=?',(i,)).fetchone()
   return self._row(r) if r else None
+ def get_by_window(self,window_id):
+  with sqlite3.connect(self.path) as c:r=c.execute("SELECT * FROM os_groundings WHERE window_id=? AND status='active' ORDER BY updated_at DESC LIMIT 1",(str(window_id),)).fetchone()
+  grounding=self._row(r) if r else None
+  return grounding if grounding and psutil.pid_exists(grounding.pid) else None
  def list(self,app_name=None,limit=200):
   q="SELECT * FROM os_groundings WHERE status='active'";p=[]
   if app_name:q+=' AND lower(app_name)=lower(?)';p.append(app_name)

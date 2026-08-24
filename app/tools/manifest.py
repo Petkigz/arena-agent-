@@ -241,11 +241,11 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(SystemAppInventory.launch_any_app, "app_query", "app_name"))
     add("list_apps", "os_control", 0, "List installed applications",
         _ignore_payload(SystemAppInventory.scan_installed_applications))
-    add("mouse_click", "os_control", 2, "Click at screen coordinates",
+    add("mouse_click", "os_control", 3, "Legacy raw-coordinate click without semantic target grounding",
         _wrap(DeepOSController.mouse_click, "x", "y", "double"))
-    add("type_text", "os_control", 2, "Type text into the active window",
+    add("type_text", "os_control", 3, "Legacy active-window typing without semantic target grounding",
         _wrap(DeepOSController.type_text, "text"))
-    add("press_hotkey", "os_control", 2, "Press a hotkey combination",
+    add("press_hotkey", "os_control", 3, "Legacy active-window hotkey without semantic target grounding",
         _wrap(DeepOSController.press_hotkey, "keys"))
     add("open_url", "os_control", 2, "Open a URL in the default browser",
         _wrap(DesktopControl.open_url, "url"))
