@@ -169,12 +169,21 @@ PENDING. A verified completion is never downgraded — later contradicting recon
 are kept in history with a surfaced conflict. The owner-approved review snapshot itself
 is never mutated (digest-protected); reconciliation records live beside it by step id.
 
-## Mostly fixed after audit — Autonomy provenance links
+## Fixed after audit — Autonomy provenance links
 
 Cycle execution events now include step/action, authorization ID, controlled execution
 ID, trace ID, goal verification/unknown state, and rollback receipt ID. A chronological
 `/owner-control/autonomy-runs/{cycle_id}/timeline` endpoint exposes the chain.
-Commitment and recovery IDs are not yet attached to every cycle event.
+
+Commitment and recovery IDs are now attached to every cycle event via a read-time join
+(`attach_cycle_links`): events referencing a plan carry the plan's current commitment
+link (ID, status, completion-verified flag), and every event carries recovery
+assessments raised during its OWN cycle time window — windows computed per cycle_id so
+cross-cycle queries never mix them. The links are labeled `raised_during_cycle`
+(temporal co-occurrence, not a causation claim), stored events are never rewritten,
+missing links stay null/empty, and unreadable ledgers degrade to null rather than
+fabricating joins. Because the join is read-time, it also covers all events recorded
+before this change.
 
 ## P2 — Frontend is tested locally but not in GitHub CI
 
@@ -246,7 +255,7 @@ It does **not** create:
 ## Phase C — autonomy completion
 
 10. ✅ Full preemption reconciliation and plan resume.
-11. End-to-end cycle provenance graph.
+11. ✅ End-to-end cycle provenance graph.
 12. Conflict-safe recurring scheduler with timezone/DST support.
 13. Desktop and Android parity for autonomy operations.
 14. Multi-hour restart/preemption tests.

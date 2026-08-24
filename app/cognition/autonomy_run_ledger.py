@@ -30,3 +30,60 @@ class AutonomyRunLedger:
   q+=' ORDER BY created_at DESC LIMIT ?';p.append(max(1,min(limit,2000)))
   with sqlite3.connect(self.path) as c: rows=c.execute(q,p).fetchall()
   return [AutonomyEvent(r[0],r[1],r[2],r[3],r[4],json.loads(r[5]),r[6]) for r in rows]
+
+def _parse_iso(value):
+ from datetime import datetime
+ if isinstance(value,datetime): return value
+ try: return datetime.fromisoformat(str(value))
+ except Exception: return None
+
+def attach_cycle_links(events,*,commitment_ledger=None,recovery_store=None):
+ """Join commitment and recovery provenance onto recorded timeline events.
+
+ This is a READ-TIME join over immutable stored events: `commitment_links`
+ reflect the current commitment state for the plan an event references, and
+ `recovery_assessment_ids` list recovery assessments raised during the event's
+ OWN cycle time window (temporal co-occurrence, labeled as such — it is not a
+ causation claim). Windows are computed per cycle_id so cross-cycle queries
+ never mix windows. Joins never rewrite stored evidence.
+ """
+ from datetime import datetime,timezone
+ ordered=list(events)
+ windows={}
+ for e in ordered:
+  cycle_id=getattr(e,'cycle_id',None)
+  if cycle_id is None: continue
+  window=windows.setdefault(cycle_id,{'started':None,'ended':None})
+  if getattr(e,'stage','')=='cycle_started': window['started']=(getattr(e,'details',None) or {}).get('started_at')
+  parsed=_parse_iso(getattr(e,'created_at',None))
+  if parsed and (window['ended'] is None or parsed>window['ended']): window['ended']=parsed
+ now=datetime.now(timezone.utc)
+ recovery_by_cycle={}
+ if recovery_store is not None:
+  try: assessments=list(recovery_store.list(limit=1000))
+  except Exception: assessments=[]
+  for cycle_id,window in windows.items():
+   start_dt=_parse_iso(window['started'])
+   if start_dt is None: continue
+   end_dt=window['ended'] or now
+   links=[]
+   for assessment in assessments:
+    created=_parse_iso(getattr(assessment,'created_at',None))
+    if created is not None and start_dt<=created<=end_dt:
+     links.append({'assessment_id':assessment.assessment_id,'status':assessment.status,'created_at':assessment.created_at,'raised_during_cycle':True})
+   recovery_by_cycle[cycle_id]=links
+ enriched=[]
+ for e in ordered:
+  out=e.to_dict()
+  details=out.get('details') or {}
+  plan_id=details.get('plan_id')
+  out['commitment_links']=None
+  if commitment_ledger is not None and plan_id:
+   try:
+    commitment=commitment_ledger.get_by_source('approved_plan',str(plan_id))
+    if commitment is not None:
+     out['commitment_links']=[{'commitment_id':commitment.commitment_id,'status':commitment.status,'completion_verified':commitment.completion_verified,'source':f'approved_plan:{plan_id}'}]
+   except Exception: out['commitment_links']=None
+  out['recovery_assessment_ids']=list(recovery_by_cycle.get(out.get('cycle_id'),[]))
+  enriched.append(out)
+ return enriched
