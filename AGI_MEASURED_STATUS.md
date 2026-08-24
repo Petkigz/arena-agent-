@@ -24,7 +24,7 @@ and test-count figures that did not match the code; they are now archived under
 
 A **local-first, full-capability coworker / friend** with a closed-loop cognitive architecture. Owner-defined approval gates, not a restricted demo: nothing is off-limits, but sensitive/irreversible actions require explicit owner approval (Level 3).
 
-**Hardware:** Intel Core i9-14900K · RX 580 8 GB (CPU inference) · 16 GB DDR5 · LM Studio · Qwen 3B fast + 9B reasoning.
+**Owner hardware target:** Intel Core i9-14900K · RX 580 8 GB (CPU inference) · 48 GB RAM · LM Studio · Qwen fast + reasoning routes. Runtime values are probed rather than trusted from this document.
 
 ---
 
@@ -163,7 +163,7 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **P1-4 Adaptive curiosity via information gain**: Structured signals cover unknown entities, low-confidence groundings, unexplored files, weak causal edges, and prediction-error clusters. Prediction-error, low-success, and goal auto-approval thresholds now calibrate from verified strategy outcomes after a minimum sample count, using bounded smoothing and conservative clamps. A persistent owner maximum caps the combined exploratory goals per cycle (including zero), and free-text keyword generation is a true fallback rather than an extra unbounded channel.
 
-- ✅ **P2 Resource-aware planning**: `CounterfactualSimulator` has `RESOURCE_COSTS` per action, penalizes high-memory when RAM>80% (0.6×), high-cpu when CPU>75% (0.7×), file-writing when disk>85% (0.8×), budget>90% (0.7×). `ActionPlanner` auto-fetches `hardware_self_model` + `ResourceManager`. `GoalReplanner` signature extended, call sites pass outcome_store, hardware, resource_manager.
+- ✅ **P2 Resource-aware planning**: Hardware tiers and resource limits are live-probed rather than fixed at 16 GB. A 32GB+ / 20-thread host receives the high-memory profile; 40GB+ can schedule up to six CPU tasks and consider 14B Q4 CPU inference while retaining a faster 9B route. Pressure remains percentage-based, so 48 GB naturally permits more work without disabling critical 95–98% safety checks. Counterfactual planning still penalizes actual CPU/RAM/disk pressure.
 
 - ✅ **P2 Social from real signals**: New `prosody_analyzer.py` — rms, pitch (autocorr), ZCR, speaking rate → emotion (joy/sadness/anger/fear/surprise/neutral) + intensity. `VoiceService._transcribe_remote_utterance()` analyzes prosody before STT and feeds to `social_cognition`. Runtime `_integrate_phase_modules()` infers emotion from text keywords.
 

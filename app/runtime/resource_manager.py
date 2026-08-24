@@ -1,4 +1,4 @@
-"""Lightweight resource awareness for Arena's 16 GB RAM / 8 GB VRAM host."""
+"""Lightweight resource awareness derived from the current host at runtime."""
 
 from __future__ import annotations
 
@@ -27,8 +27,9 @@ class ResourceSnapshot:
 class ResourceManager:
     """Read host resources and expose conservative execution decisions."""
 
-    def __init__(self, ram_limit_gb: float = 16.0, vram_limit_gb: float = 8.0) -> None:
-        self.ram_limit_gb = ram_limit_gb
+    def __init__(self, ram_limit_gb: float | None = None, vram_limit_gb: float = 8.0) -> None:
+        detected = (psutil.virtual_memory().total / (1024 ** 3)) if psutil is not None else 16.0
+        self.ram_limit_gb = float(ram_limit_gb if ram_limit_gb is not None else detected)
         self.vram_limit_gb = vram_limit_gb
 
     def snapshot(self) -> ResourceSnapshot:

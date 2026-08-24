@@ -35,23 +35,23 @@ class HardwareGovernor:
             pass
 
         # Tier classification logic
-        if total_cpus >= 20 and total_ram_gb >= 15.0 and gpu_available:
+        if total_cpus >= 20 and total_ram_gb >= 32.0:
             tier_level = 1
-            tier_name = "TIER 1 (Ultra High-End / i9-14900K)"
+            tier_name = "TIER 1 (High-memory workstation / 32GB+ RAM)"
             max_threads = total_cpus
-            max_context_budget = 1000
+            max_context_budget = 8192
             enable_background_daemon = True
-        elif total_cpus >= 8 and total_ram_gb >= 8.0:
+        elif total_cpus >= 8 and total_ram_gb >= 16.0:
             tier_level = 2
-            tier_name = "TIER 2 (Mid-Range 8th Gen CPU / 8-16GB RAM)"
-            max_threads = min(8, total_cpus)
-            max_context_budget = 500
+            tier_name = "TIER 2 (Mid-range workstation / 16GB+ RAM)"
+            max_threads = min(12, total_cpus)
+            max_context_budget = 4096
             enable_background_daemon = True
         else:
             tier_level = 3
-            tier_name = "TIER 3 (Legacy Low-Spec 2nd-7th Gen CPU / <8GB RAM)"
+            tier_name = "TIER 3 (Low-memory host / under 16GB RAM)"
             max_threads = min(4, total_cpus)
-            max_context_budget = 250
+            max_context_budget = 2048
             enable_background_daemon = False
 
         return {
@@ -182,6 +182,8 @@ class HardwareGovernor:
         # Model-fit recommendation based on RAM + acceleration.
         if inference_accel == "cuda":
             model_recommendation = "qwen2.5-9b-instruct (GPU-accelerated)"
+        elif ram_total_gb >= 40:
+            model_recommendation = "qwen2.5-14b-instruct (Q4, CPU) or 9B for faster interaction"
         elif ram_total_gb >= 24:
             model_recommendation = "qwen2.5-9b-instruct (Q4_K_M, CPU)"
         elif ram_total_gb >= 12:
@@ -203,6 +205,8 @@ class HardwareGovernor:
             "disk_free_gb": live.get("disk_free_gb", 0.0),
             "hardware_tier": tier["tier_name"],
             "operating_mode": operating_mode,
+            "high_memory_profile": ram_total_gb >= 32,
+            "max_parallel_cpu_tasks": 6 if ram_total_gb >= 40 else 3 if ram_total_gb >= 24 else 1,
             "live": {
                 "cpu_percent": cpu_pressure,
                 "ram_percent": ram_pressure,
