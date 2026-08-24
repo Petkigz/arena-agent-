@@ -60,11 +60,13 @@ so a permanent banner cannot verify a new upload. It requires an absent-before,
 visible-after transition; missing post-submit confirmation remains unknown with
 remote side effects explicitly possible. Service-specific receipt IDs remain future work.
 
-## P1 — Browser transfer hashing is not streaming or size-bounded
+## Partially fixed after audit — Browser transfer resources
 
-Browser upload/download hashing uses `Path.read_bytes()`. A large file can consume substantial RAM despite the 48 GB upgrade, and downloads have no owner-configured size quota.
-
-**Fix:** stream SHA-256, enforce optional owner size/quota limits, check free disk before save, and cancel oversized transfers.
+Upload/download SHA-256 is now streaming and both directions enforce the
+owner-configurable `LPA_BROWSER_TRANSFER_MAX_MB` quota (default 1024 MB). Oversized
+uploads stop before browser side effects; oversized downloaded artifacts are removed
+and verified absent. Pre-download free-disk reservation and in-flight cancellation
+before the remote transfer completes remain future work.
 
 ## Fixed after audit — Backup overwrite classification
 

@@ -17,6 +17,14 @@ class BrowserAutomation:
     DOWNLOADS_DIR = settings.DATA_DIR / "workspace" / "downloads"
     GROUNDING = BrowserGroundingStore(settings.DATA_DIR / "browser_grounding.db")
 
+    @staticmethod
+    def _hash_file(path: Path) -> str:
+        import hashlib
+        digest=hashlib.sha256()
+        with path.open('rb') as handle:
+            for chunk in iter(lambda:handle.read(1024*1024),b''):digest.update(chunk)
+        return digest.hexdigest()
+
     @classmethod
     def _download_destination(cls, suggested_filename: str) -> Path:
         cls.DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -39,7 +47,6 @@ class BrowserAutomation:
             url = f"https://{url}"
         browser = None
         try:
-            import hashlib
             cooperative_checkpoint("before_browser_download")
             from playwright.sync_api import sync_playwright
             with sync_playwright() as playwright:
@@ -55,7 +62,12 @@ class BrowserAutomation:
                 cooperative_checkpoint("after_download_save")
                 if not destination.is_file():
                     return {"success": False, "error": "Download completed but file was not observed"}
-                digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+                size_bytes=destination.stat().st_size
+                max_bytes=max(1,int(settings.BROWSER_TRANSFER_MAX_MB))*1024*1024
+                if size_bytes>max_bytes:
+                    destination.unlink(missing_ok=True)
+                    return {"success":False,"request_success":True,"error":"Downloaded artifact exceeded owner transfer quota and was removed","size_bytes":size_bytes,"max_bytes":max_bytes,"environment_verified":not destination.exists(),"side_effects":False}
+                digest = cls._hash_file(destination)
                 session_id = f"browser_session_{uuid.uuid4().hex[:12]}"
                 tab = cls.GROUNDING.observe_tab(
                     session_id=session_id, url=page.url, title=page.title(),
@@ -70,7 +82,7 @@ class BrowserAutomation:
             return {
                 "success": True, "environment_verified": True,
                 "download_path": str(destination), "download_sha256": digest,
-                "size_bytes": destination.stat().st_size,
+                "size_bytes": size_bytes,
                 "browser_session_id": session_id, "tab_grounding": tab.to_dict(),
                 "download_event": event, "profile_type": "ephemeral",
                 "auth_state": "unknown", "side_effects": True,
@@ -97,8 +109,9 @@ class BrowserAutomation:
         if not url.startswith(("http://", "https://")): url = f"https://{url}"
         browser = None
         try:
-            import hashlib
-            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            size_bytes=source.stat().st_size;max_bytes=max(1,int(settings.BROWSER_TRANSFER_MAX_MB))*1024*1024
+            if size_bytes>max_bytes:return {"success":False,"request_success":False,"side_effects":False,"error":"Upload exceeds owner transfer quota","size_bytes":size_bytes,"max_bytes":max_bytes}
+            digest = cls._hash_file(source)
             from playwright.sync_api import sync_playwright
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True); page = browser.new_page()
@@ -114,7 +127,7 @@ class BrowserAutomation:
                 tab=cls.GROUNDING.observe_tab(session_id=session_id,url=page.url,title=page.title(),profile_type="ephemeral",evidence=["set_input_files completed","submit clicked",f"success selector visible:{success_selector}"])
                 event=cls.GROUNDING.record_event(tab.tab_id,"upload","completed" if observed else "unknown",evidence=[f"local_sha256:{digest}",f"success_selector:{success_selector}"])
                 browser.close();browser=None
-            return {"success":observed,"request_success":True,"environment_verified":observed,"verification_unknown":not observed,"uploaded_file":str(source),"uploaded_sha256":digest,"tab_grounding":tab.to_dict(),"upload_event":event,"auth_state":"unknown","side_effects":True,"rollback_supported":False,"rollback_reason":"Remote upload cannot be deterministically removed without a service-specific delete API."}
+            return {"success":observed,"request_success":True,"environment_verified":observed,"verification_unknown":not observed,"uploaded_file":str(source),"uploaded_sha256":digest,"size_bytes":size_bytes,"tab_grounding":tab.to_dict(),"upload_event":event,"auth_state":"unknown","side_effects":True,"rollback_supported":False,"rollback_reason":"Remote upload cannot be deterministically removed without a service-specific delete API."}
         except ExecutionCancelled: raise
         except Exception as exc:
             return {"success":False,"request_success":True,"environment_verified":False,"verification_unknown":True,"side_effects":True,"error":str(exc),"note":"Submission may have reached the remote service; retry requires fresh observation and authorization."}

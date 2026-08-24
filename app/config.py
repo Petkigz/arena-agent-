@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     FAST_MODEL: str = "qwen2.5-3b-instruct"
     MAIN_MODEL: str = "qwen2.5-9b-instruct"
     DEFAULT_TIMEOUT: float = 180.0  # Extended timeout (3 mins) to allow LM Studio to auto-load models into VRAM
+    BROWSER_TRANSFER_MAX_MB: int = 1024  # Owner-overridable local transfer safety quota
 
     # Autonomy policy (P1 fix): the autonomous cycle is opt-in, not always-on.
     #   "off"        — no autonomous cycle is scheduled.

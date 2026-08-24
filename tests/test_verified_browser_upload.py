@@ -38,6 +38,14 @@ def test_preexisting_success_marker_blocks_submission(tmp_path,monkeypatch):
  r=BrowserAutomation.upload_file('https://service.test','input',str(source),'button','success')
  assert r['request_success'] is False and r['side_effects'] is False
 
+def test_upload_quota_blocks_before_browser_side_effect(tmp_path,monkeypatch):
+ source=tmp_path/'large';source.write_bytes(b'x'*2048)
+ monkeypatch.setattr('app.tools.browser_automation.settings.BROWSER_TRANSFER_MAX_MB',0)
+ # Normalization makes the minimum quota 1 MB; use an object larger than that.
+ source.write_bytes(b'x'*(1024*1024+1))
+ r=BrowserAutomation.upload_file('https://service.test','input',str(source),'button','success')
+ assert r['request_success'] is False and r['side_effects'] is False
+
 def test_upload_failure_preserves_side_effect_uncertainty(tmp_path,monkeypatch):
  source=tmp_path/'r';source.write_text('x')
  class Bad(Page):
