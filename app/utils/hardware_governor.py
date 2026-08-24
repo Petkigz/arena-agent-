@@ -193,6 +193,14 @@ class HardwareGovernor:
 
         operating_mode = "high_performance" if not tier.get("ultra_lean_mode") else "ultra_lean"
 
+        # Measured (not just recommended) concurrency budget from live pressure.
+        from app.utils.concurrency_governor import ConcurrencyGovernor
+        try:
+            worker_budget = ConcurrencyGovernor.measure(stats=live)
+        except Exception as exc:
+            app_logger.warning(f"Concurrency budget measurement unavailable: {exc}")
+            worker_budget = {"success": False, "workers_granted": 1, "reasons": [f"measurement_unavailable: {exc}"]}
+
         return {
             "cpu_model": cpu_model,
             "cpu_logical_threads": logical_cpus,
@@ -207,6 +215,7 @@ class HardwareGovernor:
             "operating_mode": operating_mode,
             "high_memory_profile": ram_total_gb >= 32,
             "recommended_parallel_cpu_tasks": 6 if ram_total_gb >= 40 else 3 if ram_total_gb >= 24 else 1,
+            "measured_worker_budget": worker_budget,
             "memory_consolidation_batch": 500 if ram_total_gb >= 40 else 100,
             "memory_record_cap": 20000 if ram_total_gb >= 40 else 5000,
             "live": {

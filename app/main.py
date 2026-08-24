@@ -247,6 +247,11 @@ class AuthorizationIssueRequest(BaseModel):
     plan_id: Optional[str] = None
     override_owner_policy: bool = False
 
+class ConcurrencyBudgetUpdate(BaseModel):
+    """Owner concurrency budget override. max_workers=null resets to measured defaults."""
+    enabled: Optional[bool] = None
+    max_workers: Optional[int] = Field(None, ge=1, le=256)
+
 class AuthorizedExecutionRequest(BaseModel):
     authorization_id: str = Field(min_length=1)
     action_type: str = Field(min_length=1)
@@ -1290,6 +1295,37 @@ def update_autonomy_envelope_endpoint(req: AutonomyEnvelopeUpdate):
     from app.cognition.runtime import CognitiveRuntime
     policy=CognitiveRuntime.get_instance().autonomy_envelope.update(req.model_dump(exclude_none=True))
     return {"success": True, "envelope": policy.to_dict(), "note": "Limits constrain future cycles and grant no new authority."}
+
+@router.get("/owner-control/concurrency-budget")
+def get_concurrency_budget_endpoint():
+    from app.utils.concurrency_governor import ConcurrencyGovernor
+    measurement = ConcurrencyGovernor.measure()
+    return {
+        "success": True,
+        "budget": measurement,
+        "recent_receipts": ConcurrencyGovernor.recent_receipts(limit=10),
+        "note": "Worker grants are measured from live RAM/CPU pressure; the owner override cannot bypass critical pressure gates.",
+    }
+
+@router.put("/owner-control/concurrency-budget")
+def update_concurrency_budget_endpoint(req: ConcurrencyBudgetUpdate):
+    from app.utils.concurrency_governor import concurrency_override_store, ConcurrencyGovernor
+    try:
+        override = concurrency_override_store.update(req.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    measurement = ConcurrencyGovernor.measure()
+    return {
+        "success": True,
+        "override": override.to_dict(),
+        "budget": measurement,
+        "note": "The owner budget is clamped to physical thread count and collapses to serial under critical RAM/CPU pressure.",
+    }
+
+@router.get("/owner-control/concurrency-budget/receipts")
+def get_concurrency_receipts_endpoint(limit: int = 20):
+    from app.utils.concurrency_governor import ConcurrencyGovernor
+    return {"success": True, "receipts": ConcurrencyGovernor.recent_receipts(limit=max(1, min(limit, 200)))}
 
 @router.post("/owner-control/autonomous-goals")
 def create_owner_autonomous_goal_endpoint(req:OwnerAutonomousGoalRequest):

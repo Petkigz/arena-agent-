@@ -442,6 +442,27 @@ class ArenaBackendClient:
     def latest_intelligence_benchmark(self) -> Dict[str, Any]:
         return self._get_json("/benchmarks/intelligence/latest")
 
+    # ── owner concurrency budget ────────────────────────────────────────────
+    def concurrency_budget(self) -> Dict[str, Any]:
+        """GET /owner-control/concurrency-budget — measured worker budget + receipts."""
+        return self._get_json("/owner-control/concurrency-budget")
+
+    def set_concurrency_budget(self, enabled: bool | None = None, max_workers: int | None = None) -> Dict[str, Any]:
+        """PUT /owner-control/concurrency-budget — owner override within physical threads.
+
+        Pass max_workers=None to reset to measured defaults; omit both (sent as
+        explicit payload keys) only for the values you intend to change.
+        """
+        payload: Dict[str, Any] = {}
+        if enabled is not None:
+            payload["enabled"] = enabled
+        payload["max_workers"] = max_workers
+        return self._put_json("/owner-control/concurrency-budget", payload)
+
+    def concurrency_receipts(self, limit: int = 20) -> Dict[str, Any]:
+        """GET /owner-control/concurrency-budget/receipts — measured execution evidence."""
+        return self._get_json(f"/owner-control/concurrency-budget/receipts?limit={int(limit)}")
+
     # ── code execution ──────────────────────────────────────────────────────
     def execute_code(self, code: str, language: str = "python") -> Dict[str, Any]:
         """POST /code/execute."""

@@ -13,3 +13,14 @@ def test_desktop_autonomy_routes_and_stage_separation():
  assert calls[4]==('PUT','/owner-control/autonomy-envelope',{'limits_enabled':False})
  assert calls[5][2]['timezone_name']=='Africa/Kampala'
  assert calls[6][1]=='/owner-control/autonomy-schedule/s/1/status'
+
+def test_desktop_concurrency_budget_client():
+ calls=[]
+ def handler(request):
+  calls.append((request.method,request.url.path,json.loads(request.content) if request.content else None));return httpx.Response(200,json={'success':True})
+ c=ArenaBackendClient();c._client=httpx.Client(transport=httpx.MockTransport(handler))
+ c.concurrency_budget();c.set_concurrency_budget(max_workers=6);c.set_concurrency_budget(enabled=False,max_workers=None);c.concurrency_receipts(limit=5);c.close()
+ assert calls[0]==('GET','/owner-control/concurrency-budget',None)
+ assert calls[1]==('PUT','/owner-control/concurrency-budget',{'max_workers':6})
+ assert calls[2]==('PUT','/owner-control/concurrency-budget',{'enabled':False,'max_workers':None})
+ assert calls[3][0]=='GET' and calls[3][1].startswith('/owner-control/concurrency-budget/receipts')

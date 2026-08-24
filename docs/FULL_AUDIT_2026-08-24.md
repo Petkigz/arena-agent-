@@ -108,12 +108,20 @@ inputs fail. An explicitly empty findings list creates a deterministic template
 stating that no findings were supplied and does not claim the target is secure;
 example SQL injection findings and placeholder CVEs are no longer inserted.
 
-## Partially fixed after audit — High-memory capacity wiring
+## Mostly fixed after audit — High-memory capacity wiring
 
 The 40GB+ profile now actually raises verified-memory consolidation batches from
-100 to 500 and retained records from 5,000 to 20,000. Parallel CPU work is now
-labeled a recommendation rather than a claimed active scheduler setting. Actual
-worker-pool concurrency, 8192-token provider context, and 14B LM Studio loading still
+100 to 500 and retained records from 5,000 to 20,000. Worker-pool concurrency is
+no longer advisory-only: `ConcurrencyGovernor`
+(`app/utils/concurrency_governor.py`) measures live RAM/CPU pressure, applies
+the owner's persisted override (`data/concurrency_budget.json`, owner API
+`GET/PUT /owner-control/concurrency-budget`), grants a worker budget with typed
+reasons, collapses to serial under critical pressure regardless of override, and
+writes bounded execution receipts. It is wired into counterfactual branch
+simulation (order-preserving, results identical to serial) and surfaced in the
+hardware self-model as `measured_worker_budget`. Owner authority is full within
+physical thread count; it cannot fabricate threads or bypass the critical
+resource gate. 8192-token provider context and 14B LM Studio loading still
 require owner-hardware benchmarks and explicit provider configuration.
 
 ## Mostly fixed after audit — Identity continuity depth
@@ -204,7 +212,7 @@ It does **not** create:
 
 ## Phase B — use the 48 GB deliberately
 
-6. Owner-configured worker/concurrency budget derived from live RAM pressure.
+6. ✅ Owner-configured worker/concurrency budget derived from live RAM pressure (`ConcurrencyGovernor`: measured grants, owner override within physical threads, absolute critical-pressure gate, persisted receipts; wired into counterfactual branch simulation and the hardware self-model).
 7. Benchmark 9B versus 14B inference latency, quality and RAM.
 8. Increase retrieval/index scale with measured limits.
 9. Add larger local embedding, speech and VLM profiles only after held-out evaluation.
