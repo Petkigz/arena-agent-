@@ -219,7 +219,19 @@ Runs & timeline with commitment/recovery links, Preemptions, Budgets & decisions
 driving every control from the page. The widget logic is exercised by an offscreen
 test that runs wherever a Qt GUI runtime exists and skips cleanly otherwise (this
 sandbox lacks Qt system libraries; an always-run syntax check covers compilation).
-Android parity remains open.
+
+Android parity is implemented at the transport + UI level: ApiClient exposes
+goal-queue decisions/defer/priority/execute-next, allocation preview, schedules
+(create/status), run events + cycle timeline, autonomy envelope, preemptions
+(create/refresh/reconcile/request-resume), plan step reconciliations, the measured
+concurrency budget (get/set/receipts), signed owner decisions (issue/revoke),
+OS grounding + accessibility status + browser tabs (read-only), and the
+allow_sensitive_autonomy policy switch with a Level 0–3 ceiling. The Settings
+screen gained an Autonomy operations section (goals, schedules, runs, preemptions,
+budget, decisions) plus a sensitive-autonomy switch, all with authority-boundary
+copy. Static contract tests pin routes, payloads, and the
+decision-is-not-execution separation; Android compile and on-device verification
+remain open (no Android build in CI).
 
 Web Owner Control has the complete queue, schedule and envelope UI. Desktop now has authenticated client coverage for goal creation/decision/defer/execute, schedule creation/status, envelope updates and run events, but its native page does not expose all of them yet. Android still lacks the newest schedules, run ledger, allocation preview, sensitive-autonomy switch, plan freshness, browser tabs and OS groundings.
 
@@ -285,7 +297,7 @@ It does **not** create:
 10. ✅ Full preemption reconciliation and plan resume.
 11. ✅ End-to-end cycle provenance graph.
 12. Conflict-safe recurring scheduler with timezone/DST support.
-13. ◐ Desktop parity for autonomy operations (done); Android parity remains.
+13. ✅ Desktop + Android transport/UI parity for autonomy operations (Android build verification remains).
 14. Multi-hour restart/preemption tests.
 
 ## Phase D — OS integration

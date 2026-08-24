@@ -54,6 +54,36 @@ data class OwnerExecution(
     val rollbackSupported: Boolean,
 )
 
+data class OwnerGoal(
+    val goalId: String,
+    val title: String,
+    val status: String,
+    val priority: String,
+)
+
+data class OwnerSchedule(
+    val scheduleId: String,
+    val title: String,
+    val status: String,
+)
+
+data class OwnerRunEvent(
+    val cycleId: String,
+    val stage: String,
+    val createdAt: String,
+)
+
+data class OwnerPreemption(
+    val preemptionId: String,
+    val status: String,
+)
+
+data class OwnerDecision(
+    val decisionId: String,
+    val status: String,
+    val changeTypes: String,
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val api: ApiClient,
@@ -82,6 +112,22 @@ class SettingsViewModel @Inject constructor(
     var planStepsJson by mutableStateOf("")
     var ownerExecutions by mutableStateOf<List<OwnerExecution>>(emptyList())
         private set
+    var allowSensitiveAutonomy by mutableStateOf(false)
+    var autonomyGoals by mutableStateOf<List<OwnerGoal>>(emptyList())
+        private set
+    var autonomySchedule by mutableStateOf<List<OwnerSchedule>>(emptyList())
+        private set
+    var autonomyRuns by mutableStateOf<List<OwnerRunEvent>>(emptyList())
+        private set
+    var autonomyPreemptions by mutableStateOf<List<OwnerPreemption>>(emptyList())
+        private set
+    var ownerDecisions by mutableStateOf<List<OwnerDecision>>(emptyList())
+        private set
+    var workerBudgetLabel by mutableStateOf("Measured worker budget: unknown")
+        private set
+    var directiveTitle by mutableStateOf("")
+    var directivePriority by mutableStateOf("normal")
+    var decisionTypesInput by mutableStateOf("")
 
     var piperVoices by mutableStateOf<List<String>>(emptyList())
         private set
@@ -121,6 +167,7 @@ class SettingsViewModel @Inject constructor(
                 }
             }
             loadOwnerControlState()
+            loadAutonomyState()
             loading = false
         }
     }
@@ -132,6 +179,7 @@ class SettingsViewModel @Inject constructor(
                 ownerMode = policy.optString("mode", ownerMode)
                 ownerPaused = policy.optBoolean("paused", false)
                 maxAutonomousSafety = policy.optInt("max_autonomous_level", 0).toString()
+                allowSensitiveAutonomy = policy.optBoolean("allow_sensitive_autonomy", false)
             }
         }
         api.getAdaptiveAutonomy()?.let { raw ->
@@ -201,14 +249,177 @@ class SettingsViewModel @Inject constructor(
     fun refreshOwnerControl() {
         viewModelScope.launch {
             loadOwnerControlState()
+            loadAutonomyState()
             status = "Owner-control state refreshed"
+        }
+    }
+
+    private suspend fun loadAutonomyState() {
+        api.getAutonomousGoals()?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("goals") ?: JSONArray()
+                autonomyGoals = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        OwnerGoal(
+                            it.optString("goal_id"), it.optString("title"),
+                            it.optString("status"), it.optString("priority"),
+                        )
+                    }
+                }
+            }
+        }
+        api.getAutonomySchedule()?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("schedule") ?: JSONArray()
+                autonomySchedule = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        OwnerSchedule(it.optString("schedule_id"), it.optString("title"), it.optString("status"))
+                    }
+                }
+            }
+        }
+        api.getAutonomyRunEvents(50)?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("events") ?: JSONArray()
+                autonomyRuns = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        OwnerRunEvent(it.optString("cycle_id"), it.optString("stage"), it.optString("created_at"))
+                    }
+                }
+            }
+        }
+        api.getPreemptions()?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("preemptions") ?: JSONArray()
+                autonomyPreemptions = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        OwnerPreemption(it.optString("preemption_id"), it.optString("status"))
+                    }
+                }
+            }
+        }
+        api.getConcurrencyBudget()?.let { raw ->
+            runCatching {
+                val budget = JSONObject(raw).optJSONObject("budget") ?: JSONObject()
+                workerBudgetLabel = "Measured worker budget: " + budget.optInt("workers_granted") +
+                    " granted of " + budget.optInt("configured_budget") +
+                    " (physical cap " + budget.optInt("physical_thread_cap") + ")"
+            }
+        }
+        api.getOwnerDecisions()?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("decisions") ?: JSONArray()
+                ownerDecisions = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        val types = it.optJSONObject("payload")?.optJSONArray("expected_change_types")
+                        val joined = if (types == null) "" else (0 until types.length()).joinToString(",") { j -> types.optString(j) }
+                        OwnerDecision(it.optString("decision_id"), it.optString("status"), joined)
+                    }
+                }
+            }
+        }
+    }
+
+    fun decideAutonomousGoal(goal: OwnerGoal, approved: Boolean) {
+        viewModelScope.launch {
+            status = if (api.decideAutonomousGoal(goal.goalId, approved) != null)
+                "Goal decision recorded; planning only — execution stays separate" else "Goal decision failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun deferAutonomousGoal(goal: OwnerGoal) {
+        viewModelScope.launch {
+            status = if (api.deferAutonomousGoal(goal.goalId) != null)
+                "Goal deferred by owner priority" else "Defer failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun executeNextAutonomousGoal() {
+        viewModelScope.launch {
+            status = if (api.executeNextAutonomousGoal() != null)
+                "Execute-next issued; results require verification" else "Execute-next failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun createDirective() {
+        if (directiveTitle.isBlank()) {
+            status = "Directive title is required"
+            return
+        }
+        viewModelScope.launch {
+            status = if (api.createAutonomousGoal(directiveTitle, "", directivePriority) != null) {
+                directiveTitle = ""
+                "Directive created; it authorizes planning only"
+            } else "Create directive failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun setScheduleStatus(schedule: OwnerSchedule, scheduleStatus: String) {
+        viewModelScope.launch {
+            status = if (api.updateScheduleStatus(schedule.scheduleId, scheduleStatus) != null)
+                "Schedule $scheduleStatus" else "Schedule update failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun reconcilePreemption(preemption: OwnerPreemption) {
+        viewModelScope.launch {
+            val raw = api.reconcilePreemption(preemption.preemptionId)
+            status = if (raw != null) {
+                val step = JSONObject(raw).optJSONObject("step_status_update")?.optString("status") ?: "?"
+                "Reconciled; step now $step (nothing executed)"
+            } else "Reconciliation failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun requestPreemptionResume(preemption: OwnerPreemption) {
+        viewModelScope.launch {
+            status = if (api.requestPreemptionResume(preemption.preemptionId) != null)
+                "Resume requested; separately execute the approved plan" else "Resume request failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun applyWorkerBudget(enabled: Boolean, maxWorkers: Int?) {
+        viewModelScope.launch {
+            status = if (api.setConcurrencyBudget(enabled, maxWorkers) != null)
+                "Owner worker budget updated (clamped to physical threads)" else "Budget update failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun issueOwnerDecision() {
+        val types = decisionTypesInput.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        if (types.isEmpty()) {
+            status = "List at least one expected change type"
+            return
+        }
+        viewModelScope.launch {
+            status = if (api.issueOwnerDecision(types, "Android owner decision") != null) {
+                decisionTypesInput = ""
+                "Decision issued (single-use); pass its ID to the identity checkpoint"
+            } else "Decision issue failed"
+            loadAutonomyState()
+        }
+    }
+
+    fun revokeOwnerDecision(decision: OwnerDecision) {
+        viewModelScope.launch {
+            status = if (api.revokeOwnerDecision(decision.decisionId) != null)
+                "Decision revoked" else "Decision revoke failed"
+            loadAutonomyState()
         }
     }
 
     fun saveOwnerPolicy() {
         viewModelScope.launch {
             val policy = api.updateOwnerControl(
-                ownerMode, (maxAutonomousSafety.toIntOrNull() ?: 0).coerceIn(0, 2)
+                ownerMode, (maxAutonomousSafety.toIntOrNull() ?: 0).coerceIn(0, 3), allowSensitiveAutonomy
             )
             val budget = api.setExplorationBudget(
                 (explorationBudget.toIntOrNull() ?: 0).coerceIn(0, 10)
@@ -429,7 +640,7 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = viewModel.maxAutonomousSafety,
                 onValueChange = { viewModel.maxAutonomousSafety = it },
-                label = { Text("Safety ceiling 0–2") },
+                label = { Text("Safety ceiling 0–3") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
@@ -440,6 +651,22 @@ fun SettingsScreen(
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Switch(
+                checked = viewModel.allowSensitiveAutonomy,
+                onCheckedChange = { viewModel.allowSensitiveAutonomy = it },
+            )
+            Column {
+                Text("Delegate sensitive (Level 3) autonomy", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Off clamps autonomous execution to Level 2; on allows Level 3 under your policy.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { viewModel.saveOwnerPolicy() }, modifier = Modifier.weight(1f)) {
@@ -571,6 +798,148 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                         ) { Text("Request rollback") }
                     }
+                }
+            }
+        }
+
+        Divider()
+        // ── Autonomy operations (goal queue, schedule, runs, preemptions, budgets, decisions) ──
+        Text("Autonomy operations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Goal decisions authorize planning only. Execution, resume, and rollback stay separate actions.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text("Measured budget: ${viewModel.workerBudgetLabel}", style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(onClick = { viewModel.applyWorkerBudget(true, null) }, modifier = Modifier.weight(1f)) {
+                Text("Reset to measured")
+            }
+            OutlinedButton(onClick = { viewModel.executeNextAutonomousGoal() }, modifier = Modifier.weight(1f)) {
+                Text("Execute next approved goal")
+            }
+        }
+        OutlinedTextField(
+            value = viewModel.directiveTitle,
+            onValueChange = { viewModel.directiveTitle = it },
+            label = { Text("Directive title (planning only)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val priorities = listOf("critical", "high", "normal", "low")
+            var priorityExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = priorityExpanded,
+                onExpandedChange = { priorityExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = viewModel.directivePriority,
+                    onReadOnlyChange = { },
+                    label = { Text("Priority") },
+                    singleLine = true,
+                    modifier = Modifier.menuAnchor().weight(1f),
+                )
+                DropdownMenu(expanded = priorityExpanded, onDismissRequest = { priorityExpanded = false }) {
+                    priorities.forEach { priority ->
+                        DropdownMenuItem(
+                            text = { Text(priority) },
+                            onClick = {
+                                viewModel.directivePriority = priority
+                                priorityExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            Button(onClick = { viewModel.createDirective() }, modifier = Modifier.weight(1f)) {
+                Text("Create directive")
+            }
+        }
+        viewModel.autonomyGoals.take(10).forEach { goal ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${goal.title} [${goal.status}/${goal.priority}]")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.decideAutonomousGoal(goal, true) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Approve for planning") }
+                        OutlinedButton(
+                            onClick = { viewModel.decideAutonomousGoal(goal, false) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Reject") }
+                        OutlinedButton(
+                            onClick = { viewModel.deferAutonomousGoal(goal) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Defer") }
+                    }
+                }
+            }
+        }
+        viewModel.autonomySchedule.take(10).forEach { schedule ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Schedule: ${schedule.title} [${schedule.status}]")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.setScheduleStatus(schedule, "paused") },
+                            enabled = schedule.status != "paused",
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Pause") }
+                        OutlinedButton(
+                            onClick = { viewModel.setScheduleStatus(schedule, "active") },
+                            enabled = schedule.status == "paused",
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Resume") }
+                    }
+                }
+            }
+        }
+        viewModel.autonomyRuns.take(10).forEach { run ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Run ${run.cycleId.take(16)} ${run.stage} ${run.createdAt.take(19)}",
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+        Text("Preemptions — reconcile before resume; verified steps are skipped, unknown halts for evidence", style = MaterialTheme.typography.bodySmall)
+        viewModel.autonomyPreemptions.take(10).forEach { preemption ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${preemption.preemptionId.take(20)} [${preemption.status}]")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.reconcilePreemption(preemption) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Reconcile") }
+                        OutlinedButton(
+                            onClick = { viewModel.requestPreemptionResume(preemption) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Request resume") }
+                    }
+                }
+            }
+        }
+        Text("Signed owner decisions (expected identity changes; single-use, revocable)", style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(
+            value = viewModel.decisionTypesInput,
+            onValueChange = { viewModel.decisionTypesInput = it },
+            label = { Text("Expected change types, comma separated") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = { viewModel.issueOwnerDecision() }, modifier = Modifier.fillMaxWidth()) {
+            Text("Issue decision")
+        }
+        viewModel.ownerDecisions.take(10).forEach { decision ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${decision.decisionId.take(18)} [${decision.status}] ${decision.changeTypes}")
+                    OutlinedButton(
+                        onClick = { viewModel.revokeOwnerDecision(decision) },
+                        enabled = decision.status == "active",
+                    ) { Text("Revoke") }
                 }
             }
         }

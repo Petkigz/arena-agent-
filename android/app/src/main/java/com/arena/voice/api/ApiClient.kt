@@ -139,12 +139,15 @@ class ApiClient @Inject constructor(
         java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     suspend fun getOwnerControl(): String? = call("/owner-control")
-    suspend fun updateOwnerControl(mode: String, maxSafetyLevel: Int): String? =
-        call(
-            "/owner-control", "PUT",
-            JSONObject().put("mode", mode)
-                .put("max_autonomous_level", maxSafetyLevel).toString(),
-        )
+    suspend fun updateOwnerControl(
+        mode: String,
+        maxSafetyLevel: Int,
+        allowSensitiveAutonomy: Boolean? = null,
+    ): String? {
+        val body = JSONObject().put("mode", mode).put("max_autonomous_level", maxSafetyLevel)
+        if (allowSensitiveAutonomy != null) body.put("allow_sensitive_autonomy", allowSensitiveAutonomy)
+        return call("/owner-control", "PUT", body.toString())
+    }
     suspend fun setEmergencyPause(paused: Boolean): String? =
         call("/owner-control/pause", "POST", JSONObject().put("paused", paused).toString())
     suspend fun getAdaptiveAutonomy(): String? = call("/owner-control/adaptive-autonomy")
@@ -198,4 +201,100 @@ class ApiClient @Inject constructor(
             "/owner-control/executions/${segment(executionId)}/request-rollback",
             "POST", "{}",
         )
+
+    // ── autonomy operations (goal queue, schedule, runs) ────────────────────
+    suspend fun getAutonomousGoals(): String? = call("/owner-control/autonomous-goals")
+    suspend fun createAutonomousGoal(title: String, description: String, priority: String): String? =
+        call(
+            "/owner-control/autonomous-goals", "POST",
+            JSONObject().put("title", title).put("description", description)
+                .put("priority", priority).put("approve_for_planning", true).toString(),
+        )
+    suspend fun decideAutonomousGoal(goalId: String, approved: Boolean): String? =
+        call(
+            "/owner-control/autonomous-goals/${segment(goalId)}/decision", "POST",
+            JSONObject().put("approved", approved).toString(),
+        )
+    suspend fun deferAutonomousGoal(goalId: String): String? =
+        call("/owner-control/autonomous-goals/${segment(goalId)}/defer", "POST", "{}")
+    suspend fun prioritizeAutonomousGoal(goalId: String, priority: String): String? =
+        call(
+            "/owner-control/autonomous-goals/${segment(goalId)}/priority", "PUT",
+            JSONObject().put("priority", priority).toString(),
+        )
+    suspend fun executeNextAutonomousGoal(): String? =
+        call("/owner-control/autonomous-goals/execute-next", "POST", "{}")
+    suspend fun getAllocationPreview(): String? =
+        call("/owner-control/autonomous-goals/allocation-preview")
+
+    suspend fun getAutonomySchedule(): String? = call("/owner-control/autonomy-schedule")
+    suspend fun createScheduledDirective(
+        title: String,
+        runAt: String,
+        recurrence: String,
+        timezoneName: String,
+    ): String? = call(
+        "/owner-control/autonomy-schedule", "POST",
+        JSONObject().put("title", title).put("next_run_at", runAt)
+            .put("recurrence", recurrence).put("timezone_name", timezoneName)
+            .put("approve_for_planning", true).toString(),
+    )
+    suspend fun updateScheduleStatus(scheduleId: String, status: String): String? =
+        call(
+            "/owner-control/autonomy-schedule/${segment(scheduleId)}/status", "POST",
+            JSONObject().put("status", status).toString(),
+        )
+
+    suspend fun getAutonomyRunEvents(limit: Int = 100): String? =
+        call("/owner-control/autonomy-runs?limit=$limit")
+    suspend fun getAutonomyCycleTimeline(cycleId: String): String? =
+        call("/owner-control/autonomy-runs/${segment(cycleId)}/timeline")
+    suspend fun getAutonomyEnvelope(): String? = call("/owner-control/autonomy-envelope")
+    suspend fun updateAutonomyEnvelope(patch: JSONObject): String? =
+        call("/owner-control/autonomy-envelope", "PUT", patch.toString())
+
+    // ── preemptions + reconciliation ────────────────────────────────────────
+    suspend fun getPreemptions(): String? = call("/owner-control/preemptions")
+    suspend fun createPreemption(
+        executionId: String,
+        urgentGoalId: String,
+        planId: String? = null,
+    ): String? {
+        val body = JSONObject().put("execution_id", executionId).put("urgent_goal_id", urgentGoalId)
+        if (planId != null) body.put("plan_id", planId)
+        return call("/owner-control/preemptions", "POST", body.toString())
+    }
+    suspend fun refreshPreemption(preemptionId: String): String? =
+        call("/owner-control/preemptions/${segment(preemptionId)}/refresh", "POST", "{}")
+    suspend fun reconcilePreemption(preemptionId: String): String? =
+        call("/owner-control/preemptions/${segment(preemptionId)}/reconcile", "POST", "{}")
+    suspend fun requestPreemptionResume(preemptionId: String): String? =
+        call("/owner-control/preemptions/${segment(preemptionId)}/request-resume", "POST", "{}")
+    suspend fun getPlanStepReconciliations(planId: String): String? =
+        call("/owner-control/plans/${segment(planId)}/step-reconciliations")
+
+    // ── measured concurrency budget + signed owner decisions ────────────────
+    suspend fun getConcurrencyBudget(): String? = call("/owner-control/concurrency-budget")
+    suspend fun setConcurrencyBudget(enabled: Boolean, maxWorkers: Int?): String? {
+        val body = JSONObject().put("enabled", enabled)
+        body.put("max_workers", maxWorkers ?: JSONObject.NULL)
+        return call("/owner-control/concurrency-budget", "PUT", body.toString())
+    }
+    suspend fun getConcurrencyReceipts(): String? =
+        call("/owner-control/concurrency-budget/receipts?limit=20")
+    suspend fun getOwnerDecisions(): String? = call("/owner-control/owner-decisions")
+    suspend fun issueOwnerDecision(expectedChangeTypes: List<String>, note: String): String? =
+        call(
+            "/owner-control/owner-decisions", "POST",
+            JSONObject().put("decision_type", "expected_identity_change")
+                .put("expected_change_types", JSONArray(expectedChangeTypes))
+                .put("note", note).toString(),
+        )
+    suspend fun revokeOwnerDecision(decisionId: String): String? =
+        call("/owner-control/owner-decisions/${segment(decisionId)}/revoke", "POST", "{}")
+
+    // ── OS grounding + browser tabs (read-only observations) ────────────────
+    suspend fun getOsGrounding(): String? = call("/os-grounding")
+    suspend fun getAccessibilityStatus(): String? = call("/os-grounding/accessibility/status")
+    suspend fun getBrowserTabs(): String? = call("/os-grounding/browser-tabs")
 }

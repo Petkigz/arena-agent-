@@ -47,3 +47,73 @@ def test_approval_and_plan_decision_functions_do_not_call_execution_routes():
     assert "executeApprovedPlan" not in plan_block
     assert "api.decideApproval" in approval_block
     assert "api.decidePlan" in plan_block
+
+
+def test_android_api_exposes_autonomy_operations_routes():
+    required = [
+        'call("/owner-control/autonomous-goals")',
+        '"/owner-control/autonomous-goals", "POST"',
+        '"/owner-control/autonomous-goals/${segment(goalId)}/decision"',
+        '"/owner-control/autonomous-goals/${segment(goalId)}/defer"',
+        '"/owner-control/autonomous-goals/${segment(goalId)}/priority", "PUT"',
+        '"/owner-control/autonomous-goals/execute-next"',
+        '"/owner-control/autonomous-goals/allocation-preview"',
+        'call("/owner-control/autonomy-schedule")',
+        '"/owner-control/autonomy-schedule", "POST"',
+        '"/owner-control/autonomy-schedule/${segment(scheduleId)}/status"',
+        '"/owner-control/autonomy-runs?limit=$limit"',
+        '"/owner-control/autonomy-runs/${segment(cycleId)}/timeline"',
+        'call("/owner-control/autonomy-envelope")',
+        '"/owner-control/autonomy-envelope", "PUT"',
+    ]
+    for marker in required:
+        assert marker in API
+
+
+def test_android_api_exposes_preemptions_budgets_decisions_and_groundings():
+    required = [
+        'call("/owner-control/preemptions")',
+        '"/owner-control/preemptions", "POST"',
+        '"/owner-control/preemptions/${segment(preemptionId)}/refresh"',
+        '"/owner-control/preemptions/${segment(preemptionId)}/reconcile"',
+        '"/owner-control/preemptions/${segment(preemptionId)}/request-resume"',
+        '"/owner-control/plans/${segment(planId)}/step-reconciliations"',
+        'call("/owner-control/concurrency-budget")',
+        '"/owner-control/concurrency-budget", "PUT"',
+        'call("/owner-control/concurrency-budget/receipts?limit=20")',
+        'call("/owner-control/owner-decisions")',
+        '"/owner-control/owner-decisions", "POST"',
+        '"/owner-control/owner-decisions/${segment(decisionId)}/revoke"',
+        'call("/os-grounding")',
+        'call("/os-grounding/accessibility/status")',
+        'call("/os-grounding/browser-tabs")',
+    ]
+    for marker in required:
+        assert marker in API
+    # The sensitive-autonomy switch is an explicit owner policy field.
+    assert '"allow_sensitive_autonomy", allowSensitiveAutonomy' in API
+
+
+def test_android_ui_states_autonomy_authority_boundaries():
+    markers = [
+        '"Goal decision recorded; planning only — execution stays separate"',
+        '"Directive created; it authorizes planning only"',
+        '"Reconciled; step now $step (nothing executed)"',
+        '"Resume requested; separately execute the approved plan"',
+        '"Owner worker budget updated (clamped to physical threads)"',
+        '"Decision issued (single-use); pass its ID to the identity checkpoint"',
+        'Text("Delegate sensitive (Level 3) autonomy", fontWeight',
+        'Text("Safety ceiling 0–3")',
+    ]
+    for marker in markers:
+        assert marker in SETTINGS
+
+
+def test_android_goal_decision_does_not_execute_and_ceiling_allows_level_three():
+    goal_block = SETTINGS.split("fun decideAutonomousGoal", 1)[1].split("fun executeNextAutonomousGoal", 1)[0]
+    assert "api.decideAutonomousGoal" in goal_block
+    assert "executeNextAutonomousGoal" not in goal_block
+    assert "api.executeNextAutonomousGoal" not in goal_block
+    save_block = SETTINGS.split("fun saveOwnerPolicy", 1)[1].split("fun toggleEmergencyPause", 1)[0]
+    assert "coerceIn(0, 3)" in save_block  # Level 3 reachable only with the sensitive switch
+    assert "allowSensitiveAutonomy" in save_block
