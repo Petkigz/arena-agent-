@@ -509,8 +509,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(BackupManager.verify_backup, "backup_id"))
     add("restore_backup", "system", 2, "Restore a backup only into an empty destination",
         _wrap(BackupManager.restore_backup, "backup_id", "dest_dir", "overwrite"))
-    add("restore_backup_overwrite", "system", 3, "Restore a backup while allowing destination overwrite",
-        _wrap(BackupManager.restore_backup_overwrite, "backup_id", "dest_dir"))
+    add("restore_backup_overwrite", "system", 3, "Restore a backup with destination overwrite; pre_snapshot captures the overwritten files first",
+        _wrap(BackupManager.restore_backup_overwrite, "backup_id", "dest_dir", "pre_snapshot"))
     add("delete_backup", "system", 3, "Delete a backup (irreversible)",
         _wrap(BackupManager.delete_backup, "backup_id"))
 

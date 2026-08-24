@@ -147,11 +147,66 @@ class BackupManager:
         return cls._restore_backup_impl(backup_id, dest_dir, overwrite=False)
 
     @classmethod
-    def restore_backup_overwrite(cls, backup_id: str, dest_dir: str) -> Dict[str, Any]:
-        return cls._restore_backup_impl(backup_id, dest_dir, overwrite=True)
+    def restore_backup_overwrite(cls, backup_id: str, dest_dir: str, pre_snapshot: bool = False) -> Dict[str, Any]:
+        """Level-3 overwriting restore, optionally snapshotted first.
+
+        With pre_snapshot=True, every existing file the archive will overwrite is
+        first captured into a verified backup (arcnames match the archive member
+        paths, so restoring the snapshot reproduces the pre-overwrite state). If
+        the snapshot cannot be created, the overwrite is refused with zero side
+        effects — destruction never happens without its recovery evidence.
+        """
+        return cls._restore_backup_impl(backup_id, dest_dir, overwrite=True, pre_snapshot=pre_snapshot)
 
     @classmethod
-    def _restore_backup_impl(cls, backup_id: str, dest_dir: str, overwrite: bool) -> Dict[str, Any]:
+    def _create_preoverwrite_snapshot(cls, backup_id: str, dest: Path, member_names: List[str]) -> Dict[str, Any]:
+        """Snapshot exactly the existing files the archive will overwrite."""
+        existing: List[Path] = []
+        for name in member_names:
+            target = (dest / name)
+            try:
+                if target.is_file():
+                    existing.append(target)
+            except OSError:
+                return {"created": False, "error": f"Could not observe destination file '{name}'"}
+        if not existing:
+            return {"created": False, "file_count": 0, "reason": "no existing files would be overwritten"}
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        snapshot_id = f"{stamp}_pre-overwrite_{backup_id}"
+        zip_path = cls.BACKUP_DIR / f"{snapshot_id}.zip"
+        cls.ensure_dir()
+        try:
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for target in existing:
+                    # Arcname = member-relative path: restoring this snapshot
+                    # reproduces the exact pre-overwrite layout of the destination.
+                    zf.write(target, arcname=target.relative_to(dest))
+        except Exception as e:
+            zip_path.unlink(missing_ok=True)
+            return {"created": False, "error": f"Pre-overwrite snapshot failed: {e}"}
+        size = zip_path.stat().st_size
+        sha = cls._sha256(zip_path)
+        entry = {
+            "id": snapshot_id,
+            "name": f"pre-overwrite-{backup_id}",
+            "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "sources": [str(dest)],
+            "file_count": len(existing),
+            "size_bytes": size,
+            "sha256": sha,
+            "path": str(zip_path),
+            "pre_overwrite_for": backup_id,
+            "dest_dir": str(dest),
+            "overwrote_files": [str(t.relative_to(dest)) for t in existing],
+        }
+        index = cls._load_index()
+        index[snapshot_id] = entry
+        cls._save_index(index)
+        audit_logger.info(f"Pre-overwrite snapshot {snapshot_id} captured {len(existing)} files before restoring {backup_id}")
+        return {"created": True, "backup_id": snapshot_id, "file_count": len(existing), "sha256": sha, "overwrote_files": entry["overwrote_files"]}
+
+    @classmethod
+    def _restore_backup_impl(cls, backup_id: str, dest_dir: str, overwrite: bool, pre_snapshot: bool = False) -> Dict[str, Any]:
         """Extract a verified backup after the caller selected the proper safety action."""
         index = cls._load_index()
         entry = index.get(backup_id)
@@ -182,11 +237,48 @@ class BackupManager:
                     target = (root / member.filename).resolve()
                     if target != root and root not in target.parents:
                         return {"success": False, "error": f"Unsafe archive path rejected: {member.filename}"}
+                # Optional pre-overwrite snapshot: capture exactly the existing
+                # files this extraction will replace. Failure refuses the
+                # overwrite entirely (destination untouched).
+                snapshot_result: Optional[Dict[str, Any]] = None
+                if overwrite and pre_snapshot:
+                    snapshot_result = cls._create_preoverwrite_snapshot(
+                        backup_id, root, [m.filename for m in members if not m.is_dir()]
+                    )
+                    if snapshot_result.get("error"):
+                        return {
+                            "success": False,
+                            "refused": True,
+                            "side_effects": False,
+                            "error": "Pre-overwrite snapshot failed; overwrite refused without side effects",
+                            "detail": snapshot_result["error"],
+                        }
                 zf.extractall(dest)
             restored = [str((root / member.filename).resolve()) for member in members if not member.is_dir()]
             observed = all(Path(item).is_file() for item in restored)
             audit_logger.info(f"Restored backup {backup_id} → {dest}")
-            return {"success": observed, "backup_id": backup_id, "restored_to": str(dest), "file_count": len(restored), "restored_files": restored, "archive_sha256": verification.get("current_sha256"), "environment_verified": observed, "side_effects": bool(restored), "rollback_supported": False, "rollback_reason": "Restore may overwrite or combine with pre-existing destination content; automatic rollback is unsafe."}
+            result = {
+                "success": observed, "backup_id": backup_id, "restored_to": str(dest),
+                "file_count": len(restored), "restored_files": restored,
+                "archive_sha256": verification.get("current_sha256"),
+                "environment_verified": observed, "side_effects": bool(restored),
+            }
+            if snapshot_result is not None:
+                result["pre_overwrite_snapshot"] = snapshot_result
+                if snapshot_result.get("created"):
+                    result["rollback_supported"] = True
+                    result["rollback_backup_id"] = snapshot_result["backup_id"]
+                    result["rollback_reason"] = (
+                        f"Pre-overwrite snapshot {snapshot_result['backup_id']} can restore the overwritten files; "
+                        "restoring it is a separate action requiring fresh approval."
+                    )
+                else:
+                    result["rollback_supported"] = False
+                    result["rollback_reason"] = f"Restore may overwrite or combine with pre-existing destination content; automatic rollback is unsafe (snapshot: {snapshot_result.get('reason')})."
+            else:
+                result["rollback_supported"] = False
+                result["rollback_reason"] = "Restore may overwrite or combine with pre-existing destination content; automatic rollback is unsafe."
+            return result
         except Exception as e:
             app_logger.warning(f"Restore failed: {e}")
             return {"success": False, "error": f"Restore failed: {e}"}

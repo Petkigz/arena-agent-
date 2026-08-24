@@ -102,7 +102,13 @@ and service-specific delete/rollback adapters remain future work.
 `restore_backup` is now strictly non-overwriting Level 2. Passing `overwrite=True`
 returns a typed redirect to the separate `restore_backup_overwrite` Level-3 action.
 Archive integrity/path containment still run before extraction. Optional pre-restore
-snapshotting remains future work.
+snapshotting is implemented: with `pre_snapshot=True`, every existing file the archive
+will overwrite is first captured into a verified backup whose arcnames match the
+archive member paths (restoring the snapshot reproduces the exact pre-overwrite state);
+only files the archive actually replaces are snapshotted, snapshot failure refuses the
+overwrite with zero side effects, and the result exposes `rollback_backup_id` for a
+separately-approved rollback. Restoring the rollback snapshot is itself a Level-3
+overwrite action.
 
 ## Fixed after audit — Legacy application authentication
 
