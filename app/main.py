@@ -1000,6 +1000,12 @@ class ExplicitCommitmentRequest(BaseModel):
 class IdentityCheckpointRequest(BaseModel):
     expected_change_types: List[str] = Field(default_factory=list)
     owner_change_evidence: List[str] = Field(default_factory=list)
+    owner_decision_id: Optional[str] = Field(None, min_length=1, max_length=100)
+
+class OwnerDecisionRequest(BaseModel):
+    decision_type: str = Field(default="expected_identity_change")
+    expected_change_types: List[str] = Field(default_factory=list)
+    note: str = Field(default="", max_length=2000)
 
 class RecoveryDecisionRequest(BaseModel):
     status: str
@@ -1071,11 +1077,44 @@ def identity_continuity_checkpoint_endpoint(req:Optional[IdentityCheckpointReque
     from app.cognition.runtime import CognitiveRuntime
     runtime=CognitiveRuntime.get_instance();req=req or IdentityCheckpointRequest()
     runtime.refresh_self_knowledge(); runtime.refresh_embodied_boundary(); runtime.refresh_commitments()
-    continuity=runtime.checkpoint_identity_continuity(req.expected_change_types)
+    continuity=runtime.checkpoint_identity_continuity(req.expected_change_types,owner_decision_id=req.owner_decision_id)
     recovery=None
     if not continuity["continuous"]:
         recovery=runtime.self_recovery.save(continuity,owner_evidence=req.owner_change_evidence).to_dict()
     return {"success":True,"continuity":continuity,"recovery_assessment":recovery}
+
+@router.post("/owner-control/owner-decisions")
+def issue_owner_decision_endpoint(req: OwnerDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    from app.cognition.owner_decisions import DECISION_TYPES
+    if req.decision_type != "expected_identity_change":
+        return {"success": False, "error": f"Unsupported decision type; supported: {sorted(DECISION_TYPES)}"}
+    if not req.expected_change_types:
+        return {"success": False, "error": "expected_change_types must list the change types this decision authorizes"}
+    decision = CognitiveRuntime.get_instance().owner_decisions.issue(
+        "expected_identity_change",
+        {"expected_change_types": req.expected_change_types},
+        note=req.note,
+    )
+    return {
+        "success": True, "decision": decision.to_dict(),
+        "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the identity-checkpoint that expects these changes.",
+    }
+
+@router.get("/owner-control/owner-decisions")
+def list_owner_decisions_endpoint(limit: int = Query(200, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    decisions = CognitiveRuntime.get_instance().owner_decisions.list(limit)
+    return {"success": True, "decisions": [d.to_dict() for d in decisions]}
+
+@router.post("/owner-control/owner-decisions/{decision_id}/revoke")
+def revoke_owner_decision_endpoint(decision_id: str):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        decision = CognitiveRuntime.get_instance().owner_decisions.revoke(decision_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return {"success": True, "decision": decision.to_dict()}
 
 @router.get("/self-awareness/recovery")
 def list_recovery_assessments_endpoint(status_filter: Optional[str]=Query(None,alias="status"),limit:int=Query(200,ge=1,le=1000)):

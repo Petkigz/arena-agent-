@@ -19,11 +19,15 @@ def test_claim_commitment_interface_and_provider_changes_are_detected(tmp_path):
  assert {'changed_self_claim_values','missing_active_commitments','interface_availability_changed','provider_model_changed'}<=kinds
 
 def test_owner_expected_change_is_recorded_without_false_discontinuity(tmp_path):
- l=IdentityContinuityLedger(tmp_path/'id.db');l.checkpoint(state(owner_policy_revision=3),'boot-1')
- report=l.checkpoint(state(owner_policy_revision=2),'boot-2',expected_change_types=['owner_policy_revision_rollback'])
+ from app.cognition.owner_decisions import OwnerDecisionStore
+ decisions=OwnerDecisionStore(tmp_path/'od.db')
+ l=IdentityContinuityLedger(tmp_path/'id.db',owner_decisions=decisions);l.checkpoint(state(owner_policy_revision=3),'boot-1')
+ decision=decisions.issue('expected_identity_change',{'expected_change_types':['owner_policy_revision_rollback']},note='owner lowered the ceiling')
+ report=l.checkpoint(state(owner_policy_revision=2),'boot-2',expected_change_types=['owner_policy_revision_rollback'],owner_decision_id=decision.decision_id)
  assert report['continuous'] is True and report['issues']==[]
  assert report['expected_changes'][0]['type']=='owner_policy_revision_rollback'
  assert report['state_changed'] is True
+ assert report['owner_decision_id']==decision.decision_id
 
 def test_missing_capability_and_policy_rollback_are_detected(tmp_path):
  l=IdentityContinuityLedger(tmp_path/'id.db'); l.checkpoint(state(),'boot-1')

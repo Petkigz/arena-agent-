@@ -140,15 +140,22 @@ physical thread count; it cannot fabricate threads or bypass the critical
 resource gate. 8192-token provider context and 14B LM Studio loading still
 require owner-hardware benchmarks and explicit provider configuration.
 
-## Mostly fixed after audit — Identity continuity depth
+## Fixed after audit — Identity continuity depth
 
 Identity checkpoints now compare current claim-value digests, missing active/blocked
 commitments, interface availability, provider model binding, capability count and
 owner-policy revision. Changes generate explicit discontinuity issues and recovery
-assessments. Identity checkpoint requests can now include expected change types and owner-change
-evidence. Expected changes remain recorded but do not create a false discontinuity;
-unexpected changes still trigger recovery. Linking each expected change to a signed
-owner decision ID rather than owner-supplied evidence text remains future hardening.
+assessments. Expected changes are now bound to signed owner decisions
+(`app/cognition/owner_decisions.py`): `POST /owner-control/owner-decisions` issues a
+content-digested (SHA-256 over canonical type+payload), revocable, single-use decision
+authorizing exact change types; an identity checkpoint honors `expected_change_types`
+ONLY when it references a valid, unused, unrevoked decision covering exactly those
+types. Without that binding the expectation fails closed — the change stays recorded
+as a discontinuity finding with a typed validation reason (`missing_owner_decision`,
+`decision_already_used`, `decision_revoked`, `change_type_not_authorized:...`,
+`content_digest_mismatch`, `decision_store_unavailable`). The honored decision ID is
+persisted on the checkpoint row. Unexpected changes still trigger recovery; expected
+changes still never claim persistence of consciousness or subjective identity.
 
 ## Fixed after audit — Preemption reconciliation
 

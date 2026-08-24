@@ -172,8 +172,13 @@ class CognitiveRuntime:
             str(Path(path).parent / "process_ownership.db") if path else "data/process_ownership.db"
         )
         from app.cognition.identity_continuity import IdentityContinuityLedger
+        from app.cognition.owner_decisions import OwnerDecisionStore
+        self.owner_decisions = OwnerDecisionStore(
+            str(Path(path).parent / "owner_decisions.db") if path else "data/owner_decisions.db"
+        )
         self.identity_continuity = IdentityContinuityLedger(
-            str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db"
+            str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db",
+            owner_decisions=self.owner_decisions,
         )
         from app.cognition.self_recovery import SelfRecoveryStore
         self.self_recovery = SelfRecoveryStore(
@@ -368,7 +373,7 @@ class CognitiveRuntime:
             ))
         return {"interfaces": [item.to_dict() for item in records]}
 
-    def checkpoint_identity_continuity(self, expected_change_types: Optional[List[str]] = None) -> Dict[str, Any]:
+    def checkpoint_identity_continuity(self, expected_change_types: Optional[List[str]] = None, owner_decision_id: Optional[str] = None) -> Dict[str, Any]:
         claims=self.self_knowledge.current_claims(include_stale=True)
         commitments=self.commitments.list()
         interfaces=self.embodied_boundary.interfaces()
@@ -384,7 +389,7 @@ class CognitiveRuntime:
             "provider_model":llm_client.model_override or llm_client.route_request("fast"),
             "tool_count":len(self.registry._registry),
             "owner_policy_revision":owner_control_store.get_policy().revision,
-        },self.boot_id,expected_change_types=expected_change_types)
+        },self.boot_id,expected_change_types=expected_change_types,owner_decision_id=owner_decision_id)
 
     def refresh_commitments(self) -> Dict[str, Any]:
         """Reconcile persistent projects into the commitment ledger."""
