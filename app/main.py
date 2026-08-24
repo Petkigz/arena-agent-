@@ -1435,10 +1435,40 @@ def refresh_autonomy_preemption_endpoint(preemption_id:str):
     if not execution:raise HTTPException(status_code=404,detail="Execution not found")
     return {"success":True,"preemption":store.refresh(preemption_id,execution.to_dict()).to_dict()}
 
+@router.post("/owner-control/preemptions/{preemption_id}/reconcile")
+def reconcile_autonomy_preemption_endpoint(preemption_id:str):
+    from app.cognition.action_proposal import ActionProposal
+    from app.cognition.execution_control import execution_control_registry
+    from app.cognition.plan_control import plan_review_store
+    from app.cognition.runtime import CognitiveRuntime
+    runtime=CognitiveRuntime.get_instance();store=runtime.autonomy_preemptions;item=store.get(preemption_id)
+    if not item:raise HTTPException(status_code=404,detail="Preemption not found")
+    previous=execution_control_registry.get_result(item.execution_id)
+    execution=execution_control_registry.get(item.execution_id)
+    review=plan_review_store.get(item.plan_id) if item.plan_id else None
+    if not previous or not execution or not review:
+        raise HTTPException(status_code=409,detail="Execution result and reviewed plan are required for observation-only reconciliation")
+    step=next((s for s in review.snapshot.get("steps",[]) if s.get("action_type")==execution.action_type),None)
+    if not step:raise HTTPException(status_code=409,detail="Could not bind interrupted execution to an exact reviewed step")
+    proposal=ActionProposal(action_type=step["action_type"],payload=dict(step.get("payload") or {}),plan_id=item.plan_id)
+    result=runtime.verify_existing_proposal_outcome(proposal,review.goal_title,previous)
+    if result.get("goal_verified"):recommendation="skip_verified_step_and_review_next"
+    elif result.get("verification_unknown"):recommendation="wait_for_evidence"
+    else:recommendation="create_fresh_replan"
+    result["resume_recommendation"]=recommendation;result["executed"]=False
+    store.record_reconciliation(preemption_id,result)
+    return {"success":True,"reconciliation":result}
+
 @router.post("/owner-control/preemptions/{preemption_id}/request-resume")
 def request_autonomy_resume_endpoint(preemption_id:str):
     from app.cognition.runtime import CognitiveRuntime
-    try:item=CognitiveRuntime.get_instance().autonomy_preemptions.request_resume(preemption_id)
+    store=CognitiveRuntime.get_instance().autonomy_preemptions
+    reconciliation=store.get_reconciliation(preemption_id)
+    if not reconciliation:
+        raise HTTPException(status_code=409,detail="Observation-only reconciliation is required before resume")
+    if reconciliation.get("verification_unknown"):
+        raise HTTPException(status_code=409,detail="Resume remains blocked while outcome evidence is unknown")
+    try:item=store.request_resume(preemption_id)
     except KeyError as exc:raise HTTPException(status_code=404,detail="Preemption not found") from exc
     except ValueError as exc:raise HTTPException(status_code=409,detail=str(exc)) from exc
     return {"success":True,"preemption":item.to_dict(),"executed":False,"note":"Resume request recorded. Reconcile evidence, then separately execute the approved plan."}

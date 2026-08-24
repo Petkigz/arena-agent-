@@ -94,6 +94,11 @@ class ExecutionControlRegistry:
                 rollback_receipt_json TEXT,
                 note TEXT NOT NULL DEFAULT ''
             )""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS controlled_execution_results (
+                execution_id TEXT PRIMARY KEY,
+                result_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            )""")
             conn.execute("""UPDATE controlled_executions
                 SET status = 'interrupted', completed_at = ?,
                     note = CASE WHEN note = '' THEN 'Process restarted before completion' ELSE note END
@@ -265,6 +270,22 @@ class ExecutionControlRegistry:
             cancellation_observed=bool(row[8]), rollback_receipt=receipt,
             note=row[10],
         )
+
+    def record_result(self, execution_id: str, result: Dict[str, Any]) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO controlled_execution_results VALUES (?, ?, ?)",
+                (execution_id, json.dumps(result, default=str), _now()),
+            )
+            conn.commit()
+
+    def get_result(self, execution_id: str) -> Optional[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            row=conn.execute(
+                "SELECT result_json FROM controlled_execution_results WHERE execution_id=?",
+                (execution_id,),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
 
     def get(self, execution_id: str) -> Optional[ControlledExecution]:
         with sqlite3.connect(self.db_path) as conn:

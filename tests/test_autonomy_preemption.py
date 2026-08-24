@@ -11,6 +11,12 @@ def test_preemption_requires_observation_before_resume(tmp_path):
  resumed=s.request_resume(x.preemption_id)
  assert resumed.status=='resume_requested' and resumed.requires_observation_reconciliation is True
 
+def test_reconciliation_evidence_persists(tmp_path):
+ s=AutonomyPreemptionStore(tmp_path/'p.db');x=s.create('exec1','urgent',plan_id='plan1')
+ evidence={'goal_verified':False,'verification_unknown':True,'executed':False}
+ s.record_reconciliation(x.preemption_id,evidence)
+ assert AutonomyPreemptionStore(tmp_path/'p.db').get_reconciliation(x.preemption_id)==evidence
+
 def test_late_cancel_blocks_resume(tmp_path):
  s=AutonomyPreemptionStore(tmp_path/'p.db');x=s.create('exec1','urgent',plan_id='plan1')
  x=s.refresh(x.preemption_id,{'status':'completed_after_cancel_request','cancellation_observed':False})

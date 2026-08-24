@@ -22,7 +22,9 @@ class AutonomyPreemptionStore:
    c.execute('''CREATE TABLE IF NOT EXISTS autonomy_preemptions
    (preemption_id TEXT PRIMARY KEY,execution_id TEXT,urgent_goal_id TEXT,interrupted_goal_id TEXT,
    plan_id TEXT,status TEXT,reason TEXT,cancellation_observed INTEGER,side_effect_state TEXT,
-   requires_reconciliation INTEGER,resume_requested INTEGER,created_at TEXT,updated_at TEXT)''');c.commit()
+   requires_reconciliation INTEGER,resume_requested INTEGER,created_at TEXT,updated_at TEXT)''')
+   c.execute('''CREATE TABLE IF NOT EXISTS preemption_reconciliations
+   (preemption_id TEXT PRIMARY KEY,result_json TEXT,recorded_at TEXT)''');c.commit()
  def _row(self,r):return PreemptionReceipt(r[0],r[1],r[2],r[3],r[4],r[5],r[6],bool(r[7]),r[8],bool(r[9]),bool(r[10]),r[11],r[12])
  def create(self,execution_id,urgent_goal_id,*,interrupted_goal_id=None,plan_id=None,reason='Urgent owner priority'):
   now=_now();x=PreemptionReceipt(f'preempt_{uuid4().hex[:16]}',execution_id,urgent_goal_id,interrupted_goal_id,plan_id,'cancellation_requested',reason,False,'unknown',True,False,now,now)
@@ -46,6 +48,13 @@ class AutonomyPreemptionStore:
   now=_now()
   with sqlite3.connect(self.path) as c:c.execute("UPDATE autonomy_preemptions SET status='resume_requested',resume_requested=1,updated_at=? WHERE preemption_id=?",(now,preemption_id));c.commit()
   return self.get(preemption_id)
+ def record_reconciliation(self,preemption_id,result):
+  if not self.get(preemption_id):raise KeyError(preemption_id)
+  with sqlite3.connect(self.path) as c:c.execute('INSERT OR REPLACE INTO preemption_reconciliations VALUES (?,?,?)',(preemption_id,json.dumps(result,default=str),_now()));c.commit()
+  return result
+ def get_reconciliation(self,preemption_id):
+  with sqlite3.connect(self.path) as c:r=c.execute('SELECT result_json FROM preemption_reconciliations WHERE preemption_id=?',(preemption_id,)).fetchone()
+  return json.loads(r[0]) if r else None
  def get(self,i):
   with sqlite3.connect(self.path) as c:r=c.execute('SELECT * FROM autonomy_preemptions WHERE preemption_id=?',(i,)).fetchone()
   return self._row(r) if r else None

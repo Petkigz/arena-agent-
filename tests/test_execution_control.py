@@ -34,6 +34,12 @@ def test_cancellation_checkpoint_is_persistent(tmp_path):
     assert restored.status == "cancelled"
 
 
+def test_execution_result_evidence_persists_for_reconciliation(tmp_path):
+ registry=ExecutionControlRegistry(tmp_path/'executions.db');record=registry.begin('p','move_file')
+ result={'success':True,'new_path':'/tmp/x','environment_verified':False}
+ registry.record_result(record.execution_id,result)
+ assert ExecutionControlRegistry(tmp_path/'executions.db').get_result(record.execution_id)==result
+
 def test_restart_marks_orphaned_running_execution_interrupted(tmp_path):
     path = tmp_path / "executions.db"
     first = ExecutionControlRegistry(path)

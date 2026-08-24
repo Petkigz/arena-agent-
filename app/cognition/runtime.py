@@ -1889,6 +1889,7 @@ class CognitiveRuntime:
                     "cancellation_observed": True,
                     "rollback_receipt": None,
                 })
+                control.record_result(record.execution_id, result)
                 return result
             except Exception as exc:
                 result = {
@@ -1931,6 +1932,7 @@ class CognitiveRuntime:
             "cancellation_observed": completed.cancellation_observed,
             "rollback_receipt": receipt.to_dict(),
         })
+        control.record_result(record.execution_id, result)
         return result
 
     def verify_existing_proposal_outcome(

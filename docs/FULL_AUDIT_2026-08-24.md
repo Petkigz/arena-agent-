@@ -103,11 +103,14 @@ owner-policy revision. Changes generate explicit discontinuity issues and recove
 assessments. The remaining improvement is linking expected changes directly to the
 specific owner decision that authorized them.
 
-## P2 — Preemption records resume intent but does not orchestrate full resume
+## Partially fixed after audit — Preemption reconciliation
 
-Receipts correctly block blind replay, but `request-resume` does not yet run observation-only reconciliation, reconstruct the exact pending step, or produce a fresh revised plan automatically.
-
-**Fix:** implement `resume_review` that observes existing side effects, marks completed steps, invalidates stale assumptions, and returns a new recommendation for owner review.
+Controlled execution results now persist for restart-safe evidence review. A preemption
+can bind its execution to an exact reviewed plan step and run observation-only
+reconciliation without repeating the action. Resume is blocked until reconciliation
+exists, remains blocked while evidence is unknown, and returns a recommendation to
+skip a verified step, wait, or create a fresh replan. Automatic mutation of plan-step
+status remains intentionally deferred pending stronger plan reconciliation tests.
 
 ## P2 — Autonomy run events need stronger cross-links
 

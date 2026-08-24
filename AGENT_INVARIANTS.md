@@ -137,9 +137,9 @@ Owner Control Plane may always impose a stricter rule:
 - Owner schedules are timezone-aware, atomically claimed, idempotent per occurrence,
   and catch recurrence up to the next future local wall time. Schedule approval still
   authorizes planning only.
-- Urgent preemption requests cooperative cancellation and persists a receipt.
-  Resume remains separate, requires cancellation observation and evidence reconciliation,
-  and never blindly repeats completed or uncertain side effects.
+- Urgent preemption requests cooperative cancellation and persists receipt plus
+  execution result evidence. Resume remains separate, requires observation-only
+  reconciliation of the exact reviewed step, and never blindly repeats side effects.
 - Explicit approval mints only a short-lived, revocable grant bound to the exact
   action type and canonical payload digest. It is single-use by default; changed
   parameters, replay, expiry, restart, or revocation invalidate it.
