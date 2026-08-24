@@ -132,6 +132,7 @@ class PeriodicAutonomousCycle:
         max_goals_per_cycle: int = 3,
         autonomy_envelope=None,
         run_ledger=None,
+        cycle_lease=None,
     ):
         """
         Initialize the periodic autonomous cycle.
@@ -152,6 +153,7 @@ class PeriodicAutonomousCycle:
         self.max_goals_per_cycle = max_goals_per_cycle
         self.autonomy_envelope = autonomy_envelope
         self.run_ledger = run_ledger
+        self.cycle_lease = cycle_lease
         self._running = False
         
         self._ensure_db()
@@ -207,8 +209,18 @@ class PeriodicAutonomousCycle:
         cycle.status = CycleStatus.RUNNING
         cycle.started_at = _now()
         start_time = time.time()
+        lease = None
+        if self.cycle_lease is not None:
+            lease = self.cycle_lease.acquire(ttl_seconds=900)
+            if not lease.get("acquired"):
+                cycle.status = CycleStatus.SKIPPED
+                cycle.completed_at = _now()
+                cycle.summary = lease.get("reason", "Autonomy cycle lease unavailable")
+                self._record_event(cycle.cycle_id, "cycle_skipped", reason=cycle.summary, details=lease)
+                self._save_cycle(cycle)
+                return cycle
         envelope_decision = {"cycle_allowed": True, "execution_allowed": True, "policy": {}}
-        self._record_event(cycle.cycle_id,"cycle_started",details={"started_at":cycle.started_at})
+        self._record_event(cycle.cycle_id,"cycle_started",details={"started_at":cycle.started_at,"lease_holder":lease.get("holder") if lease else None})
         if self.autonomy_envelope is not None:
             from app.cognition.owner_control import owner_control_store
             with sqlite3.connect(self.db_path) as conn:
@@ -226,6 +238,8 @@ class PeriodicAutonomousCycle:
                 cycle.summary = "; ".join(envelope_decision["reasons"])
                 self._record_event(cycle.cycle_id,"cycle_skipped",reason=cycle.summary,details=envelope_decision)
                 self._save_cycle(cycle)
+                if lease and self.cycle_lease:
+                    self.cycle_lease.release(lease["holder"])
                 return cycle
         envelope_policy = envelope_decision.get("policy", {})
         limits_enabled = bool(envelope_policy.get("limits_enabled", False))
@@ -445,6 +459,8 @@ class PeriodicAutonomousCycle:
             self._record_event(cycle.cycle_id,"cycle_completed" if cycle.status==CycleStatus.COMPLETED else "cycle_failed",reason=cycle.summary or "; ".join(cycle.errors),details={"status":cycle.status.value,"goals_generated":cycle.goals_generated,"goals_executed":cycle.goals_executed,"goals_completed":cycle.goals_completed,"goals_failed":cycle.goals_failed})
             # Save cycle
             self._save_cycle(cycle)
+            if lease and self.cycle_lease:
+                self.cycle_lease.release(lease["holder"])
             
             app_logger.info(
                 f"Cycle {cycle.cycle_id} completed in {cycle.duration_seconds:.1f}s: {cycle.summary}"

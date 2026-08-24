@@ -205,6 +205,7 @@ class ScheduledDirectiveRequest(BaseModel):
     recurrence: str = "none"
     missed_policy: str = "run_once"
     approve_for_planning: bool = True
+    timezone_name: str = "UTC"
 
 class ScheduleStatusRequest(BaseModel):
     status: str
@@ -1295,7 +1296,7 @@ def create_owner_autonomous_goal_endpoint(req:OwnerAutonomousGoalRequest):
 @router.post("/owner-control/autonomy-schedule")
 def create_autonomy_schedule_endpoint(req:ScheduledDirectiveRequest):
     from app.cognition.runtime import CognitiveRuntime
-    try:item=CognitiveRuntime.get_instance().autonomy_schedule.create(req.title,req.run_at,description=req.description,priority=req.priority,recurrence=req.recurrence,missed_policy=req.missed_policy,approve_for_planning=req.approve_for_planning)
+    try:item=CognitiveRuntime.get_instance().autonomy_schedule.create(req.title,req.run_at,description=req.description,priority=req.priority,recurrence=req.recurrence,missed_policy=req.missed_policy,approve_for_planning=req.approve_for_planning,timezone_name=req.timezone_name)
     except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
     return {"success":True,"schedule":item.to_dict(),"execution_authorized":False}
 
@@ -1361,8 +1362,16 @@ def prioritize_autonomous_goal_endpoint(goal_id:str,req:AutonomousGoalPriorityRe
 @router.post("/owner-control/autonomous-goals/execute-next")
 def execute_next_autonomous_goal_endpoint():
     from app.cognition.runtime import CognitiveRuntime
-    runtime=CognitiveRuntime.get_instance(); plan=runtime.execute_autonomous_goal()
-    return {"success":plan is not None,"plan":plan.to_dict() if plan else None,"note":"Every plan action still passes Owner Control and ActionGate."}
+    runtime=CognitiveRuntime.get_instance()
+    lease=runtime.autonomy_cycle_lease.acquire(ttl_seconds=900)
+    if not lease.get("acquired"):
+        raise HTTPException(status_code=409,detail=lease.get("reason","Autonomy lease unavailable"))
+    try:
+        plan=runtime.execute_autonomous_goal()
+        return {"success":plan is not None,"plan":plan.to_dict() if plan else None,"note":"Every plan action still passes Owner Control and ActionGate."}
+    finally:
+        runtime.autonomy_cycle_lease.release(lease["holder"])
+
 
 @router.put("/owner-control/adaptive-autonomy/exploration-budget")
 def set_exploration_budget_endpoint(req: ExplorationBudgetRequest):

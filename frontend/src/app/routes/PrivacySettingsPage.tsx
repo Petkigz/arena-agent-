@@ -244,7 +244,7 @@ export function PrivacySettingsPage() {
     setAutonomyBusy('create-schedule');
     const response = await fetch('/owner-control/autonomy-schedule', {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
-      body: JSON.stringify({ ...newSchedule, run_at: new Date(newSchedule.run_at).toISOString(), approve_for_planning: true }),
+      body: JSON.stringify({ ...newSchedule, timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', approve_for_planning: true }),
     });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {

@@ -131,10 +131,12 @@ Owner Control Plane may always impose a stricter rule:
   reject, reprioritize, defer/resume, or request the next goal; goal approval never authorizes its actions.
 - Multi-goal allocation makes owner priority dominant, blocks incomplete dependencies,
   and uses resource pressure only as a secondary cost—not as permission to reorder owner intent.
-- Every autonomous cycle persists stage events for observation, consideration,
-  recommendation, planning approval, execution, blocking, budget stops, and outcome.
-- Owner schedules are timezone-aware and persistent. Recurrence and missed-run
-  policy release owner-directive goals; schedule approval still authorizes planning only.
+- Every autonomous cycle must hold one atomic expiring SQLite lease and persists
+  stage events for observation, consideration, recommendation, planning approval,
+  execution, blocking, budget stops, and outcome.
+- Owner schedules are timezone-aware, atomically claimed, idempotent per occurrence,
+  and catch recurrence up to the next future local wall time. Schedule approval still
+  authorizes planning only.
 - Urgent preemption requests cooperative cancellation and persists a receipt.
   Resume remains separate, requires cancellation observation and evidence reconciliation,
   and never blindly repeats completed or uncertain side effects.

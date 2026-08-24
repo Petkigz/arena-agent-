@@ -106,6 +106,10 @@ class CognitiveRuntime:
         self.autonomy_run_ledger = AutonomyRunLedger(
             str(Path(path).parent / "autonomy_run_ledger.db") if path else "data/autonomy_run_ledger.db"
         )
+        from app.cognition.autonomy_lease import AutonomyCycleLease
+        self.autonomy_cycle_lease = AutonomyCycleLease(
+            str(Path(path).parent / "autonomy_lease.db") if path else "data/autonomy_lease.db"
+        )
         from app.cognition.autonomy_allocator import AutonomyResourceAllocator
         self.autonomy_allocator = AutonomyResourceAllocator()
         from app.cognition.autonomy_schedule import AutonomySchedule
@@ -206,6 +210,7 @@ class CognitiveRuntime:
             max_goals_per_cycle=3,
             autonomy_envelope=self.autonomy_envelope,
             run_ledger=self.autonomy_run_ledger,
+            cycle_lease=self.autonomy_cycle_lease,
         )
         
         # Phase 11-21: Higher-order cognition modules (wired into the cycle via

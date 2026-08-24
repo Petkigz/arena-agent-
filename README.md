@@ -243,7 +243,7 @@ Verified ephemeral-profile downloads use `browser_download` or
 Autonomous resource limits are optional through `GET/PUT /owner-control/autonomy-envelope`
 and are disabled by default. The owner can cap cycle duration, cooldown, execution,
 project work, and failures when desired, preempt active work through persistent
-cancellation/resume receipts, and inspect/approve/reject/reprioritize the planning queue at `GET /owner-control/autonomous-goals`, preview resource-aware queue selection at `GET /owner-control/autonomous-goals/allocation-preview`, inspect cross-session plan assumptions at `/owner-control/plans/{plan_id}/freshness`, schedule one-time/daily/weekly directives at `GET/POST /owner-control/autonomy-schedule`, and inspect stage-by-stage run evidence at `GET /owner-control/autonomy-runs`. For a specific command, the owner can issue
+cancellation/resume receipts, and inspect/approve/reject/reprioritize the planning queue at `GET /owner-control/autonomous-goals`, preview resource-aware queue selection at `GET /owner-control/autonomous-goals/allocation-preview`, inspect cross-session plan assumptions at `/owner-control/plans/{plan_id}/freshness`, schedule atomically claimed one-time/daily/weekly directives with IANA timezone and missed-run policy at `GET/POST /owner-control/autonomy-schedule`, and inspect stage-by-stage run evidence at `GET /owner-control/autonomy-runs`. For a specific command, the owner can issue
 an exact short-lived authorization with `override_owner_policy: true`; this overrides
 the owner's own mode/block/level rules. The owner may also explicitly enable
 `allow_sensitive_autonomy` and ceiling 3 for ongoing Level-3 delegation; turning it

@@ -37,17 +37,13 @@ The system is ready for controlled owner-machine integration testing. It is **no
 
 # Findings
 
-## P1 — Concurrent autonomous cycles have no real lease
+## Fixed after audit — Atomic autonomy cycle and schedule claiming
 
-`PeriodicAutonomousCycle._running` is defined but unused. Cooldown reads the last persisted cycle, but two scheduler/manual invocations can start before either cycle is saved. Both can generate, approve and execute the same queued or scheduled work.
-
-**Fix:** add a SQLite lease with atomic `BEGIN IMMEDIATE`, owner-visible lease holder/expiry, heartbeat, stale-lease recovery, and a unique cycle claim. Manual `execute-next` must use the same claim mechanism.
-
-## P1 — Scheduled directives are not atomically claimed
-
-`AutonomySchedule.release_due()` reads active rows and updates them after creating goals. Concurrent cycles can release the same schedule twice. Daily/weekly recurrence adds one interval; a schedule far in the past may remain due and fire repeatedly each cycle. `skip` has the same catch-up problem.
-
-**Fix:** transactionally claim each due row, generate one idempotency key, advance recurrence until `next_run_at > now`, and preserve the owner’s intended timezone/DST rule rather than treating “daily” as always 24 UTC hours.
+Autonomous cycles now require an atomic expiring SQLite lease acquired with
+`BEGIN IMMEDIATE`; overlapping invocations persist a skipped cycle rather than
+executing duplicate work. Owner schedules now atomically claim due rows, recover
+stale claims, use deterministic per-occurrence goal IDs, and advance daily/weekly
+recurrence to the next future local wall time using an explicit IANA timezone.
 
 ## P1 — Legacy mouse/keyboard/hotkey actions bypass semantic target grounding
 
