@@ -66,11 +66,12 @@ Browser upload/download hashing uses `Path.read_bytes()`. A large file can consu
 
 **Fix:** stream SHA-256, enforce optional owner size/quota limits, check free disk before save, and cancel oversized transfers.
 
-## P1 — Backup overwrite restore is under-classified
+## Fixed after audit — Backup overwrite classification
 
-`restore_backup` is manifest Level 2 even when `overwrite=True`. Overwriting existing files can destroy owner data, and the code correctly admits automatic rollback is unsafe.
-
-**Fix:** split non-overwriting restore (Level 2) from overwrite restore (Level 3), inventory conflicts before extraction, and optionally create a pre-restore snapshot under separate owner authorization.
+`restore_backup` is now strictly non-overwriting Level 2. Passing `overwrite=True`
+returns a typed redirect to the separate `restore_backup_overwrite` Level-3 action.
+Archive integrity/path containment still run before extraction. Optional pre-restore
+snapshotting remains future work.
 
 ## P1 — Legacy `app.main:app` remains an unauthenticated entry point
 

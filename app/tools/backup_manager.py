@@ -141,7 +141,18 @@ class BackupManager:
     # ── restore (Level 2) ───────────────────────────────────────────────────
     @classmethod
     def restore_backup(cls, backup_id: str, dest_dir: str, overwrite: bool = False) -> Dict[str, Any]:
-        """Extract a backup into dest_dir (refuses to clobber a non-empty dir)."""
+        """Non-overwriting restore. Overwrite requires a distinct Level-3 action."""
+        if overwrite:
+            return {"success": False, "requires_approval": True, "required_action": "restore_backup_overwrite", "error": "Overwrite restore is a separate Level-3 action."}
+        return cls._restore_backup_impl(backup_id, dest_dir, overwrite=False)
+
+    @classmethod
+    def restore_backup_overwrite(cls, backup_id: str, dest_dir: str) -> Dict[str, Any]:
+        return cls._restore_backup_impl(backup_id, dest_dir, overwrite=True)
+
+    @classmethod
+    def _restore_backup_impl(cls, backup_id: str, dest_dir: str, overwrite: bool) -> Dict[str, Any]:
+        """Extract a verified backup after the caller selected the proper safety action."""
         index = cls._load_index()
         entry = index.get(backup_id)
         if not entry:

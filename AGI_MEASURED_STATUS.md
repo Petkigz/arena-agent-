@@ -44,7 +44,7 @@ A **local-first, full-capability coworker / friend** with a closed-loop cognitiv
 | Frontend tests passing | **184** | `cd frontend && npm test -- --run` → `184 passed` on 2026-08-23 |
 | Frontend build | ✅ | `npm run build` (tsc + vite) succeeded on 2026-08-23 |
 | Python source | ~50,000 lines / 220 files | `find app backend -name '*.py' -exec cat {} + | wc -l` |
-| Tools in the manifest | **150** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
+| Tools in the manifest | **151** | `len(get_tool_manifest())` — added detect_objects, detect_faces, analyze_image_grounded, analyze_prosody, vlm_analyze, vlm_status, list_loras, lora_status, activate_lora, deactivate_lora, prepare_lora_dataset, create_lora_job (P1-1, P2, P3) |
 | Cognition modules wired | **17/17** | `runtime._integrate_phase_modules()` + `module_wiring` probe — includes `goal_decomposer` + `project_manager` |
 | Capability scorecard | **27/27 verified** across 7 evidence categories | `runtime.measure_capabilities()` → `verified_count == total_count`; includes grounding, causal learning, memory association, curiosity, resource-aware planning, prosody, multimodal chat, verified self-evolution, projects, VLM integration, and LoRA management |
 | Live verification of external APIs | script | `scripts/live_check.py` + `LIVE_VERIFICATION.md` |
@@ -72,7 +72,7 @@ User / WebSocket chat (now multimodal: text + image_path + attachments)
       → reasoning loop (ANSWER / INVESTIGATE / DEFER / ACT)
       → counterfactual strategy simulation (resource-aware: penalizes heavy actions under RAM/CPU/disk pressure)
       → action gate (policy: Level 0–3)
-      → capability execution (150 manifest tools)
+      → capability execution (151 manifest tools)
       → observation → tri-state verification (SATISFIED / FAILED / UNKNOWN)
       → causal learning from execution + surprisal (learns action→effect, intent→outcome)
       → replan on failure (resource-aware)
@@ -103,7 +103,7 @@ Run `runtime.measure_capabilities()`. Each entry is **probed at runtime**, not c
 - **hardware_self_awareness** — self-model of CPU/RAM/GPU present
 - **memory_consolidation** — decay + prune + episodic integration
 - **autonomy_loop** — generate → execute → reflect wired
-- **tools_wired** — 150 tools registered in the capability registry (from the manifest) — was 118
+- **tools_wired** — 151 tools registered in the capability registry (from the manifest) — was 118
 - **tier1_tool_manifest** — all expected deterministic tools present (data, PDF, process, backup, finance, network, messaging, agents)
 - **deterministic_degradation** — invalid inputs to deterministic tools return typed `{success: False}` results, never raise
 - **persistence_roundtrip** — a structured lesson survives a SQLite save/reload (robustness)
@@ -191,7 +191,7 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Longitudinal intelligence regression history**: An isolated deterministic suite now measures 14 checks: paraphrased memory retrieval, success/failure utility adaptation, outcome-calibrated autonomy, evidence-linked consolidation, authorization replay resistance, temporal continuity, LoRA review boundaries, project dependency unlocking, owner curiosity limits, conservative agency attribution, restart-safe commitment continuity, longitudinal self-belief calibration, and embodied-boundary integrity. Each run persists per-check evidence/metrics/duration and reports pass→fail regressions against the previous run. It reports factual pass counts, never an “AGI percentage,” and does not mutate the live brain.
 
-- ✅ **Transactional and privilege-aware OS changes**: File moves, copies, and archives reject overwrite/missing-source conflicts, verify path state and content hashes, and emit exact compensation facts. Copy/archive rollback removes only an unchanged hash-matching artifact under fresh Level-3 approval. Backup restore verifies recorded SHA-256, ZIP CRC, and path containment to block corrupted archives and zip-slip traversal; restore side effects are never claimed automatically reversible. Process identity includes owner, executable, parent PID, creation time, and launch provenance; verified termination binds the exact instance, waits for exit, rejects PID reuse, and admits rollback is impossible. Clipboard inspection is read-only; sensitive clearing is a separate Level-3 action that verifies empty state and retains no secret for fake rollback. Software updates now report command success separately from before/after or expected installed-version verification; unobservable versions remain unknown.
+- ✅ **Transactional and privilege-aware OS changes**: File moves, copies, and archives reject overwrite/missing-source conflicts, verify path state and content hashes, and emit exact compensation facts. Copy/archive rollback removes only an unchanged hash-matching artifact under fresh Level-3 approval. Backup restore verifies SHA-256, ZIP CRC, and path containment. Non-overwriting restore is Level 2; overwrite is a separate explicit Level-3 action. Restore side effects are never claimed automatically reversible. Process identity includes owner, executable, parent PID, creation time, and launch provenance; verified termination binds the exact instance, waits for exit, rejects PID reuse, and admits rollback is impossible. Clipboard inspection is read-only; sensitive clearing is a separate Level-3 action that verifies empty state and retains no secret for fake rollback. Software updates now report command success separately from before/after or expected installed-version verification; unobservable versions remain unknown.
 
 - ✅ **Cooperative execution control + rollback receipts**: Every runtime capability execution now receives a persistent execution ID, cancellation state, and rollback receipt. Owner stop requests are visible while work runs; ToolRegistry checks cancellation around handlers. A shared cancellable process-group runner covers disposable sandbox, package manager, ADB/device, system update, git, ping, and traceroute subprocesses. A cancellable blocking-call bridge now covers local model HTTP, browser HTTP fallback, multi-engine research, messaging/webhooks, weather/location/prices/RSS/media, and local HTTP calls; owned clients are closed to interrupt transport where possible, while browser steps check cancellation between Playwright operations. Cancellation arriving after dispatch is reported honestly because remote side effects may already exist. Rollback is never implied: unsupported actions receive a reason, while supported compensation creates a new exact approval request rather than auto-running.
 

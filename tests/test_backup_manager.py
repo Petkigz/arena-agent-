@@ -98,8 +98,11 @@ def test_restore_refuses_overwrite(tmp_path, monkeypatch):
     (dest / "existing.txt").write_text("x")
 
     assert BackupManager.restore_backup(bid, str(dest))["success"] is False
-    # With overwrite, it proceeds.
-    assert BackupManager.restore_backup(bid, str(dest), overwrite=True)["success"] is True
+    # Overwrite is a separate Level-3 operation.
+    redirected = BackupManager.restore_backup(bid, str(dest), overwrite=True)
+    assert redirected["success"] is False
+    assert redirected["required_action"] == "restore_backup_overwrite"
+    assert BackupManager.restore_backup_overwrite(bid, str(dest))["success"] is True
 
 
 def test_delete_backup(tmp_path, monkeypatch):
