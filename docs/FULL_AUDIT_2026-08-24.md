@@ -53,11 +53,12 @@ snapshots, and native UIA/AT-SPI activation requires a live process/window groun
 The remaining work is to require topology digest and immediate re-observation for
 every raw-coordinate path, or remove those paths from autonomous planning entirely.
 
-## P1 — Browser upload confirmation can be a false positive
+## Fixed after audit — Browser upload transition evidence
 
-`browser_upload` verifies that `success_selector` is visible after submission, but does not prove it was absent before the click or changed because of this upload. A permanently visible success banner can incorrectly verify the goal.
-
-**Fix:** capture pre-state, require a transition or service-specific receipt/response identifier, and preserve response/download evidence. Keep unknown if no transition occurs.
+`browser_upload` now refuses to submit when the success selector is already visible,
+so a permanent banner cannot verify a new upload. It requires an absent-before,
+visible-after transition; missing post-submit confirmation remains unknown with
+remote side effects explicitly possible. Service-specific receipt IDs remain future work.
 
 ## P1 — Browser transfer hashing is not streaming or size-bounded
 

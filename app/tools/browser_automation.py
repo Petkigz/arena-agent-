@@ -103,6 +103,8 @@ class BrowserAutomation:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True); page = browser.new_page()
                 page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                if page.is_visible(success_selector):
+                    return {"success":False,"request_success":False,"environment_verified":False,"error":"Success selector was already visible before upload; it cannot verify this submission","side_effects":False}
                 cooperative_checkpoint("before_browser_upload")
                 page.set_input_files(input_selector, str(source))
                 page.click(submit_selector)
