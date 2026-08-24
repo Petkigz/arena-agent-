@@ -18,8 +18,11 @@ class IdentityContinuityLedger:
     def checkpoint(self,state:Dict[str,Any],boot_id:str)->Dict[str,Any]:
         normalized={
           "claim_predicates":sorted(state.get("claim_predicates",[])),
+          "claim_digests":dict(sorted((state.get("claim_digests") or {}).items())),
           "active_commitment_sources":sorted(state.get("active_commitment_sources",[])),
           "interface_ids":sorted(state.get("interface_ids",[])),
+          "interface_availability":dict(sorted((state.get("interface_availability") or {}).items())),
+          "provider_model":state.get("provider_model"),
           "tool_count":int(state.get("tool_count",0)),
           "owner_policy_revision":int(state.get("owner_policy_revision",0)),
         }
@@ -30,8 +33,15 @@ class IdentityContinuityLedger:
             if previous:
                 missing=sorted(set(previous["claim_predicates"])-set(normalized["claim_predicates"]))
                 if missing: issues.append({"type":"missing_self_claims","items":missing})
+                changed_claims=sorted(k for k,v in previous.get("claim_digests",{}).items() if k in normalized["claim_digests"] and normalized["claim_digests"][k]!=v)
+                if changed_claims:issues.append({"type":"changed_self_claim_values","items":changed_claims})
+                missing_commitments=sorted(set(previous.get("active_commitment_sources",[]))-set(normalized["active_commitment_sources"]))
+                if missing_commitments:issues.append({"type":"missing_active_commitments","items":missing_commitments})
                 missing_interfaces=sorted(set(previous["interface_ids"])-set(normalized["interface_ids"]))
                 if missing_interfaces: issues.append({"type":"missing_interfaces","items":missing_interfaces})
+                changed_interfaces=sorted(k for k,v in previous.get("interface_availability",{}).items() if k in normalized["interface_availability"] and normalized["interface_availability"][k]!=v)
+                if changed_interfaces:issues.append({"type":"interface_availability_changed","items":changed_interfaces})
+                if previous.get("provider_model")!=normalized.get("provider_model"):issues.append({"type":"provider_model_changed","before":previous.get("provider_model"),"after":normalized.get("provider_model")})
                 if normalized["tool_count"]<previous["tool_count"]: issues.append({"type":"capability_count_decreased","before":previous["tool_count"],"after":normalized["tool_count"]})
                 if normalized["owner_policy_revision"]<previous["owner_policy_revision"]: issues.append({"type":"owner_policy_revision_rollback"})
             cid=f"identity_{uuid4().hex[:16]}"; digest=_hash(normalized)

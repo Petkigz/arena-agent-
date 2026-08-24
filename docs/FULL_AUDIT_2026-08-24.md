@@ -95,11 +95,13 @@ The hardware self-model reports `max_parallel_cpu_tasks: 6` and an 8192-token bu
 
 **Fix:** pass a verified resource budget into scheduling and inference routing, add owner-configured concurrency, benchmark latency/RAM on the actual 48 GB machine, and gate increases on measured pressure.
 
-## P2 — Identity continuity misses some meaningful changes
+## Mostly fixed after audit — Identity continuity depth
 
-The checkpoint stores active commitment sources and a state digest but does not report lost/added commitments. It compares claim predicates, not claim values/evidence, so a changed hardware fact under the same predicate may not be flagged.
-
-**Fix:** compare commitment sets, current claim digests, interface availability and model/provider binding, with expected-change exemptions linked to owner decisions.
+Identity checkpoints now compare current claim-value digests, missing active/blocked
+commitments, interface availability, provider model binding, capability count and
+owner-policy revision. Changes generate explicit discontinuity issues and recovery
+assessments. The remaining improvement is linking expected changes directly to the
+specific owner decision that authorized them.
 
 ## P2 — Preemption records resume intent but does not orchestrate full resume
 

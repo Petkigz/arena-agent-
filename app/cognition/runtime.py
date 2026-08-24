@@ -373,10 +373,15 @@ class CognitiveRuntime:
         commitments=self.commitments.list()
         interfaces=self.embodied_boundary.interfaces()
         from app.cognition.owner_control import owner_control_store
+        import hashlib, json
+        claim_digests={c.predicate:hashlib.sha256(json.dumps(c.value,sort_keys=True,default=str).encode()).hexdigest() for c in claims}
         return self.identity_continuity.checkpoint({
             "claim_predicates":[c.predicate for c in claims],
+            "claim_digests":claim_digests,
             "active_commitment_sources":[f"{c.source_type}:{c.source_id}" for c in commitments if c.status in ("active","blocked")],
             "interface_ids":[i.interface_id for i in interfaces],
+            "interface_availability":{i.interface_id:i.available for i in interfaces},
+            "provider_model":llm_client.model_override or llm_client.route_request("fast"),
             "tool_count":len(self.registry._registry),
             "owner_policy_revision":owner_control_store.get_policy().revision,
         },self.boot_id)

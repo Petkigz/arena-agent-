@@ -10,6 +10,14 @@ def test_expected_restart_preserves_functional_continuity(tmp_path):
  assert report['continuous'] is True
  assert 'not persistence of consciousness' in report['note']
 
+def test_claim_commitment_interface_and_provider_changes_are_detected(tmp_path):
+ l=IdentityContinuityLedger(tmp_path/'id.db')
+ before=state(claim_digests={'hardware.profile':'a'},interface_availability={'desktop_screen':True},provider_model='model-a')
+ l.checkpoint(before,'boot-1')
+ after=state(claim_digests={'hardware.profile':'b'},active_commitment_sources=[],interface_availability={'desktop_screen':False},provider_model='model-b')
+ report=l.checkpoint(after,'boot-2');kinds={x['type'] for x in report['issues']}
+ assert {'changed_self_claim_values','missing_active_commitments','interface_availability_changed','provider_model_changed'}<=kinds
+
 def test_missing_capability_and_policy_rollback_are_detected(tmp_path):
  l=IdentityContinuityLedger(tmp_path/'id.db'); l.checkpoint(state(),'boot-1')
  report=l.checkpoint(state(claim_predicates=['authority.owner_policy'],interface_ids=['desktop_screen'],tool_count=120,owner_policy_revision=2),'boot-2')
