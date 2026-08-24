@@ -688,13 +688,18 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Consolidation: belief maintenance failed: {e}")
 
+        hardware_model = getattr(self, "hardware_self_model", {}) or {}
+        high_memory = float(hardware_model.get("ram_total_gb", 0) or 0) >= 40
+        memory_record_cap = 20000 if high_memory else 5000
+        episode_batch = 500 if high_memory else 100
         try:
-            summary["pruned_memories"] = self.memory.apply_memory_decay_and_prune()
+            summary["pruned_memories"] = self.memory.apply_memory_decay_and_prune(max_records=memory_record_cap)
+            summary["memory_record_cap"] = memory_record_cap
         except Exception as e:
             app_logger.warning(f"Consolidation: memory decay/prune failed: {e}")
 
         try:
-            episodes = self.memory.unconsolidated_episodes(limit=100)
+            episodes = self.memory.unconsolidated_episodes(limit=episode_batch)
             if episodes:
                 created = self.learning.consolidate_verified_episodes(episodes)
                 summary["consolidated"] = len(created)

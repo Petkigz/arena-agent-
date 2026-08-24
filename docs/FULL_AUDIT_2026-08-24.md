@@ -89,11 +89,13 @@ inputs fail. An explicitly empty findings list creates a deterministic template
 stating that no findings were supplied and does not claim the target is secure;
 example SQL injection findings and placeholder CVEs are no longer inserted.
 
-## P1 — High-memory concurrency is described but not wired
+## Partially fixed after audit — High-memory capacity wiring
 
-The hardware self-model reports `max_parallel_cpu_tasks: 6` and an 8192-token budget for high-memory hosts, but the autonomous scheduler, model client, and worker pools do not consume those values. The 14B recommendation is metadata; it does not load/configure LM Studio.
-
-**Fix:** pass a verified resource budget into scheduling and inference routing, add owner-configured concurrency, benchmark latency/RAM on the actual 48 GB machine, and gate increases on measured pressure.
+The 40GB+ profile now actually raises verified-memory consolidation batches from
+100 to 500 and retained records from 5,000 to 20,000. Parallel CPU work is now
+labeled a recommendation rather than a claimed active scheduler setting. Actual
+worker-pool concurrency, 8192-token provider context, and 14B LM Studio loading still
+require owner-hardware benchmarks and explicit provider configuration.
 
 ## Mostly fixed after audit — Identity continuity depth
 

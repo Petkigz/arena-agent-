@@ -206,7 +206,9 @@ class HardwareGovernor:
             "hardware_tier": tier["tier_name"],
             "operating_mode": operating_mode,
             "high_memory_profile": ram_total_gb >= 32,
-            "max_parallel_cpu_tasks": 6 if ram_total_gb >= 40 else 3 if ram_total_gb >= 24 else 1,
+            "recommended_parallel_cpu_tasks": 6 if ram_total_gb >= 40 else 3 if ram_total_gb >= 24 else 1,
+            "memory_consolidation_batch": 500 if ram_total_gb >= 40 else 100,
+            "memory_record_cap": 20000 if ram_total_gb >= 40 else 5000,
             "live": {
                 "cpu_percent": cpu_pressure,
                 "ram_percent": ram_pressure,
