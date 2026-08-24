@@ -131,7 +131,7 @@ The only workflow installs Python and runs pytest. Frontend Vitest/build passes 
 
 ## P2 — Native clients lag the newest autonomy/OS surfaces
 
-Web Owner Control has the complete queue, schedule and envelope UI. Desktop/Android do not yet expose all newer controls: schedules, run ledger, allocation preview, sensitive-autonomy switch, plan freshness, browser tabs, and OS groundings.
+Web Owner Control has the complete queue, schedule and envelope UI. Desktop now has authenticated client coverage for goal creation/decision/defer/execute, schedule creation/status, envelope updates and run events, but its native page does not expose all of them yet. Android still lacks the newest schedules, run ledger, allocation preview, sensitive-autonomy switch, plan freshness, browser tabs and OS groundings.
 
 ## P2 — Android and physical-device paths remain unbuilt/unverified here
 

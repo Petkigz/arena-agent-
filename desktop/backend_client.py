@@ -394,6 +394,42 @@ class ArenaBackendClient:
             f"/owner-control/executions/{quote(execution_id, safe='')}/request-rollback", {}
         )
 
+    def autonomy_envelope(self) -> Dict[str, Any]:
+        return self._get_json("/owner-control/autonomy-envelope")
+
+    def update_autonomy_envelope(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+        return self._put_json("/owner-control/autonomy-envelope", patch)
+
+    def autonomous_goals(self, limit: int = 100) -> Dict[str, Any]:
+        return self._get_json(f"/owner-control/autonomous-goals?limit={limit}")
+
+    def create_autonomous_goal(self, title: str, description: str = "", priority: str = "normal") -> Dict[str, Any]:
+        return self._post_json("/owner-control/autonomous-goals", {"title": title, "description": description, "priority": priority, "approve_for_planning": True})
+
+    def decide_autonomous_goal(self, goal_id: str, approved: bool) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/autonomous-goals/{quote(goal_id, safe='')}/decision", {"approved": approved})
+
+    def prioritize_autonomous_goal(self, goal_id: str, priority: str) -> Dict[str, Any]:
+        return self._put_json(f"/owner-control/autonomous-goals/{quote(goal_id, safe='')}/priority", {"priority": priority})
+
+    def defer_autonomous_goal(self, goal_id: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/autonomous-goals/{quote(goal_id, safe='')}/defer", {})
+
+    def execute_next_autonomous_goal(self) -> Dict[str, Any]:
+        return self._post_json("/owner-control/autonomous-goals/execute-next", {})
+
+    def autonomy_schedule(self, limit: int = 100) -> Dict[str, Any]:
+        return self._get_json(f"/owner-control/autonomy-schedule?limit={limit}")
+
+    def create_scheduled_directive(self, title: str, run_at: str, recurrence: str = "none", timezone_name: str = "UTC") -> Dict[str, Any]:
+        return self._post_json("/owner-control/autonomy-schedule", {"title": title, "run_at": run_at, "recurrence": recurrence, "timezone_name": timezone_name, "missed_policy": "run_once", "approve_for_planning": True})
+
+    def update_schedule_status(self, schedule_id: str, status: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/autonomy-schedule/{quote(schedule_id, safe='')}/status", {"status": status})
+
+    def autonomy_run_events(self, limit: int = 200) -> Dict[str, Any]:
+        return self._get_json(f"/owner-control/autonomy-runs?limit={limit}")
+
     def adaptive_autonomy(self) -> Dict[str, Any]:
         return self._get_json("/owner-control/adaptive-autonomy")
 
