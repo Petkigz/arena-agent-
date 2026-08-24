@@ -69,6 +69,7 @@ def test_pentest_company_assistant():
     # Test Pentest Report generation
     report = PentestCompanyAssistant.generate_pentest_report(
         client_company_name="Apex Financial Systems",
+        target_scope=["10.0.0.0/24"],
         vulnerabilities_found=[{
             "title": "Remote Code Execution via Deserialization",
             "severity": "CRITICAL",

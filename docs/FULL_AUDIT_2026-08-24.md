@@ -77,11 +77,12 @@ Browser upload/download hashing uses `Path.read_bytes()`. A large file can consu
 
 **Fix:** make `app.main:app` delegate to the hardened app factory, or refuse non-test startup and clearly deprecate it.
 
-## P1 — Pentest report generation fabricates findings when none are supplied
+## Fixed after audit — Pentest evidence boundary
 
-`PentestCompanyAssistant.generate_pentest_report()` substitutes example SQL injection/header findings and `CVE-2024-XXXX` when `vulnerabilities_found` is empty. A generated client report can therefore contain invented vulnerabilities.
-
-**Fix:** require explicit findings or generate an explicitly labeled template with zero findings. Never place example findings in a report returned as successful evidence.
+Pentest reports now require an explicit target scope and findings list. Missing
+inputs fail. An explicitly empty findings list creates a deterministic template
+stating that no findings were supplied and does not claim the target is secure;
+example SQL injection findings and placeholder CVEs are no longer inserted.
 
 ## P1 — High-memory concurrency is described but not wired
 

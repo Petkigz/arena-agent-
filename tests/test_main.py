@@ -207,7 +207,9 @@ def test_human_and_opsec_and_pentest_apis(_model):
 
     # Pentest Report API
     resp_p2 = client.post("/specialists/security/pentest-report", json={
-        "client_company_name": "SecureCorp"
+        "client_company_name": "SecureCorp",
+        "target_scope": ["192.168.1.1"],
+        "vulnerabilities_found": []
     })
     assert resp_p2.status_code == 200
     assert resp_p2.json()["success"] is True

@@ -26,7 +26,10 @@ def test_pentest_llm_failure_is_graceful(monkeypatch):
     def llm_raises(**kw):
         raise RuntimeError("llm down")
     monkeypatch.setattr("app.llm.llm_client.generate_chat_completion", llm_raises)
-    res = PentestCompanyAssistant.generate_pentest_report("Acme")
+    res = PentestCompanyAssistant.generate_pentest_report(
+        "Acme", target_scope=["192.168.1.0/24"],
+        vulnerabilities_found=[{"title": "Observed issue", "description": "evidence", "remediation": "fix"}],
+    )
     assert res["success"] is False
     assert "failed" in res["error"]
 
