@@ -1,6 +1,6 @@
 # Arena Agent — Measured Status
 
-**Updated:** 2026-08-23 · Branch `arena/01a02b25-arena-agent`
+**Updated:** 2026-08-24 · Branch `arena/01a02b25-arena-agent`
 **This is the canonical status document.** It supersedes the percentage-based status
 files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,
 `AGI_FINAL_SUMMARY.md`, `PHASES.md`, `PROJECT_REVIEW.md`, and the recovered branch's
@@ -17,6 +17,14 @@ and test-count figures that did not match the code; they are now archived under
 > backend suite. GitHub Actions run `32635400747` then passed from a clean runner
 > after dependency installation and the full pytest job. See
 > [`docs/FULL_AUDIT_2026-08-23.md`](docs/FULL_AUDIT_2026-08-23.md).
+
+> **2026-08-24 post-upgrade audit:** 48 GB removes the former RAM-capacity
+> concern but not concurrency, stale-target, privilege, GPU, provider, or evidence
+> limitations. Current priority defects are atomic autonomy-cycle/schedule claiming,
+> mandatory grounding for legacy mouse/keyboard actions, accessibility/display
+> freshness, browser-upload transition verification, backup-overwrite classification,
+> and fabricated default pentest findings. See
+> [`docs/FULL_AUDIT_2026-08-24.md`](docs/FULL_AUDIT_2026-08-24.md).
 
 ---
 
