@@ -144,14 +144,24 @@ evidence. Expected changes remain recorded but do not create a false discontinui
 unexpected changes still trigger recovery. Linking each expected change to a signed
 owner decision ID rather than owner-supplied evidence text remains future hardening.
 
-## Partially fixed after audit — Preemption reconciliation
+## Fixed after audit — Preemption reconciliation
 
 Controlled execution results now persist for restart-safe evidence review. A preemption
 can bind its execution to an exact reviewed plan step and run observation-only
 reconciliation without repeating the action. Resume is blocked until reconciliation
 exists, remains blocked while evidence is unknown, and returns a recommendation to
-skip a verified step, wait, or create a fresh replan. Automatic mutation of plan-step
-status remains intentionally deferred pending stronger plan reconciliation tests.
+skip a verified step, wait, or create a fresh replan.
+
+The recommendation is now applied to the exact step (`app/cognition/plan_step_reconciliation.py`
++ `GET /owner-control/plans/{plan_id}/step-reconciliations`): reconciled bindings refuse
+ambiguity (multiple same-action steps require payload disambiguation), `skip_verified...`
+marks the step completed, `wait_for_evidence` marks it `unknown_pending_evidence`, and
+`create_fresh_replan` marks it `needs_fresh_replan`. On plan resume the executor consults
+these records: verified-completed steps are skipped without re-execution (no repeated
+side effects), unknown and failed steps halt the plan as UNVERIFIED with dependents left
+PENDING. A verified completion is never downgraded — later contradicting reconciliations
+are kept in history with a surfaced conflict. The owner-approved review snapshot itself
+is never mutated (digest-protected); reconciliation records live beside it by step id.
 
 ## Mostly fixed after audit — Autonomy provenance links
 
@@ -229,7 +239,7 @@ It does **not** create:
 
 ## Phase C — autonomy completion
 
-10. Full preemption reconciliation and plan resume.
+10. ✅ Full preemption reconciliation and plan resume.
 11. End-to-end cycle provenance graph.
 12. Conflict-safe recurring scheduler with timezone/DST support.
 13. Desktop and Android parity for autonomy operations.

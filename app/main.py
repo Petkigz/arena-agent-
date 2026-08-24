@@ -1500,6 +1500,7 @@ def reconcile_autonomy_preemption_endpoint(preemption_id:str):
     from app.cognition.action_proposal import ActionProposal
     from app.cognition.execution_control import execution_control_registry
     from app.cognition.plan_control import plan_review_store
+    from app.cognition.plan_step_reconciliation import plan_step_reconciliation_store
     from app.cognition.runtime import CognitiveRuntime
     runtime=CognitiveRuntime.get_instance();store=runtime.autonomy_preemptions;item=store.get(preemption_id)
     if not item:raise HTTPException(status_code=404,detail="Preemption not found")
@@ -1508,16 +1509,44 @@ def reconcile_autonomy_preemption_endpoint(preemption_id:str):
     review=plan_review_store.get(item.plan_id) if item.plan_id else None
     if not previous or not execution or not review:
         raise HTTPException(status_code=409,detail="Execution result and reviewed plan are required for observation-only reconciliation")
-    step=next((s for s in review.snapshot.get("steps",[]) if s.get("action_type")==execution.action_type),None)
-    if not step:raise HTTPException(status_code=409,detail="Could not bind interrupted execution to an exact reviewed step")
+    # Bind the interrupted execution to ONE exact reviewed step. action_type
+    # alone is not sufficient: multiple steps may share an action type. Payload
+    # equality disambiguates; remaining ambiguity refuses rather than binding
+    # the wrong step.
+    candidates=[s for s in review.snapshot.get("steps",[]) if s.get("action_type")==execution.action_type]
+    exact=[s for s in candidates if dict(s.get("payload") or {})==dict(previous.get("payload") or {})]
+    if len(candidates)>1 and len(exact)==1: step=exact[0]
+    elif len(candidates)==1: step=candidates[0]
+    elif len(candidates)==0:
+        raise HTTPException(status_code=409,detail="Could not bind interrupted execution to an exact reviewed step")
+    else:
+        raise HTTPException(status_code=409,detail=f"Ambiguous step binding: {len(candidates)} reviewed steps share action '{execution.action_type}' and the payload does not disambiguate")
     proposal=ActionProposal(action_type=step["action_type"],payload=dict(step.get("payload") or {}),plan_id=item.plan_id)
     result=runtime.verify_existing_proposal_outcome(proposal,review.goal_title,previous)
     if result.get("goal_verified"):recommendation="skip_verified_step_and_review_next"
     elif result.get("verification_unknown"):recommendation="wait_for_evidence"
     else:recommendation="create_fresh_replan"
     result["resume_recommendation"]=recommendation;result["executed"]=False
+    # Apply the reconciliation to the exact plan step: completed steps are
+    # skipped (never re-executed) on resume; unknown steps halt for evidence;
+    # failed work requires a fresh plan revision.
+    record=plan_step_reconciliation_store.apply(
+        item.plan_id,step,recommendation,
+        verification=result,preemption_id=preemption_id,execution_id=item.execution_id,
+    )
     store.record_reconciliation(preemption_id,result)
-    return {"success":True,"reconciliation":result}
+    return {"success":True,"reconciliation":result,"step_status_update":record.to_dict()}
+
+@router.get("/owner-control/plans/{plan_id}/step-reconciliations")
+def get_plan_step_reconciliations_endpoint(plan_id: str):
+    from app.cognition.plan_step_reconciliation import plan_step_reconciliation_store
+    records = plan_step_reconciliation_store.for_plan(plan_id)
+    return {
+        "success": True,
+        "plan_id": plan_id,
+        "step_reconciliations": [r.to_dict() for r in records],
+        "note": "completed steps are skipped on resume; unknown_pending_evidence and needs_fresh_replan halt for evidence or a fresh revision.",
+    }
 
 @router.post("/owner-control/preemptions/{preemption_id}/request-resume")
 def request_autonomy_resume_endpoint(preemption_id:str):

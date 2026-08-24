@@ -652,23 +652,58 @@ class AutonomousGoalExecutor:
                 break
 
             if step.status == ExecutionStatus.PENDING:
-                # Enforce the data-flow graph: a step runs only if (a) every
-                # declared depends_on prerequisite is COMPLETED AND (b) every
-                # requires_evidence name was produced by a COMPLETED step.
-                blocked = self._blocked_step(step, plan)
-                if blocked:
-                    kind, names = blocked
-                    step.status = ExecutionStatus.UNVERIFIED
-                    step.error = (
-                        f"{'Prerequisite step(s) not verified' if kind == 'dependency' else 'Required evidence not produced'}: "
-                        f"{', '.join(names)}"
+                # Preemption reconciliation is consulted before any re-execution:
+                # verified-completed work is skipped, unknown work halts for
+                # evidence, and verified-failed work requires a fresh revision.
+                try:
+                    from app.cognition.plan_step_reconciliation import (
+                        STATUS_COMPLETED,
+                        STATUS_NEEDS_FRESH_REPLAN,
+                        STATUS_UNKNOWN_PENDING_EVIDENCE,
+                        plan_step_reconciliation_store,
                     )
-                    step.completed_at = _now()
-                    app_logger.info(
-                        f"Step '{step.description[:40]}' blocked ({kind}): {', '.join(names)}"
-                    )
-                else:
-                    self.execute_step(step, cognitive_runtime)
+                    reconciliation = plan_step_reconciliation_store.get(step.step_id)
+                except Exception:
+                    reconciliation = None
+                if reconciliation is not None:
+                    if reconciliation.status == STATUS_COMPLETED:
+                        step.status = ExecutionStatus.COMPLETED
+                        step.result = step.result or (
+                            f"Verified completed during preemption reconciliation "
+                            f"({reconciliation.preemption_id}); skipped on resume without re-execution."
+                        )
+                        step.completed_at = step.completed_at or _now()
+                        app_logger.info(
+                            f"Step '{step.description[:40]}' skipped on resume: verified completed "
+                            f"by reconciliation {reconciliation.preemption_id}"
+                        )
+                    elif reconciliation.status in (STATUS_UNKNOWN_PENDING_EVIDENCE, STATUS_NEEDS_FRESH_REPLAN):
+                        step.status = ExecutionStatus.UNVERIFIED
+                        step.error = (
+                            "Outcome evidence is unknown after preemption; re-observe before re-execution"
+                            if reconciliation.status == STATUS_UNKNOWN_PENDING_EVIDENCE
+                            else "Reconciliation verified the step did not achieve its goal; a fresh plan revision is required"
+                        )
+                        step.completed_at = _now()
+                        app_logger.info(f"Step '{step.description[:40]}' halted by reconciliation: {reconciliation.status}")
+                if step.status == ExecutionStatus.PENDING:
+                    # Enforce the data-flow graph: a step runs only if (a) every
+                    # declared depends_on prerequisite is COMPLETED AND (b) every
+                    # requires_evidence name was produced by a COMPLETED step.
+                    blocked = self._blocked_step(step, plan)
+                    if blocked:
+                        kind, names = blocked
+                        step.status = ExecutionStatus.UNVERIFIED
+                        step.error = (
+                            f"{'Prerequisite step(s) not verified' if kind == 'dependency' else 'Required evidence not produced'}: "
+                            f"{', '.join(names)}"
+                        )
+                        step.completed_at = _now()
+                        app_logger.info(
+                            f"Step '{step.description[:40]}' blocked ({kind}): {', '.join(names)}"
+                        )
+                    else:
+                        self.execute_step(step, cognitive_runtime)
             # Update progress as steps are processed (any terminal status counts).
             done = sum(
                 1 for s in plan.steps
