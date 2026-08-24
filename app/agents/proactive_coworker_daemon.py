@@ -7,8 +7,6 @@ from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
 from app.utils.hardware_governor import HardwareGovernor
-from app.tools.app_inventory import SystemAppInventory
-from app.tools.doc_manager import DocumentManager
 from app.tasks import TaskManager
 from app.memory.semantic_rag import SemanticRAGEngine
 from app.scheduler.self_healer import AutonomousSelfHealer
@@ -52,11 +50,17 @@ class ProactiveCoworkerDaemon:
         pending_tasks = TaskManager.get_all_tasks(status="queued")
         task_summary = f"{len(pending_tasks)} queued tasks" if pending_tasks else "task queue clean"
 
-        # 2. Inspect Workspace Files
-        workspace_files = DocumentManager.list_workspace_files()
-        file_count = len(workspace_files) if isinstance(workspace_files, list) else 0
+        # 2. Inspect Workspace Files (optional office/PDF dependencies stay local)
+        try:
+            from app.tools.doc_manager import DocumentManager
+            workspace_files = DocumentManager.list_workspace_files()
+            file_count = len(workspace_files) if isinstance(workspace_files, list) else 0
+        except ImportError as exc:
+            file_count = 0
+            app_logger.warning(f"Workspace inventory unavailable during maintenance: {exc}")
 
         # 3. Inspect System App Count
+        from app.tools.app_inventory import SystemAppInventory
         app_count = SystemAppInventory.get_installed_apps_count()
 
         # 4. Trigger Self-Healing Immune Cycle if Idle
