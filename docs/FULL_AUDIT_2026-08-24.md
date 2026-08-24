@@ -209,7 +209,17 @@ The only workflow installs Python and runs pytest. Frontend Vitest/build passes 
 
 **Fix:** add separate frontend and Android workflows once the GitHub App has workflow permission. Upgrade deprecated Node-20-based action versions.
 
-## P2 — Native clients lag the newest autonomy/OS surfaces
+## Mostly fixed after audit — Native clients lag the newest autonomy/OS surfaces
+
+Desktop parity is complete for the newest owner surfaces: the backend client gained
+preemption (create/list/refresh/reconcile/request-resume), cycle timeline, plan step
+reconciliations, allocation preview, and owner-decision transports; the native
+Owner Control page now has a four-tab Autonomy operations section (Goals & schedule,
+Runs & timeline with commitment/recovery links, Preemptions, Budgets & decisions)
+driving every control from the page. The widget logic is exercised by an offscreen
+test that runs wherever a Qt GUI runtime exists and skips cleanly otherwise (this
+sandbox lacks Qt system libraries; an always-run syntax check covers compilation).
+Android parity remains open.
 
 Web Owner Control has the complete queue, schedule and envelope UI. Desktop now has authenticated client coverage for goal creation/decision/defer/execute, schedule creation/status, envelope updates and run events, but its native page does not expose all of them yet. Android still lacks the newest schedules, run ledger, allocation preview, sensitive-autonomy switch, plan freshness, browser tabs and OS groundings.
 
@@ -275,7 +285,7 @@ It does **not** create:
 10. ✅ Full preemption reconciliation and plan resume.
 11. ✅ End-to-end cycle provenance graph.
 12. Conflict-safe recurring scheduler with timezone/DST support.
-13. Desktop and Android parity for autonomy operations.
+13. ◐ Desktop parity for autonomy operations (done); Android parity remains.
 14. Multi-hour restart/preemption tests.
 
 ## Phase D — OS integration

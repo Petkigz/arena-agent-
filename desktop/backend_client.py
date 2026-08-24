@@ -430,6 +430,55 @@ class ArenaBackendClient:
     def autonomy_run_events(self, limit: int = 200) -> Dict[str, Any]:
         return self._get_json(f"/owner-control/autonomy-runs?limit={limit}")
 
+    def autonomy_cycle_timeline(self, cycle_id: str) -> Dict[str, Any]:
+        """GET /owner-control/autonomy-runs/{cycle_id}/timeline — provenance + commitment/recovery links."""
+        return self._get_json(f"/owner-control/autonomy-runs/{quote(cycle_id, safe='')}/timeline")
+
+    def plan_step_reconciliations(self, plan_id: str) -> Dict[str, Any]:
+        """GET /owner-control/plans/{plan_id}/step-reconciliations."""
+        return self._get_json(f"/owner-control/plans/{quote(plan_id, safe='')}/step-reconciliations")
+
+    def allocation_preview(self) -> Dict[str, Any]:
+        """GET /owner-control/autonomous-goals/allocation-preview."""
+        return self._get_json("/owner-control/autonomous-goals/allocation-preview")
+
+    # ── preemptions ──────────────────────────────────────────────────────────
+    def preemptions(self, limit: int = 200) -> Dict[str, Any]:
+        return self._get_json(f"/owner-control/preemptions?limit={limit}")
+
+    def create_preemption(self, execution_id: str, urgent_goal_id: str,
+                          interrupted_goal_id: str | None = None,
+                          plan_id: str | None = None, reason: str = "Urgent owner priority") -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"execution_id": execution_id, "urgent_goal_id": urgent_goal_id, "reason": reason}
+        if interrupted_goal_id is not None:
+            payload["interrupted_goal_id"] = interrupted_goal_id
+        if plan_id is not None:
+            payload["plan_id"] = plan_id
+        return self._post_json("/owner-control/preemptions", payload)
+
+    def refresh_preemption(self, preemption_id: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/preemptions/{quote(preemption_id, safe='')}/refresh", {})
+
+    def reconcile_preemption(self, preemption_id: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/preemptions/{quote(preemption_id, safe='')}/reconcile", {})
+
+    def request_preemption_resume(self, preemption_id: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/preemptions/{quote(preemption_id, safe='')}/request-resume", {})
+
+    # ── owner decisions (expected identity changes) ──────────────────────────
+    def owner_decisions(self, limit: int = 200) -> Dict[str, Any]:
+        return self._get_json(f"/owner-control/owner-decisions?limit={limit}")
+
+    def issue_owner_decision(self, expected_change_types: list[str], note: str = "") -> Dict[str, Any]:
+        return self._post_json("/owner-control/owner-decisions", {
+            "decision_type": "expected_identity_change",
+            "expected_change_types": expected_change_types,
+            "note": note,
+        })
+
+    def revoke_owner_decision(self, decision_id: str) -> Dict[str, Any]:
+        return self._post_json(f"/owner-control/owner-decisions/{quote(decision_id, safe='')}/revoke", {})
+
     def adaptive_autonomy(self) -> Dict[str, Any]:
         return self._get_json("/owner-control/adaptive-autonomy")
 

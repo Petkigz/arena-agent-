@@ -12,13 +12,16 @@ import json
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -126,6 +129,17 @@ class OwnerControlPage(QWidget):
         execution_actions.addWidget(self.rollback_btn)
         layout.addLayout(execution_actions)
 
+        # ── Autonomy operations ──────────────────────────────────────────────
+        # Newest owner surfaces: goal queue + schedules, run timeline with
+        # commitment/recovery links, preemption reconciliation, concurrency
+        # budget, and signed owner decisions for expected identity changes.
+        self.autonomy_tabs = QTabWidget()
+        self.autonomy_tabs.addTab(self._build_goals_tab(), "Goals & schedule")
+        self.autonomy_tabs.addTab(self._build_runs_tab(), "Runs & timeline")
+        self.autonomy_tabs.addTab(self._build_preemptions_tab(), "Preemptions")
+        self.autonomy_tabs.addTab(self._build_budgets_tab(), "Budgets & decisions")
+        layout.addWidget(self.autonomy_tabs, 1)
+
         layout.addWidget(QLabel("Selected plan steps JSON (editable before execution)"))
         self.plan_editor = QTextEdit()
         self.plan_editor.setFixedHeight(170)
@@ -173,6 +187,404 @@ class OwnerControlPage(QWidget):
         self.detail.setPlainText(json.dumps(plan, indent=2, ensure_ascii=False))
         steps = plan.get("snapshot", {}).get("steps", [])
         self.plan_editor.setPlainText(json.dumps(steps, indent=2, ensure_ascii=False))
+
+    # ── autonomy operations: tab construction ───────────────────────────────
+
+    def _build_goals_tab(self):
+        tab = QWidget()
+        column = QVBoxLayout(tab)
+        self.goals = QListWidget()
+        column.addWidget(QLabel("Autonomous goal queue (owner priorities are authoritative)"))
+        column.addWidget(self.goals, 1)
+        goal_buttons = QHBoxLayout()
+        self.goal_approve_btn = QPushButton("Approve for planning")
+        self.goal_approve_btn.clicked.connect(lambda: self._decide_goal(True))
+        goal_buttons.addWidget(self.goal_approve_btn)
+        self.goal_reject_btn = QPushButton("Reject goal")
+        self.goal_reject_btn.clicked.connect(lambda: self._decide_goal(False))
+        goal_buttons.addWidget(self.goal_reject_btn)
+        self.goal_defer_btn = QPushButton("Defer goal")
+        self.goal_defer_btn.clicked.connect(self._defer_goal)
+        goal_buttons.addWidget(self.goal_defer_btn)
+        self.goal_execute_next_btn = QPushButton("Execute next approved goal")
+        self.goal_execute_next_btn.clicked.connect(self._execute_next_goal)
+        goal_buttons.addWidget(self.goal_execute_next_btn)
+        self.allocation_btn = QPushButton("Show allocation preview")
+        self.allocation_btn.clicked.connect(self._show_allocation)
+        goal_buttons.addWidget(self.allocation_btn)
+        column.addLayout(goal_buttons)
+
+        directive = QHBoxLayout()
+        self.goal_title = QLineEdit()
+        self.goal_title.setPlaceholderText("Directive title")
+        directive.addWidget(self.goal_title, 2)
+        self.goal_priority = QComboBox()
+        self.goal_priority.addItems(["critical", "high", "normal", "low"])
+        directive.addWidget(self.goal_priority)
+        self.goal_create_btn = QPushButton("Create directive")
+        self.goal_create_btn.clicked.connect(self._create_goal)
+        directive.addWidget(self.goal_create_btn)
+        column.addLayout(directive)
+
+        schedule = QHBoxLayout()
+        self.schedule_run_at = QLineEdit()
+        self.schedule_run_at.setPlaceholderText("Next run ISO time (e.g. 2026-08-25T09:00:00)")
+        schedule.addWidget(self.schedule_run_at, 2)
+        self.schedule_recurrence = QComboBox()
+        self.schedule_recurrence.addItems(["none", "daily", "weekly"])
+        schedule.addWidget(self.schedule_recurrence)
+        self.schedule_tz = QLineEdit("Africa/Kampala")
+        schedule.addWidget(self.schedule_tz)
+        self.schedule_create_btn = QPushButton("Schedule directive")
+        self.schedule_create_btn.clicked.connect(self._create_schedule)
+        schedule.addWidget(self.schedule_create_btn)
+        column.addLayout(schedule)
+        return tab
+
+    def _build_runs_tab(self):
+        tab = QWidget()
+        column = QVBoxLayout(tab)
+        column.addWidget(QLabel("Autonomy run events (select one to load its cycle timeline with commitment/recovery links)"))
+        self.runs = QListWidget()
+        self.runs.itemClicked.connect(self._show_run_timeline)
+        column.addWidget(self.runs, 1)
+        column.addWidget(QLabel("Autonomy envelope JSON (optional limits; grants no new authority)"))
+        self.envelope_editor = QTextEdit()
+        self.envelope_editor.setFixedHeight(110)
+        column.addWidget(self.envelope_editor)
+        self.envelope_save_btn = QPushButton("Save envelope")
+        self.envelope_save_btn.clicked.connect(self._save_envelope)
+        column.addWidget(self.envelope_save_btn)
+        return tab
+
+    def _build_preemptions_tab(self):
+        tab = QWidget()
+        column = QVBoxLayout(tab)
+        column.addWidget(QLabel("Owner preemptions — reconcile before resume; verified steps are skipped, unknown halts for evidence"))
+        self.preemptions = QListWidget()
+        column.addWidget(self.preemptions, 1)
+        preemption_buttons = QHBoxLayout()
+        self.preemption_refresh_btn = QPushButton("Refresh selected")
+        self.preemption_refresh_btn.clicked.connect(self._refresh_preemption)
+        preemption_buttons.addWidget(self.preemption_refresh_btn)
+        self.preemption_reconcile_btn = QPushButton("Reconcile (observation only)")
+        self.preemption_reconcile_btn.clicked.connect(self._reconcile_preemption)
+        preemption_buttons.addWidget(self.preemption_reconcile_btn)
+        self.preemption_resume_btn = QPushButton("Request resume")
+        self.preemption_resume_btn.clicked.connect(self._request_preemption_resume)
+        preemption_buttons.addWidget(self.preemption_resume_btn)
+        column.addLayout(preemption_buttons)
+        create_row = QHBoxLayout()
+        self.preempt_execution_id = QLineEdit()
+        self.preempt_execution_id.setPlaceholderText("Execution ID to preempt")
+        create_row.addWidget(self.preempt_execution_id, 2)
+        self.preempt_urgent_goal = QLineEdit()
+        self.preempt_urgent_goal.setPlaceholderText("Urgent goal ID")
+        create_row.addWidget(self.preempt_urgent_goal, 2)
+        self.preempt_plan_id = QLineEdit()
+        self.preempt_plan_id.setPlaceholderText("Plan ID (optional)")
+        create_row.addWidget(self.preempt_plan_id, 2)
+        self.preempt_create_btn = QPushButton("Preempt execution")
+        self.preempt_create_btn.clicked.connect(self._create_preemption)
+        create_row.addWidget(self.preempt_create_btn)
+        column.addLayout(create_row)
+        return tab
+
+    def _build_budgets_tab(self):
+        tab = QWidget()
+        column = QVBoxLayout(tab)
+        self.budget_label = QLabel("Measured worker budget: unknown")
+        self.budget_label.setWordWrap(True)
+        column.addWidget(self.budget_label)
+        budget_row = QHBoxLayout()
+        self.budget_override = QCheckBox("Override worker budget")
+        budget_row.addWidget(self.budget_override)
+        self.budget_workers = QSpinBox()
+        self.budget_workers.setRange(1, 256)
+        budget_row.addWidget(self.budget_workers)
+        self.budget_apply_btn = QPushButton("Apply budget")
+        self.budget_apply_btn.clicked.connect(self._apply_budget)
+        budget_row.addWidget(self.budget_apply_btn)
+        self.budget_reset_btn = QPushButton("Reset to measured")
+        self.budget_reset_btn.clicked.connect(self._reset_budget)
+        budget_row.addWidget(self.budget_reset_btn)
+        self.budget_receipts_btn = QPushButton("Show receipts")
+        self.budget_receipts_btn.clicked.connect(self._show_budget_receipts)
+        budget_row.addWidget(self.budget_receipts_btn)
+        column.addLayout(budget_row)
+
+        column.addWidget(QLabel("Signed owner decisions (expected identity changes; single-use, revocable)"))
+        self.decisions = QListWidget()
+        column.addWidget(self.decisions, 1)
+        decision_row = QHBoxLayout()
+        self.decision_types = QLineEdit()
+        self.decision_types.setPlaceholderText("Expected change types, comma separated (e.g. provider_model_changed)")
+        decision_row.addWidget(self.decision_types, 2)
+        self.decision_issue_btn = QPushButton("Issue decision")
+        self.decision_issue_btn.clicked.connect(self._issue_decision)
+        decision_row.addWidget(self.decision_issue_btn)
+        self.decision_revoke_btn = QPushButton("Revoke selected")
+        self.decision_revoke_btn.clicked.connect(self._revoke_decision)
+        decision_row.addWidget(self.decision_revoke_btn)
+        column.addLayout(decision_row)
+        return tab
+
+    # ── autonomy operations: data + handlers ────────────────────────────────
+
+    def _refresh_autonomy(self):
+        try:
+            self.goals.clear()
+            for goal in self._client.autonomous_goals().get("goals", []):
+                item = QListWidgetItem(
+                    f"{goal.get('title', goal.get('goal_id', ''))} [{goal.get('status', '')}/{goal.get('priority', '')}]"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, goal)
+                self.goals.addItem(item)
+        except Exception as exc:
+            self.status.setText(f"Could not load goal queue: {exc}")
+        try:
+            self.runs.clear()
+            for event in self._client.autonomy_run_events(limit=100).get("events", []):
+                item = QListWidgetItem(
+                    f"{event.get('cycle_id', '')[:18]} {event.get('stage', '')} {event.get('created_at', '')[:19]}"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, event)
+                self.runs.addItem(item)
+        except Exception as exc:
+            self.status.setText(f"Could not load run events: {exc}")
+        try:
+            envelope = self._client.autonomy_envelope().get("envelope", {})
+            if not self.envelope_editor.toPlainText().strip():
+                self.envelope_editor.setPlainText(json.dumps(envelope, indent=2, ensure_ascii=False))
+        except Exception as exc:
+            self.status.setText(f"Could not load autonomy envelope: {exc}")
+        try:
+            self.preemptions.clear()
+            for preemption in self._client.preemptions().get("preemptions", []):
+                item = QListWidgetItem(
+                    f"{preemption.get('preemption_id', '')[:22]} [{preemption.get('status', '')}] {preemption.get('reason', '')[:40]}"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, preemption)
+                self.preemptions.addItem(item)
+        except Exception as exc:
+            self.status.setText(f"Could not load preemptions: {exc}")
+        try:
+            budget = self._client.concurrency_budget().get("budget", {})
+            self.budget_label.setText(
+                "Measured worker budget: %s granted of %s configured (physical cap %s) — %s"
+                % (
+                    budget.get("workers_granted"), budget.get("configured_budget"),
+                    budget.get("physical_thread_cap"),
+                    "; ".join(budget.get("reasons", [])) or "no pressure scaling",
+                )
+            )
+        except Exception as exc:
+            self.budget_label.setText(f"Measured worker budget unavailable: {exc}")
+        try:
+            self.decisions.clear()
+            for decision in self._client.owner_decisions().get("decisions", []):
+                item = QListWidgetItem(
+                    f"{decision.get('decision_id', '')[:20]} [{decision.get('status', '')}] "
+                    + ",".join(decision.get("payload", {}).get("expected_change_types", []))
+                )
+                item.setData(Qt.ItemDataRole.UserRole, decision)
+                self.decisions.addItem(item)
+        except Exception as exc:
+            self.status.setText(f"Could not load owner decisions: {exc}")
+
+    def _decide_goal(self, approved):
+        goal = self._selected(self.goals)
+        if not goal:
+            return
+        try:
+            self._client.decide_autonomous_goal(goal["goal_id"], approved)
+            self.status.setText("Goal decision recorded; planning only — execution stays separate")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Goal decision failed: {exc}")
+
+    def _defer_goal(self):
+        goal = self._selected(self.goals)
+        if not goal:
+            return
+        try:
+            self._client.defer_autonomous_goal(goal["goal_id"])
+            self.status.setText("Goal deferred by owner priority")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Defer failed: {exc}")
+
+    def _execute_next_goal(self):
+        try:
+            result = self._client.execute_next_autonomous_goal()
+            self.status.setText(f"Execute-next returned: {result.get('status', result.get('success'))}")
+            self.detail.setPlainText(json.dumps(result, indent=2, ensure_ascii=False))
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Execute-next failed: {exc}")
+
+    def _show_allocation(self):
+        try:
+            preview = self._client.allocation_preview()
+            self.detail.setPlainText(json.dumps(preview, indent=2, ensure_ascii=False))
+        except Exception as exc:
+            self.status.setText(f"Allocation preview failed: {exc}")
+
+    def _create_goal(self):
+        title = self.goal_title.text().strip()
+        if not title:
+            self.status.setText("Directive title is required")
+            return
+        try:
+            self._client.create_autonomous_goal(title, "", self.goal_priority.currentText())
+            self.status.setText("Directive created; it authorizes planning only")
+            self.goal_title.clear()
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Create directive failed: {exc}")
+
+    def _create_schedule(self):
+        title = self.goal_title.text().strip()
+        run_at = self.schedule_run_at.text().strip()
+        if not title or not run_at:
+            self.status.setText("Directive title and next run time are required")
+            return
+        try:
+            self._client.create_scheduled_directive(
+                title, run_at, self.schedule_recurrence.currentText(), self.schedule_tz.text().strip() or "UTC"
+            )
+            self.status.setText("Scheduled directive created; it authorizes planning only")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Schedule creation failed: {exc}")
+
+    def _show_run_timeline(self, item):
+        event = self._data(item) or {}
+        cycle_id = event.get("cycle_id")
+        if not cycle_id:
+            return
+        try:
+            timeline = self._client.autonomy_cycle_timeline(cycle_id)
+            self.detail.setPlainText(json.dumps(timeline, indent=2, ensure_ascii=False))
+        except Exception as exc:
+            self.status.setText(f"Timeline load failed: {exc}")
+
+    def _save_envelope(self):
+        try:
+            patch = json.loads(self.envelope_editor.toPlainText() or "{}")
+            if not isinstance(patch, dict):
+                raise ValueError("Envelope must be a JSON object")
+            self._client.update_autonomy_envelope(patch)
+            self.status.setText("Envelope saved; limits constrain future cycles and grant no new authority")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Envelope save failed: {exc}")
+
+    def _create_preemption(self):
+        execution_id = self.preempt_execution_id.text().strip()
+        urgent = self.preempt_urgent_goal.text().strip()
+        if not execution_id or not urgent:
+            self.status.setText("Execution ID and urgent goal ID are required")
+            return
+        try:
+            plan_id = self.preempt_plan_id.text().strip() or None
+            self._client.create_preemption(execution_id, urgent, plan_id=plan_id)
+            self.status.setText("Preemption requested; resume requires reconciliation")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Preemption creation failed: {exc}")
+
+    def _refresh_preemption(self):
+        preemption = self._selected(self.preemptions)
+        if not preemption:
+            return
+        try:
+            result = self._client.refresh_preemption(preemption["preemption_id"])
+            self.detail.setPlainText(json.dumps(result, indent=2, ensure_ascii=False))
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Preemption refresh failed: {exc}")
+
+    def _reconcile_preemption(self):
+        preemption = self._selected(self.preemptions)
+        if not preemption:
+            return
+        try:
+            result = self._client.reconcile_preemption(preemption["preemption_id"])
+            body = result.get("reconciliation", {})
+            step_update = result.get("step_status_update", {})
+            self.status.setText(
+                "Reconciliation: %s — step now %s (nothing executed)"
+                % (body.get("resume_recommendation"), step_update.get("status"))
+            )
+            self.detail.setPlainText(json.dumps(result, indent=2, ensure_ascii=False))
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Reconciliation failed: {exc}")
+
+    def _request_preemption_resume(self):
+        preemption = self._selected(self.preemptions)
+        if not preemption:
+            return
+        try:
+            result = self._client.request_preemption_resume(preemption["preemption_id"])
+            self.status.setText("Resume requested; separately execute the approved plan")
+            self.detail.setPlainText(json.dumps(result, indent=2, ensure_ascii=False))
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Resume request failed: {exc}")
+
+    def _apply_budget(self):
+        if not self.budget_override.isChecked():
+            self.status.setText("Check 'Override worker budget' to set a fixed budget")
+            return
+        try:
+            self._client.set_concurrency_budget(enabled=True, max_workers=self.budget_workers.value())
+            self.status.setText("Owner worker budget applied (clamped to physical threads; critical pressure still wins)")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Budget apply failed: {exc}")
+
+    def _reset_budget(self):
+        try:
+            self._client.set_concurrency_budget(enabled=True, max_workers=None)
+            self.status.setText("Worker budget reset to measured defaults")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Budget reset failed: {exc}")
+
+    def _show_budget_receipts(self):
+        try:
+            receipts = self._client.concurrency_receipts(limit=20)
+            self.detail.setPlainText(json.dumps(receipts, indent=2, ensure_ascii=False))
+        except Exception as exc:
+            self.status.setText(f"Receipts load failed: {exc}")
+
+    def _issue_decision(self):
+        raw = [part.strip() for part in self.decision_types.text().split(",") if part.strip()]
+        if not raw:
+            self.status.setText("List at least one expected change type")
+            return
+        try:
+            result = self._client.issue_owner_decision(raw)
+            decision = result.get("decision", {})
+            self.status.setText(
+                "Decision %s issued (single-use); pass its ID to the identity checkpoint" % decision.get("decision_id")
+            )
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Decision issue failed: {exc}")
+
+    def _revoke_decision(self):
+        decision = self._selected(self.decisions)
+        if not decision:
+            return
+        try:
+            self._client.revoke_owner_decision(decision["decision_id"])
+            self.status.setText("Decision revoked")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Decision revoke failed: {exc}")
 
     def _manual_refresh(self):
         self.status.setText("")
@@ -224,6 +636,7 @@ class OwnerControlPage(QWidget):
                 self.status.setText("Owner-control state refreshed")
         except Exception as exc:
             self.status.setText(f"Could not load Owner Control: {exc}")
+        self._refresh_autonomy()
 
     def _save_policy(self):
         try:
@@ -369,5 +782,13 @@ class OwnerControlPage(QWidget):
         self.mode.setStyleSheet(_input_style())
         self.detail.setStyleSheet(_textarea_style())
         self.plan_editor.setStyleSheet(_textarea_style())
+        self.envelope_editor.setStyleSheet(_textarea_style())
+        self.goal_title.setStyleSheet(_input_style())
+        self.schedule_run_at.setStyleSheet(_input_style())
+        self.schedule_tz.setStyleSheet(_input_style())
+        self.preempt_execution_id.setStyleSheet(_input_style())
+        self.preempt_urgent_goal.setStyleSheet(_input_style())
+        self.preempt_plan_id.setStyleSheet(_input_style())
+        self.decision_types.setStyleSheet(_input_style())
         for button in self.findChildren(QPushButton):
             button.setStyleSheet(_button_style(ACCENT if button is self.pause_btn else BG_SURFACE, TEXT_PRIMARY))
