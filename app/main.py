@@ -298,6 +298,7 @@ class BrowserEventRequest(BaseModel):
 class BrowserDownloadRequest(BaseModel):
     url: str
     click_selector: str
+    expected_size_bytes: Optional[int] = Field(None, ge=1)
 
 class BrowserUploadRequest(BaseModel):
     url: str
@@ -2668,7 +2669,22 @@ def create_lora_job_endpoint(req: LoraJobRequest):
 # 13. Phase 5 Automation: Browser & Desktop Automation Endpoints
 @router.post("/automation/browser/download")
 def browser_download_endpoint(req: BrowserDownloadRequest):
-    return BrowserAutomation.download_file(req.url, req.click_selector)
+    return BrowserAutomation.download_file(req.url, req.click_selector, expected_size_bytes=req.expected_size_bytes)
+
+@router.get("/automation/browser/disk-status")
+def browser_disk_status_endpoint():
+    from app.cognition.disk_reservation import disk_reservation_ledger
+    ledger = disk_reservation_ledger
+    probe = ledger.probe(BrowserAutomation.DOWNLOADS_DIR)
+    return {
+        "success": True,
+        "probe": probe,
+        "safety_margin_bytes": ledger.safety_margin_bytes(),
+        "active_reservations": [r.to_dict() for r in ledger.list_active()],
+        "active_reserved_bytes": ledger.active_bytes(),
+        "note": "Reservations bound concurrent in-flight transfers; refused transfers never start.",
+    }
+
 
 @router.post("/automation/browser/upload")
 def browser_upload_endpoint(req: BrowserUploadRequest):

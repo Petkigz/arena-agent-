@@ -79,13 +79,23 @@ so a permanent banner cannot verify a new upload. It requires an absent-before,
 visible-after transition; missing post-submit confirmation remains unknown with
 remote side effects explicitly possible. Service-specific receipt IDs remain future work.
 
-## Partially fixed after audit — Browser transfer resources
+## Fixed after audit — Browser transfer resources
 
-Upload/download SHA-256 is now streaming and both directions enforce the
+Upload/download SHA-256 is streaming and both directions enforce the
 owner-configurable `LPA_BROWSER_TRANSFER_MAX_MB` quota (default 1024 MB). Oversized
 uploads stop before browser side effects; oversized downloaded artifacts are removed
-and verified absent. Pre-download free-disk reservation and in-flight cancellation
-before the remote transfer completes remain future work.
+and verified absent. Downloads now reserve measured free disk space
+(`app/cognition/disk_reservation.py`) before launch — worst-case quota when the size
+is unknown, `expected_size_bytes` when known — with concurrent reservations
+accumulating beneath an owner-configurable safety margin
+(`BROWSER_DISK_SAFETY_MARGIN_MB`, default 512), stale-reservation recovery on restart,
+and typed refusal measurements (`insufficient_disk_space`) that never start the
+browser. The download save phase and the upload attach/submit phases run through the
+cooperative cancellation runner: owner cancel aborts the in-flight transfer by closing
+the browser context, removes partial artifacts, and releases the reservation; upload
+attach-phase cancellation is local-only, while submit-phase cancellation honestly
+records that remote receipt of the payload is unknown. Service-specific receipt IDs
+and service-specific delete/rollback adapters remain future work.
 
 ## Fixed after audit — Backup overwrite classification
 
@@ -229,7 +239,7 @@ It does **not** create:
 
 15. Owner-machine UIA/AT-SPI and multi-monitor tests.
 16. Ground all active-window actions to process/window/accessibility identity.
-17. Service-specific browser upload/delete adapters.
+17. Service-specific browser upload/delete adapters (receipt IDs still future; delete/rollback APIs remain).
 18. Transactional restore/update tests on disposable owner-machine fixtures.
 19. Real ADB/device and privilege-elevation handoff tests.
 

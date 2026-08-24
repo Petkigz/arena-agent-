@@ -6,9 +6,11 @@ from app.config import settings
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 from app.cognition.browser_grounding import BrowserGroundingStore
+from app.cognition.disk_reservation import disk_reservation_ledger
 from app.cognition.execution_control import (
     ExecutionCancelled,
     cooperative_checkpoint,
+    current_execution_id,
     run_cancellable_blocking_call,
 )
 
@@ -16,6 +18,7 @@ class BrowserAutomation:
     SCREENSHOTS_DIR = settings.DATA_DIR / "workspace" / "screenshots"
     DOWNLOADS_DIR = settings.DATA_DIR / "workspace" / "downloads"
     GROUNDING = BrowserGroundingStore(settings.DATA_DIR / "browser_grounding.db")
+    DISK_LEDGER = disk_reservation_ledger
 
     @staticmethod
     def _hash_file(path: Path) -> str:
@@ -39,13 +42,37 @@ class BrowserAutomation:
         cls.SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def download_file(cls, url: str, click_selector: str) -> Dict[str, Any]:
-        """Download one file through an ephemeral tab and verify the local artifact."""
+    def download_file(cls, url: str, click_selector: str, expected_size_bytes: Optional[int] = None) -> Dict[str, Any]:
+        """Download one file through an ephemeral tab and verify the local artifact.
+
+        The transfer is disk-reserved before launch (worst-case quota when the
+        size is unknown) and the save phase is owner-cancellable in flight; a
+        cancelled save removes its partial artifact and releases the reservation.
+        """
         if not url or not click_selector:
             return {"success": False, "error": "URL and click selector are required"}
         if not url.startswith(("http://", "https://")):
             url = f"https://{url}"
+        max_bytes = max(1, int(settings.BROWSER_TRANSFER_MAX_MB)) * 1024 * 1024
+        # Unknown size ⇒ reserve the worst-case quota, never zero.
+        reserve_bytes = max(1, int(expected_size_bytes)) if expected_size_bytes else max_bytes
+        cls.DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)  # probe target must exist
+        reservation = cls.DISK_LEDGER.reserve(
+            "browser_download", reserve_bytes,
+            target_root=cls.DOWNLOADS_DIR,
+            execution_id=current_execution_id(),
+        )
+        if not reservation.get("success"):
+            return {
+                "success": False,
+                "request_success": False,
+                "side_effects": False,
+                "error": reservation.get("detail", reservation.get("error", "insufficient_disk_space")),
+                "disk_reservation": reservation,
+            }
+        reservation_id = reservation["reservation"]["reservation_id"]
         browser = None
+        destination: Optional[Path] = None
         try:
             cooperative_checkpoint("before_browser_download")
             from playwright.sync_api import sync_playwright
@@ -58,16 +85,37 @@ class BrowserAutomation:
                     page.click(click_selector)
                 download = download_info.value
                 destination = cls._download_destination(download.suggested_filename)
-                download.save_as(str(destination))
+
+                def _abort_inflight() -> None:
+                    # Closing the browser context aborts an in-flight transfer.
+                    for interrupt in (
+                        lambda: download.cancel(),
+                        lambda: browser.close(),
+                    ):
+                        try:
+                            interrupt()
+                        except Exception:
+                            pass
+
+                # The remote fetch itself is cancellable: the cooperative runner
+                # polls the owner cancel flag and invokes the browser abort.
+                run_cancellable_blocking_call(
+                    lambda: download.save_as(str(destination)),
+                    cancel=_abort_inflight,
+                    description="browser download save",
+                )
                 cooperative_checkpoint("after_download_save")
                 if not destination.is_file():
+                    cls.DISK_LEDGER.release(reservation_id, reason="download produced no artifact")
                     return {"success": False, "error": "Download completed but file was not observed"}
-                size_bytes=destination.stat().st_size
-                max_bytes=max(1,int(settings.BROWSER_TRANSFER_MAX_MB))*1024*1024
-                if size_bytes>max_bytes:
+                size_bytes = destination.stat().st_size
+                if size_bytes > max_bytes:
                     destination.unlink(missing_ok=True)
-                    return {"success":False,"request_success":True,"error":"Downloaded artifact exceeded owner transfer quota and was removed","size_bytes":size_bytes,"max_bytes":max_bytes,"environment_verified":not destination.exists(),"side_effects":False}
+                    cls.DISK_LEDGER.release(reservation_id, reason="oversized artifact removed")
+                    return {"success":False,"request_success":True,"error":"Downloaded artifact exceeded owner transfer quota and was removed","size_bytes":size_bytes,"max_bytes":max_bytes,"environment_verified":not destination.exists(),"side_effects":False,"disk_reservation":{"reservation_id":reservation_id,"status":"released"}}
                 digest = cls._hash_file(destination)
+                # Completed: the artifact now physically occupies the space.
+                cls.DISK_LEDGER.consume(reservation_id, size_bytes, reason="verified download completed")
                 session_id = f"browser_session_{uuid.uuid4().hex[:12]}"
                 tab = cls.GROUNDING.observe_tab(
                     session_id=session_id, url=page.url, title=page.title(),
@@ -87,10 +135,26 @@ class BrowserAutomation:
                 "download_event": event, "profile_type": "ephemeral",
                 "auth_state": "unknown", "side_effects": True,
                 "rollback_path": str(destination), "rollback_sha256": digest,
+                "disk_reservation": {
+                    "reservation_id": reservation_id,
+                    "reserved_bytes": reserve_bytes,
+                    "actual_bytes": size_bytes,
+                    "status": "consumed",
+                },
             }
         except ExecutionCancelled:
+            # Never assert the peer aborted cleanly: only local cleanup is known.
+            partial_removed = None
+            if destination is not None:
+                try:
+                    destination.unlink(missing_ok=True)
+                    partial_removed = not destination.exists()
+                except Exception:
+                    partial_removed = False
+            cls.DISK_LEDGER.release(reservation_id, reason="cancelled in flight")
             raise
         except Exception as exc:
+            cls.DISK_LEDGER.release(reservation_id, reason=f"download failed: {exc}"[:120])
             return {"success": False, "available": False, "error": str(exc)}
         finally:
             if browser is not None:
@@ -119,9 +183,31 @@ class BrowserAutomation:
                 if page.is_visible(success_selector):
                     return {"success":False,"request_success":False,"environment_verified":False,"error":"Success selector was already visible before upload; it cannot verify this submission","side_effects":False}
                 cooperative_checkpoint("before_browser_upload")
-                page.set_input_files(input_selector, str(source))
-                page.click(submit_selector)
-                page.wait_for_selector(success_selector, timeout=30000, state="visible")
+
+                def _abort_inflight() -> None:
+                    try: browser.close()
+                    except Exception: pass
+
+                # Local file attach (no remote submission yet) is cancellable
+                # without remote side effects.
+                run_cancellable_blocking_call(
+                    lambda: page.set_input_files(input_selector, str(source)),
+                    cancel=_abort_inflight,
+                    description="browser upload attach",
+                )
+                cooperative_checkpoint("before_browser_upload_submit")
+
+                def _submit_and_wait() -> None:
+                    page.click(submit_selector)
+                    page.wait_for_selector(success_selector, timeout=30000, state="visible")
+
+                # From the submit click onward, cancellation cannot prove the
+                # remote service never received the payload.
+                run_cancellable_blocking_call(
+                    _submit_and_wait,
+                    cancel=_abort_inflight,
+                    description="browser upload submit",
+                )
                 observed = page.is_visible(success_selector)
                 session_id=f"browser_session_{uuid.uuid4().hex[:12]}"
                 tab=cls.GROUNDING.observe_tab(session_id=session_id,url=page.url,title=page.title(),profile_type="ephemeral",evidence=["set_input_files completed","submit clicked",f"success selector visible:{success_selector}"])
