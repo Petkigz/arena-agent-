@@ -7,7 +7,7 @@ from app.tools.universal_filesystem import UniversalFilesystem
 from app.tools.data_analyzer import DataAnalysisEngine
 
 def test_deep_os_controller(monkeypatch):
-    """Real desktop action may be unavailable in headless CI, but is never simulated."""
+    """Raw input without exact grounding is refused before touching any device."""
     import sys
     from types import SimpleNamespace
 
@@ -20,8 +20,10 @@ def test_deep_os_controller(monkeypatch):
     res = DeepOSController.mouse_click(100, 200)
     type_res = DeepOSController.type_text("Hello World")
 
-    assert res["success"] is False and res["available"] is False
-    assert type_res["success"] is False and type_res["available"] is False
+    assert res["success"] is False and res["refused"] is True
+    assert res["guard_reason"] == "missing_grounding" and res["attempted"] is False
+    assert type_res["success"] is False and type_res["refused"] is True
+    assert broken is not None
 
 def test_android_adb_controller():
     devs = AndroidADBController.list_connected_devices()

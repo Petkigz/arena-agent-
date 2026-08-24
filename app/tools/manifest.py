@@ -241,12 +241,12 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(SystemAppInventory.launch_any_app, "app_query", "app_name"))
     add("list_apps", "os_control", 0, "List installed applications",
         _ignore_payload(SystemAppInventory.scan_installed_applications))
-    add("mouse_click", "os_control", 3, "Legacy raw-coordinate click without semantic target grounding",
-        _wrap(DeepOSController.mouse_click, "x", "y", "double"))
-    add("type_text", "os_control", 3, "Legacy active-window typing without semantic target grounding",
-        _wrap(DeepOSController.type_text, "text"))
-    add("press_hotkey", "os_control", 3, "Legacy active-window hotkey without semantic target grounding",
-        _wrap(DeepOSController.press_hotkey, "keys"))
+    add("mouse_click", "os_control", 3, "Grounded raw-coordinate click: requires window/process grounding ID, fresh display-topology digest and immediate re-observation",
+        _wrap(DeepOSController.mouse_click, "x", "y", "double", "grounding_id", "expected_topology_sha256"))
+    add("type_text", "os_control", 3, "Grounded raw typing into an exactly grounded window: requires grounding ID, fresh topology digest and immediate re-observation",
+        _wrap(DeepOSController.type_text, "text", "grounding_id", "expected_topology_sha256"))
+    add("press_hotkey", "os_control", 3, "Grounded raw hotkey into an exactly grounded window: requires grounding ID, fresh topology digest and immediate re-observation",
+        _wrap(DeepOSController.press_hotkey, "keys", "grounding_id", "expected_topology_sha256"))
     add("open_url", "os_control", 2, "Open a URL in the default browser",
         _wrap(DesktopControl.open_url, "url"))
     add("display_topology", "os_control", 0, "Capture physical multi-monitor topology",

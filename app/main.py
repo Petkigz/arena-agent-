@@ -363,12 +363,18 @@ class OSMouseClickRequest(BaseModel):
     x: int
     y: int
     double: bool = False
+    grounding_id: Optional[str] = None
+    expected_topology_sha256: Optional[str] = None
 
 class OSTypeTextRequest(BaseModel):
     text: str
+    grounding_id: Optional[str] = None
+    expected_topology_sha256: Optional[str] = None
 
 class OSHotkeyRequest(BaseModel):
     keys: List[str]
+    grounding_id: Optional[str] = None
+    expected_topology_sha256: Optional[str] = None
 
 class SoftwareUpdateRequest(BaseModel):
     package_name: str = "vlc"
@@ -2944,15 +2950,27 @@ def run_multi_agent_endpoint(req: MultiAgentRequest):
 # 17. Deep OS, Android ADB, Universal Filesystem & Data Science Endpoints
 @router.post("/os/click")
 def os_mouse_click_endpoint(req: OSMouseClickRequest):
-    return DeepOSController.mouse_click(req.x, req.y, double=req.double)
+    return DeepOSController.mouse_click(
+        req.x, req.y, double=req.double,
+        grounding_id=req.grounding_id,
+        expected_topology_sha256=req.expected_topology_sha256,
+    )
 
 @router.post("/os/type")
 def os_type_text_endpoint(req: OSTypeTextRequest):
-    return DeepOSController.type_text(req.text)
+    return DeepOSController.type_text(
+        req.text,
+        grounding_id=req.grounding_id,
+        expected_topology_sha256=req.expected_topology_sha256,
+    )
 
 @router.post("/os/hotkey")
 def os_press_hotkey_endpoint(req: OSHotkeyRequest):
-    return DeepOSController.press_hotkey(req.keys)
+    return DeepOSController.press_hotkey(
+        req.keys,
+        grounding_id=req.grounding_id,
+        expected_topology_sha256=req.expected_topology_sha256,
+    )
 
 @router.post("/os/update-software")
 def os_update_software_endpoint(req: SoftwareUpdateRequest):

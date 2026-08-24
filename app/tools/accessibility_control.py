@@ -101,14 +101,27 @@ class AccessibilityControlTool:
  def resolve_target(cls,role,name,window_id=None,max_age_seconds=30):return cls.store.resolve(role=role,name=name,window_id=window_id,max_age_seconds=max_age_seconds)
  @classmethod
  def activate_target(cls,role,name,window_id=None):
+  from datetime import datetime,timezone
   resolved=cls.resolve_target(role,name,window_id,max_age_seconds=10)
   if not resolved.get('success'):return resolved
   target=resolved['target'];bounds=target.get('bounds')
   if not bounds:return {'success':False,'available':False,'error':'Semantic target has no observed screen bounds','target':target}
-  if target.get('interface') in ('linux_atspi','windows_uia'):
-   if not target.get('window_id'):return {'success':False,'error':'Native semantic activation requires a grounded window ID','target':target}
-   grounding=cls.os_grounding.get_by_window(target['window_id'])
-   if not grounding:return {'success':False,'error':'Window/process grounding is missing or stale','target':target}
+  if not target.get('window_id'):return {'success':False,'error':'Semantic activation requires a grounded window ID','target':target}
+  # Every raw-coordinate activation must bind a live process/window grounding.
+  grounding=cls.os_grounding.get_by_window(target['window_id'])
+  if not grounding:return {'success':False,'error':'Window/process grounding is missing or stale','target':target}
+  from app.tools.display_topology import DisplayTopologyTool
+  topology=DisplayTopologyTool.capture()
+  if not topology.get('success'):return {'success':False,'error':'Display topology unavailable for grounded activation','target':target}
+  # The accessibility snapshot is the immediate target-window observation.
+  snapshot_age=(datetime.now(timezone.utc)-datetime.fromisoformat(target['created_at'])).total_seconds()
+  fresh_observation={'age_seconds':snapshot_age,'evidence':[f"accessibility_snapshot:{target['snapshot_id']}",f"node:{target['node_id']}"]}
   from app.tools.deep_os_controller import DeepOSController
-  result=DeepOSController.mouse_click(int(bounds['x']+bounds['width']/2),int(bounds['y']+bounds['height']/2))
+  click_x=int(bounds['x']+bounds['width']/2);click_y=int(bounds['y']+bounds['height']/2)
+  result=DeepOSController.mouse_click(
+   click_x,click_y,
+   grounding_id=grounding.grounding_id,
+   expected_topology_sha256=topology['topology_sha256'],
+   fresh_observation=fresh_observation,
+  )
   return {'success':bool(result.get('success')),'target':target,'activation_result':result,'semantic_target_verified':True}

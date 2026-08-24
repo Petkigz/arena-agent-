@@ -45,13 +45,32 @@ executing duplicate work. Owner schedules now atomically claim due rows, recover
 stale claims, use deterministic per-occurrence goal IDs, and advance daily/weekly
 recurrence to the next future local wall time using an explicit IANA timezone.
 
-## Partially fixed after audit — Legacy input and snapshot freshness
+## Fixed after audit — Legacy input and snapshot freshness
 
 Raw `mouse_click`, `type_text`, and `press_hotkey` are now Level 3 compatibility
 paths rather than ordinary reversible autonomy. Accessibility resolution expires
 snapshots, and native UIA/AT-SPI activation requires a live process/window grounding.
-The remaining work is to require topology digest and immediate re-observation for
-every raw-coordinate path, or remove those paths from autonomous planning entirely.
+
+Every raw-coordinate path now executes only through `RawInputGuard`
+(`app/cognition/raw_input_guard.py`), which refuses the action unless all of the
+following hold immediately before execution:
+
+- an active OS grounding identifies the exact window and owning process,
+- the process is alive and its executable path (when readable) still matches,
+- the target window was observed within the last 10 seconds (grounding row or a
+  supplied fresh accessibility-snapshot observation),
+- a freshly captured display topology still matches the SHA-256 digest the
+  planner observed, and
+- for coordinates, the point lies inside the grounded display and window region.
+
+There is no bypass path: `DeepOSController`, the tool manifest, the `/os/*`
+HTTP endpoints, and accessibility activation all route through the guard, and
+ungrounded calls are refused before the input device is touched. `scripts/validate_os_control.py`
+now includes an always-required raw-input-grounding-refusal check (6/6 required
+checks pass in sandbox). Honesty constraint preserved: desktop focus is not
+portably observable, so keyboard actions report `focus_observation: "unknown"`
+and rely on window/process grounding plus immediate re-observation rather than a
+claimed focus proof.
 
 ## Fixed after audit — Browser upload transition evidence
 
@@ -177,11 +196,11 @@ It does **not** create:
 
 ## Phase A — correctness before more functions
 
-1. Atomic autonomy cycle lease and schedule claiming.
-2. Ground legacy mouse/keyboard/hotkeys to exact windows or restrict them to owner-sovereign use.
-3. Snapshot freshness/re-observation for accessibility, displays and tabs.
-4. Fix upload transition verification, backup overwrite classification, and fabricated pentest defaults.
-5. Harden/deprecate `app.main:app`.
+1. ✅ Atomic autonomy cycle lease and schedule claiming.
+2. ✅ Ground legacy mouse/keyboard/hotkeys to exact windows or restrict them to owner-sovereign use (RawInputGuard, mandatory for every path).
+3. ✅ Snapshot freshness/re-observation for accessibility, displays and tabs (raw input now re-observes topology + window within 10 s).
+4. ✅ Fix upload transition verification, backup overwrite classification, and fabricated pentest defaults.
+5. ✅ Harden/deprecate `app.main:app`.
 
 ## Phase B — use the 48 GB deliberately
 

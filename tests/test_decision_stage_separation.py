@@ -2,8 +2,18 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from app.cognition.action_planner import ActionPlanner
 from app.cognition.action_proposal import ActionGate, ActionProposal
+
+
+@pytest.fixture(autouse=True)
+def hermetic_default_owner_policy(monkeypatch):
+    """Pin the ambient owner-control singleton to defaults so stage-separation
+    tests do not depend on the developer machine's live owner policy file."""
+    from app.cognition.owner_control import OwnerControlPolicy, owner_control_store
+    monkeypatch.setattr(owner_control_store, "_policy", OwnerControlPolicy())
 
 
 class _ResourceManager:

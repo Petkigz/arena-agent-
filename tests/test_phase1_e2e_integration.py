@@ -7,6 +7,14 @@ from app.cognition.tool_registry import ToolRegistry
 from app.cognition.prediction_engine import PredictionEngine
 from app.cognition.event_bus import EventBus
 
+
+@pytest.fixture(autouse=True)
+def hermetic_default_owner_policy(monkeypatch):
+    """Pin the ambient owner-control singleton to defaults so gatekeeper tests
+    do not depend on the developer machine's live owner policy file."""
+    from app.cognition.owner_control import OwnerControlPolicy, owner_control_store
+    monkeypatch.setattr(owner_control_store, "_policy", OwnerControlPolicy())
+
 class TestPhase1EndToEndCognitiveIntegration:
     """
     Unit P1-H: Comprehensive End-to-End Phase 1 Closed-Loop Integration Test Suite.

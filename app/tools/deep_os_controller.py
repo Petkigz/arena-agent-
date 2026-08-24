@@ -11,19 +11,54 @@ from app.utils.logger import app_logger, audit_logger
 _PACKAGE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+@-]{0,127}$")
 
 class DeepOSController:
+    # Raw-coordinate input is only executed through RawInputGuard, which
+    # requires an exact window/process grounding, an immediate re-observation,
+    # and a matching fresh display-topology digest. There is no bypass path.
     @classmethod
-    def mouse_click(cls, x: int, y: int, double: bool = False) -> Dict[str, Any]:
+    def mouse_click(
+        cls,
+        x: int,
+        y: int,
+        double: bool = False,
+        grounding_id: Optional[str] = None,
+        expected_topology_sha256: Optional[str] = None,
+        fresh_observation: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
-        Executes a GUI mouse click at (x, y) screen coordinates.
+        Executes a GUI mouse click at (x, y) screen coordinates after
+        mandatory window/process/display grounding re-observation.
         """
+        from app.cognition.raw_input_guard import RawInputGuard
+
+        guard = RawInputGuard.authorize(
+            grounding_id,
+            expected_topology_sha256,
+            coordinate={"x": int(x), "y": int(y)},
+            fresh_observation=fresh_observation,
+        )
+        if not guard.get("success"):
+            app_logger.warning(f"Raw click refused by grounding guard: {guard.get('guard_reason')}")
+            return guard
         try:
             import pyautogui
             if double:
                 pyautogui.doubleClick(x, y)
             else:
                 pyautogui.click(x, y)
-            audit_logger.info(f"Mouse click at ({x}, {y})")
-            return {"success": True, "action": "click", "x": x, "y": y}
+            audit_logger.info(
+                f"Mouse click at ({x}, {y}) on grounded window {guard['window_id']} "
+                f"(pid {guard['pid']}, topology {guard['topology_sha256'][:12]})"
+            )
+            return {
+                "success": True,
+                "action": "click",
+                "x": x,
+                "y": y,
+                "grounding_id": guard["grounding_id"],
+                "window_id": guard["window_id"],
+                "topology_sha256": guard["topology_sha256"],
+                "focus_observation": guard["focus_observation"],
+            }
         except Exception as e:
             app_logger.warning(f"PyAutoGUI display click unavailable: {e}")
             return {
@@ -33,18 +68,41 @@ class DeepOSController:
                 "error": f"Mouse click unavailable: {e}",
                 "x": x,
                 "y": y,
+                "grounding_id": guard["grounding_id"],
             }
 
     @classmethod
-    def type_text(cls, text: str) -> Dict[str, Any]:
+    def type_text(
+        cls,
+        text: str,
+        grounding_id: Optional[str] = None,
+        expected_topology_sha256: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Types text onto active desktop input window.
+        Types text onto the grounded active input window after mandatory
+        window/process/display grounding re-observation.
         """
+        from app.cognition.raw_input_guard import RawInputGuard
+
+        guard = RawInputGuard.authorize(grounding_id, expected_topology_sha256)
+        if not guard.get("success"):
+            app_logger.warning(f"Raw typing refused by grounding guard: {guard.get('guard_reason')}")
+            return guard
         try:
             import pyautogui
             pyautogui.write(text, interval=0.02)
-            audit_logger.info(f"Typed text: '{text[:50]}'")
-            return {"success": True, "typed_text": text}
+            audit_logger.info(
+                f"Typed text into grounded window {guard['window_id']} "
+                f"(pid {guard['pid']}, topology {guard['topology_sha256'][:12]})"
+            )
+            return {
+                "success": True,
+                "typed_text": text,
+                "grounding_id": guard["grounding_id"],
+                "window_id": guard["window_id"],
+                "topology_sha256": guard["topology_sha256"],
+                "focus_observation": guard["focus_observation"],
+            }
         except Exception as e:
             app_logger.warning(f"PyAutoGUI typing unavailable: {e}")
             return {
@@ -52,18 +110,41 @@ class DeepOSController:
                 "available": False,
                 "attempted": False,
                 "error": f"Text typing unavailable: {e}",
+                "grounding_id": guard["grounding_id"],
             }
 
     @classmethod
-    def press_hotkey(cls, keys: List[str]) -> Dict[str, Any]:
+    def press_hotkey(
+        cls,
+        keys: List[str],
+        grounding_id: Optional[str] = None,
+        expected_topology_sha256: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Presses a key combination (e.g. ['ctrl', 'c'] or ['alt', 'tab'] or ['win', 'r']).
+        Presses a key combination (e.g. ['ctrl', 'c']) into the grounded
+        window after mandatory window/process/display grounding re-observation.
         """
+        from app.cognition.raw_input_guard import RawInputGuard
+
+        guard = RawInputGuard.authorize(grounding_id, expected_topology_sha256)
+        if not guard.get("success"):
+            app_logger.warning(f"Raw hotkey refused by grounding guard: {guard.get('guard_reason')}")
+            return guard
         try:
             import pyautogui
             pyautogui.hotkey(*keys)
-            audit_logger.info(f"Pressed hotkey combination: {keys}")
-            return {"success": True, "hotkey": keys}
+            audit_logger.info(
+                f"Pressed hotkey combination {keys} on grounded window {guard['window_id']} "
+                f"(pid {guard['pid']}, topology {guard['topology_sha256'][:12]})"
+            )
+            return {
+                "success": True,
+                "hotkey": keys,
+                "grounding_id": guard["grounding_id"],
+                "window_id": guard["window_id"],
+                "topology_sha256": guard["topology_sha256"],
+                "focus_observation": guard["focus_observation"],
+            }
         except Exception as e:
             app_logger.warning(f"PyAutoGUI hotkey unavailable: {e}")
             return {
@@ -72,6 +153,7 @@ class DeepOSController:
                 "attempted": False,
                 "error": f"Hotkey unavailable: {e}",
                 "keys": keys,
+                "grounding_id": guard["grounding_id"],
             }
 
     @staticmethod

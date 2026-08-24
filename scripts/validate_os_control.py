@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app.cognition.privilege_model import PrivilegeModel,ProcessOwnershipStore
 from app.tools.accessibility_control import AccessibilityControlTool
+from app.tools.deep_os_controller import DeepOSController
 from app.tools.display_topology import DisplayTopologyTool
 from app.tools.universal_filesystem import UniversalFilesystem
 
@@ -14,6 +15,9 @@ def run():
   checks.append({'name':name,'passed':bool(result.get('success')),'required':required,'result':result})
  add('privilege_probe',{'success':bool(PrivilegeModel.probe().evidence),'privilege':PrivilegeModel.probe().to_dict()},True)
  add('current_process_ownership',ProcessOwnershipStore(Path(tempfile.gettempdir())/'arena_os_validation.db').inspect(os.getpid()),True)
+ # Ungrounded raw input must be refused on every machine, display or not.
+ refusal=DeepOSController.mouse_click(1,1)
+ add('raw_input_grounding_refusal',{'success':refusal.get('refused') is True and refusal.get('guard_reason')=='missing_grounding','refusal':refusal},True)
  add('display_topology',DisplayTopologyTool.capture())
  add('accessibility_status',AccessibilityControlTool.status())
  with tempfile.TemporaryDirectory(prefix='arena_os_validation_') as d:

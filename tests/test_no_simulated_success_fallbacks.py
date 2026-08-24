@@ -39,9 +39,13 @@ def test_deep_os_unavailable_is_failure_not_simulation():
 
     for result in (click, typing, hotkey):
         assert result["success"] is False
-        assert result["available"] is False
+        assert result["refused"] is True
+        assert result["guard_reason"] == "missing_grounding"
         assert result["attempted"] is False
         assert "simulated" not in str(result).lower()
+        # Ungrounded calls are refused before the display stack is touched, so
+        # the grounded unavailable path is covered separately in
+        # tests/test_raw_input_guard.py::test_unavailable_display_reports_failure_not_simulation.
 
 
 def test_screen_capture_failure_creates_no_fake_screenshot(tmp_path):
