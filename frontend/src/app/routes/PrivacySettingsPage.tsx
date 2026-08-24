@@ -90,6 +90,7 @@ interface OwnerControlPolicy {
   mode: ControlMode;
   paused: boolean;
   max_autonomous_level: number;
+  allow_sensitive_autonomy: boolean;
   require_approval_actions: string[];
   blocked_actions: string[];
   custom_autonomous_actions: string[];
@@ -573,10 +574,12 @@ export function PrivacySettingsPage() {
                     <option value={0}>Level 0 — read and observe only</option>
                     <option value={1}>Level 1 — include drafts</option>
                     <option value={2}>Level 2 — include reversible actions</option>
+                    {ownerPolicy.allow_sensitive_autonomy && <option value={3}>Level 3 — sensitive/irreversible actions delegated</option>}
                   </select>
-                  <p className="text-xs text-text-muted mt-1">
-                    Level 3 always requires explicit approval and cannot be delegated here.
-                  </p>
+                  <label className="flex items-center gap-2 mt-2 text-xs text-text-secondary">
+                    <input type="checkbox" checked={ownerPolicy.allow_sensitive_autonomy} disabled={controlBusy} onChange={(event) => updateOwnerPolicy({ allow_sensitive_autonomy: event.target.checked, max_autonomous_level: event.target.checked ? ownerPolicy.max_autonomous_level : Math.min(2, ownerPolicy.max_autonomous_level) })} />
+                    Allow me to delegate Level-3 actions autonomously (exact action gates, evidence, pause and physical limits still apply)
+                  </label>
                 </div>
 
                 {adaptiveProfile && (

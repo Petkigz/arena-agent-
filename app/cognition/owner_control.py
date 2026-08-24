@@ -57,13 +57,16 @@ class OwnerControlPolicy:
     mode: ControlMode = ControlMode.BOUNDED_AUTONOMY
     paused: bool = False
     max_autonomous_level: int = 2
+    allow_sensitive_autonomy: bool = False
     require_approval_actions: list[str] = field(default_factory=list)
     blocked_actions: list[str] = field(default_factory=list)
     custom_autonomous_actions: list[str] = field(default_factory=list)
     revision: int = 1
 
     def normalized(self) -> "OwnerControlPolicy":
-        self.max_autonomous_level = max(0, min(2, int(self.max_autonomous_level)))
+        self.allow_sensitive_autonomy = bool(self.allow_sensitive_autonomy)
+        ceiling = 3 if self.allow_sensitive_autonomy else 2
+        self.max_autonomous_level = max(0, min(ceiling, int(self.max_autonomous_level)))
         self.require_approval_actions = _normalize_actions(self.require_approval_actions)
         self.blocked_actions = _normalize_actions(self.blocked_actions)
         self.custom_autonomous_actions = _normalize_actions(self.custom_autonomous_actions)
@@ -106,6 +109,7 @@ class OwnerControlStore:
                 mode=ControlMode(raw.get("mode", ControlMode.BOUNDED_AUTONOMY.value)),
                 paused=bool(raw.get("paused", False)),
                 max_autonomous_level=int(raw.get("max_autonomous_level", 2)),
+                allow_sensitive_autonomy=bool(raw.get("allow_sensitive_autonomy", False)),
                 require_approval_actions=list(raw.get("require_approval_actions", [])),
                 blocked_actions=list(raw.get("blocked_actions", [])),
                 custom_autonomous_actions=list(raw.get("custom_autonomous_actions", [])),
@@ -123,6 +127,7 @@ class OwnerControlStore:
                 mode=ControlMode(data["mode"]),
                 paused=data["paused"],
                 max_autonomous_level=data["max_autonomous_level"],
+                allow_sensitive_autonomy=data["allow_sensitive_autonomy"],
                 require_approval_actions=list(data["require_approval_actions"]),
                 blocked_actions=list(data["blocked_actions"]),
                 custom_autonomous_actions=list(data["custom_autonomous_actions"]),
@@ -131,7 +136,7 @@ class OwnerControlStore:
 
     def update(self, patch: Dict[str, Any]) -> OwnerControlPolicy:
         allowed_keys = {
-            "mode", "paused", "max_autonomous_level", "require_approval_actions",
+            "mode", "paused", "max_autonomous_level", "allow_sensitive_autonomy", "require_approval_actions",
             "blocked_actions", "custom_autonomous_actions",
         }
         unknown = set(patch) - allowed_keys
@@ -145,6 +150,7 @@ class OwnerControlStore:
                 mode=ControlMode(current["mode"]),
                 paused=bool(current["paused"]),
                 max_autonomous_level=int(current["max_autonomous_level"]),
+                allow_sensitive_autonomy=bool(current["allow_sensitive_autonomy"]),
                 require_approval_actions=list(current["require_approval_actions"]),
                 blocked_actions=list(current["blocked_actions"]),
                 custom_autonomous_actions=list(current["custom_autonomous_actions"]),

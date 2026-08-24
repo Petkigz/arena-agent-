@@ -245,8 +245,10 @@ and are disabled by default. The owner can cap cycle duration, cooldown, executi
 project work, and failures when desired, preempt active work through persistent
 cancellation/resume receipts, and inspect/approve/reject/reprioritize the planning queue at `GET /owner-control/autonomous-goals`, preview resource-aware queue selection at `GET /owner-control/autonomous-goals/allocation-preview`, inspect cross-session plan assumptions at `/owner-control/plans/{plan_id}/freshness`, schedule one-time/daily/weekly directives at `GET/POST /owner-control/autonomy-schedule`, and inspect stage-by-stage run evidence at `GET /owner-control/autonomy-runs`. For a specific command, the owner can issue
 an exact short-lived authorization with `override_owner_policy: true`; this overrides
-the owner's own mode/block/level rules but never emergency pause, resource-critical
-shutdown, missing capability, payload binding, or verification honesty.
+the owner's own mode/block/level rules. The owner may also explicitly enable
+`allow_sensitive_autonomy` and ceiling 3 for ongoing Level-3 delegation; turning it
+off reclamps to level 2. Neither mechanism bypasses emergency pause, OS privilege,
+resource-critical shutdown, missing capability, payload binding, or verification honesty.
 
 Run owner-machine OS validation without destructive system changes:
 

@@ -95,8 +95,9 @@ Nothing is off-limits for consideration, but execution authority belongs to the
 owner. The tool manifest's `safety_level` is authoritative, while the persistent
 Owner Control Plane may always impose a stricter rule:
 
-- Default bounded autonomy: `0` read / `1` draft / `2` reversible are delegated;
-  `≥ 3` sensitive/irreversible requires explicit approval.
+- Default bounded autonomy delegates levels 0–2. Level 3 requires exact approval
+  unless the owner explicitly enables `allow_sensitive_autonomy` and sets ceiling 3;
+  disabling the switch immediately reclamps the ceiling to 2.
 - The owner may switch to observe-only, suggest-only, approve-every-action,
   approve-each-plan, bounded-autonomy, or a custom action allowlist.
 - Per-action approval and block lists override the default delegation.

@@ -180,7 +180,8 @@ class SystemSleepRequest(BaseModel):
 class OwnerControlUpdate(BaseModel):
     mode: Optional[ControlMode] = None
     paused: Optional[bool] = None
-    max_autonomous_level: Optional[int] = Field(default=None, ge=0, le=2)
+    max_autonomous_level: Optional[int] = Field(default=None, ge=0, le=3)
+    allow_sensitive_autonomy: Optional[bool] = None
     require_approval_actions: Optional[List[str]] = None
     blocked_actions: Optional[List[str]] = None
     custom_autonomous_actions: Optional[List[str]] = None
