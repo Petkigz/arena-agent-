@@ -129,6 +129,13 @@ class ModelConfigUpdate(BaseModel):
     main_model: Optional[str] = None
     lm_studio_url: Optional[str] = None
 
+class InferenceProfileUpdate(BaseModel):
+    """Owner inference profile update. All fields optional; validated by the store."""
+    main_model: Optional[str] = None
+    fast_model: Optional[str] = None
+    provider_url: Optional[str] = None
+    context_window_tokens: Optional[int] = Field(None, ge=512, le=32768)
+
 class ModelUnloadRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     model_id: Optional[str] = None
@@ -1968,21 +1975,68 @@ def get_local_models():
 
 @router.post("/models/config")
 def update_model_config(config: ModelConfigUpdate):
-    if config.fast_model:
-        settings.FAST_MODEL = config.fast_model.strip()
-    if config.main_model:
-        settings.MAIN_MODEL = config.main_model.strip()
-    if config.lm_studio_url:
-        settings.LM_STUDIO_URL = config.lm_studio_url.rstrip('/').strip()
-        llm_client.base_url = settings.LM_STUDIO_URL
-    
-    db.create_audit_log("update_model_config", "success", f"Fast Model: {settings.FAST_MODEL}, Main Model: {settings.MAIN_MODEL}, Endpoint: {settings.LM_STUDIO_URL}", level=1)
-    
+    # Legacy entry point: writes through the owner inference profile store so
+    # there is exactly one persisted source of truth for model configuration.
+    from app.cognition.inference_profile import apply_profile, inference_profile_store
+    try:
+        patch = {}
+        if config.fast_model:
+            patch["fast_model"] = config.fast_model.strip()
+        if config.main_model:
+            patch["main_model"] = config.main_model.strip()
+        if config.lm_studio_url:
+            patch["provider_url"] = config.lm_studio_url.rstrip('/').strip()
+        profile = inference_profile_store.update(patch) if patch else inference_profile_store.get()
+        applied = apply_profile(profile)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    db.create_audit_log("update_model_config", "success", f"Fast Model: {applied['fast_model']}, Main Model: {applied['main_model']}, Endpoint: {applied['lm_studio_url']}", level=1)
+
     return {
         "message": "Model settings updated successfully.",
-        "configured_fast_model": settings.FAST_MODEL,
-        "configured_main_model": settings.MAIN_MODEL,
-        "lm_studio_url": settings.LM_STUDIO_URL
+        "success": True,
+        "configured_fast_model": applied["fast_model"],
+        "configured_main_model": applied["main_model"],
+        "lm_studio_url": applied["lm_studio_url"],
+        "context_window_tokens": applied["context_window_tokens"],
+        "profile_revision": profile.revision
+    }
+
+@router.get("/owner-control/inference-profile")
+def get_inference_profile_endpoint():
+    from app.cognition.inference_profile import inference_profile_store
+    profile = inference_profile_store.get()
+    return {
+        "success": True,
+        "profile": profile.to_dict(),
+        "divergence": inference_profile_store.divergence(profile),
+        "note": "Recommendations derive from the measured hardware tier; only a live provider load/completion proves capability.",
+    }
+
+@router.put("/owner-control/inference-profile")
+def update_inference_profile_endpoint(req: InferenceProfileUpdate):
+    from app.cognition.inference_profile import apply_profile, inference_profile_store
+    try:
+        profile = inference_profile_store.update(req.model_dump(exclude_unset=True))
+        applied = apply_profile(profile)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    return {
+        "success": True,
+        "profile": profile.to_dict(),
+        "applied": applied,
+        "divergence": inference_profile_store.divergence(profile),
+    }
+
+@router.post("/owner-control/inference-profile/probe")
+def probe_inference_profile_endpoint():
+    from app.cognition.inference_profile import inference_profile_store, probe_provider
+    evidence = probe_provider(inference_profile_store.get())
+    return {
+        "success": True,
+        "evidence": evidence,
+        "note": "Measured live provider evidence; offline or unprobed states remain unknown.",
     }
 
 @router.post("/models/unload")

@@ -213,7 +213,7 @@ It does **not** create:
 ## Phase B — use the 48 GB deliberately
 
 6. ✅ Owner-configured worker/concurrency budget derived from live RAM pressure (`ConcurrencyGovernor`: measured grants, owner override within physical threads, absolute critical-pressure gate, persisted receipts; wired into counterfactual branch simulation and the hardware self-model).
-7. Benchmark 9B versus 14B inference latency, quality and RAM.
+7. 🔶 Owner-managed inference profile (`data/inference_profile.json`, `GET/PUT /owner-control/inference-profile`, live probe at `/probe`, `scripts/benchmark_lm_studio.py`): context window and fast/main models derive from the measured tier, `/models/config` now writes through the same store, and probe evidence distinguishes loaded/unloaded/unknown. The 9B-vs-14B latency/quality/RAM *numbers* still require running the benchmark on the owner machine.
 8. Increase retrieval/index scale with measured limits.
 9. Add larger local embedding, speech and VLM profiles only after held-out evaluation.
 

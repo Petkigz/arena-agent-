@@ -201,6 +201,18 @@ class HardwareGovernor:
             app_logger.warning(f"Concurrency budget measurement unavailable: {exc}")
             worker_budget = {"success": False, "workers_granted": 1, "reasons": [f"measurement_unavailable: {exc}"]}
 
+        # Configured inference profile vs the measured recommendation.
+        try:
+            from app.cognition.inference_profile import inference_profile_store
+            profile = inference_profile_store.get()
+            profile_surface = {
+                "configured": profile.to_dict(),
+                "divergence": inference_profile_store.divergence(profile),
+            }
+        except Exception as exc:
+            app_logger.warning(f"Inference profile surface unavailable: {exc}")
+            profile_surface = {"error": str(exc)}
+
         return {
             "cpu_model": cpu_model,
             "cpu_logical_threads": logical_cpus,
@@ -216,6 +228,7 @@ class HardwareGovernor:
             "high_memory_profile": ram_total_gb >= 32,
             "recommended_parallel_cpu_tasks": 6 if ram_total_gb >= 40 else 3 if ram_total_gb >= 24 else 1,
             "measured_worker_budget": worker_budget,
+            "inference_profile": profile_surface,
             "memory_consolidation_batch": 500 if ram_total_gb >= 40 else 100,
             "memory_record_cap": 20000 if ram_total_gb >= 40 else 5000,
             "live": {
