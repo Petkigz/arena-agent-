@@ -978,6 +978,10 @@ class ExplicitCommitmentRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     source_id: str = Field(min_length=1, max_length=200)
 
+class IdentityCheckpointRequest(BaseModel):
+    expected_change_types: List[str] = Field(default_factory=list)
+    owner_change_evidence: List[str] = Field(default_factory=list)
+
 class RecoveryDecisionRequest(BaseModel):
     status: str
     note: str = ""
@@ -1044,14 +1048,14 @@ def self_agency_history_endpoint(limit: int = Query(100, ge=1, le=1000)):
 
 
 @router.post("/self-awareness/identity-checkpoint")
-def identity_continuity_checkpoint_endpoint():
+def identity_continuity_checkpoint_endpoint(req:Optional[IdentityCheckpointRequest]=None):
     from app.cognition.runtime import CognitiveRuntime
-    runtime=CognitiveRuntime.get_instance()
+    runtime=CognitiveRuntime.get_instance();req=req or IdentityCheckpointRequest()
     runtime.refresh_self_knowledge(); runtime.refresh_embodied_boundary(); runtime.refresh_commitments()
-    continuity=runtime.checkpoint_identity_continuity()
+    continuity=runtime.checkpoint_identity_continuity(req.expected_change_types)
     recovery=None
     if not continuity["continuous"]:
-        recovery=runtime.self_recovery.save(continuity).to_dict()
+        recovery=runtime.self_recovery.save(continuity,owner_evidence=req.owner_change_evidence).to_dict()
     return {"success":True,"continuity":continuity,"recovery_assessment":recovery}
 
 @router.get("/self-awareness/recovery")

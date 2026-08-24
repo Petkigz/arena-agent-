@@ -368,7 +368,7 @@ class CognitiveRuntime:
             ))
         return {"interfaces": [item.to_dict() for item in records]}
 
-    def checkpoint_identity_continuity(self) -> Dict[str, Any]:
+    def checkpoint_identity_continuity(self, expected_change_types: Optional[List[str]] = None) -> Dict[str, Any]:
         claims=self.self_knowledge.current_claims(include_stale=True)
         commitments=self.commitments.list()
         interfaces=self.embodied_boundary.interfaces()
@@ -384,7 +384,7 @@ class CognitiveRuntime:
             "provider_model":llm_client.model_override or llm_client.route_request("fast"),
             "tool_count":len(self.registry._registry),
             "owner_policy_revision":owner_control_store.get_policy().revision,
-        },self.boot_id)
+        },self.boot_id,expected_change_types=expected_change_types)
 
     def refresh_commitments(self) -> Dict[str, Any]:
         """Reconcile persistent projects into the commitment ledger."""

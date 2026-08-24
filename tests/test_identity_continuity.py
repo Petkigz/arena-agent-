@@ -18,6 +18,13 @@ def test_claim_commitment_interface_and_provider_changes_are_detected(tmp_path):
  report=l.checkpoint(after,'boot-2');kinds={x['type'] for x in report['issues']}
  assert {'changed_self_claim_values','missing_active_commitments','interface_availability_changed','provider_model_changed'}<=kinds
 
+def test_owner_expected_change_is_recorded_without_false_discontinuity(tmp_path):
+ l=IdentityContinuityLedger(tmp_path/'id.db');l.checkpoint(state(owner_policy_revision=3),'boot-1')
+ report=l.checkpoint(state(owner_policy_revision=2),'boot-2',expected_change_types=['owner_policy_revision_rollback'])
+ assert report['continuous'] is True and report['issues']==[]
+ assert report['expected_changes'][0]['type']=='owner_policy_revision_rollback'
+ assert report['state_changed'] is True
+
 def test_missing_capability_and_policy_rollback_are_detected(tmp_path):
  l=IdentityContinuityLedger(tmp_path/'id.db'); l.checkpoint(state(),'boot-1')
  report=l.checkpoint(state(claim_predicates=['authority.owner_policy'],interface_ids=['desktop_screen'],tool_count=120,owner_policy_revision=2),'boot-2')

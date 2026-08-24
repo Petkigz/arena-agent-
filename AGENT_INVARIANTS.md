@@ -231,7 +231,9 @@ not authorized.
 - Browser downloads require a real event, workspace-confined destination, observed
   file/hash, and hash-guarded rollback. Upload submission is Level 3, requires a
   success selector for verification, and preserves remote-side-effect uncertainty.
-- Restart continuity compares claim predicates, commitments, interfaces, capability count, and owner-policy revision. Missing state is flagged, never silently rationalized.
+- Restart continuity compares claim values, commitments, interfaces, provider binding,
+  capability count, and owner policy. Expected owner changes remain recorded separately;
+  only unexpected drift triggers discontinuity recovery.
 - Recovery assessments persist for owner review. They are advisory only; requesting a recovery action creates an exact pending approval and never executes it.
 - Functional self-knowledge never implies consciousness, sentience, emotion, a
   biological body, persistent subjective identity, or subjective experience. The absence of measurement remains explicit.

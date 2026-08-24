@@ -102,8 +102,10 @@ require owner-hardware benchmarks and explicit provider configuration.
 Identity checkpoints now compare current claim-value digests, missing active/blocked
 commitments, interface availability, provider model binding, capability count and
 owner-policy revision. Changes generate explicit discontinuity issues and recovery
-assessments. The remaining improvement is linking expected changes directly to the
-specific owner decision that authorized them.
+assessments. Identity checkpoint requests can now include expected change types and owner-change
+evidence. Expected changes remain recorded but do not create a false discontinuity;
+unexpected changes still trigger recovery. Linking each expected change to a signed
+owner decision ID rather than owner-supplied evidence text remains future hardening.
 
 ## Partially fixed after audit — Preemption reconciliation
 

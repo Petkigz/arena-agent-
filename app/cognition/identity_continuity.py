@@ -15,7 +15,7 @@ class IdentityContinuityLedger:
         self.path=str(path); Path(self.path).parent.mkdir(parents=True,exist_ok=True)
         with sqlite3.connect(self.path) as c:
             c.execute("CREATE TABLE IF NOT EXISTS identity_checkpoints (id TEXT PRIMARY KEY, boot_id TEXT, created_at TEXT, state_json TEXT, digest TEXT)"); c.commit()
-    def checkpoint(self,state:Dict[str,Any],boot_id:str)->Dict[str,Any]:
+    def checkpoint(self,state:Dict[str,Any],boot_id:str,expected_change_types:Optional[list[str]]=None)->Dict[str,Any]:
         normalized={
           "claim_predicates":sorted(state.get("claim_predicates",[])),
           "claim_digests":dict(sorted((state.get("claim_digests") or {}).items())),
@@ -46,5 +46,6 @@ class IdentityContinuityLedger:
                 if normalized["owner_policy_revision"]<previous["owner_policy_revision"]: issues.append({"type":"owner_policy_revision_rollback"})
             cid=f"identity_{uuid4().hex[:16]}"; digest=_hash(normalized)
             c.execute("INSERT INTO identity_checkpoints VALUES (?,?,?,?,?)",(cid,boot_id,_now(),json.dumps(normalized),digest)); c.commit()
-        return {"checkpoint_id":cid,"continuous":not issues,"issues":issues,"state_digest":digest,"previous_exists":previous is not None,
-          "note":"Functional state continuity only; not persistence of consciousness or subjective identity."}
+        expected_types=set(expected_change_types or []);expected=[item for item in issues if item.get('type') in expected_types];unexpected=[item for item in issues if item.get('type') not in expected_types]
+        return {"checkpoint_id":cid,"continuous":not unexpected,"issues":unexpected,"expected_changes":expected,"state_changed":bool(issues),"state_digest":digest,"previous_exists":previous is not None,
+          "note":"Functional state continuity only; expected owner-approved changes remain recorded. This is not persistence of consciousness or subjective identity."}
