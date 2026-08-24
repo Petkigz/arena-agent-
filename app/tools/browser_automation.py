@@ -6,6 +6,7 @@ from app.config import settings
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 from app.cognition.browser_grounding import BrowserGroundingStore
+from app.cognition.browser_adapters import browser_adapter_store
 from app.cognition.disk_reservation import disk_reservation_ledger
 from app.cognition.execution_control import (
     ExecutionCancelled,
@@ -19,6 +20,7 @@ class BrowserAutomation:
     DOWNLOADS_DIR = settings.DATA_DIR / "workspace" / "downloads"
     GROUNDING = BrowserGroundingStore(settings.DATA_DIR / "browser_grounding.db")
     DISK_LEDGER = disk_reservation_ledger
+    ADAPTERS = browser_adapter_store
 
     @staticmethod
     def _hash_file(path: Path) -> str:
@@ -209,11 +211,48 @@ class BrowserAutomation:
                     description="browser upload submit",
                 )
                 observed = page.is_visible(success_selector)
+                # Service-specific receipt extraction (owner-configured adapter):
+                # the service's own receipt ID, extracted from the observed page.
+                service_receipt = None
+                adapter = cls.ADAPTERS.match(url)
+                if adapter is not None and adapter.receipt_selector:
+                    try:
+                        element = page.query_selector(adapter.receipt_selector)
+                        if element is not None:
+                            if adapter.receipt_attribute == "text":
+                                raw_receipt = element.inner_text()
+                            else:
+                                raw_receipt = element.get_attribute(adapter.receipt_attribute)
+                            receipt_id = str(raw_receipt or "").strip() or None
+                            if receipt_id:
+                                service_receipt = {
+                                    "service_id": adapter.service_id,
+                                    "adapter_id": adapter.adapter_id,
+                                    "receipt_id": receipt_id,
+                                    "extracted_via": f"{adapter.receipt_selector}@{adapter.receipt_attribute}",
+                                }
+                    except Exception as exc:
+                        app_logger.warning(f"Service receipt extraction failed for {adapter.service_id}: {exc}")
+                        service_receipt = None  # honest: extraction failed, not invented
                 session_id=f"browser_session_{uuid.uuid4().hex[:12]}"
                 tab=cls.GROUNDING.observe_tab(session_id=session_id,url=page.url,title=page.title(),profile_type="ephemeral",evidence=["set_input_files completed","submit clicked",f"success selector visible:{success_selector}"])
-                event=cls.GROUNDING.record_event(tab.tab_id,"upload","completed" if observed else "unknown",evidence=[f"local_sha256:{digest}",f"success_selector:{success_selector}"])
+                event_evidence=[f"local_sha256:{digest}",f"success_selector:{success_selector}"]
+                if service_receipt:
+                    event_evidence.append(f"service_receipt:{service_receipt['service_id']}:{service_receipt['receipt_id']}")
+                event=cls.GROUNDING.record_event(tab.tab_id,"upload","completed" if observed else "unknown",evidence=event_evidence)
                 browser.close();browser=None
-            return {"success":observed,"request_success":True,"environment_verified":observed,"verification_unknown":not observed,"uploaded_file":str(source),"uploaded_sha256":digest,"size_bytes":size_bytes,"tab_grounding":tab.to_dict(),"upload_event":event,"auth_state":"unknown","side_effects":True,"rollback_supported":False,"rollback_reason":"Remote upload cannot be deterministically removed without a service-specific delete API."}
+            result={"success":observed,"request_success":True,"environment_verified":observed,"verification_unknown":not observed,"uploaded_file":str(source),"uploaded_sha256":digest,"size_bytes":size_bytes,"tab_grounding":tab.to_dict(),"upload_event":event,"auth_state":"unknown","side_effects":True,"service_receipt":service_receipt}
+            if adapter is not None and service_receipt is not None and adapter.delete_supported:
+                # A service-specific delete flow exists for this receipt: the
+                # rollback becomes a concrete proposal, still requiring separate
+                # Level-3 authorization to execute.
+                result["rollback_supported"]=True
+                result["rollback_reason"]=f"Owner adapter {adapter.adapter_id} defines a delete flow for {adapter.service_id}; deletion requires separate Level-3 authorization."
+                result["rollback_compensation"]={"action":"browser_delete_upload","payload":{"service_id":adapter.service_id,"receipt_id":service_receipt["receipt_id"]}}
+            else:
+                result["rollback_supported"]=False
+                result["rollback_reason"]="Remote upload cannot be deterministically removed without a service-specific delete API."+(f" (receipt extracted for {adapter.service_id}, but no delete flow is configured.)" if adapter is not None and service_receipt is not None else "")
+            return result
         except ExecutionCancelled: raise
         except Exception as exc:
             return {"success":False,"request_success":True,"environment_verified":False,"verification_unknown":True,"side_effects":True,"error":str(exc),"note":"Submission may have reached the remote service; retry requires fresh observation and authorization."}
@@ -221,6 +260,86 @@ class BrowserAutomation:
             if browser is not None:
                 try:browser.close()
                 except Exception:pass
+
+    @classmethod
+    def delete_uploaded_file(cls, service_id: str, receipt_id: str) -> Dict[str, Any]:
+        """Level-3 service-specific deletion of a previously uploaded receipt.
+
+        Runs ONLY the owner-configured delete flow for the service: the adapter's
+        delete URL template (receipt id URL-quoted) plus an observed confirmation
+        selector. Deletion is verified by that observation; it is never assumed
+        from navigation alone, and Arena cannot undo a deletion (re-upload is a
+        fresh authorized action).
+        """
+        if not service_id or not receipt_id:
+            return {"success": False, "request_success": False, "side_effects": False,
+                    "error": "service_id and receipt_id are required"}
+        adapter = cls.ADAPTERS.get_by_service(str(service_id))
+        if adapter is None:
+            return {"success": False, "request_success": False, "side_effects": False,
+                    "error": f"No owner-configured browser adapter for service '{service_id}'",
+                    "note": "Service-specific deletion requires owner adapter configuration; refusing rather than improvising a delete flow."}
+        if not adapter.delete_supported:
+            return {"success": False, "request_success": False, "side_effects": False,
+                    "error": f"Adapter '{service_id}' has no delete flow configured",
+                    "note": "delete_url_template and confirm_selector are required for deletion."}
+        from urllib.parse import quote
+        delete_url = adapter.delete_url_template.format(receipt_id=quote(str(receipt_id), safe=""))
+        browser = None
+        try:
+            cooperative_checkpoint("before_browser_delete_upload")
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                page = browser.new_page()
+
+                def _abort_inflight() -> None:
+                    try: browser.close()
+                    except Exception: pass
+
+                def _navigate_and_confirm() -> None:
+                    page.goto(delete_url, timeout=30000, wait_until="domcontentloaded")
+                    page.wait_for_selector(adapter.confirm_selector, timeout=30000, state="visible")
+
+                # Remote destructive action: cancellable in flight, with the
+                # standing caveat that cancellation cannot prove the service
+                # never processed the request.
+                run_cancellable_blocking_call(
+                    _navigate_and_confirm, cancel=_abort_inflight,
+                    description="browser delete upload",
+                )
+                observed = page.is_visible(adapter.confirm_selector)
+                session_id = f"browser_session_{uuid.uuid4().hex[:12]}"
+                tab = cls.GROUNDING.observe_tab(
+                    session_id=session_id, url=page.url, title=page.title(),
+                    profile_type="ephemeral",
+                    evidence=["owner-configured delete flow", f"service:{adapter.service_id}", f"receipt:{receipt_id}"],
+                )
+                event = cls.GROUNDING.record_event(
+                    tab.tab_id, "upload_delete", "completed" if observed else "unknown",
+                    evidence=[f"delete_url:{delete_url}", f"confirm_selector:{adapter.confirm_selector}"],
+                )
+                browser.close(); browser = None
+            return {
+                "success": observed, "request_success": True,
+                "environment_verified": observed, "verification_unknown": not observed,
+                "service_id": adapter.service_id, "receipt_id": str(receipt_id),
+                "delete_url": delete_url, "tab_grounding": tab.to_dict(),
+                "delete_event": event, "side_effects": True,
+                "rollback_supported": False,
+                "rollback_reason": "A completed deletion cannot be undone by Arena; re-upload is a fresh action requiring authorization.",
+                "note": "Deletion verified by the adapter's confirmation selector observation, nothing stronger.",
+            }
+        except ExecutionCancelled:
+            raise
+        except Exception as exc:
+            return {"success": False, "request_success": True, "environment_verified": False,
+                    "verification_unknown": True, "side_effects": True, "error": str(exc),
+                    "note": "Delete request may have reached the service; outcome requires re-observation."}
+        finally:
+            if browser is not None:
+                try: browser.close()
+                except Exception: pass
 
     @classmethod
     def navigate_and_extract(

@@ -368,6 +368,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(BrowserAutomation.download_file, "url", "click_selector", "expected_size_bytes"))
     add("browser_upload", "web", 3, "In-flight-cancellable upload with observed success selector",
         _wrap(BrowserAutomation.upload_file, "url", "input_selector", "file_path", "submit_selector", "success_selector"))
+    add("browser_delete_upload", "web", 3, "Owner-adapter service-specific deletion of an uploaded receipt, confirmed by observation",
+        _wrap(BrowserAutomation.delete_uploaded_file, "service_id", "receipt_id"))
     add("youtube_learn", "web", 0, "Learn from a YouTube video",
         _wrap(YouTubeLearner.learn_from_video, "video_url"))
     add("media_learn", "web", 0, "Analyze a media target",

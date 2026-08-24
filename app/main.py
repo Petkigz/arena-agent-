@@ -307,6 +307,19 @@ class BrowserUploadRequest(BaseModel):
     submit_selector: str
     success_selector: str
 
+class BrowserDeleteUploadRequest(BaseModel):
+    service_id: str = Field(min_length=1, max_length=100)
+    receipt_id: str = Field(min_length=1, max_length=500)
+
+class BrowserServiceAdapterRequest(BaseModel):
+    service_id: str = Field(min_length=1, max_length=100)
+    url_pattern: str = Field(min_length=1, max_length=500)
+    receipt_selector: str = Field(default="", max_length=300)
+    receipt_attribute: str = Field(default="text", max_length=100)
+    delete_url_template: str = Field(default="", max_length=1000)
+    confirm_selector: str = Field(default="", max_length=300)
+    note: str = Field(default="", max_length=2000)
+
 class BrowserNavigateRequest(BaseModel):
     url: str
     fill_inputs: Optional[Dict[str, str]] = None
@@ -2743,6 +2756,33 @@ def create_lora_job_endpoint(req: LoraJobRequest):
 @router.post("/automation/browser/download")
 def browser_download_endpoint(req: BrowserDownloadRequest):
     return BrowserAutomation.download_file(req.url, req.click_selector, expected_size_bytes=req.expected_size_bytes)
+
+@router.post("/automation/browser/delete-upload")
+def browser_delete_upload_endpoint(req: BrowserDeleteUploadRequest):
+    return BrowserAutomation.delete_uploaded_file(req.service_id, req.receipt_id)
+
+@router.post("/owner-control/browser-service-adapters")
+def upsert_browser_service_adapter_endpoint(req: BrowserServiceAdapterRequest):
+    from app.cognition.browser_adapters import browser_adapter_store
+    try:
+        adapter = browser_adapter_store.upsert(req.model_dump())
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "adapter": adapter.to_dict(),
+            "note": "Owner-declared service knowledge; delete flows still require separate Level-3 authorization per use."}
+
+@router.get("/owner-control/browser-service-adapters")
+def list_browser_service_adapters_endpoint():
+    from app.cognition.browser_adapters import browser_adapter_store
+    return {"success": True, "adapters": [a.to_dict() for a in browser_adapter_store.list()]}
+
+@router.delete("/owner-control/browser-service-adapters/{service_id}")
+def remove_browser_service_adapter_endpoint(service_id: str):
+    from app.cognition.browser_adapters import browser_adapter_store
+    removed = browser_adapter_store.remove(service_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Adapter not found")
+    return {"success": True, "removed": service_id}
 
 @router.get("/automation/browser/disk-status")
 def browser_disk_status_endpoint():

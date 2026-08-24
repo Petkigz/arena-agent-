@@ -77,7 +77,18 @@ claimed focus proof.
 `browser_upload` now refuses to submit when the success selector is already visible,
 so a permanent banner cannot verify a new upload. It requires an absent-before,
 visible-after transition; missing post-submit confirmation remains unknown with
-remote side effects explicitly possible. Service-specific receipt IDs remain future work.
+remote side effects explicitly possible. Service-specific receipt IDs and delete/
+rollback flows are implemented through owner-configured adapters
+(`app/cognition/browser_adapters.py`, `POST/GET/DELETE /owner-control/browser-service-adapters`):
+a matched adapter extracts the service's own receipt ID from the observed page (stored
+in the upload grounding event evidence), and when the adapter defines a delete flow
+(`delete_url_template` + `confirm_selector`), the upload's rollback becomes a concrete
+`browser_delete_upload` compensation (Level 3, still requiring separate authorization;
+execution-control rollback receipts now carry the compensation payload). Deletion runs
+only the configured flow with the receipt URL-quoted, is cancellable in flight, is
+verified solely by the confirmation-selector observation, and honestly reports that a
+completed deletion cannot be undone by Arena. No adapter configured → receipts stay
+null and rollback stays unsupported; Arena never improvises a delete flow.
 
 ## Fixed after audit — Browser transfer resources
 
@@ -271,7 +282,7 @@ It does **not** create:
 
 15. Owner-machine UIA/AT-SPI and multi-monitor tests.
 16. Ground all active-window actions to process/window/accessibility identity.
-17. Service-specific browser upload/delete adapters (receipt IDs still future; delete/rollback APIs remain).
+17. ✅ Service-specific browser upload/delete adapters (owner-configured receipts + delete flows; `browser_delete_upload` Level 3).
 18. Transactional restore/update tests on disposable owner-machine fixtures.
 19. Real ADB/device and privilege-elevation handoff tests.
 

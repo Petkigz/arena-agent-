@@ -221,6 +221,20 @@ class ExecutionControlRegistry:
                 "rollback_reason",
                 "Terminated process memory and unsaved state cannot be restored.",
             )
+        elif action_type == "browser_upload" and result.get("rollback_compensation"):
+            compensation = result["rollback_compensation"]
+            if (
+                compensation.get("action") == "browser_delete_upload"
+                and isinstance(compensation.get("payload"), dict)
+                and compensation["payload"].get("service_id")
+                and compensation["payload"].get("receipt_id")
+            ):
+                compensation_action = "browser_delete_upload"
+                compensation_payload = dict(compensation["payload"])
+                reason = result.get(
+                    "rollback_reason",
+                    "Owner-configured service delete flow exists for this receipt.",
+                )
         elif action_type == "activate_lora":
             compensation_action = "deactivate_lora"
             reason = "Adapter selection can be reversed by selecting the base model."
