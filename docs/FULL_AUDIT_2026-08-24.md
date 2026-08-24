@@ -73,11 +73,12 @@ returns a typed redirect to the separate `restore_backup_overwrite` Level-3 acti
 Archive integrity/path containment still run before extraction. Optional pre-restore
 snapshotting remains future work.
 
-## P1 — Legacy `app.main:app` remains an unauthenticated entry point
+## Fixed after audit — Legacy application authentication
 
-`app.server:app` applies API-key and localhost/LAN hardening. The backward-compatible `app.main:app` exposes core routes without that server wrapper. Launching the wrong module can bypass the intended deployment boundary.
-
-**Fix:** make `app.main:app` delegate to the hardened app factory, or refuse non-test startup and clearly deprecate it.
+The compatibility `app.main:app` now applies dynamic API-key verification,
+fail-closed `ARENA_ENFORCE_AUTH`, and unauthenticated localhost-only middleware.
+`app.server:app` remains the documented unified production entry point, but
+launching the legacy module no longer exposes core capability routes unauthenticated.
 
 ## Fixed after audit — Pentest evidence boundary
 

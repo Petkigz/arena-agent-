@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, status, Request, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Query, status, Request, UploadFile, File, BackgroundTasks, Depends
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict
@@ -3013,13 +3013,33 @@ def trigger_system_shutdown(background_tasks: BackgroundTasks):
     }
 
 
-# ── Backward-compatible application object ──────────────────────────────────
-# The core REST routes now live on `router` (above) so the unified server can
-# include them. This module-level `app` is kept so `from app.main import app`
-# continues to work for existing callers/tests — it exposes just the core routes.
+# ── Backward-compatible hardened application object ─────────────────────────
+# Production should use app.server:app. This compatibility app now enforces the
+# same API-key and unauthenticated localhost boundary so launching the old entry
+# point cannot expose capability routes accidentally.
+async def _legacy_verify_request(request: Request):
+    configured = os.getenv("ARENA_API_KEY", "")
+    enforced = os.getenv("ARENA_ENFORCE_AUTH", "").lower() in ("1", "true", "yes")
+    if not configured:
+        if enforced:
+            raise HTTPException(status_code=503, detail="Authentication required but ARENA_API_KEY is not set")
+        return
+    if request.headers.get("X-API-Key", "") != configured:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Version 0 Core Engine & Visual Dashboard for the Local Personal Assistant",
+    description="Compatibility core API; use app.server:app for unified service",
     version="0.1.0",
 )
-app.include_router(router)
+
+@app.middleware("http")
+async def _legacy_localhost_guard(request: Request, call_next):
+    configured = bool(os.getenv("ARENA_API_KEY", ""))
+    insecure = os.getenv("ARENA_ALLOW_INSECURE_LAN", "").lower() in ("1", "true", "yes")
+    host = request.client.host.lower() if request.client and request.client.host else ""
+    if not configured and not insecure and host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return JSONResponse(status_code=403, content={"detail": "Unauthenticated compatibility API is localhost-only"})
+    return await call_next(request)
+
+app.include_router(router, dependencies=[Depends(_legacy_verify_request)])

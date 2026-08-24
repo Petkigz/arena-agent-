@@ -201,6 +201,8 @@ Closed this session (P1-1 → P2 — pushing toward human intelligence):
 
 - ✅ **Native Owner Control operations**: Desktop and Android expose policy mode, autonomous safety ceiling, exploration cap, emergency pause/resume, exact recommendation approval/rejection, revision-bound exact plan-step JSON editing, plan approval/rejection, separate approved-plan execution, active authorization execution/revocation, execution cancellation, and rollback-request creation. Reviewed grants expose their original payload only when it still hashes to the immutable authorization digest; direct grants never invent a payload. Both native clients explicitly preserve authorization versus execution, report goal verification separately from tool success, and keep rollback as a new approval. Desktop API credentials are now local QSettings connection state applied to every HTTP request—not synced into backend preferences—so these controls work with an authenticated server.
 
+- ✅ **API entry-point hardening**: Both unified `app.server:app` and compatibility `app.main:app` enforce configured API keys and fail-closed auth; unauthenticated compatibility access is localhost-only.
+
 - ✅ **P1 bugs from full audit**: B6 magic-byte duplicate keys → ordered list, B7/B8 useVoice stale closure + context conflict → separate refs, B9 blob leak when replaced, B10/B11 conversationStore ack/merge, B12 desktop WS version, B13 QSettings bool, V3/V4 TTS speed + voice_enabled, V1 VAD degrade, F2 AppearanceSettingsPage theme drift, D2 VisionWorker thread-safety.
 
 Still open (future):
