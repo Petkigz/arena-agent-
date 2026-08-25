@@ -298,7 +298,7 @@ It does **not** create:
 11. ✅ End-to-end cycle provenance graph.
 12. Conflict-safe recurring scheduler with timezone/DST support.
 13. ✅ Desktop + Android transport/UI parity for autonomy operations (Android build verification remains).
-14. Multi-hour restart/preemption tests.
+14. ✅ Multi-hour restart/preemption tests (tests/test_restart_durability.py: accelerated-clock semantics — stale-lease recovery after simulated crashes, heartbeat single-ownership for multi-hour cycles, daily/weekly recurrence across a simulated week with deterministic occurrence ids, multi-hour downtime skip/catch-up, restart-marked-interrupted executions with persisted results, and preemption→restart→reconciliation→resume skipping verified work; real hardware validation remains for the owner machine).
 
 ## Phase D — OS integration
 
