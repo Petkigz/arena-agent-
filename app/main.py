@@ -2665,6 +2665,7 @@ app.include_router(_owner_autonomy_router, dependencies=[Depends(_legacy_verify_
 from app.api.os_browser_automation import router as _os_browser_router
 app.include_router(_os_browser_router, dependencies=[Depends(_legacy_verify_request)])
 from app.api.self_awareness import router as _self_awareness_router
+from app.api.vault import router as _vault_router
 from app.api.self_awareness import (  # re-exported for existing callers/tests
     ExplicitCommitmentRequest,
     IdentityCheckpointRequest,
@@ -2678,3 +2679,4 @@ from app.api.self_awareness import (  # re-exported for existing callers/tests
     self_commitments_endpoint,
 )
 app.include_router(_self_awareness_router, dependencies=[Depends(_legacy_verify_request)])
+app.include_router(_vault_router, dependencies=[Depends(_legacy_verify_request)])

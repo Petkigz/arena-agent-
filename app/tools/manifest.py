@@ -182,6 +182,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     NetworkDiagnostics = _LazyImportProxy("app.tools.network_diagnostics", "NetworkDiagnostics")
     BudgetTracker = _LazyImportProxy("app.tools.budget_tracker", "BudgetTracker")
     BackupManager = _LazyImportProxy("app.tools.backup_manager", "BackupManager")
+    crypto_vault = _LazyImportProxy("app.tools.crypto_vault", "crypto_vault")  # singleton instance
     PresentationGenerator = _LazyImportProxy("app.tools.presentation_generator", "PresentationGenerator")
     PackageInstaller = _LazyImportProxy("app.tools.package_installer", "PackageInstaller")
     RssAggregator = _LazyImportProxy("app.tools.rss_aggregator", "RssAggregator")
@@ -501,6 +502,26 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(BudgetTracker.summary, "file_path", "month", "budgets"))
     add("list_transactions", "finance", 0, "List ledger transactions",
         _wrap(BudgetTracker.list_transactions, "file_path", "category", "month", "limit"))
+
+    # ── Encrypted vault (owner secrets & messages) ──────────────────────────
+    add("vault_status", "system", 0, "Vault state: initialized, item count, KDF/cipher parameters (no secrets)",
+        _ignore_payload(crypto_vault.status))
+    add("vault_initialize", "system", 2, "Initialize the encrypted vault with an owner passphrase (master key never stored)",
+        _wrap(crypto_vault.initialize, "passphrase"))
+    add("vault_encrypt_item", "system", 2, "Encrypt and store one secret under a name (overwrite requires explicit flag)",
+        _wrap(crypto_vault.encrypt_item, "name", "plaintext", "passphrase", "overwrite"))
+    add("vault_decrypt_item", "system", 2, "Decrypt one stored secret with the vault passphrase",
+        _wrap(crypto_vault.decrypt_item, "name", "passphrase"))
+    add("vault_list_items", "system", 0, "List stored vault items (names/metadata only, never plaintext)",
+        _ignore_payload(crypto_vault.list_items))
+    add("vault_delete_item", "system", 3, "Permanently delete one stored secret",
+        _wrap(crypto_vault.delete_item, "name"))
+    add("vault_rotate_passphrase", "system", 2, "Re-key the vault and re-encrypt every item under a new passphrase",
+        _wrap(crypto_vault.rotate_passphrase, "old_passphrase", "new_passphrase"))
+    add("vault_encrypt_message", "system", 1, "Statelessly encrypt a message into an armored blob (nothing stored)",
+        _wrap(crypto_vault.encrypt_message, "plaintext", "passphrase"))
+    add("vault_decrypt_message", "system", 1, "Decrypt an Arena V1 armored message with the passphrase",
+        _wrap(crypto_vault.decrypt_message, "armored", "passphrase"))
 
     # ── Backup & restore ────────────────────────────────────────────────────
     add("create_backup", "system", 1, "Create a versioned backup snapshot",
