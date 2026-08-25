@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     ARENA_ASK_QUESTIONS_ENABLED: str = "1"  # "0" disables the uncertainty gate
     ARENA_ASK_CONFIDENCE_THRESHOLD: float = 0.45  # calibrated confidence floor
     ARENA_QUESTION_TTL_HOURS: int = 72  # unanswered questions expire honestly
+    ARENA_WORKING_MEMORY_CAPACITY: int = 9  # F1.3 scratchpad capacity (~7±2)
 
     # Autonomy policy (P1 fix): the autonomous cycle is opt-in, not always-on.
     #   "off"        — no autonomous cycle is scheduled.

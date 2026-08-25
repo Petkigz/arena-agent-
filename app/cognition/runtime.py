@@ -87,6 +87,8 @@ class CognitiveRuntime:
             app_logger.warning(f"Associative memory not enabled: {_exc}")
         self.learning = MemoryLearner(self.memory)
         self.attention = AttentionManager()
+        from app.cognition.working_memory import WorkingMemory
+        self.working_memory = WorkingMemory()
         self.prediction = PredictionEngine()
         self.counterfactual = CounterfactualSimulator()
         self.registry = ToolRegistry(event_bus=self.events)
@@ -2351,6 +2353,13 @@ class CognitiveRuntime:
         focus_target = self.attention.allocate_attention(user_text[:40], priority_score=0.85)
         self.state.attention.focus = focus_target.target_name
         trace.attention_focus = focus_target.target_name
+        # F1.3 Working memory: decay old items, then attend the current query.
+        try:
+            self.working_memory.decay()
+            self.working_memory.set_goal(user_text)
+            self.working_memory.encode(user_text, kind="user_query", source="user", salience=1.0)
+        except Exception as exc:
+            app_logger.warning(f"Working memory encode failed (non-fatal): {exc}")
         self.state.task.current_step = "cognitive_cycle"
         self.state.touch()
 
@@ -2396,6 +2405,23 @@ class CognitiveRuntime:
             ctx_str = sliced_ctx.compact_prompt_str
             if multimodal_context:
                 ctx_str += "\n\n" + multimodal_context
+                # Attended perceptions enter working memory with provenance.
+                try:
+                    self.working_memory.encode(
+                        multimodal_context.strip()[:500], kind="observation",
+                        source="multimodal_ingestion", salience=0.8, goal_text=user_text,
+                    )
+                except Exception:
+                    pass
+            # The reasoning loop consults the live scratchpad.
+            try:
+                wm_context = self.working_memory.context_text(max_chars=1200)
+                if wm_context:
+                    ctx_str += "\n\n[WORKING MEMORY]\n" + wm_context
+                    self.blackboard.set("working_memory", self.working_memory.snapshot(),
+                                        source="working_memory", confidence=1.0)
+            except Exception:
+                pass
             self.blackboard.set("sliced_context", ctx_str, source="prompt_slicer")
         except Exception as e:
             app_logger.warning(f"PromptSlicer error: {e}")

@@ -186,6 +186,27 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("associative_paraphrase_recall", "memory", associative_recall))
 
+            def working_memory_attention():
+                from app.cognition.working_memory import WorkingMemory
+                wm = WorkingMemory(capacity=5, half_life_seconds=60)
+                wm.set_goal("fix the login crash")
+                # Fill to capacity with a mix of on-topic and noise.
+                wm.encode("login page crash log attached", kind="observation", source="bench", salience=0.5)
+                wm.encode("weather is nice today", kind="observation", source="bench", salience=0.3)
+                for i in range(6):
+                    wm.encode(f"unrelated memo number {i}", kind="observation", source="bench", salience=0.2)
+                snapshot = wm.snapshot()
+                ok_capacity = len(snapshot) <= 5
+                ok_priority = snapshot and "login" in snapshot[0]["content"]
+                ok_provenance = all(item["source"] for item in snapshot)
+                ok_gate = wm.encode("qqq www zzz", kind="observation", source="bench", salience=0.02)["accepted"] is False
+                passed = ok_capacity and ok_priority and ok_provenance and ok_gate
+                return passed, \
+                    f"capacity={ok_capacity} priority={ok_priority} provenance={ok_provenance} gate={ok_gate}", \
+                    {"kept": len(snapshot), "top": snapshot[0]["content"][:40] if snapshot else None}
+
+            checks.append(self._run_check("working_memory_attention", "memory", working_memory_attention))
+
             def failure_adaptation():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
                 store = StrategyOutcomeStore(str(root / "failure_outcomes.db"))
