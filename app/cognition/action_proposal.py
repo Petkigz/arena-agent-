@@ -30,6 +30,10 @@ class ActionProposal:
     decision_stage: str = "recommendation"
     authorization_id: Optional[str] = None
     plan_id: Optional[str] = None
+    # Recommendation-stage confidence (0..1) from the proposing pipeline; None
+    # means the prediction engine's default is used. Low calibrated confidence
+    # converts to an owner question at the gate instead of execution.
+    confidence: Optional[float] = None
     proposal_id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(default_factory=_now)
 
@@ -273,6 +277,40 @@ class ActionGate:
             pe = PredictionEngine()
             pred = pe.predict_action(proposal.action_type, proposal.payload)
             proposal.predicted_outcome = pred.expected_changes
+
+        # 3b. Uncertainty Gate: acting on weak evidence is noise, not autonomy.
+        # Low CALIBRATED confidence blocks execution and formulates an owner
+        # question instead. A valid explicit authorization skips this gate —
+        # the owner has already spoken precisely about this exact action.
+        if not authorization_valid:
+            pe_confidence = getattr(proposal, "confidence", None)
+            if pe_confidence is None:
+                pe_confidence = PredictionEngine().predict_action(
+                    proposal.action_type, proposal.payload
+                ).confidence
+            from app.cognition.uncertainty_questions import owner_question_store, should_ask
+            ask, calibrated, threshold = should_ask(proposal.action_type, pe_confidence)
+            if ask:
+                question = owner_question_store.ask(
+                    proposal_id=proposal.proposal_id,
+                    action_type=proposal.action_type,
+                    payload=proposal.payload,
+                    raw_confidence=float(pe_confidence),
+                    calibrated_confidence=calibrated,
+                    threshold=threshold,
+                    reason="Calibrated confidence is below the owner's asking threshold.",
+                )
+                proposal.decision_stage = "awaiting_owner_answer"
+                return GateResult(
+                    allowed=False,
+                    gate_name="uncertainty_gate",
+                    reason=(
+                        f"Calibrated confidence {calibrated:.2f} is below the owner threshold "
+                        f"{threshold:.2f}; owner question {question.question_id} recorded instead of executing."
+                    ),
+                    requires_approval=True,
+                    decision_stage="awaiting_owner_answer",
+                )
 
         if proposal.authorization_id:
             consumed = authorization_store.consume(

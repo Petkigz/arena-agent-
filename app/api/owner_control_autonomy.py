@@ -65,6 +65,11 @@ class OwnerDecisionRequest(BaseModel):
     note: str = Field(default="", max_length=2000)
 
 
+class QuestionAnswerRequest(BaseModel):
+    answer: str = Field(min_length=1, max_length=20)  # approve | deny | observe
+    note: str = Field(default="", max_length=2000)
+
+
 # ── endpoints ───────────────────────────────────────────────────────────────
 @router.get("/owner-control/autonomy-envelope")
 def get_autonomy_envelope_endpoint():
@@ -321,6 +326,28 @@ def issue_owner_decision_endpoint(req: OwnerDecisionRequest):
         "success": True, "decision": decision.to_dict(),
         "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the identity-checkpoint that expects these changes.",
     }
+
+@router.get("/owner-control/questions")
+def list_owner_questions_endpoint(status: Optional[str] = Query("pending"), limit: int = Query(100, ge=1, le=500)):
+    from app.cognition.uncertainty_questions import owner_question_store
+    return {"success": True, "questions": [q.to_dict() for q in owner_question_store.list(status, limit)],
+            "note": "approve creates an exact authorization; it never executes anything."}
+
+@router.post("/owner-control/questions/{question_id}/answer")
+def answer_owner_question_endpoint(question_id: str, req: QuestionAnswerRequest):
+    from app.cognition.uncertainty_questions import owner_question_store
+    result = owner_question_store.answer(question_id, req.answer.strip().lower(), req.note)
+    if not result.get("success"):
+        raise HTTPException(status_code=409, detail=result.get("error", "Answer failed"))
+    return result
+
+@router.post("/owner-control/questions/{question_id}/cancel")
+def cancel_owner_question_endpoint(question_id: str):
+    from app.cognition.uncertainty_questions import owner_question_store
+    result = owner_question_store.cancel(question_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=409, detail=result.get("error", "Cancel failed"))
+    return result
 
 @router.get("/owner-control/owner-decisions")
 def list_owner_decisions_endpoint(limit: int = Query(200, ge=1, le=1000)):

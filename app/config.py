@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     ARENA_ASSOCIATIVE_MEMORY: str = "1"  # "0" disables vector-associative recall
     ARENA_EMBEDDING_URL: str = ""  # LM Studio base URL for real embeddings (optional)
     ARENA_EMBEDDING_MODEL: str = ""  # e.g. text-embedding-nomic-embed-text-v1.5
+    # Uncertainty questions (F1.2): low calibrated confidence asks the owner.
+    ARENA_ASK_QUESTIONS_ENABLED: str = "1"  # "0" disables the uncertainty gate
+    ARENA_ASK_CONFIDENCE_THRESHOLD: float = 0.45  # calibrated confidence floor
+    ARENA_QUESTION_TTL_HOURS: int = 72  # unanswered questions expire honestly
 
     # Autonomy policy (P1 fix): the autonomous cycle is opt-in, not always-on.
     #   "off"        — no autonomous cycle is scheduled.
