@@ -15,6 +15,9 @@ class WorldPrediction:
     action_type: str
     expected_changes: Dict[str, Any]
     confidence: float = 0.85
+    # Where the confidence came from: "default" or the learned world model
+    # ("world_model:n=12" — empirical success rate from verified history).
+    confidence_source: str = "default"
     prediction_id: str = field(default_factory=lambda: f"pred_{uuid4().hex[:8]}")
     created_at: str = field(default_factory=_now)
 
@@ -41,9 +44,25 @@ class PredictionEngine:
         else:
             expected = {"action_executed": True, "success": True}
 
-        pred = WorldPrediction(action_type=action_type, expected_changes=expected)
+        # F1.4 world model: replace the hardcoded 0.85 with the empirical
+        # success rate whenever enough verified evidence exists. Thin evidence
+        # keeps the default prior, honestly labeled.
+        confidence, source = 0.85, "default"
+        try:
+            from app.cognition.action_outcomes import learned_confidence
+            learned = learned_confidence(action_type)
+            if learned is not None:
+                confidence, source = learned, "learned"
+        except Exception as exc:
+            app_logger.debug(f"World model unavailable for prediction confidence: {exc}")
+
+        pred = WorldPrediction(action_type=action_type, expected_changes=expected,
+                               confidence=float(confidence), confidence_source=source)
         self._predictions.append(pred)
-        app_logger.info(f"PredictionEngine predicted outcome for '{action_type}': {expected}")
+        app_logger.info(
+            f"PredictionEngine predicted outcome for '{action_type}': {expected} "
+            f"(confidence={confidence:.2f} via {source})"
+        )
         return pred
 
     def evaluate_surprisal(self, prediction: WorldPrediction, actual_state: Dict[str, Any]) -> float:

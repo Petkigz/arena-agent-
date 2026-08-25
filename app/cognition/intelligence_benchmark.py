@@ -207,6 +207,29 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("working_memory_attention", "memory", working_memory_attention))
 
+            def learned_outcome_statistics():
+                from app.cognition.action_outcomes import ActionOutcomeStore
+                store = ActionOutcomeStore(root / "outcomes.db")
+                for i in range(8):
+                    store.record("move_file", {"i": i}, "verified_success", execution_id=f"ok{i}")
+                for i in range(2):
+                    store.record("move_file", {"i": i}, "verified_failure", execution_id=f"bad{i}")
+                estimate = store.estimate("move_file", refresh=True)
+                ok_sufficient = estimate.evidence_sufficient and estimate.n == 10
+                ok_rate = abs(estimate.smoothed_success_rate - 0.8) < 1e-6
+                ok_interval = 0.0 < estimate.wilson_low < 0.8 < estimate.wilson_high < 1.0
+                thin = store.estimate("never_seen_action", refresh=True)
+                ok_thin = (not thin.evidence_sufficient) and learned_is_none(store)
+                passed = ok_sufficient and ok_rate and ok_interval and ok_thin
+                return passed, \
+                    f"sufficient={ok_sufficient} rate={ok_rate} interval={ok_interval} thin_honest={ok_thin}", \
+                    {"smoothed": estimate.smoothed_success_rate, "wilson": [estimate.wilson_low, estimate.wilson_high]}
+
+            def learned_is_none(store):
+                return store.estimate("never_seen_action", refresh=True).evidence_sufficient is False
+
+            checks.append(self._run_check("learned_outcome_statistics", "learning", learned_outcome_statistics))
+
             def failure_adaptation():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
                 store = StrategyOutcomeStore(str(root / "failure_outcomes.db"))
