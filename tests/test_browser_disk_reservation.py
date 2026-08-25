@@ -313,3 +313,25 @@ def test_upload_attach_phase_is_cancellable_without_submission(tmp_path, monkeyp
     canceller.join(timeout=5)
     assert UploadPage.attached is True
     assert UploadPage.submitted is False  # cancelled before the submit click
+
+
+def test_disk_status_endpoint_probes_real_downloads_dir(monkeypatch, tmp_path):
+    """Regression: the endpoint must use the concrete BrowserAutomation class
+    (the lazy proxy cannot resolve the DOWNLOADS_DIR class attribute) and must
+    create the probe target when missing."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.cognition.disk_reservation import DiskReservationLedger
+
+    probe_dir = tmp_path / "downloads"  # intentionally does not exist yet
+    # Patch the concrete class attribute used inside the endpoint's local import.
+    from app.tools.browser_automation import BrowserAutomation as Concrete
+    monkeypatch.setattr(Concrete, "DOWNLOADS_DIR", probe_dir)
+    monkeypatch.setattr("app.cognition.disk_reservation.disk_reservation_ledger", DiskReservationLedger(tmp_path / "res.db"))
+    monkeypatch.setenv("ARENA_API_KEY", "owner-key")
+    client = TestClient(app)
+    response = client.get("/automation/browser/disk-status", headers={"X-API-Key": "owner-key"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True and body["probe"]["free_bytes"] > 0
+    assert probe_dir.exists()  # created before probing

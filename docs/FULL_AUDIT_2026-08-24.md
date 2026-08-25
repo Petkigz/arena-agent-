@@ -248,8 +248,7 @@ request models moved verbatim from app/main.py (3322 → ~3010 lines) into
 app/api/owner_control_autonomy.py, included by both app.main:app and
 app.server:app with their existing auth dependencies; moved names re-exported
 from app.main for existing callers/tests. Pure move — no behavior change; full
-suite unchanged at 1783 passed. Remaining: browser/OS automation endpoints,
-self-awareness endpoints, and app/cognition/runtime.py decomposition.
+suite unchanged at 1783 passed. Step 10b: 28 OS-grounding / browser / desktop / raw-input routes (including browser service adapters) and their 14 request models moved verbatim to app/api/os_browser_automation.py; main.py is now ~2.8k lines. The move surfaced and fixed a real latent bug: /automation/browser/disk-status reached BrowserAutomation through the lazy proxy, which cannot resolve the DOWNLOADS_DIR class attribute (and the probe target was not created on fresh checkouts) — the endpoint now uses the concrete class and mkdirs before probing, with a regression test. Remaining: self-awareness endpoints, then app/cognition/runtime.py decomposition.
 
 - `app/cognition/runtime.py`: ~3,400 lines
 - `app/main.py`: ~3,000 lines
