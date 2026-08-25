@@ -239,7 +239,17 @@ Web Owner Control has the complete queue, schedule and envelope UI. Desktop now 
 
 Android Gradle compilation, ADB, camera, microphone, wake word, speaker embeddings, real desktop input, multi-monitor DPI, native AT-SPI/UIA, browser profiles, VLM and LoRA provider behavior still require owner-machine evidence.
 
-## P2 — Composition files continue growing
+## P2 — Composition files continue growing (refactor in progress)
+
+Composition refactor started (step 10a): 26 owner-control autonomy routes
+(envelope, concurrency budget, goal queue, schedules, run timelines,
+preemption reconciliation, step reconciliations, owner decisions) and their 9
+request models moved verbatim from app/main.py (3322 → ~3010 lines) into
+app/api/owner_control_autonomy.py, included by both app.main:app and
+app.server:app with their existing auth dependencies; moved names re-exported
+from app.main for existing callers/tests. Pure move — no behavior change; full
+suite unchanged at 1783 passed. Remaining: browser/OS automation endpoints,
+self-awareness endpoints, and app/cognition/runtime.py decomposition.
 
 - `app/cognition/runtime.py`: ~3,400 lines
 - `app/main.py`: ~3,000 lines

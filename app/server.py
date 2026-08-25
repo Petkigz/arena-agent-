@@ -32,6 +32,7 @@ from app.utils.logger import app_logger
 
 # ── Core REST routes (127) — previously served only by `uvicorn app.main:app` ──
 from app.main import router as core_router
+from app.api.owner_control_autonomy import router as owner_control_autonomy_router
 
 # ── WebSocket / voice / API wiring — previously served only by `uvicorn backend.main:app` ──
 from app.cognition.runtime import CognitiveRuntime
@@ -248,6 +249,7 @@ def create_app() -> FastAPI:
     # when the key is unset, preserving localhost-only operation.)
     _auth_deps = [Depends(verify_api_key)]
     app.include_router(core_router, dependencies=_auth_deps)
+    app.include_router(owner_control_autonomy_router, dependencies=_auth_deps)
 
     # ── API routers (file upload, code exec, multi-modal, screenshot, …) ──
     app.include_router(phase6_router, dependencies=_auth_deps)
