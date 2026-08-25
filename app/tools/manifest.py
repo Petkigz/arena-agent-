@@ -183,6 +183,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     BudgetTracker = _LazyImportProxy("app.tools.budget_tracker", "BudgetTracker")
     BackupManager = _LazyImportProxy("app.tools.backup_manager", "BackupManager")
     crypto_vault = _LazyImportProxy("app.tools.crypto_vault", "crypto_vault")  # singleton instance
+    _binary_analyze = _LazyImportProxy("app.tools.binary_analyzer", "analyze_binary")
+    _binary_strings = _LazyImportProxy("app.tools.binary_analyzer", "extract_strings")
     PresentationGenerator = _LazyImportProxy("app.tools.presentation_generator", "PresentationGenerator")
     PackageInstaller = _LazyImportProxy("app.tools.package_installer", "PackageInstaller")
     RssAggregator = _LazyImportProxy("app.tools.rss_aggregator", "RssAggregator")
@@ -363,12 +365,16 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(WebResearcher.search_and_scrape, "query"))
     add("web_workflow", "web", 2, "Run an autonomous multi-step web workflow",
         _wrap(WebAgent.execute_web_workflow, "objective", "target_url", "steps", "complexity"))
-    add("browser_extract", "web", 0, "Navigate and extract a page",
-        _wrap(BrowserAutomation.navigate_and_extract, "url"))
+    add("browser_extract", "web", 0, "Navigate and extract a page (use_profile reuses the owner login session)",
+        _wrap(BrowserAutomation.navigate_and_extract, "url", "use_profile"))
+    add("browser_session_open", "web", 2, "Open a visible browser with the persistent owner profile for one-time logins",
+        _wrap(BrowserAutomation.open_session, "url", "headless"))
+    add("browser_session_close", "web", 1, "Close the open owner profile session, persisting login state",
+        _ignore_payload(BrowserAutomation.close_session))
     add("browser_download", "web", 2, "Disk-reserved, in-flight-cancellable download verified by path/hash",
-        _wrap(BrowserAutomation.download_file, "url", "click_selector", "expected_size_bytes"))
+        _wrap(BrowserAutomation.download_file, "url", "click_selector", "expected_size_bytes", "use_profile"))
     add("browser_upload", "web", 3, "In-flight-cancellable upload with observed success selector",
-        _wrap(BrowserAutomation.upload_file, "url", "input_selector", "file_path", "submit_selector", "success_selector"))
+        _wrap(BrowserAutomation.upload_file, "url", "input_selector", "file_path", "submit_selector", "success_selector", "use_profile"))
     add("browser_delete_upload", "web", 3, "Owner-adapter service-specific deletion of an uploaded receipt, confirmed by observation",
         _wrap(BrowserAutomation.delete_uploaded_file, "service_id", "receipt_id"))
     add("youtube_learn", "web", 0, "Learn from a YouTube video",
@@ -502,6 +508,12 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(BudgetTracker.summary, "file_path", "month", "budgets"))
     add("list_transactions", "finance", 0, "List ledger transactions",
         _wrap(BudgetTracker.list_transactions, "file_path", "category", "month", "limit"))
+
+    # ── Binary structure analysis (triage; not disassembly) ─────────────────
+    add("binary_analyze", "system", 0, "Identify a binary and parse ELF/PE/Mach-O headers, sections, and hashes",
+        _wrap(_binary_analyze, "path"))
+    add("binary_strings", "system", 0, "Extract ASCII/UTF-16LE strings from a file (extraction only, nothing inferred)",
+        _wrap(_binary_strings, "path", "min_length", "limit"))
 
     # ── Encrypted vault (owner secrets & messages) ──────────────────────────
     add("vault_status", "system", 0, "Vault state: initialized, item count, KDF/cipher parameters (no secrets)",

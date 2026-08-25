@@ -22,7 +22,7 @@ class BrowserGroundingStore:
    c.execute('''CREATE TABLE IF NOT EXISTS browser_events
    (event_id TEXT PRIMARY KEY,tab_id TEXT,event_type TEXT,state TEXT,evidence_json TEXT,created_at TEXT)''');c.commit()
  def observe_tab(self,*,session_id,url,title,profile_type='ephemeral',tab_id=None,opener_tab_id=None,accessibility_snapshot_id=None,evidence:List[str]):
-  if profile_type not in ('ephemeral','owner_profile','isolated_persistent') or not evidence:raise ValueError('Profile type and evidence required')
+  if profile_type not in ('ephemeral','owner_profile','isolated_persistent','persistent-owner') or not evidence:raise ValueError('Profile type and evidence required')
   tid=tab_id or f'tab_{uuid4().hex[:16]}';now=_now();existing=self.get(tid)
   tab=BrowserTab(tid,session_id,profile_type,url,title,opener_tab_id,existing.owner_takeover if existing else False,'unknown',accessibility_snapshot_id,'open',evidence,now)
   with sqlite3.connect(self.path) as c:c.execute('INSERT OR REPLACE INTO browser_tabs VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',(tid,session_id,profile_type,url,title,opener_tab_id,int(tab.owner_takeover),'unknown',accessibility_snapshot_id,'open',json.dumps(evidence),now));c.commit()

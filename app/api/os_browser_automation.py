@@ -53,11 +53,16 @@ class BrowserUploadRequest(BaseModel):
     submit_selector: str
     success_selector: str
 
+class BrowserSessionOpenRequest(BaseModel):
+    url: str = Field(min_length=1)
+    headless: bool = False
+
 class BrowserNavigateRequest(BaseModel):
     url: str
     fill_inputs: Optional[Dict[str, str]] = None
     click_selectors: Optional[List[str]] = None
     submit_form: bool = False
+    use_profile: bool = False
 
 class AppLaunchRequest(BaseModel):
     app_name: str
@@ -205,13 +210,23 @@ def browser_disk_status_endpoint():
 def browser_upload_endpoint(req: BrowserUploadRequest):
     return BrowserAutomation.upload_file(req.url,req.input_selector,req.file_path,req.submit_selector,req.success_selector)
 
+@router.post("/automation/browser/session/open")
+def browser_session_open_endpoint(req: BrowserSessionOpenRequest):
+    return BrowserAutomation.open_session(req.url, headless=req.headless)
+
+@router.post("/automation/browser/session/close")
+def browser_session_close_endpoint():
+    from app.tools.browser_automation import BrowserAutomation as Concrete
+    return Concrete.close_session()
+
 @router.post("/automation/browser/navigate")
 def browser_navigate_endpoint(req: BrowserNavigateRequest):
     return BrowserAutomation.navigate_and_extract(
         req.url, 
         fill_inputs=req.fill_inputs, 
         click_selectors=req.click_selectors, 
-        submit_form=req.submit_form
+        submit_form=req.submit_form,
+        use_profile=req.use_profile
     )
 
 @router.get("/automation/desktop/apps")
