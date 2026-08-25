@@ -711,6 +711,14 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Consolidation: memory decay/prune failed: {e}")
 
+        # F1.5 skill induction: mine completed plans for repeated successful
+        # sequences; proposals only, owner acceptance required. Best-effort.
+        try:
+            from app.cognition.skill_induction import skill_induction_engine
+            summary["skill_induction"] = skill_induction_engine.scan(self.goal_executor.db_path)
+        except Exception as e:
+            app_logger.warning(f"Consolidation: skill induction scan failed: {e}")
+
         try:
             episodes = self.memory.unconsolidated_episodes(limit=episode_batch)
             if episodes:

@@ -230,6 +230,38 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("learned_outcome_statistics", "learning", learned_outcome_statistics))
 
+            def skill_induction_from_experience():
+                import sqlite3 as _sql
+                from app.cognition.skill_induction import SkillInductionEngine
+                plans_db = root / "induction_plans.db"
+                with _sql.connect(plans_db) as conn:
+                    conn.execute("""CREATE TABLE IF NOT EXISTS execution_plans (
+                        plan_id TEXT PRIMARY KEY, goal_id TEXT, goal_title TEXT, steps TEXT,
+                        status TEXT, progress REAL, started_at TEXT, completed_at TEXT,
+                        outcome_summary TEXT, lessons_learned TEXT)""")
+                    import json as _json
+                    for i in range(3):
+                        recipe = [
+                            {"action_type": "copy_file_verified", "payload": {"source": f"s{i}", "destination": "/d"}, "status": "completed"},
+                            {"action_type": "compress_files", "payload": {"archive": "/a.zip"}, "status": "completed"},
+                        ]
+                        conn.execute("INSERT INTO execution_plans VALUES (?,?,?,?,?,?,?,?,?,?)",
+                                     (f"bp{i}", "g", "g", _json.dumps(recipe), "completed", 1.0, None, None, None, None))
+                    conn.commit()
+                engine = SkillInductionEngine(root / "induced.db")
+                engine.scan(plans_db)
+                candidates = engine.list("pending")
+                ok_found = len(candidates) == 1 and candidates[0].action_sequence == ["copy_file_verified", "compress_files"]
+                ok_templated = ok_found and candidates[0].payload_template[0]["source"] == "{{source}}" \
+                    and candidates[0].payload_template[0]["destination"] == "/d"
+                ok_evidence = ok_found and candidates[0].occurrences == 3
+                passed = ok_found and ok_templated and ok_evidence
+                return passed, \
+                    f"found={ok_found} templated={ok_templated} evidence={ok_evidence}", \
+                    {"candidate": candidates[0].skill_name if candidates else None}
+
+            checks.append(self._run_check("skill_induction_from_experience", "learning", skill_induction_from_experience))
+
             def failure_adaptation():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
                 store = StrategyOutcomeStore(str(root / "failure_outcomes.db"))

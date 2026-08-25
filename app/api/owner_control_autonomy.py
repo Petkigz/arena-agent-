@@ -327,6 +327,35 @@ def issue_owner_decision_endpoint(req: OwnerDecisionRequest):
         "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the identity-checkpoint that expects these changes.",
     }
 
+@router.get("/owner-control/induced-skills")
+def list_induced_skills_endpoint(status: Optional[str] = Query("pending")):
+    from app.cognition.skill_induction import skill_induction_engine
+    return {"success": True, "candidates": [c.to_dict() for c in skill_induction_engine.list(status)],
+            "note": "Induced from repeated verified completions; nothing is taught or executed until accepted."}
+
+@router.post("/owner-control/induced-skills/scan")
+def scan_induced_skills_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    from app.cognition.skill_induction import skill_induction_engine
+    runtime = CognitiveRuntime.get_instance()
+    return skill_induction_engine.scan(runtime.goal_executor.db_path)
+
+@router.post("/owner-control/induced-skills/{candidate_id}/accept")
+def accept_induced_skill_endpoint(candidate_id: str):
+    from app.cognition.skill_induction import skill_induction_engine
+    result = skill_induction_engine.accept(candidate_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=409, detail=result.get("error", "Accept failed"))
+    return result
+
+@router.post("/owner-control/induced-skills/{candidate_id}/reject")
+def reject_induced_skill_endpoint(candidate_id: str):
+    from app.cognition.skill_induction import skill_induction_engine
+    result = skill_induction_engine.reject(candidate_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=409, detail=result.get("error", "Reject failed"))
+    return result
+
 @router.get("/owner-control/questions")
 def list_owner_questions_endpoint(status: Optional[str] = Query("pending"), limit: int = Query(100, ge=1, le=500)):
     from app.cognition.uncertainty_questions import owner_question_store
