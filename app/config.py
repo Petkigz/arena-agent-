@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     DEFAULT_TIMEOUT: float = 180.0  # Extended timeout (3 mins) to allow LM Studio to auto-load models into VRAM
     BROWSER_TRANSFER_MAX_MB: int = 1024  # Owner-overridable local transfer safety quota
     BROWSER_DISK_SAFETY_MARGIN_MB: int = 512  # Free space kept unreserved beneath transfers
+    ARENA_ASSOCIATIVE_MEMORY: str = "1"  # "0" disables vector-associative recall
+    ARENA_EMBEDDING_URL: str = ""  # LM Studio base URL for real embeddings (optional)
+    ARENA_EMBEDDING_MODEL: str = ""  # e.g. text-embedding-nomic-embed-text-v1.5
 
     # Autonomy policy (P1 fix): the autonomous cycle is opt-in, not always-on.
     #   "off"        — no autonomous cycle is scheduled.

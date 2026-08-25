@@ -79,6 +79,12 @@ class CognitiveRuntime:
         self.actions = ActionSelector()
         self.executor = InvestigationExecutor()
         self.memory = MemoryStore(path)
+        try:
+            from app.config import settings as _settings
+            if str(getattr(_settings, "ARENA_ASSOCIATIVE_MEMORY", "1")) != "0":
+                self.memory.enable_associative()
+        except Exception as _exc:
+            app_logger.warning(f"Associative memory not enabled: {_exc}")
         self.learning = MemoryLearner(self.memory)
         self.attention = AttentionManager()
         self.prediction = PredictionEngine()

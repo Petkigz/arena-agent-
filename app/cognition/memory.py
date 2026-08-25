@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from app.utils.logger import app_logger
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -81,6 +83,47 @@ class MemoryStore:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = str(db_path)
         self._init_db()
+        self._associative = None  # opt-in vector index (enable_associative)
+
+    def enable_associative(self, index=None, backfill_limit: int = 20000) -> bool:
+        """Layer vector-associative recall over lexical search (best-effort).
+
+        Backfills existing records and indexes new ones on add(). Failures are
+        logged and leave lexical search fully functional — never fatal.
+        """
+        try:
+            from app.cognition.associative_memory import MemoryVectorIndex
+            if index is None:
+                index = MemoryVectorIndex(
+                    Path(self.db_path).parent / "memory_vectors.npz"
+                )
+            self._associative = index
+            # Re-embedding every record on every boot is wasteful: rebuild only
+            # when the persisted index is empty or the provider changed (the
+            # index refuses to load foreign vectors). Otherwise keep the
+            # persisted index and index new records incrementally on add().
+            if index.count() == 0:
+                with self._connect() as conn:
+                    rows = conn.execute(
+                        "SELECT memory_id, content, tags_json FROM cognitive_memory "
+                        "ORDER BY last_accessed DESC LIMIT ?",
+                        (max(1, int(backfill_limit)),),
+                    ).fetchall()
+                records = [
+                    (row["memory_id"], row["content"] + " " + (row["tags_json"] or ""))
+                    for row in rows
+                ]
+                indexed = index.rebuild(records)
+                app_logger.info(f"Associative memory backfilled ({indexed} vectors)")
+            else:
+                app_logger.info(
+                    f"Associative memory resumed from persisted index ({index.count()} vectors)"
+                )
+            return True
+        except Exception as exc:
+            self._associative = None
+            app_logger.warning(f"Associative memory unavailable; lexical search only: {exc}")
+            return False
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -132,6 +175,11 @@ class MemoryStore:
                  record.created_at, record.last_accessed, record.access_count,
                  record.source, record.task_id, json.dumps(record.tags), record.outcome,
                  None if record.success is None else int(record.success)))
+        if self._associative is not None:
+            try:
+                self._associative.add(record.memory_id, record.content + " " + json.dumps(record.tags))
+            except Exception as exc:
+                app_logger.warning(f"Associative index add failed (non-fatal): {exc}")
         return record
 
     def get(self, memory_id: str) -> MemoryRecord | None:
@@ -190,7 +238,8 @@ class MemoryStore:
                     selected.append((score, row))
 
             selected.sort(key=lambda item: item[0], reverse=True)
-            result = [self._row(row) for _, row in selected[:limit]]
+            result = self._fuse_associative(query, kinds, limit, selected, conn) or \
+                [self._row(row) for _, row in selected[:limit]]
             now = _now()
             for item in result:
                 conn.execute(
@@ -198,6 +247,48 @@ class MemoryStore:
                     (now, item.memory_id),
                 )
             return result
+
+    def _fuse_associative(self, query, kinds, limit, lexical_selected, conn):
+        """Merge lexical ranking with vector-associative recall (RRF, k=60).
+
+        Returns None when associative memory is disabled or fails, leaving the
+        lexical ranking untouched. Paraphrases that the lexical 0.12 gate
+        filtered out are recovered here by their vector rank.
+        """
+        if self._associative is None or not query.strip():
+            return None
+        try:
+            vector_hits = self._associative.search(query, k=limit * 4)
+            if not vector_hits:
+                return None
+            # Only STRONG lexical matches vote in fusion: near-gate char-gram
+            # noise ("morning"≈"meeting") would otherwise accumulate with a
+            # weak vector rank through RRF and bury true vector-only recalls.
+            lexical_ids = []
+            for score, row in lexical_selected[: limit * 2]:
+                if float(score) < 0.3:
+                    continue
+                if kinds is None or row["kind"] in kinds:
+                    lexical_ids.append(str(row["memory_id"]))
+            rrf: dict[str, float] = {}
+            for rank, memory_id in enumerate(lexical_ids):
+                rrf[memory_id] = rrf.get(memory_id, 0.0) + 1.0 / (60 + rank)
+            for rank, (memory_id, similarity) in enumerate(vector_hits):
+                # Kind filtering happens at row fetch below; rank fusion stays simple.
+                rrf[memory_id] = rrf.get(memory_id, 0.0) + 1.0 / (60 + rank)
+            top_ids = [memory_id for memory_id, _ in
+                       sorted(rrf.items(), key=lambda item: item[1], reverse=True)[:limit]]
+            rows_by_id = {}
+            for memory_id in top_ids:
+                row = conn.execute(
+                    "SELECT * FROM cognitive_memory WHERE memory_id = ?", (memory_id,)
+                ).fetchone()
+                if row is not None and (kinds is None or row["kind"] in kinds):
+                    rows_by_id[memory_id] = row
+            return [self._row(rows_by_id[memory_id]) for memory_id in top_ids if memory_id in rows_by_id]
+        except Exception as exc:
+            app_logger.warning(f"Associative fusion failed; lexical ranking kept: {exc}")
+            return None
 
     def list_by_task(self, task_id: str, *, limit: int = 50) -> list[MemoryRecord]:
         with self._connect() as conn:

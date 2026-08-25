@@ -158,6 +158,34 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("memory_paraphrase_retrieval", "memory", memory_retrieval))
 
+            def associative_recall():
+                from app.cognition.memory import MemoryStore
+                from app.cognition.associative_memory import HashedNGramEmbedder, MemoryVectorIndex
+                store = MemoryStore(root / "assoc-memory.db")
+                index = MemoryVectorIndex(root / "assoc-vectors.npz", embedder=HashedNGramEmbedder())
+                assert store.enable_associative(index=index) is True
+                target = store.add(
+                    "episodic",
+                    "The budget discussion with the bank ended without agreement",
+                    tags=("finance", "bank"),
+                )
+                for filler in (
+                    "Water the garden each morning",
+                    "Compress the weekly backups on Friday",
+                    "Chrome crashed while opening the dashboard",
+                ):
+                    store.add("semantic", filler, importance=1.0)
+                # Zero shared tokens with the query: pure associative recall.
+                results = store.search("money meeting at the funds office", limit=3)
+                rank = next(
+                    (i + 1 for i, item in enumerate(results) if item.memory_id == target.memory_id),
+                    None,
+                )
+                return rank is not None and rank <= 2, \
+                    f"zero-overlap paraphrase recalled at rank={rank}", {"rank": rank}
+
+            checks.append(self._run_check("associative_paraphrase_recall", "memory", associative_recall))
+
             def failure_adaptation():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
                 store = StrategyOutcomeStore(str(root / "failure_outcomes.db"))
