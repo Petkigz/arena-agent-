@@ -602,6 +602,29 @@ class AutonomousGoalGenerator:
         except Exception as e:
             app_logger.warning(f"Info-gain scan causal failed: {e}")
 
+        # F1.7 learning-progress motivation: fill remaining exploration slots
+        # with practice goals targeted where competence is measurably growing
+        # (or clearly weak). Owner cap unchanged; insufficient data yields none.
+        try:
+            from app.cognition.learning_progress import learning_progress_tracker
+            for target in learning_progress_tracker.top_targets(k=2):
+                if len(generated) >= exploration_budget:
+                    break
+                progress = f"{(target.recent_rate or 0) * 100:.0f}% recent vs {(target.earlier_rate or 0) * 100:.0f}% earlier"
+                goal = self._create_information_gap_goal(
+                    f"competence gap: '{target.action_type}' success {progress} — practice where learning is happening",
+                    {"signal": "learning_progress", "action_type": target.action_type,
+                     "recent_rate": target.recent_rate, "earlier_rate": target.earlier_rate,
+                     "learning_value": target.learning_value},
+                )
+                if goal:
+                    goal.title = f"Practice: improve '{target.action_type}' reliability ({target.status})"
+                    goal.source = GoalSource.COMPETENCE_IMPROVEMENT
+                    goal.motivation = IntrinsicMotivation.COMPETENCE
+                    generated.append(goal)
+        except Exception as e:
+            app_logger.warning(f"Learning-progress goal generation failed: {e}")
+
         generated = generated[:exploration_budget]
         for goal in generated:
             self.add_goal(goal)

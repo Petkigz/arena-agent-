@@ -295,6 +295,30 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("owner_charter_informs_goals", "control", owner_charter_informs_goals))
 
+            def learning_progress_targets_growth():
+                from app.cognition.action_outcomes import ActionOutcomeStore
+                from app.cognition.learning_progress import LearningProgressTracker
+                store = ActionOutcomeStore(root / "lp_outcomes.db")
+                counter = 0
+                for _ in range(4):
+                    counter += 1; store.record("browser_upload", {"i": counter}, "verified_failure", execution_id=f"lp{counter}")
+                for _ in range(6):
+                    counter += 1; store.record("browser_upload", {"i": counter}, "verified_success", execution_id=f"lp{counter}")
+                for _ in range(10):
+                    counter += 1; store.record("search_files", {"i": counter}, "verified_success", execution_id=f"lp{counter}")
+                tracker = LearningProgressTracker(store.db_path)
+                upload = tracker.progress_for("browser_upload")
+                mastered = tracker.progress_for("search_files")
+                ok_improving = upload.status == "improving" and upload.learning_value > 0.2
+                ok_mastered = mastered.status == "mastered" and mastered.learning_value < upload.learning_value
+                ok_targets = [t.action_type for t in tracker.top_targets(2)] == ["browser_upload"]
+                passed = ok_improving and ok_mastered and ok_targets
+                return passed, \
+                    f"improving={ok_improving} mastered={ok_mastered} targeted={ok_targets}", \
+                    {"upload_value": upload.learning_value, "mastered_value": mastered.learning_value}
+
+            checks.append(self._run_check("learning_progress_targets_growth", "adaptation", learning_progress_targets_growth))
+
             def failure_adaptation():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
                 store = StrategyOutcomeStore(str(root / "failure_outcomes.db"))

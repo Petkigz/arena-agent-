@@ -395,6 +395,11 @@ def reject_induced_skill_endpoint(candidate_id: str):
         raise HTTPException(status_code=409, detail=result.get("error", "Reject failed"))
     return result
 
+@router.get("/owner-control/learning-progress")
+def get_learning_progress_endpoint(limit: int = Query(25, ge=1, le=100)):
+    from app.cognition.learning_progress import learning_progress_tracker
+    return learning_progress_tracker.report(limit)
+
 @router.get("/owner-control/questions")
 def list_owner_questions_endpoint(status: Optional[str] = Query("pending"), limit: int = Query(100, ge=1, le=500)):
     from app.cognition.uncertainty_questions import owner_question_store
