@@ -312,7 +312,7 @@ It does **not** create:
 ## Phase D — OS integration
 
 15. Owner-machine UIA/AT-SPI and multi-monitor tests.
-16. Ground all active-window actions to process/window/accessibility identity.
+16. ✅ Ground all active-window actions to process/window/accessibility identity — raw input executes only through RawInputGuard (window+process grounding, topology digest, 10s freshness); accessibility activation requires a live window grounding; and ghost background-messaging now binds ONE window uniquely (exact title preferred, ambiguity lists candidates instead of silently choosing the first match) and reports the owning process id where the platform exposes it (tests/test_ghost_window_binding.py).
 17. ✅ Service-specific browser upload/delete adapters (owner-configured receipts + delete flows; `browser_delete_upload` Level 3).
 18. Transactional restore/update tests on disposable owner-machine fixtures.
 19. Real ADB/device and privilege-elevation handoff tests.
