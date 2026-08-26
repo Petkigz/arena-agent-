@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useSettingsStore, useModelSettingsStore, useAppearanceSettingsStore } from '../../stores';
-import { Settings, Mic, Brain, Shield, Palette, ChevronRight, Accessibility } from 'lucide-react';
+import { Settings, Mic, Brain, Shield, Palette, ChevronRight, Accessibility, Sparkles } from 'lucide-react';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -47,6 +47,15 @@ export function SettingsPage() {
       icon: Shield,
       route: '/settings/privacy',
       color: 'text-green-500',
+      summary: null,
+    },
+    {
+      id: 'cognition',
+      title: 'Cognition',
+      description: 'Charter, uncertainty questions, induced skills, learning progress',
+      icon: Sparkles,
+      route: '/settings/cognition',
+      color: 'text-amber-500',
       summary: null,
     },
     {

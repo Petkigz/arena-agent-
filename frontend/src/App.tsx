@@ -31,6 +31,7 @@ const ModelSettingsPage = lazy(() => import('./app/routes/ModelSettingsPage').th
 const PrivacySettingsPage = lazy(() => import('./app/routes/PrivacySettingsPage').then(m => ({ default: m.PrivacySettingsPage })));
 const AppearanceSettingsPage = lazy(() => import('./app/routes/AppearanceSettingsPage').then(m => ({ default: m.AppearanceSettingsPage })));
 const AccessibilitySettingsPage = lazy(() => import('./app/routes/AccessibilitySettingsPage').then(m => ({ default: m.AccessibilitySettingsPage })));
+const CognitionPage = lazy(() => import('./app/routes/CognitionPage').then(m => ({ default: m.CognitionPage })));
 const ProjectDetailPage = lazy(() => import('./app/routes/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
 const NotFoundPage = lazy(() => import('./app/routes/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
@@ -131,6 +132,7 @@ function AppContent() {
             <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/cognition" element={<PageErrorBoundary pageName="CognitionPage"><CognitionPage /></PageErrorBoundary>} />
             <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
             <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
@@ -149,6 +151,7 @@ function AppContent() {
             <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
+            <Route path="/settings/cognition" element={<PageErrorBoundary pageName="CognitionPage"><CognitionPage /></PageErrorBoundary>} />
             <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
             <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
