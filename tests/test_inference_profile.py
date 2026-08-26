@@ -252,3 +252,80 @@ def test_benchmark_measures_models_online(monkeypatch, tmp_path):
     assert by_model["model-a"]["usage_reported"] is True
     assert by_model["model-a"]["completion_tokens_per_second_mean"] > 0
     assert "ram_after" in report
+
+
+def test_probe_uses_configured_models_only_and_reports_served_model(tmp_path):
+    """Live-hardware regression: models[0] picked a reasoning model (50.8s,
+    empty visible channel). The probe must target configured models only and
+    flag when the provider loosely resolves to a different model."""
+    import httpx
+    from app.cognition.inference_profile import InferenceProfile, probe_provider
+
+    class FakeTransport(httpx.BaseTransport):
+        def handle_request(self, request):
+            if request.url.path.endswith("/models"):
+                return httpx.Response(200, json={"data": [
+                    {"id": "qwen/qwen3-14b"},          # listed FIRST on purpose
+                    {"id": "qwen2.5-3b-instruct"},     # the configured fast model
+                ]})
+            body = json.loads(request.content)
+            # Server loosely resolves every request to its first model.
+            return httpx.Response(200, json={
+                "model": "qwen/qwen3-14b",
+                "choices": [{"message": {"content": "ready"}}],
+                "usage": {"completion_tokens": 1},
+            })
+
+    profile = InferenceProfile(main_model="qwen2.5-14b-instruct",
+                               fast_model="qwen2.5-3b-instruct",
+                               provider_url="http://127.0.0.1:1234/v1")
+    evidence = probe_provider(profile, client=httpx.Client(transport=FakeTransport()), timeout=5.0)
+    probe = evidence["completion_probe"]
+    assert probe["model"] == "qwen2.5-3b-instruct"      # configured fast, NOT models[0]
+    assert probe["served_model"] == "qwen/qwen3-14b"    # what actually answered
+    assert probe["resolved_differently"] is True
+    assert probe["verified"] is False                   # evidence about the wrong model
+
+
+def test_probe_refuses_when_no_configured_model_loaded(tmp_path):
+    import httpx
+    from app.cognition.inference_profile import InferenceProfile, probe_provider
+
+    class FakeTransport(httpx.BaseTransport):
+        def handle_request(self, request):
+            return httpx.Response(200, json={"data": [{"id": "something-else"}]})
+
+    profile = InferenceProfile(main_model="qwen2.5-14b-instruct",
+                               fast_model="qwen2.5-3b-instruct",
+                               provider_url="http://127.0.0.1:1234/v1")
+    evidence = probe_provider(profile, client=httpx.Client(transport=FakeTransport()), timeout=5.0)
+    assert evidence["completion_probe"]["success"] is False
+    assert "refusing to probe an arbitrary" in evidence["completion_probe"]["reason"]
+
+
+def test_benchmark_flags_loose_model_resolution(tmp_path):
+    """A 'benchmark of X' served by model Y is not a benchmark of X."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "benchmark_lm_studio",
+        Path(__file__).resolve().parents[1] / "scripts" / "benchmark_lm_studio.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    import httpx
+
+    class ResolvingTransport(httpx.BaseTransport):
+        def handle_request(self, request):
+            return httpx.Response(200, json={
+                "model": "qwen/qwen3-14b",
+                "choices": [{"message": {"content": "answer " * 50}}],
+                "usage": {"completion_tokens": 100},
+            })
+
+    client = httpx.Client(transport=ResolvingTransport())
+    result = module.benchmark_model(client, "http://127.0.0.1:1234/v1", "qwen2.5-14b-instruct")
+    assert result["requested_model_served"] is False
+    assert result["success"] is False  # honest: samples are about the wrong model
+    assert "NOT evidence about the requested model" in result["resolution_warning"]

@@ -56,6 +56,8 @@ def benchmark_model(client: httpx.Client, base_url: str, model: str) -> dict:
         "latency_ms_first_token": None,
         "completion_tokens_per_second": [],
         "usage_reported": False,
+        "served_models": [],
+        "requested_model_served": True,
     }
     for prompt in PROMPTS:
         payload = {
@@ -73,6 +75,13 @@ def benchmark_model(client: httpx.Client, base_url: str, model: str) -> dict:
                 result["errors"].append(f"HTTP {response.status_code}: {response.text[:200]}")
                 continue
             body = response.json()
+            served = str(body.get("model") or model)
+            if served not in result["served_models"]:
+                result["served_models"].append(served)
+            if served != model:
+                # The provider loosely resolved our id to a DIFFERENT model:
+                # these samples are not evidence about the requested model.
+                result["requested_model_served"] = False
             content = ""
             try:
                 content = str(body["choices"][0]["message"]["content"])
@@ -96,8 +105,12 @@ def benchmark_model(client: httpx.Client, base_url: str, model: str) -> dict:
         result["completion_tokens_per_second_mean"] = round(
             statistics.mean(result["completion_tokens_per_second"]), 2
         )
-    result["success"] = result["completed_samples"] == len(PROMPTS)
+    result["success"] = result["completed_samples"] == len(PROMPTS) and result["requested_model_served"]
     result["partial"] = 0 < result["completed_samples"] < len(PROMPTS)
+    if not result["requested_model_served"]:
+        result["resolution_warning"] = (
+            f"Provider resolved '{model}' to {result['served_models']}; samples are NOT evidence "
+            "about the requested model. Set the profile to the provider's exact model id." )
     return result
 
 

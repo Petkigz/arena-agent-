@@ -256,13 +256,30 @@ def probe_provider(
         evidence["main_model_loaded"] = prof.main_model in models
         evidence["fast_model_loaded"] = prof.fast_model in models
         if completion_probe and models:
+            # Probe ONLY a configured model that is actually loaded — starting
+            # with the cheap fast model. Never an arbitrary models[0]: a
+            # randomly-picked reasoning model can burn a minute producing an
+            # empty visible channel (observed live: 50.8s, verified=false).
+            if prof.fast_model in models:
+                probe_model = prof.fast_model
+            elif prof.main_model in models:
+                probe_model = prof.main_model
+            else:
+                evidence["completion_probe"] = {
+                    "success": False, "verified": False,
+                    "reason": "neither configured model is loaded; refusing to probe an arbitrary one",
+                    "loaded_models": models,
+                }
+                probe_model = None
             payload = {
-                "model": prof.main_model if prof.main_model in models else models[0],
+                "model": probe_model,
                 "messages": [{"role": "user", "content": "Reply with the single word: ready"}],
                 "temperature": 0.0,
                 "max_tokens": 8,
                 "stream": False,
-            }
+            } if probe_model else None
+            if payload is None:
+                return evidence
             started = time.perf_counter()
             completion = http.post(f"{base}/chat/completions", json=payload, timeout=max(timeout, 60.0))
             evidence["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
@@ -273,14 +290,21 @@ def probe_provider(
                     reply = str(body["choices"][0]["message"]["content"])
                 except Exception:
                     reply = ""
+                # Served-model honesty: providers may loosely resolve the
+                # requested id to a different model — record what ACTUALLY
+                # served the response, because a probe of X answered by Y is
+                # not evidence about X.
+                served = str(body.get("model") or payload["model"])
                 evidence["completion_probe"] = {
                     "success": bool(reply.strip()),
                     "model": payload["model"],
+                    "served_model": served,
+                    "resolved_differently": served != payload["model"],
                     "reply_preview": reply.strip()[:80],
                     "usage": body.get("usage"),
-                    "verified": bool(reply.strip()),
+                    "verified": bool(reply.strip()) and served == payload["model"],
                 }
-            else:
+            elif payload is not None:
                 evidence["completion_probe"] = {
                     "success": False,
                     "verified": False,
