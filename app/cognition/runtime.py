@@ -705,6 +705,12 @@ class CognitiveRuntime:
         high_memory = float(hardware_model.get("ram_total_gb", 0) or 0) >= 40
         memory_record_cap = 20000 if high_memory else 5000
         episode_batch = 500 if high_memory else 100
+        # Retrieval scale keeps pace with the record cap (audit item 8):
+        # the lexical candidate window is a quarter of the cap (min 1000).
+        try:
+            self.memory.scan_window = max(1000, memory_record_cap // 4)
+        except Exception:
+            pass
         try:
             summary["pruned_memories"] = self.memory.apply_memory_decay_and_prune(max_records=memory_record_cap)
             summary["memory_record_cap"] = memory_record_cap

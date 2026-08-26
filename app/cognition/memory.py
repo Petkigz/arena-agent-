@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from app.config import settings
 from app.utils.logger import app_logger
 
 
@@ -84,6 +85,10 @@ class MemoryStore:
         self.db_path = str(db_path)
         self._init_db()
         self._associative = None  # opt-in vector index (enable_associative)
+        # Lexical candidate window: records outside the top-N by importance
+        # are invisible to lexical search (associative recall covers them).
+        # The runtime widens this with the high-memory record cap.
+        self.scan_window = max(200, int(getattr(settings, "ARENA_MEMORY_SCAN_WINDOW", 1000)))
 
     def enable_associative(self, index=None, backfill_limit: int = 20000) -> bool:
         """Layer vector-associative recall over lexical search (best-effort).
@@ -205,7 +210,8 @@ class MemoryStore:
         limit = max(1, min(limit, 50))
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM cognitive_memory ORDER BY importance DESC, last_accessed DESC LIMIT 1000"
+                "SELECT * FROM cognitive_memory ORDER BY importance DESC, last_accessed DESC LIMIT ?",
+                (self.scan_window,),
             ).fetchall()
             selected = []
             for row in rows:

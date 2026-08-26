@@ -298,7 +298,7 @@ It does **not** create:
 
 6. ✅ Owner-configured worker/concurrency budget derived from live RAM pressure (`ConcurrencyGovernor`: measured grants, owner override within physical threads, absolute critical-pressure gate, persisted receipts; wired into counterfactual branch simulation and the hardware self-model).
 7. 🔶 Owner-managed inference profile (`data/inference_profile.json`, `GET/PUT /owner-control/inference-profile`, live probe at `/probe`, `scripts/benchmark_lm_studio.py`): context window and fast/main models derive from the measured tier, `/models/config` now writes through the same store, and probe evidence distinguishes loaded/unloaded/unknown. The 9B-vs-14B latency/quality/RAM *numbers* still require running the benchmark on the owner machine.
-8. Increase retrieval/index scale with measured limits.
+8. ✅ Retrieval/index scale with measured limits — the lexical candidate window is configurable (ARENA_MEMORY_SCAN_WINDOW) and derives from the record cap at runtime (cap/4, min 1000 → 5000 at the 20k high-memory cap; previously a hard-coded 1000 left lower-importance records invisible to lexical search). Associative recall covers all indexed records regardless of importance. Measured at 20,001 records (tests/test_retrieval_scale.py): index build 2.6s, vector search ~2ms, fused search ~91ms, lexical window ~17ms — all with asserted CI-safe ceilings.
 9. Add larger local embedding, speech and VLM profiles only after held-out evaluation.
 
 ## Phase C — autonomy completion
