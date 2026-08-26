@@ -40,3 +40,7 @@ opencv-python-headless>=4.8.0
 
 # Native desktop window (optional GUI client):
 # PySide6>=6.6.0
+
+# Windows native accessibility (UIA) — unlocks accessibility_capture on the owner machine
+uiautomation>=2.0.20; sys_platform == "win32"
+comtypes>=1.2.0; sys_platform == "win32"
