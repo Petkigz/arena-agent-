@@ -395,6 +395,24 @@ def reject_induced_skill_endpoint(candidate_id: str):
         raise HTTPException(status_code=409, detail=result.get("error", "Reject failed"))
     return result
 
+@router.get("/owner-control/continual-learning")
+def continual_learning_status_endpoint():
+    from app.cognition.continual_learning import continual_learning
+    return continual_learning.status()
+
+@router.post("/owner-control/continual-learning/plan")
+def continual_learning_plan_endpoint():
+    from app.cognition.continual_learning import continual_learning
+    return continual_learning.plan_training()
+
+@router.post("/owner-control/continual-learning/{cycle_id}/evaluate")
+def continual_learning_evaluate_endpoint(cycle_id: str):
+    from app.cognition.continual_learning import continual_learning
+    result = continual_learning.evaluate(cycle_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=409, detail=result.get("error", "Evaluate failed"))
+    return result
+
 @router.get("/owner-control/learning-progress")
 def get_learning_progress_endpoint(limit: int = Query(25, ge=1, le=100)):
     from app.cognition.learning_progress import learning_progress_tracker
