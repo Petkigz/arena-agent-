@@ -305,7 +305,7 @@ It does **not** create:
 
 10. ✅ Full preemption reconciliation and plan resume.
 11. ✅ End-to-end cycle provenance graph.
-12. Conflict-safe recurring scheduler with timezone/DST support.
+12. ✅ Conflict-safe recurring scheduler with timezone/DST support — pinned by tests/test_schedule_dst.py: wall time preserved across fall-back and spring-forward (offsets shift correctly), ambiguous fall-back times fire exactly once at the first occurrence, nonexistent spring-forward times shift forward by the gap instead of skipping, weekly recurrence crosses transitions at the exact wall time.
 13. ✅ Desktop + Android transport/UI parity for autonomy operations (Android build verification remains).
 14. ✅ Multi-hour restart/preemption tests (tests/test_restart_durability.py: accelerated-clock semantics — stale-lease recovery after simulated crashes, heartbeat single-ownership for multi-hour cycles, daily/weekly recurrence across a simulated week with deterministic occurrence ids, multi-hour downtime skip/catch-up, restart-marked-interrupted executions with persisted results, and preemption→restart→reconciliation→resume skipping verified work; real hardware validation remains for the owner machine).
 
