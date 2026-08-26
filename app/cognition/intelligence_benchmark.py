@@ -262,6 +262,39 @@ class IntelligenceBenchmarkSuite:
 
             checks.append(self._run_check("skill_induction_from_experience", "learning", skill_induction_from_experience))
 
+            def owner_charter_informs_goals():
+                import app.cognition.owner_charter as oc
+                store = oc.OwnerCharterStore(root / "charter")
+                monkey_store = store  # local, isolated charter
+                original_store = oc.owner_charter_store
+                oc.owner_charter_store = monkey_store
+                try:
+                    store.update({"priorities": ["backup archive", "server maintenance"]})
+                    aligned = oc.charter_priority_alignment("run the server maintenance and backup archive")
+                    unaligned = oc.charter_priority_alignment("cook lunch")
+                    ok_align = aligned is not None and aligned > 0.5 and unaligned == 0.0
+                    charter = store.get()
+                    ok_versioned = charter.revision == 1 and len(charter.content_digest) == 64
+                    ok_history = len(store.history()) == 1
+                    # Owner model counts decisions with Wilson bounds.
+                    from app.cognition.owner_model import OwnerModelStore
+                    model = OwnerModelStore(root / "om.db")
+                    for i in range(4):
+                        model.record_action_preference("create_backup", True, f"e{i}")
+                    report = model.report()
+                    pref = next((p for p in report["counted_preferences"]
+                                 if p["action_type"] == "create_backup"), None)
+                    ok_model = pref is not None and pref["n"] == 4 and pref["approval_rate"] == 1.0 \
+                        and pref["wilson_low"] > 0.4
+                    passed = ok_align and ok_versioned and ok_history and ok_model
+                    return passed, \
+                        f"align={ok_align} versioned={ok_versioned} history={ok_history} model={ok_model}", \
+                        {"aligned": aligned, "wilson_low": pref["wilson_low"] if pref else None}
+                finally:
+                    oc.owner_charter_store = original_store
+
+            checks.append(self._run_check("owner_charter_informs_goals", "control", owner_charter_informs_goals))
+
             def failure_adaptation():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
                 store = StrategyOutcomeStore(str(root / "failure_outcomes.db"))

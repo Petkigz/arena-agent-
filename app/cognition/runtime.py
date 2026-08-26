@@ -2375,6 +2375,24 @@ class CognitiveRuntime:
         self.blackboard.set("current_user_query", user_text, source=SourceType.USER_INPUT, confidence=1.0)
         # Phase 3: expose the hardware self-model so reasoning can consult the machine state.
         self.blackboard.set("hardware_self_model", self.hardware_self_model, source="hardware_governor")
+        # F1.6 Owner Charter + owner model: the owner's values and counted
+        # patterns inform every consideration stage (inform, never govern).
+        try:
+            from app.cognition.owner_charter import owner_charter_store
+            charter = owner_charter_store.get()
+            self.blackboard.set("owner_charter", charter.to_dict(), source="owner_charter", confidence=1.0)
+            charter_ctx = charter.compact_context()
+            if charter_ctx:
+                self.blackboard.set("owner_charter_context", charter_ctx, source="owner_charter", confidence=1.0)
+        except Exception as exc:
+            app_logger.warning(f"Owner charter context unavailable: {exc}")
+        try:
+            from app.cognition.owner_model import owner_model_store
+            owner_ctx = owner_model_store.compact_context()
+            if owner_ctx:
+                self.blackboard.set("owner_model_context", owner_ctx, source="owner_model", confidence=1.0)
+        except Exception as exc:
+            app_logger.warning(f"Owner model context unavailable: {exc}")
         # P2 AGI: Multimodal ingestion — if image_path or attachments provided, analyze and ground
         multimodal_context = ""
         if image_path:

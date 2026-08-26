@@ -327,6 +327,45 @@ def issue_owner_decision_endpoint(req: OwnerDecisionRequest):
         "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the identity-checkpoint that expects these changes.",
     }
 
+class OwnerCharterUpdate(BaseModel):
+    model_config = {"extra": "forbid"}  # unknown charter fields must fail, not vanish
+    mission: Optional[str] = None
+    values: Optional[List[Dict[str, Any]]] = None
+    priorities: Optional[List[str]] = None
+    communication_style: Optional[str] = None
+    standing_directives: Optional[List[str]] = None
+
+
+@router.get("/owner-control/charter")
+def get_owner_charter_endpoint():
+    from app.cognition.owner_charter import owner_charter_store
+    charter = owner_charter_store.get()
+    return {"success": True, "charter": charter.to_dict(),
+            "history": owner_charter_store.history(),
+            "note": "The charter informs reasoning; policy gates and sovereign grants remain the authority."}
+
+@router.put("/owner-control/charter")
+def update_owner_charter_endpoint(req: OwnerCharterUpdate):
+    from app.cognition.owner_charter import owner_charter_store
+    try:
+        return owner_charter_store.update(req.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+@router.get("/owner-control/owner-model")
+def get_owner_model_endpoint():
+    from app.cognition.owner_model import owner_model_store
+    return owner_model_store.report()
+
+@router.post("/owner-control/owner-model/ingest")
+def ingest_owner_model_endpoint():
+    from app.cognition.owner_model import owner_model_store
+    from app.cognition.approval_store import approval_store
+    from app.cognition.uncertainty_questions import owner_question_store
+    imported = owner_model_store.ingest_from_sources(approval_store, owner_question_store)
+    return {"success": True, "imported": imported,
+            "report": owner_model_store.report()}
+
 @router.get("/owner-control/induced-skills")
 def list_induced_skills_endpoint(status: Optional[str] = Query("pending")):
     from app.cognition.skill_induction import skill_induction_engine

@@ -130,6 +130,9 @@ class AutonomousGoal:
     value_score: float = 0.0  # 0-1, how valuable
     urgency_score: float = 0.0  # 0-1, how time-sensitive
     overall_score: float = 0.0  # Combined score
+    # F1.6: heuristic keyword overlap with the Owner Charter priorities
+    # (None = no charter signal). Informational; never authorizes anything.
+    owner_priority_alignment: Optional[float] = None
     
     # Approval boundary (P0: goal approval ≠ action authorization)
     max_action_level: int = 2  # highest auto-executable safety level (≥3 → owner)
@@ -760,6 +763,13 @@ class AutonomousGoalGenerator:
             GoalSource.CURIOSITY: 0.5,
         }
         goal.value_score = source_values.get(goal.source, 0.5)
+        # F1.6: charter priority alignment (heuristic, labeled, non-authoritative).
+        try:
+            from app.cognition.owner_charter import charter_priority_alignment
+            goal.owner_priority_alignment = charter_priority_alignment(
+                f"{goal.title} {goal.description}")
+        except Exception:
+            goal.owner_priority_alignment = None
         
         # Urgency: based on priority
         priority_urgency = {
