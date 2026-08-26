@@ -138,6 +138,7 @@ class OwnerControlPage(QWidget):
         self.autonomy_tabs.addTab(self._build_runs_tab(), "Runs & timeline")
         self.autonomy_tabs.addTab(self._build_preemptions_tab(), "Preemptions")
         self.autonomy_tabs.addTab(self._build_budgets_tab(), "Budgets & decisions")
+        self.autonomy_tabs.addTab(self._build_cognition_tab(), "Cognition")
         layout.addWidget(self.autonomy_tabs, 1)
 
         layout.addWidget(QLabel("Selected plan steps JSON (editable before execution)"))
@@ -328,6 +329,167 @@ class OwnerControlPage(QWidget):
         decision_row.addWidget(self.decision_revoke_btn)
         column.addLayout(decision_row)
         return tab
+
+    # ── cognition tab ────────────────────────────────────────────────────────
+
+    def _build_cognition_tab(self):
+        tab = QWidget()
+        column = QVBoxLayout(tab)
+        column.addWidget(QLabel("Owner Charter (informs every cycle; policy gates remain the authority)"))
+        self.charter_mission = QTextEdit()
+        self.charter_mission.setFixedHeight(52)
+        self.charter_mission.setPlaceholderText("Mission")
+        column.addWidget(self.charter_mission)
+        self.charter_priorities = QTextEdit()
+        self.charter_priorities.setFixedHeight(66)
+        self.charter_priorities.setPlaceholderText("Priorities — one per line, highest first")
+        column.addWidget(self.charter_priorities)
+        self.charter_directives = QTextEdit()
+        self.charter_directives.setFixedHeight(66)
+        self.charter_directives.setPlaceholderText("Standing directives — one per line")
+        column.addWidget(self.charter_directives)
+        charter_row = QHBoxLayout()
+        self.charter_save_btn = QPushButton("Save charter")
+        self.charter_save_btn.clicked.connect(self._save_charter)
+        charter_row.addWidget(self.charter_save_btn)
+        self.charter_label = QLabel("revision —")
+        charter_row.addWidget(self.charter_label)
+        column.addLayout(charter_row)
+
+        column.addWidget(QLabel("Uncertainty questions (approve authorizes exactly; it never executes)"))
+        self.questions = QListWidget()
+        column.addWidget(self.questions, 1)
+        question_row = QHBoxLayout()
+        for label, answer in (("Approve exactly", "approve"), ("Deny", "deny"), ("Observe more", "observe")):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _=False, a=answer: self._answer_question(a))
+            question_row.addWidget(button)
+        column.addLayout(question_row)
+
+        column.addWidget(QLabel("Induced skills (mined from repeated verified successes; accept teaches, gates still apply)"))
+        self.induced = QListWidget()
+        column.addWidget(self.induced, 1)
+        skill_row = QHBoxLayout()
+        self.skill_accept_btn = QPushButton("Accept skill")
+        self.skill_accept_btn.clicked.connect(lambda: self._decide_induced_skill(True))
+        skill_row.addWidget(self.skill_accept_btn)
+        self.skill_reject_btn = QPushButton("Reject")
+        self.skill_reject_btn.clicked.connect(lambda: self._decide_induced_skill(False))
+        skill_row.addWidget(self.skill_reject_btn)
+        self.skill_scan_btn = QPushButton("Rescan")
+        self.skill_scan_btn.clicked.connect(self._scan_induced_skills)
+        skill_row.addWidget(self.skill_scan_btn)
+        column.addLayout(skill_row)
+
+        self.learning_label = QLabel("Learning progress: unknown")
+        self.learning_label.setWordWrap(True)
+        column.addWidget(self.learning_label)
+        self.owner_model_label = QLabel("Owner patterns: not counted yet")
+        self.owner_model_label.setWordWrap(True)
+        column.addWidget(self.owner_model_label)
+        return tab
+
+    def _save_charter(self):
+        try:
+            patch = {
+                "mission": self.charter_mission.toPlainText().strip(),
+                "priorities": [line.strip() for line in self.charter_priorities.toPlainText().splitlines() if line.strip()],
+                "standing_directives": [line.strip() for line in self.charter_directives.toPlainText().splitlines() if line.strip()],
+            }
+            result = self._client.update_owner_charter(patch)
+            charter = result.get("charter", {})
+            self.charter_label.setText(f"revision {charter.get('revision', '?')}")
+            self.status.setText("Charter saved; it informs reasoning and grants no authority")
+        except Exception as exc:
+            self.status.setText(f"Charter save failed: {exc}")
+
+    def _answer_question(self, answer):
+        question = self._selected(self.questions)
+        if not question:
+            return
+        try:
+            result = self._client.answer_owner_question(question["question_id"], answer)
+            if answer == "approve" and result.get("approval_action_id"):
+                self.status.setText(f"Exact approval {result['approval_action_id']} created; nothing executed")
+            else:
+                self.status.setText(f"Answer recorded: {answer}")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Answer failed: {exc}")
+
+    def _decide_induced_skill(self, accept):
+        candidate = self._selected(self.induced)
+        if not candidate:
+            return
+        try:
+            if accept:
+                self._client.accept_induced_skill(candidate["candidate_id"])
+                self.status.setText("Skill accepted into the taught library; execution still passes all gates")
+            else:
+                self._client.reject_induced_skill(candidate["candidate_id"])
+                self.status.setText("Candidate rejected")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Skill decision failed: {exc}")
+
+    def _scan_induced_skills(self):
+        try:
+            result = self._client.scan_induced_skills()
+            self.status.setText(f"Scan: {result.get('candidates_created', '?')} new candidate(s), {result.get('plans_scanned', '?')} plans")
+            self.refresh()
+        except Exception as exc:
+            self.status.setText(f"Scan failed: {exc}")
+
+    def _refresh_cognition(self):
+        try:
+            data = self._client.owner_charter()
+            charter = data.get("charter", {})
+            self.charter_label.setText(f"revision {charter.get('revision', 0)}")
+            if not self.charter_mission.toPlainText().strip():
+                self.charter_mission.setPlainText(str(charter.get("mission", "")))
+                self.charter_priorities.setPlainText("\n".join(charter.get("priorities", [])))
+                self.charter_directives.setPlainText("\n".join(charter.get("standing_directives", [])))
+        except Exception as exc:
+            self.status.setText(f"Could not load charter: {exc}")
+        try:
+            self.questions.clear()
+            for question in self._client.owner_questions().get("questions", []):
+                item = QListWidgetItem(
+                    f"{question.get('action_type', '')} [{round(float(question.get('calibrated_confidence', 0)) * 100)}%] {question.get('question_text', '')[:70]}"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, question)
+                self.questions.addItem(item)
+        except Exception as exc:
+            self.status.setText(f"Could not load questions: {exc}")
+        try:
+            self.induced.clear()
+            for candidate in self._client.induced_skills().get("candidates", []):
+                item = QListWidgetItem(
+                    f"{candidate.get('skill_name', '')} [{candidate.get('occurrences', 0)}x → {' → '.join(candidate.get('action_sequence', [])[:3])}]"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, candidate)
+                self.induced.addItem(item)
+        except Exception as exc:
+            self.status.setText(f"Could not load induced skills: {exc}")
+        try:
+            targets = self._client.learning_progress().get("targets", [])
+            if targets:
+                rendered = "; ".join(
+                    f"{t.get('action_type')}({t.get('status')}, value {t.get('learning_value', 0):.2f})"
+                    for t in targets[:5]
+                )
+                self.learning_label.setText(f"Learning progress: {rendered}")
+            else:
+                self.learning_label.setText("Learning progress: no measured domains yet")
+        except Exception as exc:
+            self.learning_label.setText(f"Learning progress unavailable: {exc}")
+        try:
+            report = self._client.owner_model_report()
+            approves = ", ".join(report.get("consistently_approves", [])[:4]) or "—"
+            denies = ", ".join(report.get("consistently_denies", [])[:4]) or "—"
+            self.owner_model_label.setText(f"Owner patterns (counted): approves {approves}; denies {denies}")
+        except Exception as exc:
+            self.owner_model_label.setText(f"Owner patterns unavailable: {exc}")
 
     # ── autonomy operations: data + handlers ────────────────────────────────
 
@@ -637,6 +799,7 @@ class OwnerControlPage(QWidget):
         except Exception as exc:
             self.status.setText(f"Could not load Owner Control: {exc}")
         self._refresh_autonomy()
+        self._refresh_cognition()
 
     def _save_policy(self):
         try:

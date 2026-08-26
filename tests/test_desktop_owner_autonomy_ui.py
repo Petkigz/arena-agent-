@@ -109,6 +109,26 @@ class FakeClient:
     def concurrency_receipts(self, limit=20): return self._record("concurrency_receipts", limit)
     def issue_owner_decision(self, types, note=""): return self._record("issue_owner_decision", types, note)
     def revoke_owner_decision(self, decision_id): return self._record("revoke_owner_decision", decision_id)
+    # cognition surfaces
+    def owner_charter(self): return {"charter": {"mission": "full owner sovereignty", "revision": 2,
+                                                 "priorities": ["stability"], "standing_directives": []}}
+    def update_owner_charter(self, patch): return self._record("update_owner_charter", patch) or {"charter": {"revision": 3}}
+    def owner_questions(self, status="pending"):
+        return {"questions": [{"question_id": "oq_1", "action_type": "search_files",
+                               "question_text": "30% confident — proceed?", "calibrated_confidence": 0.3}]}
+    def answer_owner_question(self, question_id, answer, note=""):
+        self._record("answer_owner_question", question_id, answer)
+        return {"approval_action_id": "act_7"} if answer == "approve" else {}
+    def induced_skills(self, status="pending"):
+        return {"candidates": [{"candidate_id": "isk_1", "skill_name": "induced_copy_compress",
+                                "occurrences": 4, "action_sequence": ["copy_file_verified", "compress_files"]}]}
+    def scan_induced_skills(self): return self._record("scan_induced_skills") or {"candidates_created": 0, "plans_scanned": 3}
+    def accept_induced_skill(self, candidate_id): return self._record("accept_induced_skill", candidate_id)
+    def reject_induced_skill(self, candidate_id): return self._record("reject_induced_skill", candidate_id)
+    def learning_progress(self):
+        return {"targets": [{"action_type": "browser_upload", "status": "improving", "learning_value": 0.42}]}
+    def owner_model_report(self):
+        return {"consistently_approves": ["create_backup"], "consistently_denies": [], "peak_activity_hours_utc": []}
 
 
 def named_calls(fake):
@@ -203,5 +223,76 @@ def test_owner_control_page_autonomy_tabs_offscreen(qapp):
         page.decisions.setCurrentRow(0)
         page._revoke_decision()
         assert ("revoke_owner_decision", ("od_1",), {}) in fake.calls
+    finally:
+        page.deleteLater()
+
+
+def test_desktop_cognition_client_transports():
+    calls = []
+
+    def handler(request):
+        url = str(request.url)  # full URL including query string
+        calls.append((request.method, url, json.loads(request.content) if request.content else None))
+        return httpx.Response(200, json={"success": True})
+
+    c = ArenaBackendClient(); c._client = httpx.Client(transport=httpx.MockTransport(handler))
+    c.owner_charter()
+    c.update_owner_charter({"mission": "full sovereignty"})
+    c.owner_questions()
+    c.answer_owner_question("oq/1", "approve", "ok")
+    c.induced_skills()
+    c.scan_induced_skills()
+    c.accept_induced_skill("isk 1")
+    c.reject_induced_skill("isk 1")
+    c.learning_progress()
+    c.owner_model_report()
+    c.close()
+
+    base = calls[0][1].rsplit("/owner-control", 1)[0]  # scheme+host prefix
+    by_path = {(m, url[len(base):] if url.startswith(base) else url): b for m, url, b in calls}
+    assert ("GET", "/owner-control/charter") in by_path
+    assert by_path[("PUT", "/owner-control/charter")] == {"mission": "full sovereignty"}
+    assert ("GET", "/owner-control/questions?status=pending") in by_path
+    assert by_path[("POST", "/owner-control/questions/oq%2F1/answer")] == {"answer": "approve", "note": "ok"}
+    assert ("GET", "/owner-control/induced-skills?status=pending") in by_path
+    assert ("POST", "/owner-control/induced-skills/scan") in by_path
+    assert ("POST", "/owner-control/induced-skills/isk%201/accept") in by_path
+    assert ("POST", "/owner-control/induced-skills/isk%201/reject") in by_path
+    assert ("GET", "/owner-control/learning-progress") in by_path
+    assert ("GET", "/owner-control/owner-model") in by_path
+
+
+def test_owner_control_page_cognition_tab_offscreen(qapp):
+    pytest.importorskip("PySide6")
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from desktop.pages.owner_control import OwnerControlPage
+    except Exception as exc:
+        pytest.skip(f"Qt GUI runtime unavailable: {exc}")
+
+    fake = FakeClient()
+    page = OwnerControlPage(fake)
+    try:
+        # The cognition tab populated from the fake owner surfaces.
+        assert "revision" in page.charter_label.text()
+        assert page.questions.count() == 1
+        assert page.induced.count() == 1
+        assert "browser_upload" in page.learning_label.text()
+
+        page.questions.setCurrentRow(0)
+        fake.calls.clear()
+        page._answer_question("approve")
+        assert any(c[0] == "answer_owner_question" and c[1][1] == "approve" for c in fake.calls)
+        assert "nothing executed" in page.status.text()
+
+        page.induced.setCurrentRow(0)
+        page._decide_induced_skill(True)
+        assert any(c[0] == "accept_induced_skill" for c in fake.calls)
+        assert "still passes all gates" in page.status.text()
+
+        page._save_charter()
+        assert any(c[0] == "update_owner_charter" for c in fake.calls)
+        assert "grants no authority" in page.status.text()
     finally:
         page.deleteLater()

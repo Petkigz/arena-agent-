@@ -293,6 +293,32 @@ class ApiClient @Inject constructor(
     suspend fun revokeOwnerDecision(decisionId: String): String? =
         call("/owner-control/owner-decisions/${segment(decisionId)}/revoke", "POST", "{}")
 
+    // ── cognition surfaces (charter, questions, induced skills, progress) ───
+    suspend fun getOwnerCharter(): String? = call("/owner-control/charter")
+    suspend fun updateOwnerCharter(
+        mission: String,
+        priorities: List<String>,
+        standingDirectives: List<String>,
+    ): String? = call(
+        "/owner-control/charter", "PUT",
+        JSONObject().put("mission", mission)
+            .put("priorities", JSONArray(priorities))
+            .put("standing_directives", JSONArray(standingDirectives)).toString(),
+    )
+    suspend fun getOwnerQuestions(): String? = call("/owner-control/questions?status=pending")
+    suspend fun answerOwnerQuestion(questionId: String, answer: String): String? =
+        call(
+            "/owner-control/questions/${segment(questionId)}/answer", "POST",
+            JSONObject().put("answer", answer).put("note", "Android owner decision").toString(),
+        )
+    suspend fun getInducedSkills(): String? = call("/owner-control/induced-skills?status=pending")
+    suspend fun acceptInducedSkill(candidateId: String): String? =
+        call("/owner-control/induced-skills/${segment(candidateId)}/accept", "POST", "{}")
+    suspend fun rejectInducedSkill(candidateId: String): String? =
+        call("/owner-control/induced-skills/${segment(candidateId)}/reject", "POST", "{}")
+    suspend fun getLearningProgress(): String? = call("/owner-control/learning-progress")
+    suspend fun getOwnerModel(): String? = call("/owner-control/owner-model")
+
     // ── OS grounding + browser tabs (read-only observations) ────────────────
     suspend fun getOsGrounding(): String? = call("/os-grounding")
     suspend fun getAccessibilityStatus(): String? = call("/os-grounding/accessibility/status")

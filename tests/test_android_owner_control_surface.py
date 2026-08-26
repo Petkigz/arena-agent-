@@ -117,3 +117,39 @@ def test_android_goal_decision_does_not_execute_and_ceiling_allows_level_three()
     save_block = SETTINGS.split("fun saveOwnerPolicy", 1)[1].split("fun toggleEmergencyPause", 1)[0]
     assert "coerceIn(0, 3)" in save_block  # Level 3 reachable only with the sensitive switch
     assert "allowSensitiveAutonomy" in save_block
+
+
+def test_android_api_exposes_cognition_surfaces():
+    required = [
+        'call("/owner-control/charter")',
+        '"/owner-control/charter", "PUT"',
+        'call("/owner-control/questions?status=pending")',
+        '"/owner-control/questions/${segment(questionId)}/answer"',
+        'call("/owner-control/induced-skills?status=pending")',
+        '"/owner-control/induced-skills/${segment(candidateId)}/accept"',
+        '"/owner-control/induced-skills/${segment(candidateId)}/reject"',
+        'call("/owner-control/learning-progress")',
+        'call("/owner-control/owner-model")',
+    ]
+    for marker in required:
+        assert marker in API
+
+
+def test_android_ui_states_cognition_authority_boundaries():
+    markers = [
+        '"Exact approval created; nothing executed"',
+        '"Skill accepted; execution still passes all gates"',
+        '"Charter saved; it informs every cycle and grants no authority"',
+        'Text("Approve exactly")',
+        'Text("Accept skill")',
+        'data class OwnerQuestion(',
+        'data class InducedSkill(',
+    ]
+    for marker in markers:
+        assert marker in SETTINGS
+
+
+def test_android_cognition_answers_never_execute():
+    question_block = SETTINGS.split("fun answerQuestion", 1)[1].split("fun decideInducedSkill", 1)[0]
+    assert "api.answerOwnerQuestion" in question_block
+    assert "execute" not in question_block.replace("nothing executed", "")

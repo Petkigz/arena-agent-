@@ -512,6 +512,50 @@ class ArenaBackendClient:
         """GET /owner-control/concurrency-budget/receipts — measured execution evidence."""
         return self._get_json(f"/owner-control/concurrency-budget/receipts?limit={int(limit)}")
 
+    # ── cognition surfaces (charter, questions, induced skills, progress) ───
+    def owner_charter(self) -> Dict[str, Any]:
+        """GET /owner-control/charter — the owner's values artifact + history."""
+        return self._get_json("/owner-control/charter")
+
+    def update_owner_charter(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+        """PUT /owner-control/charter — versioned, digested charter update."""
+        return self._put_json("/owner-control/charter", patch)
+
+    def owner_questions(self, status: str = "pending") -> Dict[str, Any]:
+        """GET /owner-control/questions — uncertainty questions for the owner."""
+        return self._get_json(f"/owner-control/questions?status={status}")
+
+    def answer_owner_question(self, question_id: str, answer: str, note: str = "") -> Dict[str, Any]:
+        """POST /owner-control/questions/{id}/answer — approve|deny|observe (never executes)."""
+        return self._post_json(
+            f"/owner-control/questions/{quote(question_id, safe='')}/answer",
+            {"answer": answer, "note": note},
+        )
+
+    def induced_skills(self, status: str = "pending") -> Dict[str, Any]:
+        """GET /owner-control/induced-skills — candidates mined from experience."""
+        return self._get_json(f"/owner-control/induced-skills?status={status}")
+
+    def scan_induced_skills(self) -> Dict[str, Any]:
+        """POST /owner-control/induced-skills/scan — re-mine the plan history."""
+        return self._post_json("/owner-control/induced-skills/scan", {})
+
+    def accept_induced_skill(self, candidate_id: str) -> Dict[str, Any]:
+        """POST /owner-control/induced-skills/{id}/accept — teach (gates still apply)."""
+        return self._post_json(f"/owner-control/induced-skills/{quote(candidate_id, safe='')}/accept", {})
+
+    def reject_induced_skill(self, candidate_id: str) -> Dict[str, Any]:
+        """POST /owner-control/induced-skills/{id}/reject — final for this candidate."""
+        return self._post_json(f"/owner-control/induced-skills/{quote(candidate_id, safe='')}/reject", {})
+
+    def learning_progress(self) -> Dict[str, Any]:
+        """GET /owner-control/learning-progress — measured exploration targets."""
+        return self._get_json("/owner-control/learning-progress")
+
+    def owner_model_report(self) -> Dict[str, Any]:
+        """GET /owner-control/owner-model — counted owner decision patterns."""
+        return self._get_json("/owner-control/owner-model")
+
     # ── code execution ──────────────────────────────────────────────────────
     def execute_code(self, code: str, language: str = "python") -> Dict[str, Any]:
         """POST /code/execute."""

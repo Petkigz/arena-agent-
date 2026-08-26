@@ -78,6 +78,20 @@ data class OwnerPreemption(
     val status: String,
 )
 
+data class OwnerQuestion(
+    val questionId: String,
+    val actionType: String,
+    val questionText: String,
+    val calibratedConfidence: Double,
+)
+
+data class InducedSkill(
+    val candidateId: String,
+    val skillName: String,
+    val actionSequence: String,
+    val occurrences: Int,
+)
+
 data class OwnerDecision(
     val decisionId: String,
     val status: String,
@@ -128,6 +142,12 @@ class SettingsViewModel @Inject constructor(
     var directiveTitle by mutableStateOf("")
     var directivePriority by mutableStateOf("normal")
     var decisionTypesInput by mutableStateOf("")
+    var charterMission by mutableStateOf("")
+    var charterRevision by mutableStateOf(0)
+    var ownerQuestionsList by mutableStateOf<List<OwnerQuestion>>(emptyList())
+        private set
+    var inducedSkillList by mutableStateOf<List<InducedSkill>>(emptyList())
+        private set
 
     var piperVoices by mutableStateOf<List<String>>(emptyList())
         private set
@@ -168,6 +188,7 @@ class SettingsViewModel @Inject constructor(
             }
             loadOwnerControlState()
             loadAutonomyState()
+            loadCognitionState()
             loading = false
         }
     }
@@ -250,7 +271,73 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             loadOwnerControlState()
             loadAutonomyState()
+            loadCognitionState()
             status = "Owner-control state refreshed"
+        }
+    }
+
+    private suspend fun loadCognitionState() {
+        api.getOwnerCharter()?.let { raw ->
+            runCatching {
+                val charter = JSONObject(raw).optJSONObject("charter") ?: JSONObject()
+                charterMission = charter.optString("mission", charterMission)
+                charterRevision = charter.optInt("revision", 0)
+            }
+        }
+        api.getOwnerQuestions()?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("questions") ?: JSONArray()
+                ownerQuestionsList = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        OwnerQuestion(it.optString("question_id"), it.optString("action_type"),
+                            it.optString("question_text"), it.optDouble("calibrated_confidence", 0.0))
+                    }
+                }
+            }
+        }
+        api.getInducedSkills()?.let { raw ->
+            runCatching {
+                val arr = JSONObject(raw).optJSONArray("candidates") ?: JSONArray()
+                inducedSkillList = (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        val seq = it.optJSONArray("action_sequence")
+                        val joined = if (seq == null) "" else (0 until seq.length()).joinToString(" → ") { j -> seq.optString(j) }
+                        InducedSkill(it.optString("candidate_id"), it.optString("skill_name"), joined,
+                            it.optInt("occurrences", 0))
+                    }
+                }
+            }
+        }
+    }
+
+    fun saveCharter(mission: String) {
+        viewModelScope.launch {
+            status = if (api.updateOwnerCharter(mission, emptyList(), emptyList()) != null) {
+                charterMission = mission
+                "Charter saved; it informs every cycle and grants no authority"
+            } else "Charter save failed"
+            loadCognitionState()
+        }
+    }
+
+    fun answerQuestion(question: OwnerQuestion, answer: String) {
+        viewModelScope.launch {
+            status = if (api.answerOwnerQuestion(question.questionId, answer) != null) {
+                if (answer == "approve") "Exact approval created; nothing executed"
+                else "Answer recorded: $answer"
+            } else "Answer failed"
+            loadCognitionState()
+        }
+    }
+
+    fun decideInducedSkill(skill: InducedSkill, accept: Boolean) {
+        viewModelScope.launch {
+            status = if (accept && api.acceptInducedSkill(skill.candidateId) != null)
+                "Skill accepted; execution still passes all gates"
+            else if (!accept && api.rejectInducedSkill(skill.candidateId) != null)
+                "Candidate rejected"
+            else "Decision failed"
+            loadCognitionState()
         }
     }
 
@@ -940,6 +1027,59 @@ fun SettingsScreen(
                         onClick = { viewModel.revokeOwnerDecision(decision) },
                         enabled = decision.status == "active",
                     ) { Text("Revoke") }
+                }
+            }
+        }
+
+        Divider()
+        // ── Cognition (charter, questions, induced skills) ──
+        Text("Cognition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Charter revision $charterRevision. Your values inform every cycle; policy gates remain the authority.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        OutlinedTextField(
+            value = viewModel.charterMission,
+            onValueChange = { viewModel.charterMission = it },
+            label = { Text("Charter mission") },
+            minLines = 2,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = { viewModel.saveCharter(viewModel.charterMission) }, modifier = Modifier.fillMaxWidth()) {
+            Text("Save charter")
+        }
+        viewModel.ownerQuestionsList.take(5).forEach { question ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(question.questionText.take(160))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.answerQuestion(question, "approve") },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Approve exactly") }
+                        OutlinedButton(
+                            onClick = { viewModel.answerQuestion(question, "deny") },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Deny") }
+                    }
+                }
+            }
+        }
+        viewModel.inducedSkillList.take(5).forEach { skill ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${skill.skillName} (${skill.occurrences}x)")
+                    Text(skill.actionSequence, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.decideInducedSkill(skill, true) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Accept skill") }
+                        OutlinedButton(
+                            onClick = { viewModel.decideInducedSkill(skill, false) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Reject") }
+                    }
                 }
             }
         }
