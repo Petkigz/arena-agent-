@@ -122,6 +122,13 @@ runtime = CognitiveRuntime.get_instance()
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     app_logger.info("Starting Arena (unified server)...")
+    # Apply the owner's persisted inference profile (real loaded model ids)
+    # so restarts don't revert to tier defaults and 400 against the provider.
+    try:
+        from app.cognition.inference_profile import apply_persisted_profile
+        apply_persisted_profile()
+    except Exception as exc:
+        app_logger.warning(f"Inference profile startup apply failed: {exc}")
     message_router_module.initialize_message_router(runtime)
 
     if message_router_module.message_router:

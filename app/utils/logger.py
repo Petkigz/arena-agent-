@@ -37,7 +37,19 @@ def setup_logger(name: str, log_file: str, level=logging.INFO) -> logging.Logger
     handler.setFormatter(formatter)
 
     # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Belt-and-braces: give the handler its OWN utf-8 stream built on the
+    # raw buffer — immune to sys.stdout being replaced or being a wrapper
+    # without .reconfigure() (observed under uvicorn --reload on Windows).
+    import io as _io
+    try:
+        _buffer = getattr(sys.stdout, "buffer", None)
+        _console_stream = (
+            _io.TextIOWrapper(_buffer, encoding="utf-8", errors="replace", line_buffering=True)
+            if _buffer is not None else sys.stdout
+        )
+    except Exception:
+        _console_stream = sys.stdout
+    console_handler = logging.StreamHandler(_console_stream)
     console_handler.setFormatter(formatter)
 
     logger = logging.getLogger(name)

@@ -221,6 +221,26 @@ def apply_profile(profile: InferenceProfile) -> Dict[str, Any]:
     }
 
 
+def apply_persisted_profile() -> Optional[InferenceProfile]:
+    """Load the persisted profile at startup so model ids survive restarts.
+
+    Without this, every boot reverted to tier-derived defaults (e.g.
+    qwen2.5-9b-instruct) even after the owner set their real loaded models,
+    producing HTTP 400s on live machines. Best-effort: never blocks startup.
+    """
+    try:
+        profile = inference_profile_store.get()
+        apply_profile(profile)
+        app_logger.info(
+            "Inference profile applied at startup (main=%s, fast=%s)",
+            profile.main_model, profile.fast_model,
+        )
+        return profile
+    except Exception as exc:
+        app_logger.warning(f"Could not apply persisted inference profile: {exc}")
+        return None
+
+
 def probe_provider(
     profile: Optional[InferenceProfile] = None,
     *,

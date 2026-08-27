@@ -217,7 +217,7 @@ def integrate_phase_modules(
 
             # Rate limit: don't run detection every cycle (CPU heavy)
             now = _time.time()
-            last = getattr(self, "_last_grounding_detection_ts", 0)
+            last = getattr(rt, "_last_grounding_detection_ts", 0)
             if now - last >= 60:
                 screenshots_dir = settings.DATA_DIR / "workspace" / "screenshots"
                 if screenshots_dir.exists():
