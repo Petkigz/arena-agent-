@@ -383,3 +383,43 @@ def test_benchmark_preflight_refuses_unloaded_models():
     finally:
         ip.inference_profile_store = original
         module.inference_profile_store = original
+
+
+def test_benchmark_counts_reasoning_model_samples():
+    """Qwen3 spends the budget on reasoning_content; that is real work —
+    keep the sample with an honest label instead of 'empty completion'."""
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "benchmark_lm_studio",
+        Path(__file__).resolve().parents[1] / "scripts" / "benchmark_lm_studio.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    import httpx
+
+    class ReasoningTransport(httpx.BaseTransport):
+        def handle_request(self, request):
+            return httpx.Response(200, json={
+                "model": "qwen/qwen3-14b",
+                "choices": [{"message": {
+                    "content": "", "reasoning_content": "thinking hard " * 40}}],
+                "usage": {"completion_tokens": 200},
+            })
+
+    result = module.benchmark_model(
+        httpx.Client(transport=ReasoningTransport()),
+        "http://127.0.0.1:1234/v1", "qwen/qwen3-14b")
+    assert result["completed_samples"] == 5 and result["success"] is True
+    assert result["reasoning_model"] is True
+    assert result["reasoning_only_samples"] == 5
+    assert "thinking tokens" in result["note"]
+
+    class TrulyEmpty(httpx.BaseTransport):
+        def handle_request(self, request):
+            return httpx.Response(200, json={
+                "model": "m", "choices": [{"message": {"content": "", "reasoning_content": ""}}],
+                "usage": {"completion_tokens": 0}})
+
+    empty = module.benchmark_model(
+        httpx.Client(transport=TrulyEmpty()), "http://127.0.0.1:1234/v1", "m")
+    assert empty["success"] is False and "no content and no reasoning" in empty["errors"][0]

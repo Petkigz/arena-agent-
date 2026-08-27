@@ -83,13 +83,24 @@ def benchmark_model(client: httpx.Client, base_url: str, model: str) -> dict:
                 # these samples are not evidence about the requested model.
                 result["requested_model_served"] = False
             content = ""
+            message = {}
             try:
-                content = str(body["choices"][0]["message"]["content"])
+                message = body["choices"][0]["message"]
+                content = str(message.get("content") or "")
             except Exception:
                 pass
-            if not content.strip():
-                result["errors"].append("empty completion")
+            reasoning = str(message.get("reasoning_content") or "") if isinstance(message, dict) else ""
+            if reasoning.strip():
+                # Reasoning model (e.g. Qwen3): thinking is real work. Record
+                # it as evidence with the honest label; throughput counts.
+                result["reasoning_model"] = True
+            if not content.strip() and not reasoning.strip():
+                result["errors"].append("empty completion (no content and no reasoning)")
                 continue
+            if not content.strip():
+                # All budget consumed by thinking; note it but keep the sample.
+                result.setdefault("reasoning_only_samples", 0)
+                result["reasoning_only_samples"] += 1
             result["completed_samples"] += 1
             result["wall_seconds"].append(round(elapsed, 3))
             usage = body.get("usage") or {}
@@ -106,6 +117,10 @@ def benchmark_model(client: httpx.Client, base_url: str, model: str) -> dict:
             statistics.mean(result["completion_tokens_per_second"]), 2
         )
     result["success"] = result["completed_samples"] == len(PROMPTS) and result["requested_model_served"]
+    if result.get("reasoning_model"):
+        result["note"] = (
+            "Reasoning model: throughput includes thinking tokens; some samples "
+            "may spend the entire budget on reasoning_content with empty visible content.")
     result["partial"] = 0 < result["completed_samples"] < len(PROMPTS)
     if not result["requested_model_served"]:
         result["resolution_warning"] = (
