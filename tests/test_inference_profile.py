@@ -329,3 +329,57 @@ def test_benchmark_flags_loose_model_resolution(tmp_path):
     assert result["requested_model_served"] is False
     assert result["success"] is False  # honest: samples are about the wrong model
     assert "NOT evidence about the requested model" in result["resolution_warning"]
+
+
+def test_benchmark_preflight_refuses_unloaded_models():
+    """A benchmark whose targets aren't loaded wastes a run on 400s; refuse
+    with a suggestion instead (live lesson: server was down when the profile
+    PUT was attempted, so the profile still named nonexistent models)."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "benchmark_lm_studio",
+        Path(__file__).resolve().parents[1] / "scripts" / "benchmark_lm_studio.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    import httpx
+
+    class Transport(httpx.BaseTransport):
+        def handle_request(self, request):
+            if request.url.path.endswith("/models"):
+                return httpx.Response(200, json={"data": [
+                    {"id": "qwen/qwen3-14b"}, {"id": "qwen2.5-3b-instruct"}]})
+            return httpx.Response(500, json={})
+
+    # Class-level monkeypatch of the profile store the script resolved.
+    from app.cognition import inference_profile as ip
+    original = ip.inference_profile_store
+    try:
+        import tempfile
+        store = ip.InferenceProfileStore(Path(tempfile.mkdtemp()) / "p.json")
+        ip.inference_profile_store = store
+        module.inference_profile_store = store
+
+        def factory(timeout=600.0, **kwargs):
+            return httpx.Client(transport=Transport(), timeout=timeout)
+
+        # The script's internal provider probe builds its own client; supply
+        # a canned online probe so the preflight path is what gets exercised.
+        original_probe = module.probe_provider
+        module.probe_provider = lambda profile, **kw: {
+            "provider_online": True,
+            "loaded_models": ["qwen/qwen3-14b", "qwen2.5-3b-instruct"],
+        }
+        try:
+            report = module.run(client_factory=factory)  # defaults name missing models
+        finally:
+            module.probe_provider = original_probe
+        assert report["success"] is False
+        assert "not loaded" in report["error"]
+        assert "qwen/qwen3-14b" in report["loaded_models"]
+        assert "benchmark_lm_studio.py" in report["suggestion"]
+    finally:
+        ip.inference_profile_store = original
+        module.inference_profile_store = original

@@ -119,6 +119,29 @@ def run(models: list[str] | None = None, client_factory=httpx.Client) -> dict:
     base_url = profile.provider_url.rstrip("/")
     targets = models or [profile.fast_model, profile.main_model]
     probe = probe_provider(profile, completion_probe=False)
+    # Live-hardware lesson: the profile may still name models this provider
+    # doesn't have (server down when PUT was attempted, defaults on a fresh
+    # install). Refuse honestly instead of burning the run on 400s — and
+    # suggest the loaded models that COULD be benchmarked.
+    loaded = set(probe.get("loaded_models") or [])
+    if loaded:
+        missing = [m for m in targets if m not in loaded]
+        if missing:
+            report = {
+                "benchmarked_at": datetime.now(timezone.utc).isoformat(),
+                "provider_url": base_url,
+                "success": False,
+                "error": (
+                    f"Requested models not loaded by the provider: {missing}. "
+                    "Start the Arena server and PUT /owner-control/inference-profile "
+                    "with exact loaded ids, or pass them as CLI arguments."
+                ),
+                "loaded_models": sorted(loaded),
+                "suggestion": (
+                    f"e.g. python scripts/benchmark_lm_studio.py {' '.join(sorted(loaded)[:2])}"
+                ),
+            }
+            return report
 
     report = {
         "benchmarked_at": datetime.now(timezone.utc).isoformat(),

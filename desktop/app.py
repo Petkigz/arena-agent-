@@ -33,7 +33,7 @@ import sys
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPixmap, QRadialGradient
+from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPointF, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
