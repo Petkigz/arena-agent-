@@ -153,6 +153,16 @@ class MessageRouter:
 
         app_logger.info(f"Processing user message in {conversation_id}: {content[:80]}...")
 
+        # Delivery guarantee: the sender's socket joins the conversation it is
+        # messaging. Clients may send to a room they never joined (e.g. a
+        # native client selecting a server-side conversation); without this,
+        # replies stream to an empty room and the sender hangs on "thinking".
+        if websocket is not None:
+            try:
+                await ws_manager.join_conversation(websocket, conversation_id)
+            except Exception as exc:
+                app_logger.warning(f"Could not join sender to {conversation_id}: {exc}")
+
         # Send acknowledgment
         await ws_manager.send_to_conversation(conversation_id, {
             "type": "message_ack",
@@ -222,7 +232,7 @@ class MessageRouter:
                 app_logger.warning(f"Could not surface approval request: {exc}")
 
             # Stream response tokens to client
-            tokens = self._tokenize_response(response_text)
+            tokens = self._tokenize_response(response_text) or [" "]
             for i, token in enumerate(tokens):
                 is_done = i == len(tokens) - 1
                 await ws_manager.send_to_conversation(conversation_id, {
