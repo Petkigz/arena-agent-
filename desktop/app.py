@@ -544,3 +544,7 @@ def run(base_url: str = "http://localhost:8000") -> int:
     window.show()
     return app.exec()
 
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())
