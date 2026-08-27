@@ -68,3 +68,39 @@ app_logger = setup_logger("app", "app.log")
 
 # Security and action audit logger
 audit_logger = setup_logger("audit", "audit.log")
+
+def harden_all_console_handlers() -> None:
+    """Make every StreamHandler in the process tolerate any character.
+
+    Live lesson: our own handler was UTF-8-safe, but uvicorn attaches its own
+    console handler to the ROOT logger with the cp1252 console stream — app
+    log lines propagate there and crash with UnicodeEncodeError. Wrap every
+    non-UTF8 stream handler (root and named loggers) once, at startup.
+    """
+    import io as _io
+
+    def _wrap(stream):
+        try:
+            encoding = str(getattr(stream, "encoding", "") or "").lower()
+            if encoding in ("utf-8", "utf8"):
+                return stream
+            buffer = getattr(stream, "buffer", None)
+            if buffer is None:
+                return stream
+            return _io.TextIOWrapper(buffer, encoding="utf-8", errors="replace", line_buffering=True)
+        except Exception:
+            return stream
+
+    seen = set()
+    for logger in [logging.root] + list(logging.Logger.manager.loggerDict.values()):
+        handlers = getattr(logger, "handlers", None)
+        if not handlers:
+            continue
+        for handler in handlers:
+            if isinstance(handler, logging.StreamHandler) and id(handler) not in seen:
+                seen.add(id(handler))
+                try:
+                    if not isinstance(handler, logging.FileHandler):
+                        handler.stream = _wrap(handler.stream)
+                except Exception:
+                    pass

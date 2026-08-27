@@ -121,6 +121,11 @@ runtime = CognitiveRuntime.get_instance()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
+    try:
+        from app.utils.logger import harden_all_console_handlers
+        harden_all_console_handlers()
+    except Exception:
+        pass
     app_logger.info("Starting Arena (unified server)...")
     # Apply the owner's persisted inference profile (real loaded model ids)
     # so restarts don't revert to tier defaults and 400 against the provider.

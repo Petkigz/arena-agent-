@@ -100,6 +100,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Arena — Beanie")
         self.resize(920, 720)
+        self.setMinimumSize(520, 420)  # freely resizable, both directions
 
         self.settings = DesktopSettings()
         # Persisted server URL overrides the CLI default when set.

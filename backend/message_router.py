@@ -266,10 +266,24 @@ class MessageRouter:
         vision-grounded, not text-only.
         """
         try:
+            # Conversational routing (live-hardware lesson): a thinking-class
+            # main model (e.g. Qwen3-14B on CPU, ~7.7 tok/s) takes minutes for
+            # simple chat and can exhaust the token budget on internal
+            # reasoning. Short conversational turns with no attachments go to
+            # the fast model; substantial requests keep the full main path.
+            complexity = "main"
+            if (
+                not image_path
+                and not audio_path
+                and not attachments
+                and len(content) <= 280
+                and not any(marker in content for marker in ("```", "plan", "analyze", "design", "debug"))
+            ):
+                complexity = "fast"
             result = await asyncio.to_thread(
                 self.runtime.process_cognitive_cycle,
                 user_text=content,
-                complexity="main",
+                complexity=complexity,
                 image_path=image_path,
                 audio_path=audio_path,
                 attachments=attachments,
