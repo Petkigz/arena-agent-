@@ -180,3 +180,26 @@ class DesktopChatClient:
         time.sleep(delay)
         if self._should_reconnect:
             self.connect()
+
+def pick_shared_conversation(client, settings) -> str:
+    """Most recent server conversation, preferring the saved one.
+
+    Used by the desktop app to join the owner's active web room so both
+    clients share live history. Returns "" when unreachable (caller falls
+    back to a private room).
+    """
+    try:
+        data = client.list_conversations(limit=20)
+        conversations = data.get("conversations") or []
+        if not conversations:
+            return ""
+        saved = settings.get("conversation_id") or ""
+        for item in conversations:
+            if item.get("id") == saved:
+                return saved
+        latest = conversations[0].get("id") or ""
+        if latest:
+            settings.set("conversation_id", latest)
+        return latest
+    except Exception:
+        return ""

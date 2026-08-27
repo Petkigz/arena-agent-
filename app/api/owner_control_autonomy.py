@@ -418,6 +418,12 @@ def get_learning_progress_endpoint(limit: int = Query(25, ge=1, le=100)):
     from app.cognition.learning_progress import learning_progress_tracker
     return learning_progress_tracker.report(limit)
 
+@router.get("/conversations")
+def list_conversations_endpoint(limit: int = Query(50, ge=1, le=200)):
+    """Conversation previews so native clients can join the owner's active room."""
+    from app.database import db
+    return {"success": True, "conversations": db.get_conversation_previews(limit)}
+
 @router.get("/owner-control/questions")
 def list_owner_questions_endpoint(status: Optional[str] = Query("pending"), limit: int = Query(100, ge=1, le=500)):
     from app.cognition.uncertainty_questions import owner_question_store

@@ -33,7 +33,7 @@ def setup_logger(name: str, log_file: str, level=logging.INFO) -> logging.Logger
     log_dir = settings.DATA_DIR / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     
-    handler = logging.FileHandler(log_dir / log_file)        
+    handler = logging.FileHandler(log_dir / log_file, encoding="utf-8")        
     handler.setFormatter(formatter)
 
     # Console handler

@@ -69,6 +69,23 @@ class LearningProgressTracker:
                 rows = conn.execute(
                     "SELECT action_type, outcome FROM action_outcomes ORDER BY created_at, transition_id"
                 ).fetchall()
+        except sqlite3.OperationalError as exc:
+            # Fresh installs: the store singleton creates the table lazily;
+            # initialize it once, then retry the read.
+            if "no such table" in str(exc):
+                try:
+                    from app.cognition.action_outcomes import ActionOutcomeStore
+                    ActionOutcomeStore(self.outcomes_db)
+                    with sqlite3.connect(self.outcomes_db) as conn:
+                        rows = conn.execute(
+                            "SELECT action_type, outcome FROM action_outcomes ORDER BY created_at, transition_id"
+                        ).fetchall()
+                except Exception as retry_exc:
+                    app_logger.warning(f"Learning progress outcome store unavailable: {retry_exc}")
+                    return {}
+            else:
+                app_logger.warning(f"Learning progress could not read outcome store: {exc}")
+                return {}
         except Exception as exc:
             app_logger.warning(f"Learning progress could not read outcome store: {exc}")
             return {}

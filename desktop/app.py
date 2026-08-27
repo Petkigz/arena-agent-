@@ -149,14 +149,19 @@ class MainWindow(QMainWindow):
         self._listening = False
 
         # Chat (ChatGPT-style, same WS protocol as web/Android).
-        self.chat_client = DesktopChatClient(ws_url=ws_url, conversation_id="desktop-chat")
+        # Cross-client sync: join the owner's most recent conversation (the
+        # web UI's room) so desktop and web share live history. Falls back to
+        # a private room when none exists or the server is unreachable.
+        from desktop.chat_client import pick_shared_conversation
+        conversation_id = pick_shared_conversation(self.client, self.settings) or "desktop-chat"
+        self.chat_client = DesktopChatClient(ws_url=ws_url, conversation_id=conversation_id)
         self.chat_client.on_connected = self._on_chat_connected
         self.chat_client.on_token = lambda t, d: self._chat_token_signal.emit(t, d)
         self.chat_client.on_conversation_list = lambda c: self._chat_list_signal.emit(c)
         self.chat_client.on_history = lambda cid, h: self._chat_history_signal.emit(cid, h)
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
         self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
-        self.current_conv_id = "desktop-chat"
+        self.current_conv_id = conversation_id
 
         self._chat_token_signal.connect(self._handle_chat_token)
         self._chat_list_signal.connect(self._handle_conversation_list)
