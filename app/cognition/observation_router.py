@@ -63,6 +63,16 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
                 question_kind="desktop_contents",
             )
 
+    # "Can you see my desktop/screen" — seeing questions get eyes.
+    if re.search(r"\b(can|could) you (see|view|look at|check)\b.{0,30}\b(desktop|screen|monitor|display)\b", t) or \
+       re.search(r"\b(do you have (access|eyes))\b.{0,30}\b(desktop|screen|monitor|display)\b", t):
+        return ObservationPlan(
+            action_type="screen_capture",
+            payload={"filename": "observation.png"},
+            evidence_hint="Live screenshot captured from the primary display.",
+            question_kind="screen_contents",
+        )
+
     # What's on my screen / screenshot questions.
     if re.search(r"\b(on (my|the) screen|screenshot|what am i looking at|my (screen|display))\b", t):
         return ObservationPlan(

@@ -414,6 +414,11 @@ class MainWindow(QMainWindow):
             self.chat.set_voice_status("idle")
             self.beanie.set_message("I'm here.")
 
+    @Slot(str, str)
+    def _handle_room_message(self, message_id: str, content: str) -> None:
+        # Messages from other clients (web tabs) appear in the shared room.
+        self.chat.show_user_message(message_id, content)
+
     @Slot(list)
     def _handle_conversation_list(self, conversations: list) -> None:
         self.sidebar.set_conversations(conversations)
