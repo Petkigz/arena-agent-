@@ -2620,6 +2620,13 @@ class CognitiveRuntime:
                             f"OS control planner could not plan '{user_text[:50]}'; "
                             "falling through to normal pipeline."
                         )
+                        # The planner failed after BOTH model attempts — do
+                        # not let the chat model improvise a deflection about
+                        # lacking control; the owner gets the honest state.
+                        self.blackboard.set(
+                            "os_control_planning_failed",
+                            {"request": user_text[:200]},
+                            source="os_control_planner", confidence=1.0)
                 except Exception as exc:
                     app_logger.warning(f"OS control planning failed: {exc}")
             elif tool_match is not None:
@@ -2679,6 +2686,18 @@ class CognitiveRuntime:
                     "\n[OBSERVED HOST EVIDENCE - answer from this data, never guess]: "
                     + observation_evidence
                 )
+            try:
+                failed = self.blackboard.get("os_control_planning_failed")
+                if failed and isinstance(failed, dict) and failed.get("request") == user_text[:200]:
+                    system_instruction += (
+                        "\n[SYSTEM STATE]: An OS-control plan was attempted for this request "
+                        "but the command planner could not produce a valid command (both model "
+                        "routes failed). Tell the owner exactly this — the planning failed — and "
+                        "suggest they check the model configuration. NEVER claim you lack access "
+                        "to the system or cannot control it; the tooling exists, planning failed."
+                    )
+            except Exception:
+                pass
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
