@@ -405,10 +405,6 @@ class MainWindow(QMainWindow):
     @Slot(str, bool)
     def _handle_chat_token(self, token: str, done: bool) -> None:
         self.chat.stream_token(token, done)
-
-    def _handle_room_message(self, message_id: str, content: str) -> None:
-        # Messages from other clients (web tabs) appear in the shared room.
-        self.chat.show_user_message(message_id, content)
         if done:
             self._set_status("idle")
             self.chat.set_voice_status("idle")
