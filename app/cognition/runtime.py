@@ -2591,6 +2591,36 @@ class CognitiveRuntime:
                     f"Tool matcher: '{user_text[:60]}' -> {tool_match.action_type} "
                     f"(score {tool_match.score:.1f}, runner-up {tool_match.runner_up}); routing to ACT."
                 )
+            elif tool_match is not None and tool_match.action_type == "os_control_plan":
+                # General OS control: the LLM plans the command, the
+                # deterministic layer executes it through the existing gates.
+                # ONE routing rule replacing hundreds of per-action tools,
+                # across Windows/macOS/Linux.
+                try:
+                    from app.cognition.os_control_planner import plan_os_action
+                    os_plan = plan_os_action(user_text)
+                    if os_plan is not None:
+                        from app.cognition.action_proposal import ActionProposal
+                        forced_proposal = ActionProposal(
+                            action_type="os_control_execute",
+                            payload={"plan": os_plan.to_dict()},
+                            recommendation_reason=(
+                                f"OS control planner: {os_plan.description} "
+                                f"({os_plan.risk_level}, {os_plan.platform})"
+                            ),
+                            confidence=0.75,
+                        )
+                        reasoning_action = ReasoningAction.ACT
+                        app_logger.info(
+                            f"OS control plan for '{user_text[:50]}': {os_plan.command[:80]}"
+                        )
+                    else:
+                        app_logger.info(
+                            f"OS control planner could not plan '{user_text[:50]}'; "
+                            "falling through to normal pipeline."
+                        )
+                except Exception as exc:
+                    app_logger.warning(f"OS control planning failed: {exc}")
         except Exception as exc:
             app_logger.warning(f"Tool matcher failed (normal pipeline continues): {exc}")
 

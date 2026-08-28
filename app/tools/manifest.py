@@ -164,6 +164,15 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     DisplayTopologyTool = _LazyImportProxy("app.tools.display_topology", "DisplayTopologyTool")
     AccessibilityControlTool = _LazyImportProxy("app.tools.accessibility_control", "AccessibilityControlTool")
     DesktopControl = _LazyImportProxy("app.tools.desktop_control", "DesktopControl")
+
+    def _os_control_execute(plan):
+        """Manifest handler: execute an OSActionPlan dict."""
+        from app.cognition.os_control_planner import OSActionPlan, execute_os_plan
+        if isinstance(plan, dict):
+            parsed = OSActionPlan(**{k: v for k, v in plan.items()
+                                     if k in OSActionPlan.__dataclass_fields__})
+            return execute_os_plan(parsed)
+        return {"success": False, "error": "plan dict required"}
     DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
     DocumentManager = _LazyImportProxy("app.tools.doc_manager", "DocumentManager")
     FinanceTraderTool = _LazyImportProxy("app.tools.finance_trader", "FinanceTraderTool")
@@ -250,6 +259,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DeepOSController.type_text, "text", "grounding_id", "expected_topology_sha256"))
     add("press_hotkey", "os_control", 3, "Grounded raw hotkey into an exactly grounded window: requires grounding ID, fresh topology digest and immediate re-observation",
         _wrap(DeepOSController.press_hotkey, "keys", "grounding_id", "expected_topology_sha256"))
+    add("os_control_execute", "os_control", 2, "Execute a planned OS settings command (LLM-planned, gate-approved, verified); handles ANY OS action cross-platform",
+        _wrap(_os_control_execute, "plan")),
+
     add("set_wallpaper", "os_control", 2, "Set the desktop wallpaper from an image file; verified by re-reading, reversible via the previous wallpaper path",
         _wrap(DesktopControl.set_wallpaper, "image_path", "path"))
     add("open_url", "os_control", 2, "Open a URL in the default browser",

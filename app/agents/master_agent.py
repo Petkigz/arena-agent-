@@ -79,7 +79,21 @@ class MasterAgentOrchestrator:
         elif action_type == "web_search":
             from app.tools.desktop_control import DesktopControl
 
-            query_term = payload.get("query_term") or payload.get("query") or user_text
+            query_term = payload.get("query_term") or payload.get("query") or ""
+            if not query_term:
+                # Fall back to deterministic extraction before using the raw text.
+                try:
+                    from app.cognition.tool_matcher import _SEARCH_AFTER_RE
+                    import re as _re
+                    cleaned = _re.sub(r"(?:can\s+you\s+)?(?:open|launch|start|use)\s+\w+\s+(?:and|then|to)\s+", "", user_text, flags=_re.I)
+                    search = _SEARCH_AFTER_RE.search(cleaned)
+                    if search:
+                        query_term = search.group(1).strip().rstrip("?.!")
+                        query_term = _re.sub(r"^\s*(?:for\s+)?(?:me\s+|my\s+)", "", query_term, flags=_re.I).strip()
+                except Exception:
+                    pass
+            if not query_term:
+                query_term = user_text  # honest: couldn't extract a clean query
             url = f"https://www.youtube.com/results?search_query={str(query_term).replace(' ', '+')}" if "youtube" in str(query_term).lower() or "youtube" in user_text.lower() else f"https://www.google.com/search?q={str(query_term).replace(' ', '+')}"
             d_res = DesktopControl.launch_application("firefox")
             DesktopControl.open_url(url)

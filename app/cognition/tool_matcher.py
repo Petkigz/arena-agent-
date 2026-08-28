@@ -24,6 +24,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.utils.logger import app_logger
 
+# General OS control: unrecognized settings requests go to the planner,
+# not to chat. This is ONE routing rule replacing hundreds of per-action tools.
+OS_CONTROL_ACTION = "os_control_plan"
+from app.cognition.os_control_planner import _is_os_control_request
+
 # Commands, not questions. A control verb anywhere in the message marks intent
 # to ACT ("can you change my wallpaper" contains 'change').
 CONTROL_VERBS = {
@@ -53,7 +58,8 @@ SYNONYMS: Dict[str, List[str]] = {
     "move_file": ["move file", "move the file", "relocate file"],
     "search_files": ["find file", "find files", "search file", "search files",
                      "search my files", "find my files", "search my documents"],
-    "web_search": ["search the web", "google", "look up"],
+    "web_search": ["search the web", "google", "look up", "search",
+                   "search for", "find information"],
     "create_backup": ["back up", "backup my", "make a backup"],
     "compress_files": ["zip", "compress", "archive"],
     "list_apps": ["installed apps", "installed programs", "installed applications"],
@@ -83,7 +89,14 @@ def _tokens(text: str) -> List[str]:
     return [t for t in re.findall(r"[a-z_]+", text.lower()) if t not in STOPWORDS and len(t) > 2]
 
 
-def _extract_payload(text: str) -> Dict[str, Any]:
+_SEARCH_AFTER_RE = re.compile(
+    r"\b(?:search(?:\s+(?:the\s+)?web)?(?:\s+for)?|google|look\s+up|find)\s+"
+    r"(?:for\s+|the\s+web\s+for\s+|on\s+(?:the\s+)?(?:web|internet|google)\s+for\s+)*"
+    r"(.+?)(?:\s+(?:on\s+the\s+)?(?:web|internet|google|online)|$)",
+    re.I,
+)
+
+def _extract_payload(text: str, action_type: str = "") -> Dict[str, Any]:
     payload: Dict[str, Any] = {}
     path = _PATH_RE.search(text)
     if not path:
@@ -98,6 +111,20 @@ def _extract_payload(text: str) -> Dict[str, Any]:
     url = _URL_RE.search(text)
     if url:
         payload["url"] = url.group(0)
+    # Search queries: extract JUST the search terms, not the whole sentence.
+    if action_type == "web_search":
+        # Strip browser/app instructions before extracting the query.
+        cleaned = re.sub(r"(?:can\s+you\s+)?(?:open|launch|start|use)\s+\w+\s+(?:and|then|to)\s+", "", text, flags=re.I)
+        search = _SEARCH_AFTER_RE.search(cleaned)
+        if search:
+            query = search.group(1).strip().rstrip("?.!")
+            # Skip pure articles/prepositions that survive the regex.
+            if query.lower() in ("the", "a", "an", "for", "on", "in", "web", "internet"):
+                query = ""
+            # Strip conversational filler the user directed at the agent.
+            query = re.sub(r"^\s*(?:for\s+)?(?:me\s+|my\s+)", "", query, flags=re.I).strip()
+            if query:
+                payload["query"] = query
     return payload
 
 
@@ -146,14 +173,25 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
             scored.append((score, action_type, tuple(sorted(set(matched)))))
 
     if not scored:
+        # General OS control fallback: a settings-change request with no
+        # specific tool match routes to the OS planner instead of chat.
+        if _is_os_control_request(text):
+            return ToolMatch(
+                action_type=OS_CONTROL_ACTION, score=1.0,
+                payload={}, matched_terms=("os_settings",))
         return None
     scored.sort(key=lambda item: item[0], reverse=True)
     best_score, best, matched_terms = scored[0]
     if best_score < _MIN_SCORE:
+        # Below the specific-tool threshold: still try OS control before chat.
+        if _is_os_control_request(text):
+            return ToolMatch(
+                action_type=OS_CONTROL_ACTION, score=1.0,
+                payload={}, matched_terms=("os_settings",))
         return None
     if len(scored) > 1 and (best_score - scored[1][0]) < _MIN_MARGIN and scored[1][0] >= _MIN_SCORE:
         return None  # ambiguous: let the normal pipeline handle it
-    payload = _extract_payload(user_text)
+    payload = _extract_payload(user_text, action_type=best)
     return ToolMatch(action_type=best, score=best_score,
                      runner_up=scored[1][1] if len(scored) > 1 else None,
                      payload=payload, matched_terms=matched_terms)
