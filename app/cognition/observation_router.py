@@ -82,6 +82,15 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
             question_kind="screen_contents",
         )
 
+    # Browser tabs (how many tabs are open / list my tabs).
+    if re.search(r"\b(tabs?\b.{0,20}\b(open|browser|chrome|edge|firefox)|how many tabs|list.{0,15}tabs|open tabs)\b", t):
+        return ObservationPlan(
+            action_type="list_windows",
+            payload={},
+            evidence_hint="Browser and desktop windows enumerated from the host (tabs appear as window titles).",
+            question_kind="browser_tabs",
+        )
+
     # Running apps / processes.
     if re.search(r"\b(running|open) (apps?|programs?|process(es)?|applications?)\b|\bwhat.{0,20}running\b", t):
         return ObservationPlan(
@@ -92,7 +101,7 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
         )
 
     # Open windows.
-    if re.search(r"\b(open|active) windows?\b|\bwhich windows? (are )?open\b", t):
+    if re.search(r"\b(open|active|browser) windows?\b|\bwhich windows? (are )?open\b|how many.{0,15}windows", t):
         return ObservationPlan(
             action_type="list_windows",
             payload={},

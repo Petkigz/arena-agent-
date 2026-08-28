@@ -2571,9 +2571,25 @@ class CognitiveRuntime:
         # cases. Live root cause: every control request was being classified
         # knowledge_query and answered by chat, leaving ~180 tools unreachable.
         forced_proposal = None
+        # Observation priority: read-only host-state questions (counting,
+        # listing, seeing) answer from EVIDENCE — cheaper and more reliable
+        # than LLM-planned commands. Check the observation router first; only
+        # if it declines does the tool matcher force an action.
+        observation_plan = None
+        try:
+            from app.cognition.observation_router import plan_observation as _plan_obs
+            observation_plan = _plan_obs(user_text)
+        except Exception:
+            observation_plan = None
+        if observation_plan is not None:
+            # A read-only observation can answer this — force the ANSWER
+            # branch (evidence-grounded) regardless of the LLM's intent
+            # bucket. Counting/listing/seeing questions must never be
+            # routed to the action pipeline by a misclassifier.
+            reasoning_action = ReasoningAction.ANSWER
         try:
             from app.cognition.tool_matcher import match_control_tool
-            tool_match = match_control_tool(user_text)
+            tool_match = None if observation_plan is not None else match_control_tool(user_text)
             if tool_match is not None:
                 from app.cognition.action_proposal import ActionProposal
                 forced_proposal = ActionProposal(
@@ -2635,8 +2651,8 @@ class CognitiveRuntime:
             # proposal -> gate -> approval path.
             observation_evidence = ""
             try:
-                from app.cognition.observation_router import plan_observation, render_observation_evidence
-                plan = plan_observation(user_text)
+                from app.cognition.observation_router import render_observation_evidence
+                plan = observation_plan  # computed above (observation priority)
                 if plan is not None:
                     from app.tools.manifest import get_tool_manifest
                     entry = get_tool_manifest().get(plan.action_type)

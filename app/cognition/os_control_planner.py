@@ -35,13 +35,21 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.utils.logger import app_logger, audit_logger
 
-# OS action verbs that indicate the user wants their machine changed.
+# OS action verbs: the SAME set as tool_matcher.CONTROL_VERBS so routing
+# is consistent — a request that looks like control to one module looks like
+# control to both. Plus OS-settings-specific additions.
 OS_ACTION_VERBS = {
-    "change", "set", "turn", "toggle", "switch", "enable", "disable",
-    "make", "adjust", "configure", "modify", "resize", "scale",
-    "wallpaper", "background", "theme", "dark", "light", "volume",
-    "brightness", "wifi", "bluetooth", "notification", "display",
-    "resolution", "refresh", "power", "battery", "sleep", "hibernate",
+    "change", "set", "make", "open", "launch", "start", "run", "move", "rename",
+    "copy", "delete", "remove", "search", "find", "list", "show", "create",
+    "send", "download", "upload", "compress", "archive", "extract",
+    "type", "click", "press", "install", "uninstall", "update", "count",
+    "play", "stop", "close", "kill", "terminate", "encrypt",
+    "decrypt", "backup", "restore", "screenshot", "capture", "analyze",
+    "turn", "toggle", "switch", "enable", "disable", "adjust", "configure",
+    "modify", "resize", "scale", "wallpaper", "background", "theme",
+    "dark", "light", "volume", "brightness", "wifi", "bluetooth",
+    "notification", "display", "resolution", "refresh", "power",
+    "battery", "sleep", "hibernate",
 }
 
 # Domains this planner handles (NOT files, browser, email, etc. — those
@@ -56,6 +64,10 @@ OS_SETTINGS_DOMAINS = {
     "lock", "screensaver", "sleep", "hibernate", "shutdown", "restart",
     "dark", "mode", "size", "medium", "small", "large", "default",
     "airplane", "focus", "assist", "timer", "alarm", "reminder",
+    "tabs", "tab", "browser", "browsers", "chrome", "edge", "firefox",
+    "window", "windows", "app", "apps", "application", "applications",
+    "program", "programs", "process", "processes", "running", "clipboard",
+    "tray", "startup", "services", "users", "login", "desktop",
 }
 
 
