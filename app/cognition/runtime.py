@@ -2590,28 +2590,13 @@ class CognitiveRuntime:
         try:
             from app.cognition.tool_matcher import match_control_tool
             tool_match = None if observation_plan is not None else match_control_tool(user_text)
-            if tool_match is not None:
-                from app.cognition.action_proposal import ActionProposal
-                forced_proposal = ActionProposal(
-                    action_type=tool_match.action_type,
-                    payload=dict(tool_match.payload),
-                    recommendation_reason=(
-                        f"Deterministic manifest match ({', '.join(tool_match.matched_terms[:4])}; "
-                        f"score {tool_match.score:.1f})"
-                    ),
-                    confidence=min(0.95, 0.5 + tool_match.score / 10.0),
-                )
-                if reasoning_action != ReasoningAction.INVESTIGATE:
-                    reasoning_action = ReasoningAction.ACT
-                app_logger.info(
-                    f"Tool matcher: '{user_text[:60]}' -> {tool_match.action_type} "
-                    f"(score {tool_match.score:.1f}, runner-up {tool_match.runner_up}); routing to ACT."
-                )
-            elif tool_match is not None and tool_match.action_type == "os_control_plan":
+            if tool_match is not None and tool_match.action_type == "os_control_plan":
                 # General OS control: the LLM plans the command, the
                 # deterministic layer executes it through the existing gates.
                 # ONE routing rule replacing hundreds of per-action tools,
-                # across Windows/macOS/Linux.
+                # across Windows/macOS/Linux. NOTE: this MUST come before the
+                # specific-tool branch — os_control_plan is a routing signal,
+                # not an executable action type.
                 try:
                     from app.cognition.os_control_planner import plan_os_action
                     os_plan = plan_os_action(user_text)
@@ -2637,6 +2622,23 @@ class CognitiveRuntime:
                         )
                 except Exception as exc:
                     app_logger.warning(f"OS control planning failed: {exc}")
+            elif tool_match is not None:
+                from app.cognition.action_proposal import ActionProposal
+                forced_proposal = ActionProposal(
+                    action_type=tool_match.action_type,
+                    payload=dict(tool_match.payload),
+                    recommendation_reason=(
+                        f"Deterministic manifest match ({', '.join(tool_match.matched_terms[:4])}; "
+                        f"score {tool_match.score:.1f})"
+                    ),
+                    confidence=min(0.95, 0.5 + tool_match.score / 10.0),
+                )
+                if reasoning_action != ReasoningAction.INVESTIGATE:
+                    reasoning_action = ReasoningAction.ACT
+                app_logger.info(
+                    f"Tool matcher: '{user_text[:60]}' -> {tool_match.action_type} "
+                    f"(score {tool_match.score:.1f}, runner-up {tool_match.runner_up}); routing to ACT."
+                )
         except Exception as exc:
             app_logger.warning(f"Tool matcher failed (normal pipeline continues): {exc}")
 

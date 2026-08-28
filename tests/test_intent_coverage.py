@@ -116,3 +116,60 @@ def test_observation_priority_over_action_in_full_cycle(tmp_path, monkeypatch):
     system_prompt = sent[0][0]["content"] if sent else ""
     assert "OBSERVED" in system_prompt or "3 windows" in result.get("assistant_reply", "")
     assert result.get("action_type") != "open_application"
+
+
+def test_os_control_plan_placeholder_never_reaches_gate(tmp_path, monkeypatch):
+    """'open taskbar' routed to os_control_plan (correct matcher) but the
+    runtime passed the PLACEHOLDER action type to the ActionGate — blocked
+    as 'Unknown action' (Level 3 default). The runtime must convert
+    os_control_plan → os_control_execute with a real planned command."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    runtime = CognitiveRuntime.get_instance(str(tmp_path / "rt.db"))
+
+    planned = []
+
+    class FakePlan:
+        plan_id = "p1"
+        user_request = "open taskbar"
+        command = "Set-ItemProperty -Path 'HKCU:\\...' -Name TaskbarAl -Value 0"
+        shell = "powershell"
+        description = "Show the taskbar"
+        verify_command = ""
+        risk_level = "reversible"
+        platform = "Windows"
+        created_at = "now"
+        def to_dict(self):
+            return {
+                "plan_id": self.plan_id, "user_request": self.user_request,
+                "command": self.command, "shell": self.shell,
+                "description": self.description,
+                "verify_command": self.verify_command,
+                "risk_level": self.risk_level, "platform": self.platform,
+                "created_at": self.created_at,
+            }
+
+    import app.cognition.os_control_planner as ocp
+    monkeypatch.setattr(ocp, "plan_os_action", lambda text: planned.append(text) or FakePlan())
+
+    # Manifest handler that records the executed proposal.
+    executed = []
+
+    def handler(payload):
+        executed.append(payload)
+        return {"success": True, "request_success": True, "command": payload["plan"]["command"],
+                "environment_verified": True, "side_effects": True}
+
+    import app.tools.manifest as mm
+    monkeypatch.setattr(mm, "get_tool_manifest", lambda: {
+        "os_control_execute": {"safety_level": 2, "handler": handler}})
+
+    monkeypatch.setattr(
+        "app.llm.llm_client.generate_chat_completion",
+        lambda messages=None, **kw: {"choices": [{"message": {"content": "done"}}]})
+
+    result = runtime.process_cognitive_cycle("open taskbar")
+    assert planned == ["open taskbar"]  # the planner WAS called
+    assert result.get("action_type") != "os_control_plan", (
+        "placeholder os_control_plan reached the pipeline — it must be "
+        "converted to os_control_execute")
