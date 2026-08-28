@@ -24,6 +24,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.utils.logger import app_logger
 
+# Phone numbers: international (+256...), local (077...), or short codes.
+# Used to gate communication verbs so "Call John" doesn't false-match
+# phone_call (no number = no dialable target = ask or look up contacts).
+_PHONE_RE = re.compile(
+    r"\+?\d[\d\s\-()]{6,}\d")
+
 # General OS control: unrecognized settings requests go to the planner,
 # not to chat. This is ONE routing rule replacing hundreds of per-action tools.
 OS_CONTROL_ACTION = "os_control_plan"
@@ -89,6 +95,13 @@ SYNONYMS: Dict[str, List[str]] = {
     "move_file": ["move file", "move the file", "relocate file"],
     "search_files": ["find file", "find files", "search file", "search files",
                      "search my files", "find my files", "search my documents"],
+    "phone_call": ["call", "dial", "phone", "ring"],
+    "phone_sms": ["text", "sms", "message", "send a text", "send a message",
+                  "send an sms"],
+    "send_whatsapp": ["whatsapp", "whatsapp message"],
+    "send_telegram": ["telegram", "telegram message"],
+    "send_email": ["email", "send an email", "send an email to", "e-mail",
+                   "mail"],
     "web_search": ["search the web", "google", "look up", "search",
                    "search for", "find information", "search google",
                    "web search", "search online", "search the internet"],
@@ -176,7 +189,13 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
     if len(text) < 4:
         return None
     words = set(re.findall(r"[a-z_]+", text))
-    if not (words & CONTROL_VERBS):
+    has_phone_number = bool(_PHONE_RE.search(text))
+    # Communication verbs are only control verbs when a dialable target is
+    # present: 'call 0771234567' is an action; 'Call John' is a contact
+    # lookup the OS planner or owner should resolve, not a blind dial.
+    comm_verb_with_number = (
+        has_phone_number and bool(words & {"call", "dial", "text", "sms"}))
+    if not ((words & CONTROL_VERBS) or comm_verb_with_number):
         return None
 
     try:
@@ -196,6 +215,13 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
         score = float(len(overlap))
         matched: List[str] = list(overlap)
         raw_words = words  # unfiltered: synonym phrases may contain stopwords
+        # Communication tools are gated on extractable targets:
+        # phone_call/phone_sms need a phone number, send_email needs
+        # an email address. Without the target they cannot route.
+        is_comm = action_type in (
+            "phone_call", "phone_sms", "send_whatsapp", "send_telegram")
+        if is_comm and action_type in ("phone_call", "phone_sms") and not has_phone_number:
+            continue  # no number -> cannot dial/text
         for phrase in SYNONYMS.get(action_type, []):
             phrase_tokens = set(re.findall(r"[a-z_]+", phrase))
             if phrase in text or (phrase_tokens and phrase_tokens <= raw_words):
