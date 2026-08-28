@@ -211,18 +211,46 @@ class SystemAppInventory:
 
         query_clean = app_query.lower().strip()
 
+        # INPUT VALIDATION (live bugs: entire sentences were used as app
+        # names — 'now in contrrol panel open user accounts' "matched" an
+        # app because of the bidirectional substring check below). A query
+        # longer than a plausible app name is a sentence, not an app.
+        MAX_QUERY_WORDS = 6
+        if len(query_clean.split()) > MAX_QUERY_WORDS:
+            return {
+                "success": False,
+                "refused": True,
+                "error": (
+                    f"'{app_query[:60]}' looks like a sentence, not an app name. "
+                    f"App queries must be at most {MAX_QUERY_WORDS} words. "
+                    "Extract the app name first or use the OS control planner."
+                ),
+            }
+
         # Policy Evaluation Check
         allowed, reason, level = PolicyEvaluator.evaluate_action("open_application", {"app_name": query_clean})
         if not allowed:
             return {"success": False, "error": f"Policy Blocked: {reason}", "authority_level": level}
 
-        # Search for exact or fuzzy match
+        # Search for exact or fuzzy match. MATCH DIRECTION MATTERS: a short
+        # app query matching inside a longer installed name is valid
+        # ('firef' -> 'Mozilla Firefox'), but a LONG query containing an app
+        # name is a sentence ('now in contrrol panel open user accounts'
+        # contains 'control panel') and must NOT match.
         matched_app = None
         for item in cls._cached_apps:
             a_name = item["app_name"].lower()
-            if query_clean == a_name or query_clean in a_name or a_name in query_clean:
+            if query_clean == a_name:
                 matched_app = item
                 break
+        if matched_app is None:
+            # Substring: only the QUERY inside the APP NAME (short query,
+            # longer installed name). Never the reverse.
+            for item in cls._cached_apps:
+                a_name = item["app_name"].lower()
+                if len(query_clean) <= len(a_name) and query_clean in a_name:
+                    matched_app = item
+                    break
 
         if not matched_app:
             # Fallback direct execution attempt

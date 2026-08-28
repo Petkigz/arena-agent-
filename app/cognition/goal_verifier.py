@@ -400,12 +400,32 @@ class GoalVerifier:
                 if any(k in reply_lower or k in actions_str for k in ["device offline", "no devices", "device not found"]):
                     failed_conditions.append(fail_cond)
 
-        # General error/crash detection
-        error_indicators = ["crashed", "fatal error", "unhandled exception", "permission denied", "timed out", "process exited unexpectedly"]
+        # General error/crash detection — includes the OS-level failure
+        # patterns that actually appear in subprocess output (live bug:
+        # Windows printed 'The system cannot find the file' but the
+        # verifier checked only the friendly action description).
+        error_indicators = [
+            "crashed", "fatal error", "unhandled exception", "permission denied",
+            "timed out", "process exited unexpectedly",
+            "cannot find the file", "the system cannot find", "not recognized as",
+            "no such file or directory", "is not recognized",
+            "failed to launch", "launch failed", "could not find",
+            "refused", "looks like a sentence",
+        ]
         for err_ind in error_indicators:
             if err_ind in reply_lower or err_ind in actions_str:
                 if f"error_detected:{err_ind}" not in failed_conditions:
                     failed_conditions.append(f"Environmental error detected: {err_ind}")
+
+        # CRITICAL: a tool reporting success=False or refused=True in its
+        # own result must NEVER verify as achieved, regardless of what the
+        # friendly action text says (live bug: 'Successfully launched' was
+        # recorded when the subprocess actually failed).
+        if any(k in reply_lower or k in actions_str for k in (
+            '"success": false', "'success': false", "success: false",
+            "refused", "looks like a sentence",
+        )):
+            failed_conditions.append("Tool reported failure or refusal in its result")
 
         # 2. Evaluate Success Conditions against Tri-State Evaluator (SATISFIED, FAILED, UNKNOWN)
         target_conditions = goal_rep.success_conditions or ["response_delivered = true"]
