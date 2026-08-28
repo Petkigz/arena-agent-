@@ -1,22 +1,28 @@
 from app.cognition.runtime import CognitiveRuntime
 
 
-def test_unknown_capability_evaluates_to_false(tmp_path):
+def test_unknown_capability_is_ignored_not_a_veto(tmp_path):
     """
-    P0 Fix Verification:
-    Verify that an unknown or fictional capability (e.g. quantum_teleportation)
-    evaluates to False in check_capability_availability and does NOT return True via an 'or True' flaw.
+    CONTRACT CHANGE (live-evidence, owner-directed): unresolvable capability
+    phrases are IGNORED rather than vetoing. The original P0 guard made any
+    unknown phrase block execution; on the owner's machine the LLM emitted
+    free-text phrases like 'ability to express emotions verbally' on EVERY
+    message, so real registered tools were vetoed 100% of the time by
+    hallucinated filler. Unknown phrases now never appear in the map (so they
+    cannot flip `all()` to False); resolvable capabilities still evaluate
+    strictly True/False against the registry — the 'or True' flaw stays fixed.
     """
     runtime = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
 
     req_caps = ["quantum_teleportation", "os.launch_app"]
     cap_map = runtime.check_capability_availability(req_caps, "quantum_domain")
 
-    assert cap_map["quantum_teleportation"] is False
+    # The fictional phrase is not a False veto entry; it is simply absent.
+    assert "quantum_teleportation" not in cap_map
     assert cap_map["os.launch_app"] is True
 
-    action_available = all(cap_map.values())
-    assert action_available is False
+    action_available = all(cap_map.values()) if cap_map else True
+    assert action_available is True  # phantom filler cannot block real tools
 
 
 def test_known_capabilities_evaluate_to_true(tmp_path):

@@ -250,6 +250,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DeepOSController.type_text, "text", "grounding_id", "expected_topology_sha256"))
     add("press_hotkey", "os_control", 3, "Grounded raw hotkey into an exactly grounded window: requires grounding ID, fresh topology digest and immediate re-observation",
         _wrap(DeepOSController.press_hotkey, "keys", "grounding_id", "expected_topology_sha256"))
+    add("set_wallpaper", "os_control", 2, "Set the desktop wallpaper from an image file; verified by re-reading, reversible via the previous wallpaper path",
+        _wrap(DesktopControl.set_wallpaper, "image_path", "path"))
     add("open_url", "os_control", 2, "Open a URL in the default browser",
         _wrap(DesktopControl.open_url, "url"))
     add("display_topology", "os_control", 0, "Capture physical multi-monitor topology",

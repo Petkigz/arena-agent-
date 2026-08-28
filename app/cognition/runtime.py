@@ -1382,6 +1382,11 @@ class CognitiveRuntime:
         CapabilityFactory, WorldModel, and environmental device status without default 'or True'.
         """
         cap_map: Dict[str, bool] = {}
+        # Live fix: the LLM invents free-text capability phrases ('ability to
+        # express emotions verbally'). A phrase that resolves to NO registered
+        # tool or native capability cannot veto execution — it is recorded as
+        # unresolvable and ignored, and only RESOLVABLE capabilities are gated.
+        ignored_phrases: List[str] = []
 
         NATIVE_CAPABILITIES = {
             "llm.generate", "os.launch_app", "filesystem.search", "filesystem.read",
@@ -1445,10 +1450,20 @@ class CognitiveRuntime:
             elif any(wc in cap_clean or cap_clean in wc for wc in wm_caps):
                 cap_map[cap] = True
 
-            # 5. Unsupported / Unknown capability -> FALSE
+            # 5. Unresolvable phrase (invented by the LLM, matches nothing):
+            #    record and IGNORE — it cannot veto real, registered tools.
             else:
-                cap_map[cap] = False
+                ignored_phrases.append(cap)
+                app_logger.info(
+                    f"Capability phrase '{cap}' resolves to no registered tool; ignoring it as a veto."
+                )
 
+        # Only resolvable capabilities gate execution; an LLM-invented phrase
+        # list can never block an otherwise-registered action.
+        if ignored_phrases and not cap_map:
+            app_logger.warning(
+                f"All required capabilities were unresolvable phrases: {ignored_phrases}; "                "treating as unconstrained rather than blocked."
+            )
         return cap_map
 
     @staticmethod
@@ -2550,6 +2565,35 @@ class CognitiveRuntime:
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
 
+        # Manifest-first routing (the rewire): a deterministic match against the
+        # REAL tool manifest overrides the LLM's 3-intent classification. The
+        # manifest decides what is possible; the LLM only advises on ambiguous
+        # cases. Live root cause: every control request was being classified
+        # knowledge_query and answered by chat, leaving ~180 tools unreachable.
+        forced_proposal = None
+        try:
+            from app.cognition.tool_matcher import match_control_tool
+            tool_match = match_control_tool(user_text)
+            if tool_match is not None:
+                from app.cognition.action_proposal import ActionProposal
+                forced_proposal = ActionProposal(
+                    action_type=tool_match.action_type,
+                    payload=dict(tool_match.payload),
+                    recommendation_reason=(
+                        f"Deterministic manifest match ({', '.join(tool_match.matched_terms[:4])}; "
+                        f"score {tool_match.score:.1f})"
+                    ),
+                    confidence=min(0.95, 0.5 + tool_match.score / 10.0),
+                )
+                if reasoning_action != ReasoningAction.INVESTIGATE:
+                    reasoning_action = ReasoningAction.ACT
+                app_logger.info(
+                    f"Tool matcher: '{user_text[:60]}' -> {tool_match.action_type} "
+                    f"(score {tool_match.score:.1f}, runner-up {tool_match.runner_up}); routing to ACT."
+                )
+        except Exception as exc:
+            app_logger.warning(f"Tool matcher failed (normal pipeline continues): {exc}")
+
         # 5. DECISION ROUTER (100% Authoritative ReasoningAction Routing):
         # Branch A: ANSWER / Direct Conversational Q&A
         if reasoning_action == ReasoningAction.ANSWER:
@@ -2847,7 +2891,7 @@ class CognitiveRuntime:
             app_logger.warning(f"Planning pattern query failed: {e}")
         
         # Generate candidate action proposal
-        proposal = getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity, goal_rep=goal_rep)
+        proposal = forced_proposal or getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity, goal_rep=goal_rep)
         fine_action_type = proposal.action_type
         
         # Phase 3A: Skill classification and transfer adjustment
