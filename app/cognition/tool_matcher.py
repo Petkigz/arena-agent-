@@ -31,13 +31,44 @@ from app.cognition.os_control_planner import _is_os_control_request
 
 # Commands, not questions. A control verb anywhere in the message marks intent
 # to ACT ("can you change my wallpaper" contains 'change').
+# COMPREHENSIVE: covers OS, browser, file, app, and system operations.
 CONTROL_VERBS = {
-    "change", "set", "make", "open", "launch", "start", "run", "move", "rename",
-    "copy", "delete", "remove", "search", "find", "list", "show", "create",
-    "make", "send", "download", "upload", "compress", "archive", "extract",
-    "type", "click", "press", "install", "uninstall", "update", "count",
-    "play", "stop", "close", "kill", "terminate", "wallpaper", "encrypt",
-    "decrypt", "backup", "restore", "screenshot", "capture", "analyze",
+    # Change/mutate
+    "change", "set", "make", "open", "close", "modify", "adjust", "configure", "edit",
+    "update", "upgrade", "reset", "restore", "revert", "toggle", "switch",
+    "enable", "disable", "turn",
+    # File operations
+    "move", "rename", "copy", "delete", "remove", "create", "write",
+    "save", "compress", "archive", "extract", "unzip", "zip",
+    "upload", "download", "send", "share", "unshare",
+    "encrypt", "decrypt", "backup", "burn", "print", "eject", "mount",
+    "unmount",
+    # App/OS operations
+    "launch", "start", "run", "stop", "quit", "exit", "kill", "terminate",
+    "restart", "reboot", "shutdown", "sleep", "hibernate", "wake",
+    "lock", "unlock", "login", "logout", "logoff",
+    "install", "uninstall", "repair",
+    # Browser operations
+    "navigate", "visit", "browse", "refresh", "reload", "scroll", "zoom",
+    "fill", "enter", "submit", "click", "select", "check", "uncheck",
+    "hover", "bookmark",
+    # Display/UI operations
+    "screenshot", "capture", "record", "minimize", "maximize", "restore",
+    "snap", "tile", "cascade", "arrange", "resize", "scale", "rotate",
+    "extend", "duplicate", "mirror", "hide", "show", "pin", "unpin",
+    "wallpaper",
+    # System/network operations
+    "connect", "disconnect", "pair", "unpair", "scan", "sync", "block",
+    "allow", "forward", "map", "clear", "empty", "clean", "purge",
+    "flush", "release", "renew",
+    # Audio/media
+    "play", "pause", "mute", "unmute",
+    # Search/observation commands
+    "search", "find", "list", "count", "check", "verify", "test",
+    "analyze", "inspect", "monitor", "track",
+    # Communication (NOT call/text/message — too generic without a recipient;
+    # these need phone numbers/addresses that the matcher doesn't extract)
+    "notify",
 }
 
 # Words that appear in tool names/descriptions but carry no matching signal.
@@ -59,7 +90,13 @@ SYNONYMS: Dict[str, List[str]] = {
     "search_files": ["find file", "find files", "search file", "search files",
                      "search my files", "find my files", "search my documents"],
     "web_search": ["search the web", "google", "look up", "search",
-                   "search for", "find information"],
+                   "search for", "find information", "search google",
+                   "web search", "search online", "search the internet"],
+    "open_url": ["go to", "navigate to", "visit", "open website",
+                 "open this url", "browse to", "open this page"],
+    "browser_extract": ["extract the page", "get the page content",
+                        "read the page", "scrape the page",
+                        "what does this page say", "read this website"],
     "create_backup": ["back up", "backup my", "make a backup"],
     "compress_files": ["zip", "compress", "archive"],
     "list_apps": ["installed apps", "installed programs", "installed applications"],

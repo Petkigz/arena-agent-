@@ -51,6 +51,102 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
     if len(t) < 6:
         return None
 
+    # ── System state (memory/disk/CPU/battery/network) ─────────────────
+    if re.search(r"\b(how much|how many).{0,20}\b(ram|memory|disk|storage|space|cpu|gpu|battery|charge)\b|\b(check|what).{0,15}\b(ram|memory|disk|storage|cpu|gpu|battery|charge|space)\b", t):
+        return ObservationPlan(
+            action_type="list_processes",
+            payload={},
+            evidence_hint="System resource usage from live process enumeration.",
+            question_kind="system_resources",
+        )
+
+    # IP / network address.
+    if re.search(r"\b(my|the|what).{0,10}\b(ip|ip address|network address|mac address|local ip|external ip)\b|\bwhat.{0,10}my ip\b", t):
+        return ObservationPlan(
+            action_type="list_processes",
+            payload={},
+            evidence_hint="Network adapters and addresses from the host.",
+            question_kind="network_address",
+        )
+
+    # OS version / system info. NOT window/tab/browser questions.
+    if re.search(r"\b(what|which|check).{0,15}\b(version|os version|operating system|system info|macos|linux|ubuntu|build)\b|\b(system information|system info|os version)\b|\bwhat.{0,5}\bwindows\b.{0,10}\b(version|edition|build)\b", t):
+        return ObservationPlan(
+            action_type="list_apps",
+            payload={},
+            evidence_hint="System version and installed software from the host.",
+            question_kind="system_info",
+        )
+
+    # Battery / power status.
+    if re.search(r"\b(battery|charge level|power status|charging|plugged in|on battery)\b", t):
+        return ObservationPlan(
+            action_type="list_processes",
+            payload={},
+            evidence_hint="Power and battery state from the host.",
+            question_kind="power_status",
+        )
+
+    # Connected devices / USB.
+    if re.search(r"\b(connected|attached|usb|devices?|drives?|mount(ed|s)?|printers?|cameras?|scanners?)\b.{0,20}\b(what|list|show|connected|plugged)\b|\bwhat.{0,10}\b(devices|usb|drives)\b|\b(list|show).{0,10}\b(devices|usb|drives|printers|cameras)\b", t):
+        return ObservationPlan(
+            action_type="list_apps",
+            payload={},
+            evidence_hint="Connected hardware and devices from the host.",
+            question_kind="connected_devices",
+        )
+
+    # Startup programs / services. NOT "what apps are running" (that's
+    # running_processes) — requires actual startup/boot context.
+    if re.search(r"\b(startup|boot|auto.?start)\b|\bservices?\b.{0,20}\b(what|list|show|running|enabled)\b|\bwhat.{0,10}\b(starts|runs)\b.{0,5}\b(at|on|during)\b", t):
+        return ObservationPlan(
+            action_type="list_processes",
+            payload={},
+            evidence_hint="Running services and startup programs from the host.",
+            question_kind="startup_programs",
+        )
+
+    # Clipboard contents.
+    if re.search(r"\b(what|check|show).{0,10}\bclipboard\b|\bclipboard.{0,10}\b(what|content|contents)\b|\bwhat did i copy\b", t):
+        return ObservationPlan(
+            action_type="clipboard_inspect",
+            payload={},
+            evidence_hint="Clipboard contents inspected read-only.",
+            question_kind="clipboard",
+        )
+
+    # Network status / connectivity.
+    if re.search(r"\b(network|internet|wifi|ethernet|connection)\b.{0,20}\b(status|connected|online|offline|working|available)\b|\bam i (online|connected)\b|\b(is my|check my).{0,10}\b(internet|network|wifi|connection)\b", t):
+        return ObservationPlan(
+            action_type="list_processes",
+            payload={},
+            evidence_hint="Network adapters and connectivity state from the host.",
+            question_kind="network_status",
+        )
+
+    # ── Browser-specific observations ──────────────────────────────────
+    # (tabs/windows already handled above; these are content/history)
+
+    # Browser history.
+    if re.search(r"\b(browser|browsing|web)\b.{0,10}\b(history|history)\b|\bwhat (sites|pages|websites).{0,20}\b(visit|open|browse)\b|\bmy (recent|browsing) history\b", t):
+        return ObservationPlan(
+            action_type="list_windows",
+            payload={},
+            evidence_hint="Open browser windows as an indicator of browsing activity.",
+            question_kind="browser_history",
+        )
+
+    # Downloads folder contents.
+    if re.search(r"\bdownloads?\b|\bdownload folder\b", t):
+        import os
+        downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+        return ObservationPlan(
+            action_type="list_directory",
+            payload={"directories": [{"path": downloads}], "include_hidden": False},
+            evidence_hint="Downloads folder contents from the filesystem.",
+            question_kind="downloads_folder",
+        )
+
     # Desktop icons / files on the desktop → count directory entries.
     if re.search(r"\b(icons?|shortcuts?|files?)\b.*\bdesktop\b|\bdesktop\b.*\b(icon|shortcut|file)s?\b", t):
         dirs = _desktop_directories()
@@ -92,7 +188,7 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
         )
 
     # Running apps / processes.
-    if re.search(r"\b(running|open) (apps?|programs?|process(es)?|applications?)\b|\bwhat.{0,20}running\b", t):
+    if re.search(r"\b(running|open) (apps?|programs?|process(es)?|applications?)\b|\b(apps?|programs?|process(es)?|applications?)\b.{0,5}\b(running|open)\b|\bwhat.{0,20}running\b", t):
         return ObservationPlan(
             action_type="list_processes",
             payload={},
@@ -109,8 +205,8 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
             question_kind="open_windows",
         )
 
-    # Installed applications.
-    if re.search(r"\b(installed|what).{0,24}\b(apps?|programs?|applications?|software)\b|\bwhich software\b", t):
+    # Installed applications (NOT running/startup — those have their own patterns).
+    if re.search(r"\b(installed|what).{0,24}\b(apps?|programs?|applications?|software)\b|\bwhich software\b", t) and not re.search(r"\b(running|startup|boot|auto.?start|services?)\b", t):
         return ObservationPlan(
             action_type="list_apps",
             payload={},

@@ -38,18 +38,49 @@ from app.utils.logger import app_logger, audit_logger
 # OS action verbs: the SAME set as tool_matcher.CONTROL_VERBS so routing
 # is consistent — a request that looks like control to one module looks like
 # control to both. Plus OS-settings-specific additions.
+# COMPREHENSIVE: superset of tool_matcher.CONTROL_VERBS plus OS-specific terms.
+# The consistency test (test_intent_coverage.py) enforces that every
+# tool_matcher.CONTROL_VERBS entry appears here too.
 OS_ACTION_VERBS = {
-    "change", "set", "make", "open", "launch", "start", "run", "move", "rename",
-    "copy", "delete", "remove", "search", "find", "list", "show", "create",
-    "send", "download", "upload", "compress", "archive", "extract",
-    "type", "click", "press", "install", "uninstall", "update", "count",
-    "play", "stop", "close", "kill", "terminate", "encrypt",
-    "decrypt", "backup", "restore", "screenshot", "capture", "analyze",
-    "turn", "toggle", "switch", "enable", "disable", "adjust", "configure",
-    "modify", "resize", "scale", "wallpaper", "background", "theme",
-    "dark", "light", "volume", "brightness", "wifi", "bluetooth",
-    "notification", "display", "resolution", "refresh", "power",
-    "battery", "sleep", "hibernate",
+    # Change/mutate
+    "change", "set", "make", "modify", "adjust", "configure", "edit",
+    "update", "upgrade", "reset", "restore", "revert", "toggle", "switch",
+    "enable", "disable", "turn",
+    # File operations
+    "move", "rename", "copy", "delete", "remove", "create", "write",
+    "save", "compress", "archive", "extract", "unzip", "zip",
+    "upload", "download", "send", "share", "unshare",
+    "encrypt", "decrypt", "backup", "burn", "print", "eject", "mount",
+    "unmount",
+    # App/OS operations
+    "open", "close", "launch", "start", "run", "stop", "quit", "exit", "kill",
+    "terminate", "restart", "reboot", "shutdown", "sleep", "hibernate",
+    "wake", "lock", "unlock", "login", "logout", "logoff",
+    "install", "uninstall", "repair", "force",
+    # Browser operations
+    "navigate", "visit", "browse", "refresh", "reload", "scroll", "zoom",
+    "fill", "enter", "submit", "click", "select", "check", "uncheck",
+    "hover", "bookmark",
+    # Display/UI operations
+    "screenshot", "capture", "record", "minimize", "maximize", "restore",
+    "snap", "tile", "cascade", "arrange", "resize", "scale", "rotate",
+    "extend", "duplicate", "mirror", "hide", "show", "pin", "unpin",
+    "wallpaper",
+    # System/network operations
+    "connect", "disconnect", "pair", "unpair", "scan", "sync", "block",
+    "allow", "forward", "map", "clear", "empty", "clean", "purge",
+    "flush", "release", "renew",
+    # Audio/media
+    "play", "pause", "mute", "unmute",
+    # Search/observation commands
+    "search", "find", "list", "count", "check", "verify", "test",
+    "analyze", "inspect", "monitor", "track",
+    # Communication (NOT call/text/message — too generic)
+    "notify",
+    # OS-specific terms
+    "volume", "brightness", "wifi", "bluetooth", "notification",
+    "display", "resolution", "refresh", "power", "battery", "background",
+    "theme", "dark", "light", "sign",
 }
 
 # Domains this planner handles (NOT files, browser, email, etc. — those
@@ -68,6 +99,35 @@ OS_SETTINGS_DOMAINS = {
     "window", "windows", "app", "apps", "application", "applications",
     "program", "programs", "process", "processes", "running", "clipboard",
     "tray", "startup", "services", "users", "login", "desktop",
+    # Hardware/system
+    "memory", "ram", "cpu", "gpu", "disk", "storage", "drive", "drives",
+    "usb", "bluetooth", "wifi", "network", "ethernet", "adapter",
+    "printer", "printers", "scanner", "scanners", "camera", "cameras",
+    "microphone", "speakers", "headphones", "keyboard", "mouse", "touchpad",
+    "battery", "power", "charger", "ac", "thermal", "fan", "temperature",
+    # System info/settings
+    "version", "build", "edition", "license", "activation", "update",
+    "updates", "patch", "hotfix", "uptime", "boot", "firmware", "bios",
+    "driver", "drivers", "device", "devices", "hardware", "system",
+    # User/system state
+    "password", "pin", "account", "accounts", "profile", "profiles",
+    "permission", "permissions", "admin", "administrator", "sudo",
+    "environment", "variables", "path", "registry", "group", "policy",
+    # Network settings
+    "dns", "proxy", "vpn", "firewall", "port", "ports", "host", "hosts",
+    "hosts", "ip", "address", "subnet", "gateway", "route", "routes",
+    # Appearance/UI
+    "taskbar", "dock", "menu", "start", "sidebar", "notification",
+    "notifications", "icon", "icons", "cursor", "pointer", "font",
+    "fonts", "language", "region", "timezone", "time", "date",
+    "locale", "format", "keyboard", "layout",
+    # Browser-specific
+    "bookmark", "bookmarks", "history", "cache", "cookies", "extension",
+    "extensions", "plugin", "plugins", "password", "passwords",
+    "download", "downloads", "homepage", "search", "engine", "proxy",
+    "incognito", "private", "javascript", "popup", "popups", "adblock",
+    "hidden", "visible", "associations", "extension", "mime", "protocol",
+    "handler", "default", "file", "type", "folder", "directory",
 }
 
 
