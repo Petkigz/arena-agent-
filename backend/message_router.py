@@ -175,6 +175,17 @@ class MessageRouter:
 
         message_id = f"msg_{uuid.uuid4().hex[:12]}"
 
+        # Cross-client sync: broadcast the question to the room so every
+        # client (web tabs, desktop) renders messages from the others, not
+        # just the replies. Named room_message to avoid the client->server
+        # user_message type; clients dedupe their own pending copy.
+        await ws_manager.send_to_conversation(conversation_id, {
+            "type": "room_message",
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "content": content,
+        })
+
         try:
             # Generate action steps based on content analysis
             action_steps = self._generate_action_steps(content)

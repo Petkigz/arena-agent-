@@ -37,6 +37,8 @@ class DesktopChatClient:
         self.on_created: Optional[Callable[[str, str], None]] = None
         #: Called with an error message string.
         self.on_error: Optional[Callable[[str], None]] = None
+        #: Called with (message_id, content) for messages from other clients.
+        self.on_room_message: Optional[Callable[[str, str], None]] = None
 
     @property
     def connected(self) -> bool:
@@ -156,6 +158,9 @@ class DesktopChatClient:
                 self.on_token(token, done)
             if done:
                 self._reply_parts = []
+        elif t == "room_message":
+            if self.on_room_message:
+                self.on_room_message(data.get("message_id", ""), data.get("content", ""))
         elif t == "error":
             if self.on_error:
                 self.on_error(data.get("message", "Chat error"))

@@ -2555,10 +2555,38 @@ class CognitiveRuntime:
         if reasoning_action == ReasoningAction.ANSWER:
             tracker.transition(GoalLifecycleState.EXECUTING, "Formulating direct conversational answer.")
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
+            # Host-state questions get REAL observations, not LLM guesses:
+            # deterministic pattern -> Level-0 read-only tool -> answer from
+            # evidence. Anything that mutates state still needs the full
+            # proposal -> gate -> approval path.
+            observation_evidence = ""
+            try:
+                from app.cognition.observation_router import plan_observation, render_observation_evidence
+                plan = plan_observation(user_text)
+                if plan is not None:
+                    from app.tools.manifest import get_tool_manifest
+                    entry = get_tool_manifest().get(plan.action_type)
+                    if entry and int(entry.get("safety_level", 99)) == 0:
+                        observation_result = entry["handler"](plan.payload)
+                        observation_evidence = render_observation_evidence(observation_result, plan)
+                        app_logger.info(
+                            f"Observation router executed {plan.action_type} for host-state question "
+                            f"({plan.question_kind}); answering from evidence."
+                        )
+                        self.blackboard.set(
+                            "last_observation_evidence", observation_evidence,
+                            source=f"observation:{plan.action_type}", confidence=1.0)
+            except Exception as exc:
+                app_logger.warning(f"Observation routing failed (answer proceeds without it): {exc}")
             # AGI Phase 1: Enrich with common sense knowledge
             common_sense_context = self.enrich_with_common_sense(user_text)
             if common_sense_context:
                 system_instruction += common_sense_context
+            if observation_evidence:
+                system_instruction += (
+                    "\n[OBSERVED HOST EVIDENCE - answer from this data, never guess]: "
+                    + observation_evidence
+                )
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")

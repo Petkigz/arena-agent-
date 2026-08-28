@@ -68,6 +68,28 @@ export function ChatPage() {
           );
           sending.forEach((msg) => updateMessage(msg.id, { status: 'sent' as const }));
         }
+      } else if (event.type === 'room_message') {
+        // Cross-client sync: a message sent from another client (desktop or
+        // another tab). Dedupe our own pending copy by content.
+        const { conversation_id, message_id, content } = event.data as {
+          conversation_id: string; message_id: string; content: string;
+        };
+        if (conversation_id === currentConversation.id) {
+          const mine = currentConversation.messages.find(
+            (m) => m.role === 'user' && m.status === 'sending' && m.content === content,
+          );
+          if (mine) {
+            updateMessage(mine.id, { status: 'sent' as const });
+          } else if (!currentConversation.messages.some((m) => m.id === message_id)) {
+            addMessage({
+              id: message_id,
+              role: 'user',
+              content,
+              timestamp: new Date().toISOString(),
+              status: 'sent' as const,
+            });
+          }
+        }
       } else if (event.type === 'message_token') {
         // Streaming token support
         const { conversation_id, message_id, token, done } = event.data as {

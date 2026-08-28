@@ -272,6 +272,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DeepOSController.check_and_update_software, "package_name", "expected_version"))
 
     # ── Filesystem ──────────────────────────────────────────────────────────
+    add("list_directory", "filesystem", 0, "Read-only listing of directory entries (evidence for host-state questions)",
+        _wrap(UniversalFilesystem.list_directory, "directories", "include_hidden"))
     add("search_files", "filesystem", 0, "Search the filesystem",
         _wrap(UniversalFilesystem.search_filesystem, "query", "root_dir", "max_results"))
     add("move_file", "filesystem", 2, "Rename/move a file",

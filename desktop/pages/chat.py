@@ -95,6 +95,13 @@ class ChatPage(QWidget):
         self._bubbles.append(bubble)
         self._insert_bubble(bubble)
 
+    def show_user_message(self, message_id: str, content: str) -> None:
+        """Render a user message that came from another client (cross-room sync)."""
+        bubble = MessageBubble("user", content)
+        self._insert_bubble(bubble)
+        self._bubbles.append(bubble)
+        self._scroll_to_bottom()
+
     def stream_token(self, token: str, done: bool) -> None:
         if self._streaming_bubble is None:
             self._streaming_bubble = MessageBubble("assistant", "")

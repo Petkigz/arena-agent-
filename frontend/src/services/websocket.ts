@@ -28,6 +28,7 @@ export type WebSocketEvent =
   | { type: 'message'; data: Message }
   | { type: 'message_ack'; data: { conversation_id: string; status: string } }
   | { type: 'message_token'; data: { conversation_id: string; message_id: string; token: string; done: boolean } }
+  | { type: 'room_message'; data: { conversation_id: string; message_id: string; content: string } }
   | { type: 'action_step'; data: ActionStep & { conversation_id: string; message_id: string } }
   | { type: 'approval_request'; data: ApprovalRequestEvent }
   | { type: 'approval_result'; data: ApprovalResultEvent }

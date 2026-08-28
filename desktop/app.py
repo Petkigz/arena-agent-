@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
     _level_signal = Signal(float)
     # Marshal chat events from the WS recv thread onto the GUI thread.
     _chat_token_signal = Signal(str, bool)
+    _chat_room_signal = Signal(str, str)
     _chat_list_signal = Signal(list)
     _chat_history_signal = Signal(str, list)
     _chat_created_signal = Signal(str, str)
@@ -157,6 +158,7 @@ class MainWindow(QMainWindow):
         self.chat_client = DesktopChatClient(ws_url=ws_url, conversation_id=conversation_id)
         self.chat_client.on_connected = self._on_chat_connected
         self.chat_client.on_token = lambda t, d: self._chat_token_signal.emit(t, d)
+        self.chat_client.on_room_message = lambda mid, c: self._chat_room_signal.emit(mid, c)
         self.chat_client.on_conversation_list = lambda c: self._chat_list_signal.emit(c)
         self.chat_client.on_history = lambda cid, h: self._chat_history_signal.emit(cid, h)
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
@@ -164,6 +166,7 @@ class MainWindow(QMainWindow):
         self.current_conv_id = conversation_id
 
         self._chat_token_signal.connect(self._handle_chat_token)
+        self._chat_room_signal.connect(self._handle_room_message)
         self._chat_list_signal.connect(self._handle_conversation_list)
         self._chat_history_signal.connect(self._handle_conversation_history)
         self._chat_created_signal.connect(self._handle_conversation_created)
@@ -402,6 +405,10 @@ class MainWindow(QMainWindow):
     @Slot(str, bool)
     def _handle_chat_token(self, token: str, done: bool) -> None:
         self.chat.stream_token(token, done)
+
+    def _handle_room_message(self, message_id: str, content: str) -> None:
+        # Messages from other clients (web tabs) appear in the shared room.
+        self.chat.show_user_message(message_id, content)
         if done:
             self._set_status("idle")
             self.chat.set_voice_status("idle")

@@ -67,6 +67,40 @@ class UniversalFilesystem:
         return matched_files
 
     @classmethod
+    @classmethod
+    def list_directory(cls, directories: List[Dict[str, Any]], include_hidden: bool = False) -> Dict[str, Any]:
+        """Read-only listing of directory entries (Level-0 observation).
+
+        Each item of `directories` is {"path": "..."}; missing directories are
+        reported per-entry, never fatal. Used for evidence-grounded answers
+        about host state (e.g. counting desktop icons).
+        """
+        listings = []
+        errors = []
+        for item in directories or []:
+            raw = item.get("path") if isinstance(item, dict) else str(item)
+            path = Path(str(raw or "")).expanduser()
+            if not path.is_dir():
+                errors.append({"path": str(raw), "error": "not a directory"})
+                continue
+            try:
+                entries = sorted(
+                    e.name for e in path.iterdir()
+                    if include_hidden or not e.name.startswith(".")
+                )
+            except Exception as exc:
+                errors.append({"path": str(path), "error": str(exc)})
+                continue
+            listings.append({"directory": str(path), "count": len(entries), "entries": entries[:200]})
+        return {
+            "success": bool(listings) and not errors,
+            "listings": listings,
+            "errors": errors,
+            "side_effects": False,
+            "note": "Read-only filesystem observation.",
+        }
+
+    @classmethod
     def rename_or_move(cls, source_path_str: str, destination_path_str: str) -> Dict[str, Any]:
         """
         Renames or moves any file or folder across the filesystem.
