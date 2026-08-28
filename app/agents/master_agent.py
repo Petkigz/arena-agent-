@@ -95,12 +95,14 @@ class MasterAgentOrchestrator:
             if not query_term:
                 query_term = user_text  # honest: couldn't extract a clean query
             url = f"https://www.youtube.com/results?search_query={str(query_term).replace(' ', '+')}" if "youtube" in str(query_term).lower() or "youtube" in user_text.lower() else f"https://www.google.com/search?q={str(query_term).replace(' ', '+')}"
-            d_res = DesktopControl.launch_application("firefox")
-            DesktopControl.open_url(url)
+            # Use the OS default browser — webbrowser.open() picks whatever
+            # the owner has configured (Chrome, Edge, Firefox, Brave, ...).
+            # Never hardcode a specific browser.
+            d_res = DesktopControl.open_url(url)
             raw_output_data["url"] = url
             raw_output_data["query_term"] = query_term
-            if d_res.get("success", True):
-                executed_actions.append(f"Opened web browser and launched search for '{query_term}'.")
+            if d_res.get("success", False):
+                executed_actions.append(f"Opened default browser and searched for '{query_term}'.")
                 execution_facts.append({
                     "subject": "web_search",
                     "predicate": "search_results",
