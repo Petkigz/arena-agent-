@@ -148,3 +148,29 @@ def test_manifest_handler_accepts_list_root(tmp_path):
         {"query": "kaba", "root_dir": [str(home), str(tmp_path / "driveF")], "max_results": 20}
     )
     assert any(h["file_name"] == "KABA" for h in result)
+
+
+def test_fuzzy_survives_typos_in_first_chars(tmp_path):
+    """'orinary' (dropped 'd' from 'ordinary') was rejected by the old
+    positional prefilter — its first three chars 'ori' never appear in the
+    filename. The prefilter must be character-based, not positional."""
+    home = _make_tree(tmp_path)
+    hits = UniversalFilesystem.search_filesystem("orinary", root_dir=str(tmp_path / "driveF"))
+    assert hits and "Ordinary" in hits[0]["file_name"]
+    assert hits[0].get("fuzzy_match") is True
+
+
+def test_fuzzy_catches_adjacent_transpositions(tmp_path):
+    """'kbaa' for 'kaba': edit distance punishes the swap a human never
+    notices (0.75 < 0.78) — the anagram boost must carry it."""
+    home = _make_tree(tmp_path)
+    hits = UniversalFilesystem.search_filesystem("kbaa", root_dir=str(home))
+    assert hits and "Kaba" in hits[0]["file_name"]
+    assert hits[0].get("fuzzy_match") is True
+
+
+def test_fuzzy_still_rejects_junk(tmp_path):
+    """Tolerance must not become noise: a query sharing few characters with
+    the tree yields nothing."""
+    home = _make_tree(tmp_path)
+    assert UniversalFilesystem.search_filesystem("zzznope", root_dir=str(home)) == []

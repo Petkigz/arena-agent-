@@ -147,7 +147,6 @@ class UniversalFilesystem:
         exact: List[Dict[str, Any]] = []
         fuzzy: List[Dict[str, Any]] = []
         deadline = _time.monotonic() + float(timeout_s)
-        q_head = query_norm[:3]
 
         def _entry(path: Path, name: str, is_dir: bool) -> Dict[str, Any]:
             try:
@@ -166,9 +165,13 @@ class UniversalFilesystem:
         def _fuzzy_score(name: str) -> float:
             """Best similarity between the query and the name / its tokens —
             'ordinaryr' vs 'Alex Warren - Ordinary.mp3' must score on the
-            'ordinary' token, not the whole artist-prefixed string."""
+            'ordinary' token, not the whole artist-prefixed string.
+            Adjacent transpositions ('kbaa' for 'kaba') get an anagram boost:
+            character edit distance punishes swaps that a human never notices."""
             norm = _re.sub(r"[^a-z0-9]+", "", name.lower())
             best = difflib.SequenceMatcher(None, query_norm, norm).ratio()
+            if sorted(query_norm) == sorted(norm):
+                best = max(best, 1.0)
             for token in _re.split(r"[^a-z0-9]+", name.lower()):
                 t = token.strip()
                 if len(t) >= 3:
@@ -176,7 +179,20 @@ class UniversalFilesystem:
                         best,
                         difflib.SequenceMatcher(None, query_norm, t).ratio(),
                     )
+                    if sorted(query_norm) == sorted(t):
+                        best = max(best, 1.0)
             return best
+
+        # Cheap fuzzy prefilter: the query's characters must (mostly) be
+        # present in the name. Position-free on purpose — 'orinary' (typo
+        # dropped the 'd' in 'ordinary') shares every remaining letter but
+        # its FIRST THREE CHARS diverge, which a positional prefilter
+        # ('ori' in name) would wrongly reject.
+        q_chars = set(query_norm)
+        q_need = max(3, len(q_chars) - 1)
+
+        def _prefilter(name_lower: str) -> bool:
+            return len(q_chars & set(name_lower)) >= q_need
 
         for search_root in roots:
             if not search_root.exists():
@@ -199,7 +215,7 @@ class UniversalFilesystem:
                             not exact
                             and query_norm
                             and len(fuzzy) < 30
-                            and (q_head and (q_head in dl or dl[:3] in query_norm))
+                            and _prefilter(dl)
                             and _fuzzy_score(d) >= 0.78
                         ):
                             e = _entry(Path(root) / d, d, True)
@@ -214,7 +230,7 @@ class UniversalFilesystem:
                             not exact
                             and query_norm
                             and len(fuzzy) < 30
-                            and (q_head and (q_head in fl or fl[:3] in query_norm))
+                            and _prefilter(fl)
                             and _fuzzy_score(f) >= 0.78
                         ):
                             e = _entry(Path(root) / f, f, False)
