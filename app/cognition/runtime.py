@@ -1446,8 +1446,12 @@ class CognitiveRuntime:
             elif self._tool_capability_match(cap_clean, tool_norms):
                 cap_map[cap] = True
 
-            # 4. Check WorldModel dynamic capabilities synthesized by CapabilityFactory
-            elif any(wc in cap_clean or cap_clean in wc for wc in wm_caps):
+            # 4. Check WorldModel dynamic capabilities synthesized by CapabilityFactory.
+            #    Token-boundary matching, NOT bare substrings — same rationale
+            #    as step 3: a short phrase must not match a longer unrelated
+            #    one ('phone' → 'microphone'), and a long invented phrase must
+            #    not accidentally contain a real capability name.
+            elif any(self._capability_token_match(cap_clean, wc) for wc in wm_caps):
                 cap_map[cap] = True
 
             # 5. Unresolvable phrase (invented by the LLM, matches nothing):
@@ -1487,6 +1491,25 @@ class CognitiveRuntime:
             if tn in cap_tokens:
                 return True
         return False
+
+    @staticmethod
+    def _capability_token_match(a: str, b: str) -> bool:
+        """Match two capability phrases on token boundaries, never as bare
+        substrings (the old `wc in cap or cap in wc` let 'phone' match
+        'microphone' and let invented long phrases absorb real capabilities).
+
+        Equal token sets always match. Otherwise a multi-token phrase matches a
+        superset of itself ('os launch' vs 'os launch app'); single-token
+        phrases must match exactly.
+        """
+        a_tokens = {t for t in re.split(r"[^a-z0-9]+", a.lower()) if t}
+        b_tokens = {t for t in re.split(r"[^a-z0-9]+", b.lower()) if t}
+        if not a_tokens or not b_tokens:
+            return False
+        if a_tokens == b_tokens:
+            return True
+        shorter, longer = (a_tokens, b_tokens) if len(a_tokens) <= len(b_tokens) else (b_tokens, a_tokens)
+        return len(shorter) >= 2 and shorter <= longer
 
     def capture_observed_world_state(
         self,

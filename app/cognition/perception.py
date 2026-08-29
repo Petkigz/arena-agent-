@@ -10,6 +10,7 @@ Phase 1: Uses canonical SourceType enum for all observation sources.
 
 from __future__ import annotations
 import os
+import re
 import psutil
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -126,18 +127,42 @@ class ObservationCollector:
         """Process probe: strictly establishes running or not_running."""
         app_name = (payload.get("app_name") or payload.get("app") or payload.get("query") or "app").lower().strip()
 
+        # TOKEN-AWARE matching (live bug class: bidirectional substring match).
+        # The old check `app_name in p_name or p_name in app_name` let ANY
+        # process whose name merely appeared inside a sentence-style app_name
+        # ('now in contrrol panel open user accounts' contains 'panel') count
+        # as 'running' — a false observation that could verify a FAILED launch
+        # as success. Same sentence rule as launch_any_app: more than 6 words
+        # is a sentence, not an app name, and cannot be probed by name.
+        tokens = [t for t in re.split(r"[^a-z0-9]+", app_name) if t]
+        sentence_like = len(tokens) > 6
+
         process_running = False
-        try:
-            for proc in psutil.process_iter(['name']):
-                try:
-                    p_name = proc.info['name'].lower() if proc.info['name'] else ""
-                    if app_name in p_name or p_name in app_name:
-                        process_running = True
-                        break
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    pass
-        except Exception as e:
-            app_logger.warning(f"ObservationCollector process probe warning for '{app_name}': {e}")
+        if tokens and not sentence_like:
+            app_token_set = set(tokens)
+            try:
+                for proc in psutil.process_iter(['name']):
+                    try:
+                        p_name = proc.info['name'].lower() if proc.info['name'] else ""
+                        if not p_name:
+                            continue
+                        stem = p_name[:-4] if p_name.endswith(".exe") else p_name
+                        stem_tokens = [t for t in re.split(r"[^a-z0-9]+", stem) if t]
+                        # Running iff the stem equals the app name, the (short)
+                        # app name sits inside the (longer) process stem
+                        # ('firefox' -> 'firefox-esr'), or every stem token is
+                        # one of the app-name tokens ('visual studio code' <->
+                        # 'code'). Never the bare-reverse direction.
+                        if app_name == stem or (len(app_name) <= len(stem) and app_name in stem):
+                            process_running = True
+                            break
+                        if stem_tokens and all(t in app_token_set for t in stem_tokens):
+                            process_running = True
+                            break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
+            except Exception as e:
+                app_logger.warning(f"ObservationCollector process probe warning for '{app_name}': {e}")
 
         real_status = "running" if process_running else "not_running"
 

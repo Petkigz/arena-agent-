@@ -11,6 +11,42 @@ from app.database import db
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 
+# Windows shell failures print human-readable text to the console ('The system
+# cannot find the file X', "'foo' is not recognized as an internal or external
+# command") instead of raising an exception — and `cmd /c start` can exit 0
+# even then. Any of these patterns in the CAPTURED output means the launch
+# failed, regardless of the friendly description.
+_LAUNCH_FAILURE_PATTERNS = (
+    "cannot find the file",
+    "cannot find",
+    "is not recognized",
+    "no such file",
+    "no such application",
+    "access is denied",
+    "the filename, directory name, or volume label syntax is incorrect",
+    "the directory name is invalid",
+    "unable to find application",
+    "failed to launch",
+)
+
+
+def _launch_failure_detail(returncode: int, stdout: str, stderr: str) -> Optional[str]:
+    """Return a human-readable failure reason, or None if output looks clean.
+
+    This is how a failed `start` command is detected: the OS prints the error
+    as text rather than raising, so the exit code alone is not enough.
+    """
+    combined = f"{stdout or ''}\n{stderr or ''}".strip()
+    lowered = combined.lower()
+    for pattern in _LAUNCH_FAILURE_PATTERNS:
+        if pattern in lowered:
+            return combined[:300] if combined else pattern
+    if returncode != 0:
+        detail = f": {combined[:200]}" if combined else ""
+        return f"exit code {returncode}{detail}"
+    return None
+
+
 class SystemAppInventory:
     """
     Universal System Application Discovery & Enumeration Engine.
@@ -253,10 +289,27 @@ class SystemAppInventory:
                     break
 
         if not matched_app:
-            # Fallback direct execution attempt
+            # Direct Command Fallback — but ONLY for queries that resolve to a
+            # real executable. Previously ANY unmatched ≤6-word string was
+            # blind-executed via `cmd /c start`, so 'user accounts' became a
+            # shell command that failed while the tool reported success=True.
+            resolved = shutil.which(query_clean) or (
+                query_clean if os.path.exists(query_clean) else None
+            )
+            if resolved is None:
+                return {
+                    "success": False,
+                    "refused": True,
+                    "app_name": query_clean,
+                    "error": (
+                        f"No installed application matches '{app_query}' and it does not "
+                        "resolve to an executable on PATH. It is probably not installed "
+                        "(or is not an app name)."
+                    ),
+                }
             matched_app = {
                 "app_name": query_clean,
-                "executable_path": query_clean,
+                "executable_path": resolved,
                 "source_category": "Direct Command Fallback"
             }
 
@@ -269,22 +322,59 @@ class SystemAppInventory:
         try:
             launched_process = None
             # SECURITY: exec_path is resolved from the installed-app inventory
-            # (or, in the fallback path, from a user query) — pass it as an argv
-            # element, never through a shell, to prevent command injection.
+            # (or, in the fallback path, from shutil.which / an existing path) —
+            # pass it as an argv element, never through a shell, to prevent
+            # command injection.
+            #
+            # HONESTY: a failed Windows `start` prints its error to the console
+            # instead of raising, so every `cmd /c start` invocation runs with
+            # captured output and the captured text + exit code are checked
+            # BEFORE success is claimed. os.startfile has no feedback channel,
+            # but is only used for paths that verifiably exist on disk.
             if host_os == "windows":
                 if exec_path.lower().endswith(".lnk") or os.path.exists(exec_path):
                     os.startfile(exec_path)
                 else:
                     # `start` is a cmd.exe builtin; invoke it with /c and argv so
-                    # exec_path is not shell-interpreted.
-                    launched_process = subprocess.Popen(["cmd.exe", "/c", "start", "", exec_path])
+                    # exec_path is not shell-interpreted. `start` returns after
+                    # spawning, so run() does not block on the launched app.
+                    completed = subprocess.run(
+                        ["cmd.exe", "/c", "start", "", exec_path],
+                        capture_output=True, text=True, timeout=30,
+                    )
+                    failure = _launch_failure_detail(
+                        completed.returncode, completed.stdout or "", completed.stderr or ""
+                    )
+                    if failure:
+                        app_logger.error(f"Launch of '{app_name}' failed: {failure}")
+                        return {
+                            "success": False,
+                            "app_name": app_name,
+                            "executable_path": exec_path,
+                            "error": f"Launch failed: {failure}",
+                        }
             elif host_os == "darwin":
                 if exec_path.endswith(".app"):
-                    launched_process = subprocess.Popen(["open", exec_path])
+                    completed = subprocess.run(
+                        ["open", exec_path], capture_output=True, text=True, timeout=30
+                    )
+                    failure = _launch_failure_detail(
+                        completed.returncode, completed.stdout or "", completed.stderr or ""
+                    )
+                    if failure:
+                        app_logger.error(f"Launch of '{app_name}' failed: {failure}")
+                        return {
+                            "success": False,
+                            "app_name": app_name,
+                            "executable_path": exec_path,
+                            "error": f"Launch failed: {failure}",
+                        }
                 else:
                     launched_process = subprocess.Popen([exec_path])
             else:
-                # Linux — exec_path must be a resolvable executable.
+                # Linux — exec_path must be a resolvable executable (verified
+                # against the inventory or by shutil.which above); a missing
+                # binary raises at spawn time and is caught below.
                 launched_process = subprocess.Popen([exec_path])
 
             audit_logger.info(f"Successfully launched application '{app_name}'")
@@ -298,6 +388,13 @@ class SystemAppInventory:
                 "message": f"Successfully launched '{app_name}' on your {platform.system()} system!"
             }
 
+        except subprocess.TimeoutExpired:
+            app_logger.error(f"Launch of application '{app_name}' timed out.")
+            return {
+                "success": False,
+                "app_name": app_name,
+                "error": "Launch timed out."
+            }
         except Exception as e:
             app_logger.error(f"Error launching application '{app_name}': {e}")
             return {

@@ -217,7 +217,15 @@ class ProcessManager:
             return {"success": False, "error": f"Could not stop {pid}: {killed.get('error')}"}
 
         try:
-            subprocess.Popen(cmdline, start_new_session=True)
+            # Platform-aware spawn flags. `start_new_session=True` raises
+            # ValueError on Windows — which made restart_process on Windows
+            # KILL the process and then always fail to relaunch it.
+            popen_kwargs: Dict[str, Any] = {}
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            else:
+                popen_kwargs["start_new_session"] = True
+            subprocess.Popen(cmdline, **popen_kwargs)
             audit_logger.info(f"Restarted process {pid} as: {' '.join(cmdline)[:200]}")
             return {"success": True, "pid": pid, "command": " ".join(cmdline)[:500]}
         except Exception as e:

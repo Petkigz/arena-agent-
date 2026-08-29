@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 import zipfile
 import subprocess
 from pathlib import Path
@@ -214,11 +215,23 @@ class UniversalFilesystem:
             if os.name == 'nt':
                 os.startfile(str(media_path))
             elif sys.platform == 'darwin':
-                subprocess.Popen(['open', str(media_path)])
+                # `open` prints its failure and exits non-zero; capture and
+                # check it instead of claiming success on a blind spawn.
+                completed = subprocess.run(['open', str(media_path)], capture_output=True, text=True, timeout=30)
+                if completed.returncode != 0:
+                    detail = (completed.stderr or completed.stdout or "").strip()[:200]
+                    return {"success": False, "file_name": media_path.name,
+                            "error": f"macOS 'open' failed (exit {completed.returncode}): {detail}"}
             else:
-                subprocess.Popen(['xdg-open', str(media_path)])
+                completed = subprocess.run(['xdg-open', str(media_path)], capture_output=True, text=True, timeout=30)
+                if completed.returncode != 0:
+                    detail = (completed.stderr or completed.stdout or "").strip()[:200]
+                    return {"success": False, "file_name": media_path.name,
+                            "error": f"xdg-open failed (exit {completed.returncode}): {detail}"}
 
             audit_logger.info(f"Launched media playback for '{media_path.name}'")
             return {"success": True, "file_name": media_path.name, "message": f"Playing media file '{media_path.name}'."}
+        except subprocess.TimeoutExpired:
+            return {"success": False, "file_name": media_path.name, "error": "Media player launch timed out."}
         except Exception as e:
             return {"success": False, "error": str(e)}
