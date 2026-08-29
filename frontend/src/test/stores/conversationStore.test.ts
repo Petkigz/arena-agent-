@@ -170,6 +170,47 @@ describe('conversationStore', () => {
       expect(convs.find((c) => c.id === 'conv-a')!.title).toBe('Server Chat A');
     });
 
+    it('auto-resumes the newest conversation when none is open (server restart / fresh load)', () => {
+      // Previews arrive newest-first from the backend.
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-new', title: 'Latest Chat', lastMessage: 'latest', updatedAt: '2026-08-29T10:00:00Z' },
+        { id: 'conv-old', title: 'Older Chat', lastMessage: 'older', updatedAt: '2026-08-01T10:00:00Z' },
+      ]);
+
+      // The previously-active conversation is restored, not a blank chat, so
+      // follow-ups keep their context across restarts and reloads.
+      const current = useConversationStore.getState().currentConversation;
+      expect(current).not.toBeNull();
+      expect(current!.id).toBe('conv-new');
+    });
+
+    it('does not switch conversations when one is already open', () => {
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-first', title: 'First', lastMessage: '', updatedAt: '' },
+      ]);
+      const first = useConversationStore.getState().currentConversation!;
+      expect(first.id).toBe('conv-first');
+
+      // A newer conversation appearing in a later list refresh must NOT
+      // hijack the open conversation.
+      useConversationStore.getState().hydrateFromServer([
+        { id: 'conv-newer', title: 'Newer', lastMessage: '', updatedAt: '' },
+        { id: 'conv-first', title: 'First', lastMessage: '', updatedAt: '' },
+      ]);
+
+      expect(useConversationStore.getState().currentConversation!.id).toBe('conv-first');
+    });
+
+    it('persists the open conversation for reloads (partialize)', () => {
+      const store = useConversationStore.getState() as unknown as { currentConversation: unknown };
+      const opts = (useConversationStore as unknown as {
+        persist: { getOptions: () => { partialize?: (state: unknown) => unknown } };
+      }).persist.getOptions();
+      const partial = opts.partialize!(store) as { conversations: unknown[]; currentConversation: unknown };
+      expect(Array.isArray(partial.conversations)).toBe(true);
+      expect(partial).toHaveProperty('currentConversation');
+    });
+
     it('preserves existing conversation state when hydrating the same id', () => {
       useConversationStore.getState().hydrateFromServer([
         { id: 'conv-x', title: 'Server Title', lastMessage: '', updatedAt: '' },

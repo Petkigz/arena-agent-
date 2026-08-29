@@ -159,7 +159,7 @@ export const useConversationStore = create<ConversationState>()(
         return state.conversations.find((c) => c.id === id) || null;
       },
 
-      hydrateFromServer: (previews) =>
+      hydrateFromServer: (previews) => {
         set((state) => {
           const existingById = new Map(state.conversations.map((c) => [c.id, c]));
           const previewIds = new Set(previews.map((p) => p.id));
@@ -179,7 +179,20 @@ export const useConversationStore = create<ConversationState>()(
           });
           // Merge: server previews first, then local-only (preserves offline work) — fixes B11
           return { conversations: [...conversations, ...localOnly] };
-        }),
+        });
+
+        // Resume where the owner left off. Live complaint: every server
+        // restart or page reload landed on a dead empty chat (currentConversation
+        // was never persisted and never auto-restored, and sendMessage silently
+        // no-ops without an active conversation). The server list is
+        // newest-first, so the first preview is the latest conversation.
+        if (!get().currentConversation) {
+          const newest = get().conversations[0];
+          if (newest) {
+            get().setCurrentConversation(newest);
+          }
+        }
+      },
 
       hydrateMessages: (conversationId, messages) =>
         set((state) => {
@@ -238,6 +251,10 @@ export const useConversationStore = create<ConversationState>()(
       name: 'arena-conversations',
       partialize: (state) => ({
         conversations: state.conversations,
+        // Persist the open conversation too, so a page reload (e.g. after a
+        // backend restart) reopens the same chat immediately instead of
+        // stranding the user with no active conversation.
+        currentConversation: state.currentConversation,
       }),
     }
   )
