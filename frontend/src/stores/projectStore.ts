@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { listBackendProjectsPage, createBackendProject } from '../services/api';
+import {
+  listBackendProjectsPage,
+  createBackendProject,
+  listBackendProjectTasks,
+  createBackendProjectTask,
+  updateBackendProjectTask,
+  deleteBackendProjectTask,
+} from '../services/api';
 
 export interface ProjectTask {
   id: string;
@@ -66,11 +73,13 @@ interface ProjectStoreState {
   deleteProject: (id: string) => void;
   setCurrentProject: (project: Project | null) => void;
 
-  // Task actions
+  // Task actions (server-backed: every mutation syncs to the shared store so
+  // tasks follow the owner across web/desktop/Android)
   addTask: (projectId: string, task: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt'>) => string;
   updateTask: (projectId: string, taskId: string, updates: Partial<ProjectTask>) => void;
   deleteTask: (projectId: string, taskId: string) => void;
   moveTask: (projectId: string, taskId: string, newStatus: ProjectTask['status']) => void;
+  loadProjectTasks: (projectId: string) => Promise<void>;
 
   // File actions
   addFile: (projectId: string, file: Omit<ProjectFile, 'id' | 'uploadedAt'>) => string;
@@ -139,7 +148,7 @@ export const useProjectStore = create<ProjectStoreState>()(
       setCurrentProject: (project) => set({ currentProject: project }),
 
       addTask: (projectId, taskData) => {
-        const taskId = `task-${Date.now()}`;
+        const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const now = new Date().toISOString();
         const task: ProjectTask = {
           ...taskData,
@@ -159,6 +168,19 @@ export const useProjectStore = create<ProjectStoreState>()(
               ? { ...state.currentProject, tasks: [...state.currentProject.tasks, task], updatedAt: now }
               : state.currentProject,
         }));
+
+        // Sync to the server (client-supplied id keeps every UI's copy
+        // matched). Local state stays as the optimistic fallback when offline.
+        void createBackendProjectTask(projectId, {
+          id: taskId,
+          title: task.title,
+          description: task.description || '',
+          status: task.status,
+          priority: task.priority,
+          assignee: task.assignee || '',
+          dueDate: task.dueDate || '',
+          tags: task.tags || [],
+        });
 
         return taskId;
       },
@@ -190,6 +212,11 @@ export const useProjectStore = create<ProjectStoreState>()(
                 }
               : state.currentProject,
         }));
+
+        void updateBackendProjectTask(projectId, taskId, {
+          ...updates,
+          ...(completedAt ? { completedAt } : {}),
+        });
       },
 
       deleteTask: (projectId, taskId) => {
@@ -203,6 +230,22 @@ export const useProjectStore = create<ProjectStoreState>()(
           currentProject:
             state.currentProject?.id === projectId
               ? { ...state.currentProject, tasks: state.currentProject.tasks.filter((t) => t.id !== taskId), updatedAt: now }
+              : state.currentProject,
+        }));
+
+        void deleteBackendProjectTask(projectId, taskId);
+      },
+
+      loadProjectTasks: async (projectId) => {
+        const tasks = await listBackendProjectTasks(projectId);
+        if (!tasks.length) return;
+        set((state) => ({
+          projects: state.projects.map((p) =>
+            p.id === projectId ? { ...p, tasks: tasks as unknown as ProjectTask[] } : p
+          ),
+          currentProject:
+            state.currentProject?.id === projectId
+              ? { ...state.currentProject, tasks: tasks as unknown as ProjectTask[] }
               : state.currentProject,
         }));
       },
@@ -234,6 +277,12 @@ export const useProjectStore = create<ProjectStoreState>()(
                 }
               : state.currentProject,
         }));
+
+        // Status moves sync to the server so the board matches on every UI.
+        void updateBackendProjectTask(projectId, taskId, {
+          status: newStatus,
+          ...(completedAt ? { completedAt } : {}),
+        });
       },
 
       addFile: (projectId, fileData) => {

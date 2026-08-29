@@ -30,6 +30,7 @@ backward compatibility: `from desktop.app import MainWindow` still works.
 from __future__ import annotations
 
 import sys
+from collections import deque
 from typing import List, Optional
 
 from PySide6.QtCore import QPointF, Qt, QTimer, Signal, Slot
@@ -164,6 +165,9 @@ class MainWindow(QMainWindow):
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
         self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
         self.current_conv_id = conversation_id
+        # room_message echoes of our own sends (server broadcasts to the whole
+        # room, sender included) — suppressed in _handle_room_message.
+        self._sent_echoes: deque = deque(maxlen=5)
 
         self._chat_token_signal.connect(self._handle_chat_token)
         self._chat_room_signal.connect(self._handle_room_message)
@@ -393,10 +397,18 @@ class MainWindow(QMainWindow):
     def _select_conversation(self, cid: str) -> None:
         self.current_conv_id = cid
         self.chat.clear_messages()
+        # Join the room first: the server moves this socket into the new
+        # conversation so live broadcasts (other clients' messages + reply
+        # token streams) for it start arriving immediately.
+        self.chat_client.join_conversation(cid)
         self.chat_client.get_history(cid)
 
     def _send_message(self, content: str) -> None:
         self.chat.append_message("user", content)
+        # Remember locally-rendered sends so the server's room_message echo
+        # (broadcast to every room member, this client included) doesn't
+        # render the same message twice.
+        self._sent_echoes.append(content)
         self._set_status("thinking")
         self.chat.set_voice_status("thinking")
         self.beanie.set_message("Thinking…")
@@ -412,7 +424,11 @@ class MainWindow(QMainWindow):
 
     @Slot(str, str)
     def _handle_room_message(self, message_id: str, content: str) -> None:
-        # Messages from other clients (web tabs) appear in the shared room.
+        # Messages from other clients (web tabs, Android) appear in the shared
+        # room; our own sends arrive as echoes and are skipped (already shown).
+        if content in self._sent_echoes:
+            self._sent_echoes.remove(content)
+            return
         self.chat.show_user_message(message_id, content)
 
     @Slot(list)

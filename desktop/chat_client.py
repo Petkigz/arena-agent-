@@ -94,6 +94,13 @@ class DesktopChatClient:
     def list_conversations(self) -> None:
         self._send({"type": "list_conversations"})
 
+    def join_conversation(self, conversation_id: str) -> None:
+        """Switch this socket to another room (server moves a socket out of its
+        previous room on join) and remember it for reconnects, so live
+        cross-client broadcasts for the newly opened conversation arrive."""
+        self.conversation_id = conversation_id
+        self._send({"type": "join_conversation", "conversation_id": conversation_id})
+
     def get_history(self, conversation_id: str) -> None:
         self._send({"type": "get_history", "conversation_id": conversation_id})
 

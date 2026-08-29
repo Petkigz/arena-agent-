@@ -113,6 +113,15 @@ class VoiceWebSocketClient @Inject constructor(
         ))
     }
 
+    /** Switch this socket to another conversation room (live cross-device sync). */
+    fun joinConversation(conversationId: String) {
+        this.conversationId = conversationId
+        sendJson(mapOf(
+            "type" to "join_conversation",
+            "conversation_id" to conversationId
+        ))
+    }
+
     /** Public connection-state accessor (used by the UI to reflect the orb state). */
     fun isConnected(): Boolean = isConnected
 
@@ -260,16 +269,26 @@ class VoiceWebSocketClient @Inject constructor(
                     "conversation_history" -> {
                         val convId = json.optString("conversation_id")
                         val history = json.optJSONArray("messages")
-                        val msgs = mutableListOf<Pair<String, String>>() // role, content
+                        // Triple of (server message id, role, content) — the id
+                        // lets us match streamed tokens against hydrated rows.
+                        val msgs = mutableListOf<Triple<String, String, String>>()
                         if (history != null) {
                             for (i in 0 until history.length()) {
                                 val m = history.optJSONObject(i)
+                                val mid = m?.optString("message_id", "") ?: ""
                                 val role = m?.optString("role", "assistant") ?: "assistant"
                                 val content = m?.optString("content", "") ?: ""
-                                if (content.isNotBlank()) msgs.add(role to content)
+                                if (content.isNotBlank()) msgs.add(Triple(mid, role, content))
                             }
                         }
                         listeners.forEach { it.onConversationHistory(convId, msgs) }
+                    }
+                    "room_message" -> {
+                        // A user message sent from another device (web/desktop).
+                        val convId = json.optString("conversation_id")
+                        val msgId = json.optString("message_id")
+                        val content = json.optString("content")
+                        listeners.forEach { it.onRemoteMessage(convId, msgId, content) }
                     }
                     "error" -> {
                         val message = json.optString("message", "Unknown error")
@@ -325,7 +344,8 @@ class VoiceWebSocketClient @Inject constructor(
         fun onConversationJoined(conversationId: String) {}
         fun onConversationCreated(conversationId: String) {}
         fun onConversationList(conversations: List<Pair<String, String>>) {}
-        fun onConversationHistory(conversationId: String, messages: List<Pair<String, String>>) {}
+        fun onConversationHistory(conversationId: String, messages: List<Triple<String, String, String>>) {}
+        fun onRemoteMessage(conversationId: String, messageId: String, content: String) {}
         fun onChatError(message: String) {}
     }
 
@@ -334,7 +354,12 @@ class VoiceWebSocketClient @Inject constructor(
         // The default server URL now lives in SettingsRepository.DEFAULT_SERVER_URL
         // (editable at runtime via DataStore; see SettingsRepository).
         private const val DEFAULT_CONVERSATION_ID = "android-voice"
+        const val DEFAULT_CONVERSATION = DEFAULT_CONVERSATION_ID
         private const val MAX_RECONNECT_ATTEMPTS = 5
         private const val RECONNECT_DELAY_MS = 2000L
     }
+
+    /** The device's factory room id — used to detect "not yet synced to a
+     * shared conversation" so the newest server conversation can be adopted. */
+    val defaultConversationId: String get() = DEFAULT_CONVERSATION_ID
 }

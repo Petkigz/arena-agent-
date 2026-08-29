@@ -77,6 +77,26 @@ class DatabaseManager:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_conv ON conversations(conversation_id)")
 
+            # 5. Create Project Tasks Table (Kanban tasks inside projects, synced
+            # across all UIs — web, desktop, Android all read/write this store).
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS project_tasks (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'todo',
+                    priority TEXT NOT NULL DEFAULT 'medium',
+                    assignee TEXT DEFAULT '',
+                    due_date TEXT DEFAULT '',
+                    tags TEXT DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON project_tasks(project_id)")
+
             conn.commit()
             app_logger.info("SQLite database initialized successfully.")
 
@@ -254,7 +274,9 @@ class DatabaseManager:
             return [dict(row) for row in cursor.fetchall()]
 
     # Conversations (persistent chat history)
-    def add_conversation_message(self, conversation_id: str, role: str, content: str) -> bool:
+    def add_conversation_message(self, conversation_id: str, role: str, content: str) -> Optional[int]:
+        """Insert a chat message; returns the new row id (used as message_id
+        so every UI can dedupe hydrated history against live token streams)."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
@@ -263,19 +285,23 @@ class DatabaseManager:
                 VALUES (?, ?, ?, ?)
             """, (conversation_id, role, content, now))
             conn.commit()
-            return cursor.rowcount > 0
+            return cursor.lastrowid
 
     def get_conversation_messages(self, conversation_id: str, limit: int = 50) -> List[Dict[str, str]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT role, content FROM conversations "
+                "SELECT id, role, content FROM conversations "
                 "WHERE conversation_id = ? ORDER BY id ASC",
                 (conversation_id,),
             )
             rows = cursor.fetchall()
-            # Return the most recent `limit` messages, preserving order.
-            return [{"role": r["role"], "content": r["content"]} for r in rows[-limit:]]
+            # Return the most recent `limit` messages, preserving order. The row
+            # id is exposed as message_id for cross-client dedupe.
+            return [
+                {"message_id": r["id"], "role": r["role"], "content": r["content"]}
+                for r in rows[-limit:]
+            ]
 
     def get_conversation_ids(self) -> List[str]:
         """Distinct conversation IDs, most recently active first."""
@@ -318,5 +344,90 @@ class DatabaseManager:
                 "updatedAt": last["created_at"],
             })
         return previews
+
+    # Project tasks (Kanban board — synced across all UIs)
+    def add_project_task(self, task: Dict[str, Any]) -> bool:
+        """Insert a project task. `id` is client-supplied (task-<ts>) so the
+        creating UI can match its optimistic copy against the server row."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.utcnow().isoformat()
+            cursor.execute("""
+                INSERT INTO project_tasks
+                    (id, project_id, title, description, status, priority,
+                     assignee, due_date, tags, created_at, updated_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                task["id"],
+                task["project_id"],
+                task["title"],
+                task.get("description", ""),
+                task.get("status", "todo"),
+                task.get("priority", "medium"),
+                task.get("assignee", ""),
+                task.get("dueDate", ""),
+                json.dumps(task.get("tags", [])),
+                task.get("createdAt", now),
+                task.get("updatedAt", now),
+                task.get("completedAt"),
+            ))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_project_tasks(self, project_id: str) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM project_tasks WHERE project_id = ? ORDER BY created_at ASC",
+                (project_id,),
+            )
+            return [self._project_task_row(r) for r in cursor.fetchall()]
+
+    def update_project_task(self, task_id: str, updates: Dict[str, Any]) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            fields, values = [], []
+            column_map = {
+                "title": "title", "description": "description", "status": "status",
+                "priority": "priority", "assignee": "assignee", "dueDate": "due_date",
+                "completedAt": "completed_at",
+            }
+            for key, column in column_map.items():
+                if key in updates:
+                    fields.append(f"{column} = ?")
+                    values.append(updates[key])
+            if "tags" in updates:
+                fields.append("tags = ?")
+                values.append(json.dumps(updates["tags"]))
+            if not fields:
+                return False
+            fields.append("updated_at = ?")
+            values.append(datetime.utcnow().isoformat())
+            values.append(task_id)
+            cursor.execute(
+                f"UPDATE project_tasks SET {', '.join(fields)} WHERE id = ?", values
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_project_task(self, task_id: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM project_tasks WHERE id = ?", (task_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def _project_task_row(r) -> Dict[str, Any]:
+        row = dict(r)
+        try:
+            row["tags"] = json.loads(row.get("tags") or "[]")
+        except (TypeError, ValueError):
+            row["tags"] = []
+        row["dueDate"] = row.pop("due_date", "")
+        row["createdAt"] = row.get("created_at", "")
+        row["updatedAt"] = row.get("updated_at", "")
+        row["completedAt"] = row.get("completed_at") or None
+        return row
 
 db = DatabaseManager()

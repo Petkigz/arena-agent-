@@ -81,13 +81,20 @@ export function ChatPage() {
           if (mine) {
             updateMessage(mine.id, { status: 'sent' as const });
           } else if (!currentConversation.messages.some((m) => m.id === message_id)) {
-            addMessage({
-              id: message_id,
-              role: 'user',
-              content,
-              timestamp: new Date().toISOString(),
-              status: 'sent' as const,
-            });
+            // Skip when an identical user message was already rendered by a
+            // history hydrate racing this broadcast (server row id ≠ event id).
+            const hydrated = currentConversation.messages.find(
+              (m) => m.role === 'user' && m.content === content,
+            );
+            if (!hydrated) {
+              addMessage({
+                id: message_id,
+                role: 'user',
+                content,
+                timestamp: new Date().toISOString(),
+                status: 'sent' as const,
+              });
+            }
           }
         }
       } else if (event.type === 'message_token') {
@@ -102,6 +109,9 @@ export function ChatPage() {
 
         const existing = currentConversation.messages.find((m) => m.id === message_id);
         if (existing) {
+          // Already fully hydrated from history (the server persists the reply
+          // before streaming finishes) — appending tokens would duplicate text.
+          if (existing.status === 'complete' && existing.content) return;
           updateMessage(message_id, {
             content: existing.content + token,
             status: done ? 'complete' as const : 'streaming' as const,
@@ -130,8 +140,22 @@ export function ChatPage() {
         }
       } else if (event.type === 'action_step') {
         const step = event.data as ActionStep & { message_id: string };
-        const message = currentConversation.messages.find((m) => m.id === step.message_id);
-        if (message && message.actionSteps) {
+        // Steps reference the assistant reply's message id and can arrive
+        // before the first token — lazily create the streaming bubble so
+        // action steps render on every client, not just the sender.
+        let message = currentConversation.messages.find((m) => m.id === step.message_id);
+        if (!message) {
+          addMessage({
+            id: step.message_id,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date().toISOString(),
+            status: 'streaming' as const,
+            actionSteps: [step],
+          });
+          return;
+        }
+        if (message.actionSteps) {
           const updatedSteps = message.actionSteps.map((s) =>
             s.id === step.id ? { ...s, ...step } : s
           );

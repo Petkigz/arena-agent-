@@ -774,6 +774,76 @@ export async function createBackendProject(name: string, description = "", prior
 }
 
 /**
+ * Project tasks (Kanban board). Server-backed so tasks created on any UI
+ * sync everywhere; the shape mirrors the local ProjectTask type.
+ */
+export interface BackendProjectTask {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  assignee: string;
+  dueDate: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export async function listBackendProjectTasks(projectId: string): Promise<BackendProjectTask[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/tasks`, { headers: apiKeyHeader() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.tasks) ? data.tasks as BackendProjectTask[] : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createBackendProjectTask(projectId: string, task: Partial<BackendProjectTask> & { title: string }): Promise<BackendProjectTask | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify(task),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.task ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateBackendProjectTask(projectId: string, taskId: string, updates: Partial<BackendProjectTask>): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
+      body: JSON.stringify(updates),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteBackendProjectTask(projectId: string, taskId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'DELETE',
+      headers: apiKeyHeader(),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch the world-model knowledge graph (entities + relationships) from the
  * backend, so the web Pansophy shows the same graph as the desktop/Android.
  */

@@ -288,6 +288,22 @@ class ArenaBackendClient:
         """POST /settings → merged settings dict."""
         return self._post_json("/settings", patch)
 
+    def list_conversations(self, limit: int = 50) -> Dict[str, Any]:
+        """GET /conversations → {success, conversations: [{id, title, lastMessage, updatedAt}]}.
+
+        Backed by SQLite so the desktop joins the owner's most recent room
+        even when no other client is currently connected."""
+        try:
+            r = self._client.get(
+                f"{self.base_url}/conversations",
+                params={"limit": limit},
+                timeout=5.0,
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            raise BackendConnectionError(f"GET /conversations failed: {e}") from e
+
     # ── models (Settings) ───────────────────────────────────────────────────
     def list_models(self) -> Dict[str, Any]:
         """GET /models → LM Studio model info."""

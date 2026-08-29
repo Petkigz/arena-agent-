@@ -420,9 +420,12 @@ def get_learning_progress_endpoint(limit: int = Query(25, ge=1, le=100)):
 
 @router.get("/conversations")
 def list_conversations_endpoint(limit: int = Query(50, ge=1, le=200)):
-    """Conversation previews so native clients can join the owner's active room."""
-    from app.database import db
-    return {"success": True, "conversations": db.get_conversation_previews(limit)}
+    """Conversation previews so native clients can join the owner's active room.
+
+    Uses the same DB + active-room merge as the WS `list_conversations`
+    handler, so REST and WebSocket surfaces always agree."""
+    from backend.message_router import list_conversation_previews
+    return {"success": True, "conversations": list_conversation_previews(limit=limit)}
 
 @router.get("/owner-control/questions")
 def list_owner_questions_endpoint(status: Optional[str] = Query("pending"), limit: int = Query(100, ge=1, le=500)):

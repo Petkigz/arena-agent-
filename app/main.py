@@ -7,6 +7,7 @@ import httpx
 import os
 import socket
 import uuid
+from datetime import datetime
 import signal
 import sys
 
@@ -747,6 +748,29 @@ class ProjectCreateRequest(BaseModel):
 class ProjectScheduleRequest(BaseModel):
     enabled: bool
 
+
+class ProjectTaskCreateRequest(BaseModel):
+    """Kanban task inside a project — synced across web/desktop/Android."""
+    id: Optional[str] = None  # client-supplied id keeps optimistic copies matched
+    title: str
+    description: str = ""
+    status: str = "todo"
+    priority: str = "medium"
+    assignee: str = ""
+    dueDate: str = ""
+    tags: Optional[List[str]] = None
+
+
+class ProjectTaskUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    assignee: Optional[str] = None
+    dueDate: Optional[str] = None
+    tags: Optional[List[str]] = None
+    completedAt: Optional[str] = None
+
 class ProjectRunRequest(BaseModel):
     max_steps: int = Field(default=1, ge=1, le=10)
 
@@ -843,6 +867,76 @@ def get_project_endpoint(project_id: str, request: Request):
     except Exception as e:
         app_logger.error(f"Get project failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ── Project tasks (Kanban board synced across all UIs) ──
+@router.get("/projects/{project_id}/tasks")
+def list_project_tasks_endpoint(project_id: str):
+    """Tasks for a project, read from the same SQLite store every UI writes to."""
+    try:
+        return {"success": True, "tasks": db.get_project_tasks(project_id)}
+    except Exception as e:
+        app_logger.error(f"List project tasks failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/tasks", status_code=201)
+def create_project_task_endpoint(project_id: str, req: ProjectTaskCreateRequest):
+    """Create a task in a project (server-assigned id unless the client supplies one)."""
+    try:
+        task = {
+            "id": req.id or f"task-{uuid.uuid4().hex[:8]}",
+            "project_id": project_id,
+            "title": req.title,
+            "description": req.description,
+            "status": req.status,
+            "priority": req.priority,
+            "assignee": req.assignee,
+            "dueDate": req.dueDate,
+            "tags": req.tags or [],
+            "createdAt": datetime.utcnow().isoformat(),
+            "updatedAt": datetime.utcnow().isoformat(),
+            "completedAt": None,
+        }
+        if db.add_project_task(task):
+            return {"success": True, "task": task}
+        raise HTTPException(status_code=500, detail="Could not create task")
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Create project task failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/projects/{project_id}/tasks/{task_id}")
+def update_project_task_endpoint(project_id: str, task_id: str, req: ProjectTaskUpdateRequest):
+    """Update a task (status moves, edits, deletes derive from the same row)."""
+    try:
+        updates = {k: v for k, v in req.model_dump().items() if v is not None}
+        if db.update_project_task(task_id, updates):
+            return {"success": True, "task": next(
+                (t for t in db.get_project_tasks(project_id) if t["id"] == task_id), None
+            )}
+        raise HTTPException(status_code=404, detail="Task not found or update failed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Update project task failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/projects/{project_id}/tasks/{task_id}")
+def delete_project_task_endpoint(project_id: str, task_id: str):
+    """Delete a task so removal syncs to every UI."""
+    try:
+        if db.delete_project_task(task_id):
+            return {"success": True}
+        raise HTTPException(status_code=404, detail="Task not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Delete project task failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/projects")
 def create_project_endpoint(req: ProjectCreateRequest):

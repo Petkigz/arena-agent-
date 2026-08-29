@@ -14,7 +14,7 @@ import { notifications } from '../../services/notifications';
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { projects, updateProject, deleteProject } = useProjectStore();
+  const { projects, updateProject, deleteProject, loadProjectTasks } = useProjectStore();
   const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'conversations' | 'milestones'>('tasks');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -30,8 +30,10 @@ export function ProjectDetailPage() {
     getBackendProject(projectId).then((data) => {
       if (!cancelled && data) setBackendDetail(data);
     });
+    // Pull the shared task list so the board reflects every UI's changes.
+    loadProjectTasks(projectId);
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, loadProjectTasks]);
 
   const refreshBackendDetail = async () => {
     if (!projectId) return;

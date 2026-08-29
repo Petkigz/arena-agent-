@@ -40,11 +40,13 @@ export const useConversationStore = create<ConversationState>()(
 
       setCurrentConversation: (conversation) => {
         set({ currentConversation: conversation });
-        // Hydrate history from the backend when opening a conversation that has
-        // not yet loaded its messages (persisted conversations start empty).
-        if (conversation && conversation.messages.length === 0) {
-          webSocketService.requestConversationHistory(conversation.id);
-        }
+        if (!conversation) return;
+        // Join the room so live broadcasts (other clients' messages + reply
+        // streams) arrive without having to send a message first.
+        webSocketService.joinConversation(conversation.id);
+        // Always re-fetch history: the server is the source of truth, so
+        // messages sent from other devices show up here on every open.
+        webSocketService.requestConversationHistory(conversation.id);
       },
 
       addMessage: (message) =>
@@ -182,7 +184,11 @@ export const useConversationStore = create<ConversationState>()(
       hydrateMessages: (conversationId, messages) =>
         set((state) => {
           const mapped: Message[] = messages.map((m, i) => ({
-            id: `hist-${conversationId}-${i}`,
+            // Server message ids let the token handler match streamed replies
+            // against hydrated entries instead of duplicating them.
+            id: (m as { message_id?: string | number }).message_id
+              ? `${(m as { message_id?: string | number }).message_id}`
+              : `hist-${conversationId}-${i}`,
             conversationId,
             role: m.role === 'assistant' ? 'assistant' : 'user',
             content: m.content,

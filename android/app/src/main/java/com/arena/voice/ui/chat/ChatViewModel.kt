@@ -85,6 +85,8 @@ class ChatViewModel @Inject constructor(
     fun selectConversation(id: String) {
         if (id == conversationId) return
         conversationId = id
+        // Join the room so messages from other devices stream to this one.
+        webSocketClient.joinConversation(id)
         requestHistory()
     }
 
@@ -147,19 +149,40 @@ class ChatViewModel @Inject constructor(
     override fun onConversationList(conversations: List<Pair<String, String>>) {
         this.conversations.clear()
         this.conversations.addAll(conversations)
-        // Pick the first conversation if none selected yet.
-        if (conversationId.isBlank() && conversations.isNotEmpty()) {
+        // Adopt the shared conversation: when we're still parked on the device
+        // default room (never used on another UI) and the server has real
+        // conversations, join the most recent one so chats sync across devices.
+        val ids = conversations.map { it.first }
+        if (conversationId == webSocketClient.defaultConversationId &&
+            conversationId !in ids && conversations.isNotEmpty()
+        ) {
+            selectConversation(conversations.first().first)
+        } else if (conversationId.isBlank() && conversations.isNotEmpty()) {
             conversationId = conversations.first().first
             webSocketClient.requestHistory(conversationId)
         }
     }
 
-    override fun onConversationHistory(conversationId: String, history: List<Pair<String, String>>) {
+    override fun onConversationHistory(conversationId: String, history: List<Triple<String, String, String>>) {
         if (conversationId != this.conversationId) return
         messages.clear()
-        history.forEach { (role, content) ->
-            messages.add(ChatMessage(id = UUID.randomUUID().toString(), role = role, content = content))
+        history.forEach { (messageId, role, content) ->
+            // Server message ids keep hydrated rows matched against live tokens.
+            messages.add(
+                ChatMessage(
+                    id = messageId.ifBlank { UUID.randomUUID().toString() },
+                    role = role,
+                    content = content
+                )
+            )
         }
+    }
+
+    override fun onRemoteMessage(conversationId: String, messageId: String, content: String) {
+        // A user message sent from another device (web/desktop) — render it live.
+        if (conversationId != this.conversationId || content.isBlank()) return
+        if (messages.any { it.id == messageId || (it.role == "user" && it.content == content) }) return
+        messages.add(ChatMessage(id = messageId.ifBlank { UUID.randomUUID().toString() }, role = "user", content = content))
     }
 
     override fun onMessageToken(conversationId: String, messageId: String, token: String, done: Boolean) {
@@ -174,6 +197,12 @@ class ChatViewModel @Inject constructor(
         val idx = messages.indexOfFirst { it.id == messageId }
         if (idx >= 0) {
             val m = messages[idx]
+            // Already fully hydrated from history (server persists the reply
+            // before the stream finishes) — appending would duplicate text.
+            if (!m.isStreaming && m.content.isNotBlank()) {
+                if (done) streamingMessageId = null
+                return
+            }
             messages[idx] = m.copy(content = m.content + token, isStreaming = !done)
         }
 
@@ -191,6 +220,18 @@ class ChatViewModel @Inject constructor(
             val steps = if (m.actionSteps.any { it.startsWith(label) }) m.actionSteps
             else m.actionSteps + "$label ($status)"
             messages[idx] = m.copy(actionSteps = steps)
+        } else {
+            // Steps can arrive before the first token — create the bubble.
+            messages.add(
+                ChatMessage(
+                    id = messageId,
+                    role = "assistant",
+                    content = "",
+                    isStreaming = true,
+                    actionSteps = listOf("$label ($status)")
+                )
+            )
+            streamingMessageId = messageId
         }
     }
 
