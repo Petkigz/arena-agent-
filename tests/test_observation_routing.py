@@ -343,9 +343,11 @@ def test_export_failure_phrases_from_live_chats():
     assert plan is not None and plan.question_kind == "file_location"
 
     # 13:11 — 'let's observe the list of applications...' non-answer.
+    # (games questions now use the more precise installed_games kind, which
+    # renders a filtered, countable game list instead of an app sample)
     for q in ("how many games do i have on my pc", "what games do i have installed"):
         plan = plan_observation(q)
-        assert plan is not None and plan.question_kind == "installed_apps"
+        assert plan is not None and plan.question_kind in ("installed_apps", "installed_games")
 
     # 11:35 — answered with the tzdata 'Europe\\London' folder; the hint must
     # steer the model to actual media files.
@@ -356,3 +358,43 @@ def test_export_failure_phrases_from_live_chats():
     # Reference tails must not read as content intent.
     assert plan_observation("tell me all about the song called yesterday") is None
     assert plan_observation("tell me about the song called london") is None
+
+
+def test_games_questions_get_game_aware_evidence():
+    """Live bug: 'how can i check my games on pc' got File Explorer
+    instructions from the LLM while the app-inventory scan sat unused — and
+    even routed games questions only got '613 apps, sample of 10', which
+    cannot be counted. Any non-action game question now routes with a
+    filtered, countable game list."""
+    routes = [
+        "how many games do i have on my pc", "what games do i have",
+        "where are my games", "how can i check my games on pc",
+        "check my games", "can you check my games",
+        "where are my games stored", "how do i see my games",
+        "do i have a game called minecraft",
+    ]
+    for q in routes:
+        plan = plan_observation(q)
+        assert plan is not None and plan.question_kind == "installed_games", f"missed: {q}"
+        assert plan.action_type == "list_apps"
+
+    # Action/content game requests keep their pipelines.
+    for q in ["play minecraft", "install fortnite",
+              "tell me about the witcher 3 game",
+              "where can i watch game of thrones"]:
+        plan = plan_observation(q)
+        assert plan is None or plan.question_kind != "installed_games", f"over-triggered: {q}"
+
+    # Evidence must list the games so the model can count them.
+    fake = {"success": True, "applications": [
+        {"app_name": "Epic Games Launcher", "source_category": "Start Menu"},
+        {"app_name": "Football Manager 2024", "source_category": "Start Menu"},
+        {"app_name": "Microsoft Word", "source_category": "Start Menu"},
+        {"app_name": "Minecraft Launcher", "source_category": "Start Menu"},
+    ]}
+    plan = plan_observation("how many games do i have on my pc")
+    ev = render_observation_evidence(fake, plan)
+    assert "3 look like games" in ev
+    assert "Epic Games Launcher" in ev and "Football Manager 2024" in ev
+    assert "Microsoft Word" not in ev
+    assert "count/list the games" in ev

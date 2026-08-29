@@ -90,6 +90,43 @@ _FILE_EXTS = (
 
 # Questions that want the file ITSELF acted on (open/play/delete/…) are NOT
 # read-only searches — the action pipeline owns them.
+# ── Game detection for installed_games evidence ──────────────────────────
+# Heuristic, deliberately broad: an entry counts if the app name/category
+# contains game words, a known launcher/publisher, or a common game title.
+_GAME_WORDS = (
+    "game", "gaming", "steam", "epic games", "riot", "origin", "ea app",
+    "ea sports", "ubisoft", "ubisoft connect", "battle.net", "battlenet",
+    "blizzard", "gog galaxy", "minecraft", "roblox", "fortnite", "valorant",
+    "league of legends", "counter-strike", "counter strike", "cs2", "dota",
+    "football manager", "sports interactive", "the sims", "grand theft auto",
+    "gta", "call of duty", "warzone", "apex legends", "rocket league",
+    "among us", "terraria", "stardew", "hollow knight", "hades", "celeste",
+    "cuphead", "cyberpunk", "witcher", "skyrim", "fallout", "elder scrolls",
+    "forza", "halo", "gears of war", "sea of thieves", "elden ring",
+    "dark souls", "pubg", "overwatch", "diablo", "starcraft", "warcraft",
+    "hearthstone", "genshin", "chess", "solitaire", "minesweeper", "mahjong",
+    "pinball", "age of empires", "civilization", "total war", "crusader kings",
+    "hearts of iron", "stellaris", "cities skyline", "planet coaster",
+    "zoo tycoon", "rollercoaster", "farming simulator", "farm simulator",
+    "euro truck", "american truck", "flight simulator", "msfs", "xbox",
+    "playstation", "nintendo", "emulator", "dolphin", "rpcs3", "pcsx",
+    "retroarch", "dosbox",
+)
+
+
+def _filter_game_apps(apps: list) -> List[str]:
+    """Return the app names that look like games/launchers from an app scan."""
+    found: List[str] = []
+    for a in apps:
+        name = str(a.get("app_name", a.get("name", a)) if isinstance(a, dict) else a)
+        haystack = name.lower()
+        if isinstance(a, dict):
+            haystack += " " + str(a.get("source_category", "")).lower()
+        if any(w in haystack for w in _GAME_WORDS):
+            found.append(name)
+    return found
+
+
 _FILE_ACTION_INTENT = (
     r"\b(play|open|launch|start|run|execute|delete|deleting|deleted|remove|removing|removed|"
     r"rename|renaming|renamed|move|moving|moved|copy|copying|copied|cut|send|sending|sent|"
@@ -474,16 +511,25 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         )
 
     # Installed applications (NOT running/startup — those have their own patterns).
-    if re.search(
+    # Games get their own kind: any non-action question mentioning games
+    # routes to the app inventory with game-aware evidence (live lesson:
+    # 'where are my games' / 'how can i check my games on pc' got generic
+    # File Explorer instructions from the LLM while the app scan sat unused).
+    games_q = bool(re.search(r"\bgames?\b", t)) and not re.search(
+        r"\b(play|open|launch|start|install|uninstall|delete|remove|download|buy|"
+        r"update|mod|patch|cheat|cheats|walkthrough|review|trailer|about|watch|"
+        r"stream|episode|season|series|movie|song|book)\b", t,
+    )
+    if (re.search(
         r"\b(installed|what|which|how many|how much|list|show|any|do i have|got)\b.{0,30}"
         r"\b(apps?|programs?|applications?|software|games?)\b|\bwhich software\b",
         t,
-    ) and not re.search(r"\b(running|startup|boot|auto.?start|services?)\b", t):
+    ) and not re.search(r"\b(running|startup|boot|auto.?start|services?)\b", t)) or games_q:
         return ObservationPlan(
             action_type="list_apps",
             payload={},
             evidence_hint="Installed applications scanned from the host.",
-            question_kind="installed_apps",
+            question_kind="installed_games" if games_q else "installed_apps",
         )
 
     return None
@@ -547,6 +593,19 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
             return f"OBSERVED open windows: {windows and len(windows)} — {titles}"
         if plan.action_type == "list_apps" and data.get("success"):
             apps = data.get("applications", data.get("apps", []))
+            if plan.question_kind == "installed_games":
+                # Game questions must be answered from an actual filtered
+                # list — 'OBSERVED 1027 apps, sample of 40' cannot be
+                # counted and the LLM improvises File Explorer instructions.
+                games = _filter_game_apps(apps)
+                listing = "\n".join(f"- {g}" for g in games[:40])
+                return (
+                    f"OBSERVED {len(apps)} installed applications total; {len(games)} "
+                    f"look like games or game launchers:\n{listing}\n"
+                    "Answer ONLY from this evidence: count/list the games above. If "
+                    "none matched, say the app inventory shows no games — do not "
+                    "invent instructions."
+                )
             names = ", ".join(str(a) for a in apps[:40])
             return f"OBSERVED {len(apps)} installed applications. Sample: {names}"
         return f"OBSERVATION ATTEMPTED ({plan.action_type}) but returned no usable evidence: {str(result)[:200]}"
