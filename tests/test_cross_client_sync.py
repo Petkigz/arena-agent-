@@ -72,10 +72,12 @@ def test_desktop_picks_most_recent_conversation(monkeypatch, tmp_path):
     assert picked == "conv_web_latest"          # newest room wins
     assert fake_settings["conversation_id"] == "conv_web_latest"
 
-    # Saved preference wins over recency.
+    # Newest wins even when a stale saved preference exists — the desktop
+    # opens where the owner last left off on ANY device, and follow-newest
+    # keeps it there for the rest of the session.
     fake_settings["conversation_id"] = "desktop-chat"
     again = pick_shared_conversation(fake_client, FakeSettings())
-    assert again == "desktop-chat"
+    assert again == "conv_web_latest"
 
     # Server unreachable → empty (falls back to the private room).
     broken = SimpleNamespace(client=SimpleNamespace(

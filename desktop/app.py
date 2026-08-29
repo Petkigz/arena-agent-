@@ -30,6 +30,7 @@ backward compatibility: `from desktop.app import MainWindow` still works.
 from __future__ import annotations
 
 import sys
+import time
 from collections import deque
 from typing import List, Optional
 
@@ -164,10 +165,15 @@ class MainWindow(QMainWindow):
         self.chat_client.on_history = lambda cid, h: self._chat_history_signal.emit(cid, h)
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
         self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
+        self.chat_client.on_activity = self._on_conversation_activity
         self.current_conv_id = conversation_id
         # room_message echoes of our own sends (server broadcasts to the whole
         # room, sender included) — suppressed in _handle_room_message.
         self._sent_echoes: deque = deque(maxlen=5)
+        # Follow-the-owner state: set when the user manually picks/creates a
+        # room this session; until then the desktop follows the newest chat.
+        self._user_picked_conversation: bool = False
+        self._last_list_refresh: float = 0.0
 
         self._chat_token_signal.connect(self._handle_chat_token)
         self._chat_room_signal.connect(self._handle_room_message)
@@ -391,10 +397,23 @@ class MainWindow(QMainWindow):
     def _on_chat_connected(self) -> None:
         self.chat_client.list_conversations()
 
+    def _on_conversation_activity(self, conversation_id: str) -> None:
+        """The owner chatted (or created a conversation) somewhere — refresh
+        the list so the sidebar updates and follow-newest can kick in.
+        Throttled: bursts of messages trigger at most one refresh per 2s."""
+        now = time.monotonic()
+        if now - getattr(self, "_last_list_refresh", 0.0) < 2.0:
+            return
+        self._last_list_refresh = now
+        self.chat_client.list_conversations()
+
     def _new_chat(self) -> None:
+        self._user_picked_conversation = True  # explicit user action
         self.chat_client.create_conversation()
 
-    def _select_conversation(self, cid: str) -> None:
+    def _select_conversation(self, cid: str, user_action: bool = True) -> None:
+        if user_action:
+            self._user_picked_conversation = True
         self.current_conv_id = cid
         self.chat.clear_messages()
         # Join the room first: the server moves this socket into the new
@@ -434,6 +453,17 @@ class MainWindow(QMainWindow):
     @Slot(list)
     def _handle_conversation_list(self, conversations: list) -> None:
         self.sidebar.set_conversations(conversations)
+        # Cross-device follow: when the owner's most recent conversation moved
+        # (they opened/created a chat on the web or phone), join it — unless
+        # the user picked a room manually this session or is mid-typing.
+        from desktop.chat_client import should_follow_newest
+        if should_follow_newest(
+            conversations,
+            self.current_conv_id,
+            getattr(self, "_user_picked_conversation", False),
+            bool(self.chat.input.text().strip()),
+        ):
+            self._select_conversation(conversations[0][0], user_action=False)
 
     @Slot(str, list)
     def _handle_conversation_history(self, cid: str, history: list) -> None:

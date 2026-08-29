@@ -290,6 +290,11 @@ class VoiceWebSocketClient @Inject constructor(
                         val content = json.optString("content")
                         listeners.forEach { it.onRemoteMessage(convId, msgId, content) }
                     }
+                    "conversation_activity" -> {
+                        // The owner chatted/created a conversation on any device.
+                        val convId = json.optString("conversation_id")
+                        listeners.forEach { it.onConversationActivity(convId) }
+                    }
                     "error" -> {
                         val message = json.optString("message", "Unknown error")
                         listeners.forEach { it.onChatError(message) }
@@ -346,6 +351,7 @@ class VoiceWebSocketClient @Inject constructor(
         fun onConversationList(conversations: List<Pair<String, String>>) {}
         fun onConversationHistory(conversationId: String, messages: List<Triple<String, String, String>>) {}
         fun onRemoteMessage(conversationId: String, messageId: String, content: String) {}
+        fun onConversationActivity(conversationId: String) {}
         fun onChatError(message: String) {}
     }
 

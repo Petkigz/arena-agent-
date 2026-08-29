@@ -84,6 +84,32 @@ class WebSocketManager:
                 
                 if not self.active_connections[conversation_id]:
                     del self.active_connections[conversation_id]
+
+    async def broadcast_to_all(self, message: dict):
+        """Send a message to EVERY connected socket, whatever room it is in.
+
+        Used for owner-wide signals like conversation_activity, so UIs on
+        other devices refresh their conversation lists / follow the owner's
+        active chat even though they are parked in a different room."""
+        disconnected = set()
+        for websocket in list(self.connection_conversations.keys()):
+            try:
+                await websocket.send_json(message)
+            except Exception as e:
+                app_logger.error(f"Failed to broadcast to WebSocket: {e}")
+                disconnected.add(websocket)
+
+        if disconnected:
+            async with self._lock:
+                for websocket in disconnected:
+                    conversation_id = self.connection_conversations.get(websocket)
+                    if conversation_id and conversation_id in self.active_connections:
+                        self.active_connections[conversation_id].discard(websocket)
+                        if not self.active_connections[conversation_id]:
+                            del self.active_connections[conversation_id]
+                    if websocket in self.connection_conversations:
+                        del self.connection_conversations[websocket]
+
     
     async def send_to_connection(self, websocket: WebSocket, message: dict):
         """Send a message to a specific connection."""

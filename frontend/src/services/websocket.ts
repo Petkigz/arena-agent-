@@ -36,7 +36,8 @@ export type WebSocketEvent =
   | { type: 'conversation_created'; data: { conversation_id: string; title: string } }
   | { type: 'conversation_joined'; data: { conversation_id: string } }
   | { type: 'conversation_list'; data: { conversations: Array<{ id: string; title: string; lastMessage: string; updatedAt: string }> } }
-  | { type: 'conversation_history'; data: { conversation_id: string; messages: Array<{ role: string; content: string }> } }
+  | { type: 'conversation_history'; data: { conversation_id: string; messages: Array<{ role: string; content: string; message_id?: string | number }> } }
+  | { type: 'conversation_activity'; data: { conversation_id: string } }
   | { type: 'voice_state'; data: { state: VoiceState; conversation_id?: string } }
   | { type: 'voice_transcript'; data: { text: string; is_final: boolean } }
   | { type: 'voice_audio'; data: ArrayBuffer }

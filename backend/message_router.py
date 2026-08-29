@@ -225,6 +225,17 @@ class MessageRouter:
             "content": content,
         })
 
+        # Owner-wide signal: every UI (even ones parked in other rooms) learns
+        # that this conversation is now the most recently active, so they can
+        # refresh their list / follow the owner's chat across devices.
+        try:
+            await ws_manager.broadcast_to_all({
+                "type": "conversation_activity",
+                "conversation_id": conversation_id,
+            })
+        except Exception as exc:
+            app_logger.warning(f"Could not broadcast conversation activity: {exc}")
+
         try:
             # Generate action steps based on content analysis
             action_steps = self._generate_action_steps(content)
@@ -471,6 +482,14 @@ class MessageRouter:
             "conversation_id": conversation_id,
             "title": title
         })
+        # Other UIs refresh their lists so the new conversation is visible.
+        try:
+            await ws_manager.broadcast_to_all({
+                "type": "conversation_activity",
+                "conversation_id": conversation_id,
+            })
+        except Exception as exc:
+            app_logger.warning(f"Could not broadcast conversation activity: {exc}")
 
     async def _handle_list_conversations(self, websocket, message: Dict[str, Any]):
         """Handle listing conversations (SQLite-persisted, merged with active connections)."""

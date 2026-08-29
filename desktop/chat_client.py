@@ -39,6 +39,9 @@ class DesktopChatClient:
         self.on_error: Optional[Callable[[str], None]] = None
         #: Called with (message_id, content) for messages from other clients.
         self.on_room_message: Optional[Callable[[str, str], None]] = None
+        #: Called with a conversation_id when the owner chats in ANY room
+        #: (cross-device follow signal).
+        self.on_activity: Optional[Callable[[str], None]] = None
 
     @property
     def connected(self) -> bool:
@@ -168,6 +171,10 @@ class DesktopChatClient:
         elif t == "room_message":
             if self.on_room_message:
                 self.on_room_message(data.get("message_id", ""), data.get("content", ""))
+        elif t == "conversation_activity":
+            # Owner-wide signal: another device moved the active conversation.
+            if self.on_activity:
+                self.on_activity(data.get("conversation_id", ""))
         elif t == "error":
             if self.on_error:
                 self.on_error(data.get("message", "Chat error"))
@@ -194,24 +201,30 @@ class DesktopChatClient:
             self.connect()
 
 def pick_shared_conversation(client, settings) -> str:
-    """Most recent server conversation, preferring the saved one.
+    """The owner's most recently active conversation (None when unreachable).
 
-    Used by the desktop app to join the owner's active web room so both
-    clients share live history. Returns "" when unreachable (caller falls
-    back to a private room).
-    """
+    Used by the desktop app to open where the owner last left off on ANY
+    device. Falls back to "" when unreachable (caller uses a private room)."""
     try:
         data = client.list_conversations(limit=20)
         conversations = data.get("conversations") or []
         if not conversations:
             return ""
-        saved = settings.get("conversation_id") or ""
-        for item in conversations:
-            if item.get("id") == saved:
-                return saved
         latest = conversations[0].get("id") or ""
         if latest:
             settings.set("conversation_id", latest)
         return latest
     except Exception:
         return ""
+
+
+def should_follow_newest(conversations, current_id, user_picked, composer_has_text) -> bool:
+    """Decide whether a UI should follow the owner's newest conversation.
+
+    Follow when the newest room differs from the current one, the user has
+    not manually picked a room this session, and nothing is being typed
+    (never yank a room out from under an in-progress message)."""
+    if user_picked or composer_has_text or not conversations:
+        return False
+    newest = conversations[0][0] if isinstance(conversations[0], (list, tuple)) else conversations[0].get("id")
+    return bool(newest) and newest != current_id

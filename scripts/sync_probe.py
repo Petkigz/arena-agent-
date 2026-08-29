@@ -104,16 +104,29 @@ async def main():
             # ── 5. Live sync: B joins the room, A talks again ─────────────
             await b.send(json.dumps({"type": "join_conversation", "conversation_id": CONV}))
             await asyncio.sleep(0.3)
-            await a.send(json.dumps({
-                "type": "user_message", "conversation_id": CONV,
-                "content": "second message from A — B should see this live",
-            }))
-            b_events, b_reply, _, b_complete = await collect_reply(b)
-            check("B receives A's message LIVE (room_message)",
-                  any(e.get("type") == "room_message" for e in b_events),
-                  f"types={[e.get('type') for e in b_events][:10]}")
-            check("B sees full reply stream LIVE (message_token + done)",
-                  b_complete and len(b_reply) > 0)
+
+            # ── 6. Cross-room activity signal ────────────────────────────
+            # C is a client parked in a DIFFERENT room; it must still learn
+            # that the owner's active conversation moved (so every UI can
+            # refresh its list / follow the newest chat).
+            async with websockets.connect(URL) as c:
+                await c.send(json.dumps({"type": "join_conversation", "conversation_id": "conv-other-room"}))
+                await asyncio.sleep(0.2)
+                await a.send(json.dumps({
+                    "type": "user_message", "conversation_id": CONV,
+                    "content": "second message from A — B should see this live",
+                }))
+                b_events, b_reply, _, b_complete = await collect_reply(b)
+                check("B receives A's message LIVE (room_message)",
+                      any(e.get("type") == "room_message" for e in b_events),
+                      f"types={[e.get('type') for e in b_events][:10]}")
+                check("B sees full reply stream LIVE (message_token + done)",
+                      b_complete and len(b_reply) > 0)
+                c_events, _ = await recv_until(c, {"conversation_activity", "message_token"}, timeout=15)
+                check("client in ANOTHER room gets conversation_activity",
+                      any(e.get("type") == "conversation_activity" and
+                          e.get("conversation_id") == CONV for e in c_events),
+                      f"types={[e.get('type') for e in c_events][:10]}")
 
     # ── 6. Persistence ────────────────────────────────────────────────────
     import sqlite3

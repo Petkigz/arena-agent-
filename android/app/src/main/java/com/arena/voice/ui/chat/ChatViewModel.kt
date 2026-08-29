@@ -49,6 +49,11 @@ class ChatViewModel @Inject constructor(
 
     private var streamingMessageId: String? = null
 
+    /** Set when the user manually picks a conversation; while false the app
+     * follows the owner's most recent conversation from ANY device. */
+    private var userPickedConversation = false
+    private var lastListRequestMs: Long = 0L
+
     init {
         webSocketClient.addListener(this)
         _isConnected.value = webSocketClient.isConnected()
@@ -82,7 +87,8 @@ class ChatViewModel @Inject constructor(
         webSocketClient.listConversations()
     }
 
-    fun selectConversation(id: String) {
+    fun selectConversation(id: String, fromUser: Boolean = true) {
+        if (fromUser) userPickedConversation = true
         if (id == conversationId) return
         conversationId = id
         // Join the room so messages from other devices stream to this one.
@@ -149,18 +155,26 @@ class ChatViewModel @Inject constructor(
     override fun onConversationList(conversations: List<Pair<String, String>>) {
         this.conversations.clear()
         this.conversations.addAll(conversations)
-        // Adopt the shared conversation: when we're still parked on the device
-        // default room (never used on another UI) and the server has real
-        // conversations, join the most recent one so chats sync across devices.
-        val ids = conversations.map { it.first }
-        if (conversationId == webSocketClient.defaultConversationId &&
-            conversationId !in ids && conversations.isNotEmpty()
-        ) {
-            selectConversation(conversations.first().first)
-        } else if (conversationId.isBlank() && conversations.isNotEmpty()) {
-            conversationId = conversations.first().first
+        if (conversations.isEmpty()) return
+        // Follow the owner: until the user picks a conversation manually,
+        // stay in the most recently active conversation from ANY device so
+        // chats sync across web/desktop/Android.
+        val newest = conversations.first().first
+        if (!userPickedConversation && newest != conversationId) {
+            selectConversation(newest, fromUser = false)
+        } else if (conversationId.isBlank()) {
+            conversationId = newest
             webSocketClient.requestHistory(conversationId)
         }
+    }
+
+    override fun onConversationActivity(conversationId: String) {
+        // The owner chatted somewhere else — refresh the list (throttled) so
+        // follow-the-newest kicks in without pulling every message burst.
+        val now = System.currentTimeMillis()
+        if (now - lastListRequestMs < 2000L) return
+        lastListRequestMs = now
+        webSocketClient.listConversations()
     }
 
     override fun onConversationHistory(conversationId: String, history: List<Triple<String, String, String>>) {

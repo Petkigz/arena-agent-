@@ -29,9 +29,13 @@ from fastapi.testclient import TestClient
 class RecordingWS:
     def __init__(self):
         self.joined = []
+        self.broadcasts = []
 
     async def join_conversation(self, websocket, conversation_id):
         self.joined.append(conversation_id)
+
+    async def broadcast_to_all(self, message):
+        self.broadcasts.append(message)
 
 
 def run_handle(timeline, content="sync me", conversation_id="conv_sync"):
@@ -65,7 +69,7 @@ def run_handle(timeline, content="sync me", conversation_id="conv_sync"):
             handler = MessageRouter._handle_user_message.__get__(router)
             return await handler(websocket, message)
 
-    return asyncio.run(call())
+    return asyncio.run(call()), ws_manager
 
 
 def test_assistant_reply_persisted_before_done_token():
@@ -116,6 +120,74 @@ def test_history_entries_carry_message_id():
     history = [h for kind, h in timeline if kind == "history"]
     for h in history:
         assert h["message_id"], f"history entry without message_id: {h}"
+
+
+def test_user_message_broadcasts_conversation_activity_to_all():
+    """Every UI — even ones parked in OTHER rooms — must learn the owner's
+    active conversation moved, so lists refresh and devices follow."""
+    timeline = []
+    _, ws_manager = run_handle(timeline, conversation_id="conv_active")
+    activities = [b for b in ws_manager.broadcasts if b.get("type") == "conversation_activity"]
+    assert activities, "no conversation_activity broadcast"
+    assert activities[0]["conversation_id"] == "conv_active"
+    # Broadcast happens right after the room_message so followers see it fast.
+    room_pos = [i for i, (kind, m) in enumerate(timeline)
+                if kind == "send" and m.get("type") == "room_message"][0]
+    assert any(b["conversation_id"] == "conv_active" for b in ws_manager.broadcasts)
+    assert room_pos < len(timeline)
+
+
+# ── desktop follow-the-owner decision ─────────────────────────────────────
+
+def test_should_follow_newest():
+    from desktop.chat_client import should_follow_newest
+
+    convs = [("conv_newest", "t"), ("conv_old", "t")]
+    # Newest differs and nothing blocks: follow.
+    assert should_follow_newest(convs, "conv_old", False, False) is True
+    # Already in the newest room: nothing to do.
+    assert should_follow_newest(convs, "conv_newest", False, False) is False
+    # User picked a room manually this session: respect it.
+    assert should_follow_newest(convs, "conv_old", True, False) is False
+    # Mid-typing: never yank the room away.
+    assert should_follow_newest(convs, "conv_old", False, True) is False
+    # Empty list: nothing to follow.
+    assert should_follow_newest([], "conv_old", False, False) is False
+    # Dict-shaped conversations (REST preview rows) work too.
+    assert should_follow_newest([{"id": "conv_newest"}], "conv_old", False, False) is True
+
+
+def test_pick_shared_conversation_prefers_newest_over_saved():
+    """The desktop opens where the owner last left off on ANY device — a stale
+    saved preference must not pin it to an old room."""
+    from types import SimpleNamespace
+    from desktop.chat_client import pick_shared_conversation
+
+    fake_client = SimpleNamespace(list_conversations=lambda limit=50: {
+        "conversations": [
+            {"id": "conv_web_latest", "title": "Web chat", "lastMessage": "x", "updatedAt": "t"},
+            {"id": "desktop-chat", "title": "Old", "lastMessage": "y", "updatedAt": "t0"},
+        ]})
+    fake_settings = {"conversation_id": "desktop-chat"}
+
+    class FakeSettings:
+        def get(self, key, default=None):
+            return fake_settings.get(key, default)
+
+        def set(self, key, value):
+            fake_settings[key] = value
+
+    assert pick_shared_conversation(fake_client, FakeSettings()) == "conv_web_latest"
+
+
+def test_chat_client_parses_conversation_activity():
+    from desktop.chat_client import DesktopChatClient
+
+    client = DesktopChatClient()
+    seen = []
+    client.on_activity = seen.append
+    client._handle_text('{"type": "conversation_activity", "conversation_id": "conv_x"}')
+    assert seen == ["conv_x"]
 
 
 # ── 3: REST and WS conversation lists agree ───────────────────────────────
