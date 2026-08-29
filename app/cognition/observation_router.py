@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import os
 import re
+import string
+import sys
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +33,26 @@ class ObservationPlan:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+def _file_search_roots() -> List[str]:
+    """Roots for user-file questions: home directory first, then every other
+    fixed drive on Windows (the owner's music does not always live under the
+    profile — live incident: 'songs called kaba/ordinary' exist on another
+    drive while the agent only walked C:\\Users\\... and reported nothing).
+    This is still a scoped walk, NOT an Everything-style MFT index — evidence
+    text must stay honest about that."""
+    home = os.path.expanduser("~")
+    roots = [home]
+    if sys.platform.startswith("win"):
+        home_drive = os.path.splitdrive(home)[0].upper()
+        for letter in string.ascii_uppercase:
+            drive = f"{letter}:\\"
+            if f"{letter}:" == home_drive:
+                continue
+            if os.path.exists(drive):
+                roots.append(drive)
+    return roots
 
 
 def _desktop_directories() -> List[str]:
@@ -352,9 +374,9 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
                 )
             return ObservationPlan(
                 action_type="search_files",
-                payload={"query": name, "root_dir": home, "max_results": 20},
+                payload={"query": name, "root_dir": _file_search_roots(), "max_results": 20},
                 evidence_hint=(
-                    f"Filesystem search under the user's home directory for '{name}' — "
+                    f"Filesystem search for '{name}' (user home + other fixed drives) — "
                     "answer whether it exists from these results." + media_hint
                 ),
                 question_kind="file_existence",
@@ -407,7 +429,7 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         if followup_name and 1 <= len(followup_name) <= 80:
             home = os.path.expanduser("~")
             hint = (
-                f"Filesystem search under the user's home directory for '{followup_name}'"
+                f"Filesystem search for '{followup_name}' (user home + other fixed drives)"
             )
             if artist:
                 hint += (
@@ -421,7 +443,7 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             )
             return ObservationPlan(
                 action_type="search_files",
-                payload={"query": followup_name, "root_dir": home, "max_results": 20},
+                payload={"query": followup_name, "root_dir": _file_search_roots(), "max_results": 20},
                 evidence_hint=hint,
                 question_kind="file_search",
             )
@@ -499,9 +521,9 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             )
         return ObservationPlan(
             action_type="search_files",
-            payload={"query": name, "root_dir": home, "max_results": max_results},
+            payload={"query": name, "root_dir": _file_search_roots(), "max_results": max_results},
             evidence_hint=(
-                f"Filesystem search under the user's home directory for '{name}' — "
+                f"Filesystem search for '{name}' (user home + other fixed drives) — "
                 + ("give the full path(s) of every match from these results."
                    if is_location else
                    "answer from these results.")
@@ -661,34 +683,83 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
             # an EMPTY list is valid evidence of absence, not an error.
             results = result if isinstance(result, list) else []
             query = plan.payload.get("query", "?")
-            root = plan.payload.get("root_dir", "the workspace")
+            raw_root = plan.payload.get("root_dir", "the workspace")
+            root = (
+                ", ".join(str(r) for r in raw_root)
+                if isinstance(raw_root, (list, tuple))
+                else str(raw_root)
+            )
+            exact = [r for r in results if not r.get("fuzzy_match")]
+            fuzzy = [r for r in results if r.get("fuzzy_match")]
+            is_dir = lambda r: r.get("type") == "directory"  # noqa: E731
+            _no_match_guidance = (
+                "This was a live filename walk of those locations with a time "
+                "budget (system folders skipped) — NOT an Everything-style "
+                "machine-wide index. Do NOT claim the file does not exist "
+                "anywhere on the computer; say exactly which locations were "
+                "searched and ask the owner for the folder or drive to search "
+                "next."
+            )
             if plan.question_kind in ("file_search", "file_location"):
                 # Enumeration/location: the owner asked for EVERY match (or
                 # its path) — render the full list so the reply can enumerate.
-                if results:
+                if exact:
                     lines = [
-                        f"- {r.get('file_name', r)} -> {r.get('file_path', r)}"
-                        for r in results[:50]
+                        f"- {r.get('file_name', r)}"
+                        f"{' [folder]' if is_dir(r) else ''} -> {r.get('file_path', r)}"
+                        for r in exact[:50]
                     ]
+                    cap_note = (
+                        "\n(The list may be truncated at the result cap.)"
+                        if len(exact) >= int(plan.payload.get("max_results", 20))
+                        else ""
+                    )
                     return (
-                        f"OBSERVED from filesystem search for '{query}': {len(results)} match(es) "
-                        f"under {root}:\n" + "\n".join(lines)
+                        f"OBSERVED from filesystem search for '{query}': {len(exact)} match(es) "
+                        f"under {root}:\n" + "\n".join(lines) + cap_note
                         + "\nAnswer ONLY from this evidence: enumerate the matches with their full "
                         "paths. If the list is empty, say no files matched."
                     )
+                if fuzzy:
+                    lines = [
+                        f"- {r.get('file_name', r)}"
+                        f"{' [folder]' if is_dir(r) else ''} -> {r.get('file_path', r)}"
+                        f" (similarity {r.get('fuzzy_score')})"
+                        for r in fuzzy[:20]
+                    ]
+                    return (
+                        f"OBSERVED from filesystem search for '{query}': NO exact filename "
+                        f"matches under {root}, but {len(fuzzy)} close match(es) — likely what "
+                        "the owner meant (possible typo in the request):\n" + "\n".join(lines)
+                        + "\nAnswer from this evidence: present these as the closest matches, "
+                        "say the search name did not match exactly, and give the full paths."
+                    )
                 return (
-                    f"OBSERVED from filesystem search for '{query}': NO matches found under {root}. "
-                    "Answer from this evidence — nothing matched."
+                    f"OBSERVED from filesystem search for '{query}': NO matches found under "
+                    f"{root}. {_no_match_guidance}"
                 )
-            if results:
-                paths = "; ".join(str(r.get("file_path", r)) for r in results[:10])
+            if exact:
+                paths = "; ".join(
+                    f"{r.get('file_path', r)}{' [folder]' if is_dir(r) else ''}"
+                    for r in exact[:10]
+                )
                 return (
-                    f"OBSERVED from filesystem search for '{query}': {len(results)} match(es) "
+                    f"OBSERVED from filesystem search for '{query}': {len(exact)} match(es) "
                     f"under {root}: {paths}"
+                )
+            if fuzzy:
+                paths = "; ".join(
+                    f"{r.get('file_path', r)} (similarity {r.get('fuzzy_score')})"
+                    for r in fuzzy[:10]
+                )
+                return (
+                    f"OBSERVED from filesystem search for '{query}': no exact matches under "
+                    f"{root}, but close match(es): {paths}. Present these as the likely "
+                    "intended files; the requested name did not match exactly."
                 )
             return (
                 f"OBSERVED from filesystem search for '{query}': NO matches found under {root}. "
-                "Answer from this evidence — the file was not found there."
+                + _no_match_guidance
             )
         if plan.action_type == "list_directory" and data.get("success"):
             parts = []

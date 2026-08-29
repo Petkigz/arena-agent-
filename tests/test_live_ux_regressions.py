@@ -71,7 +71,10 @@ def test_file_existence_empty_results_is_evidence_of_absence():
     assert plan is not None
     evidence = render_observation_evidence([], plan)
     assert "NO matches found" in evidence
-    assert "not found" in evidence
+    # Absence must stay SCOPED (live incident: 'there are no files or folders
+    # named…' while the songs existed on another drive — Everything sees the
+    # NTFS MFT, this walk does not).
+    assert "Do NOT claim the file does not exist" in evidence
 
 
 def test_file_existence_renders_matches():

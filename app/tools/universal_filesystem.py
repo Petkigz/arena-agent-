@@ -92,34 +92,148 @@ class UniversalFilesystem:
             ),
         }
 
+    # Directories never worth walking for user-file questions (huge, noisy,
+    # or cyclic junction bait). Pruned by NAME anywhere in the tree.
+    _SKIP_DIRS = {
+        "$recycle.bin", "$windows.~bt", "$getcurrent", "$winreagent",
+        "system volume information", "windows", "program files",
+        "program files (x86)", "programdata", "appdata", "node_modules",
+        ".git", ".venv", "__pycache__", "site-packages", "perflogs",
+        "msocache", "recovery", "onedrivetemp", "dist-info",
+    }
+
     @classmethod
-    def search_filesystem(cls, query: str, root_dir: Optional[str] = None, max_results: int = 20) -> List[Dict[str, Any]]:
-        """
-        Searches all directories for files matching query string across filesystem.
-        """
-        query_lower = query.lower().strip()
-        search_root = Path(root_dir) if root_dir else settings.BASE_DIR
-        matched_files = []
+    def search_filesystem(
+        cls,
+        query: str,
+        root_dir: Optional[Any] = None,
+        max_results: int = 20,
+        timeout_s: float = 15.0,
+    ) -> List[Dict[str, Any]]:
+        """Live (non-indexed) filename search: exact substring matches first,
+        typo-tolerant fuzzy matches as a fallback.
 
-        try:
-            for root, _, files in os.walk(search_root):
-                for f in files:
-                    if query_lower in f.lower():
-                        p = Path(root) / f
-                        matched_files.append({
-                            "file_name": f,
-                            "file_path": str(p),
-                            "size_bytes": p.stat().st_size,
-                            "extension": p.suffix.lower()
-                        })
-                        if len(matched_files) >= max_results:
-                            break
-                if len(matched_files) >= max_results:
-                    break
-        except Exception as e:
-            app_logger.warning(f"Error during filesystem search: {e}")
+        Everything (voidtools) reads the NTFS master file table and sees every
+        file on every drive instantly; this tool WALKS the tree, so it is
+        scoped and budgeted instead:
 
-        return matched_files
+          * ``root_dir`` may be a single path or a LIST of paths (None → the
+            app base directory). Directories are matched as well as files —
+            an album folder named 'Kaba' is a hit, not a miss.
+          * System/junk directories are pruned; a ``timeout_s`` budget bounds
+            huge trees (a timeout returns partial results, never hangs).
+          * When nothing matches exactly, a fuzzy pass kicks in (the owner
+            asked for 'ordinaryr' and the file is 'Ordinary'): candidates are
+            scored per filename token so 'Artist - Title.ext' matches the
+            bare title. Fuzzy entries carry ``fuzzy_match``/``fuzzy_score``.
+        """
+        import difflib
+        import re as _re
+        import time as _time
+
+        query_raw = (query or "").strip()
+        if not query_raw:
+            return []
+        query_lower = query_raw.lower()
+        query_norm = _re.sub(r"[^a-z0-9]+", "", query_lower)
+
+        if root_dir is None:
+            roots = [Path(settings.BASE_DIR)]
+        elif isinstance(root_dir, (list, tuple)):
+            roots = [Path(r) for r in root_dir if str(r or "").strip()]
+        else:
+            roots = [Path(str(root_dir))]
+
+        exact: List[Dict[str, Any]] = []
+        fuzzy: List[Dict[str, Any]] = []
+        deadline = _time.monotonic() + float(timeout_s)
+        q_head = query_norm[:3]
+
+        def _entry(path: Path, name: str, is_dir: bool) -> Dict[str, Any]:
+            try:
+                size = 0 if is_dir else path.stat().st_size
+            except OSError:
+                size = 0
+            return {
+                "file_name": name,
+                "file_path": str(path),
+                "size_bytes": size,
+                "extension": "" if is_dir else path.suffix.lower(),
+                "type": "directory" if is_dir else "file",
+                "match": "exact",
+            }
+
+        def _fuzzy_score(name: str) -> float:
+            """Best similarity between the query and the name / its tokens —
+            'ordinaryr' vs 'Alex Warren - Ordinary.mp3' must score on the
+            'ordinary' token, not the whole artist-prefixed string."""
+            norm = _re.sub(r"[^a-z0-9]+", "", name.lower())
+            best = difflib.SequenceMatcher(None, query_norm, norm).ratio()
+            for token in _re.split(r"[^a-z0-9]+", name.lower()):
+                t = token.strip()
+                if len(t) >= 3:
+                    best = max(
+                        best,
+                        difflib.SequenceMatcher(None, query_norm, t).ratio(),
+                    )
+            return best
+
+        for search_root in roots:
+            if not search_root.exists():
+                continue
+            if _time.monotonic() > deadline:
+                break
+            try:
+                walk = os.walk(search_root)
+                for root, dirs, files in walk:
+                    if _time.monotonic() > deadline:
+                        break
+                    # Prune system/junk directories in-place (os.walk reuses
+                    # the mutated list).
+                    dirs[:] = [d for d in dirs if d.lower() not in cls._SKIP_DIRS]
+                    for d in dirs:
+                        dl = d.lower()
+                        if query_lower in dl:
+                            exact.append(_entry(Path(root) / d, d, True))
+                        elif (
+                            not exact
+                            and query_norm
+                            and len(fuzzy) < 30
+                            and (q_head and (q_head in dl or dl[:3] in query_norm))
+                            and _fuzzy_score(d) >= 0.78
+                        ):
+                            e = _entry(Path(root) / d, d, True)
+                            e["match"] = "fuzzy"
+                            e["fuzzy_score"] = round(_fuzzy_score(d), 2)
+                            fuzzy.append(e)
+                    for f in files:
+                        fl = f.lower()
+                        if query_lower in fl:
+                            exact.append(_entry(Path(root) / f, f, False))
+                        elif (
+                            not exact
+                            and query_norm
+                            and len(fuzzy) < 30
+                            and (q_head and (q_head in fl or fl[:3] in query_norm))
+                            and _fuzzy_score(f) >= 0.78
+                        ):
+                            e = _entry(Path(root) / f, f, False)
+                            e["match"] = "fuzzy"
+                            e["fuzzy_score"] = round(_fuzzy_score(f), 2)
+                            fuzzy.append(e)
+                    if len(exact) >= max_results:
+                        break
+            except Exception as e:
+                app_logger.warning(f"Error during filesystem search: {e}")
+
+        if exact:
+            return exact[:max_results]
+        # No exact hits anywhere → fuzzy candidates are the answer the owner
+        # needs (typo'd title). Best scores first.
+        fuzzy.sort(key=lambda m: -(m.get("fuzzy_score") or 0))
+        for m in fuzzy[:max_results]:
+            m["fuzzy_match"] = True
+        return fuzzy[:max_results]
 
     @classmethod
     @classmethod
