@@ -273,6 +273,7 @@ class MessageRouter:
                 image_path=image_path,
                 audio_path=audio_path,
                 attachments=attachments,
+                conversation_id=conversation_id,
             )
 
             # Surface the exact pending scope to the owner. This event is only a
@@ -332,6 +333,7 @@ class MessageRouter:
         image_path: Optional[str] = None,
         audio_path: Optional[str] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
+        conversation_id: Optional[str] = None,
     ) -> str:
         """Route the message through CognitiveRuntime (the authoritative cognitive path).
 
@@ -342,6 +344,18 @@ class MessageRouter:
         vision-grounded, not text-only.
         """
         try:
+            # Recent turns (current excluded) give the observation router
+            # context to resolve follow-up pronouns ('where is it located').
+            recent_user_messages: List[str] = []
+            if conversation_id:
+                try:
+                    history = get_conversation_history(conversation_id)
+                    recent_user_messages = [
+                        m.get("content", "") for m in history
+                        if m.get("role") == "user" and m.get("content") != content
+                    ][-5:]
+                except Exception:
+                    recent_user_messages = []
             # Conversational routing (live-hardware lesson): a thinking-class
             # main model (e.g. Qwen3-14B on CPU, ~7.7 tok/s) takes minutes for
             # simple chat and can exhaust the token budget on internal
@@ -363,6 +377,7 @@ class MessageRouter:
                 image_path=image_path,
                 audio_path=audio_path,
                 attachments=attachments,
+                recent_user_messages=recent_user_messages,
             )
 
             if not isinstance(result, dict):

@@ -31,7 +31,7 @@ def make_router(recorded_tokens):
     ws_manager.send_to_conversation = send
     router = MessageRouter.__new__(MessageRouter)
 
-    async def fake_cycle(content, image_path=None, audio_path=None, attachments=None):
+    async def fake_cycle(content, image_path=None, audio_path=None, attachments=None, conversation_id=None, **kwargs):
         return "the reply"
 
     router_router = MagicMock()

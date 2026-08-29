@@ -45,8 +45,35 @@ def _desktop_directories() -> List[str]:
     return dirs
 
 
-def plan_observation(text: str) -> Optional[ObservationPlan]:
-    """Map a host-state question to a read-only observation plan, or None."""
+def _extract_file_subject(text: str) -> Optional[str]:
+    """Pull '<name>' out of '... called/named/titled <name> ...' file phrasing."""
+    m = re.search(
+        r"\b(?:called|named|titled)\s+(.+?)(?:\s+on my (?:pc|computer|machine|laptop|desktop)\b)?"
+        r"(?:\s+(?:that )?(?:i have|do i have|i own|have i got|are there|is there)\b)?\s*[?.!]*$",
+        text,
+    )
+    if not m:
+        return None
+    name = m.group(1).strip().strip("'\"")
+    name = re.split(r"\s+on\s+my\s+", name)[0].strip().strip("'\"?.! ")
+    if 1 <= len(name) <= 80:
+        return name
+    return None
+
+
+_FILE_NOUN = (
+    r"(song|track|album|file|document|photo|picture|image|video|movie|clip|"
+    r"pdf|folder|presentation|spreadsheet|note|audio|music|recording)s?"
+)
+
+
+def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None) -> Optional[ObservationPlan]:
+    """Map a host-state question to a read-only observation plan, or None.
+
+    `recent_user_messages` (most recent last, current turn excluded) lets
+    follow-up questions resolve pronouns: 'where is it located' after 'do i
+    have a song called kaba on my pc' searches for kaba.
+    """
     t = (text or "").lower().strip()
     if len(t) < 6:
         return None
@@ -114,6 +141,57 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
                 ),
                 question_kind="file_existence",
             )
+
+    # ── File enumeration / location questions ────────────────────────────
+    # Live bug: only yes/no existence questions were observable. 'give me a
+    # list of all of the songs called london i have' fell through to the LLM,
+    # which answered 'I don't have direct access to your files' — while the
+    # deterministic search tool sat unused. List/count/where variants get the
+    # same evidence-grounded treatment, with a bigger result cap.
+    has_file_noun = re.search(r"\b" + _FILE_NOUN + r"\b", t) is not None
+    enum_trigger = re.search(
+        r"\b(list|show|find|enumerate|all|every|how many|how much)\b"
+        r"|\bgive me a list\b"
+        r"|\b(which|what)\b.{0,60}\b(?:do i have|i have|have i got|are there)\b",
+        t,
+    ) and not re.search(r"\ball about\b", t)
+    name = _extract_file_subject(t)
+
+    # Follow-up pronouns: 'where is it located' / 'where is it' after a file
+    # question about a named subject — resolve 'it' from the previous turn.
+    if name is None and recent_user_messages:
+        pronoun_q = re.search(
+            r"\b(where (?:is|are|was|were) it|where'?s it|where (?:is|are) that|"
+            r"where did i (?:save|put|download) it|"
+            r"(?:location|path|folder|directory) of it)\b",
+            t,
+        )
+        if pronoun_q:
+            for prev in reversed(recent_user_messages):
+                prev_l = (prev or "").lower().strip()
+                if not prev_l:
+                    continue
+                if re.search(r"\b" + _FILE_NOUN + r"\b", prev_l):
+                    prev_name = _extract_file_subject(prev_l)
+                    if prev_name:
+                        name = prev_name
+                        has_file_noun = True
+                        break
+
+    if has_file_noun and name and (enum_trigger or re.search(r"\bwhere\b|\blocation\b|\bpath\b", t)):
+        home = os.path.expanduser("~")
+        is_location = bool(re.search(r"\bwhere\b|\blocation\b|\bpath\b|\bfolder\b|\bdirectory\b", t))
+        return ObservationPlan(
+            action_type="search_files",
+            payload={"query": name, "root_dir": home, "max_results": 50},
+            evidence_hint=(
+                f"Filesystem search under the user's home directory for '{name}' — "
+                + ("give the full path(s) of every match from these results."
+                   if is_location else
+                   "enumerate every match from these results.")
+            ),
+            question_kind="file_location" if is_location else "file_search",
+        )
 
     # Connected devices / USB.
     if re.search(r"\b(connected|attached|usb|devices?|drives?|mount(ed|s)?|printers?|cameras?|scanners?)\b.{0,20}\b(what|list|show|connected|plugged)\b|\bwhat.{0,10}\b(devices|usb|drives)\b|\b(list|show).{0,10}\b(devices|usb|drives|printers|cameras)\b", t):
@@ -254,6 +332,24 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
             results = result if isinstance(result, list) else []
             query = plan.payload.get("query", "?")
             root = plan.payload.get("root_dir", "the workspace")
+            if plan.question_kind in ("file_search", "file_location"):
+                # Enumeration/location: the owner asked for EVERY match (or
+                # its path) — render the full list so the reply can enumerate.
+                if results:
+                    lines = [
+                        f"- {r.get('file_name', r)} -> {r.get('file_path', r)}"
+                        for r in results[:50]
+                    ]
+                    return (
+                        f"OBSERVED from filesystem search for '{query}': {len(results)} match(es) "
+                        f"under {root}:\n" + "\n".join(lines)
+                        + "\nAnswer ONLY from this evidence: enumerate the matches with their full "
+                        "paths. If the list is empty, say no files matched."
+                    )
+                return (
+                    f"OBSERVED from filesystem search for '{query}': NO matches found under {root}. "
+                    "Answer from this evidence — nothing matched."
+                )
             if results:
                 paths = "; ".join(str(r.get("file_path", r)) for r in results[:10])
                 return (

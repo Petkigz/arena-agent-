@@ -2366,6 +2366,7 @@ class CognitiveRuntime:
         image_path: Optional[str] = None,
         audio_path: Optional[str] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
+        recent_user_messages: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Authoritative Closed-Loop Predictive Cognitive Cycle with Goal Lifecycle & Verification:
@@ -2604,7 +2605,7 @@ class CognitiveRuntime:
         observation_plan = None
         try:
             from app.cognition.observation_router import plan_observation as _plan_obs
-            observation_plan = _plan_obs(user_text)
+            observation_plan = _plan_obs(user_text, recent_user_messages=recent_user_messages)
         except Exception:
             observation_plan = None
         if observation_plan is not None:

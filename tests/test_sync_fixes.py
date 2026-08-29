@@ -49,7 +49,7 @@ def run_handle(timeline, content="sync me", conversation_id="conv_sync"):
 
     ws_manager.send_to_conversation = send
 
-    async def fake_cycle(content, image_path=None, audio_path=None, attachments=None):
+    async def fake_cycle(content, image_path=None, audio_path=None, attachments=None, conversation_id=None, **kwargs):
         return "the reply"
 
     router = MessageRouter.__new__(MessageRouter)

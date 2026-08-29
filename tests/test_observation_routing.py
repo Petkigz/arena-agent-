@@ -134,3 +134,71 @@ def test_room_message_broadcast_for_cross_client_sync():
     assert room and room[0]["content"] == "hi" and room[0]["message_id"]
     # Dedupe key present so clients can avoid double-rendering their own copy.
     assert "message_id" in room[0]
+
+
+def test_file_enumeration_questions_get_real_searches():
+    """Live bug: 'give me a list of all of the songs called london i have'
+    fell through to the LLM, which claimed it had no file access while the
+    search tool sat unused. Enumeration now routes to evidence."""
+    plan = plan_observation("give me a list of all of the songs called london i have")
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.question_kind == "file_search"
+    assert plan.payload["query"] == "london"
+    assert plan.payload["max_results"] == 50  # enumeration, not existence
+
+    assert plan_observation("list all songs called london").question_kind == "file_search"
+    assert plan_observation("how many songs called london do i have").question_kind == "file_search"
+    assert plan_observation("which songs do i have called london?").payload["query"] == "london"
+    assert plan_observation("find all documents called report").payload["query"] == "report"
+
+
+def test_file_location_questions_get_real_searches():
+    plan = plan_observation("where is the song called tema ensingo?")
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.question_kind == "file_location"
+    assert plan.payload["query"] == "tema ensingo"
+    assert plan_observation("where can i find the file called notes").question_kind == "file_location"
+
+
+def test_pronoun_followup_resolves_subject_from_previous_turn():
+    """'where is it located' right after 'do i have a song called kaba on my
+    pc' must search for kaba — the live 39-second failed investigation."""
+    plan = plan_observation(
+        "where is it located",
+        recent_user_messages=["do i have a song called tema ensingo on my pc"],
+    )
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.payload["query"] == "tema ensingo"
+    assert plan.question_kind == "file_location"
+
+    # Without file context in the previous turns, pronouns stay unresolved.
+    assert plan_observation("where is it located", recent_user_messages=["what is the weather"]) is None
+    assert plan_observation("where is it located") is None
+
+
+def test_non_file_questions_still_left_alone(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.cognition.observation_router._desktop_directories",
+        lambda: [str(tmp_path)])
+    assert plan_observation("give me a summary of the movie called inception") is None
+    assert plan_observation("tell me all about the song called yesterday") is None
+    assert plan_observation("where is london located?") is None  # geography, not files
+    assert plan_observation("what is the song called in that movie?") is None
+    assert plan_observation("show me all the files on my desktop").question_kind == "desktop_contents"
+    assert plan_observation("list all my downloads").question_kind == "downloads_folder"
+
+
+def test_enumeration_evidence_renders_the_full_list():
+    plan = plan_observation("list all songs called london")
+    assert plan is not None
+    results = [
+        {"file_name": f"london-{i}.mp3", "file_path": f"C:/Users/x/Music/london-{i}.mp3"}
+        for i in range(3)
+    ]
+    evidence = render_observation_evidence(results, plan)
+    assert "3 match(es)" in evidence
+    assert "london-0.mp3" in evidence and "london-2.mp3" in evidence
+    assert "enumerate" in evidence
+    # Empty result is honest evidence of absence.
+    empty = render_observation_evidence([], plan)
+    assert "NO matches" in empty
