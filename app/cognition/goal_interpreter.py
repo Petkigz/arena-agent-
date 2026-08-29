@@ -14,6 +14,34 @@ class SemanticGoalSchemaValidationResult:
     data: Dict[str, Any] = field(default_factory=dict)
     validation_error: Optional[str] = None
 
+
+# ── Word-boundary keyword matching ───────────────────────────────────────────
+# Live bug (owner machine): 'do i have a song called kaba on my pc' was routed
+# to mobile_phone because the bare substring check `"call" in text_lower`
+# matched the word 'called'. Keyword routing must match WHOLE WORDS: 'call'
+# never matches 'called', 'phone' never matches 'microphone'.
+_WORD_PATTERN_CACHE: Dict[str, "re.Pattern"] = {}
+
+
+def _has_word(text_lower: str, keyword: str) -> bool:
+    """True when `keyword` appears in `text_lower` as a whole word/phrase
+    (word boundaries on both sides). Safe for multi-word keywords."""
+    key = keyword.strip().lower()
+    if not key:
+        return False
+    pat = _WORD_PATTERN_CACHE.get(key)
+    if pat is None:
+        # Optional plural suffix so 'documents' matches 'document' and
+        # 'songs' matches 'song', while 'called' still never matches 'call'.
+        pat = re.compile(r"(?<![a-z0-9])" + re.escape(key) + r"(?:s|es)?(?![a-z0-9])")
+        _WORD_PATTERN_CACHE[key] = pat
+    return pat.search(text_lower) is not None
+
+
+def _has_any_word(text_lower: str, keywords) -> bool:
+    return any(_has_word(text_lower, k) for k in keywords)
+
+
 @dataclass
 class SemanticGoalRepresentation:
     user_query: str
@@ -326,7 +354,9 @@ class SemanticGoalInterpreter:
         risks = ["low"]
 
         # 1. Diagnostic, Research & Information Gathering queries FIRST
-        if any(k in text_lower for k in ["why ", "how come", "find out", "find whether", "find if", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
+        # (word-boundary matching: bare substrings misroute — 'call' matched
+        # 'called' and sent a PC file question to the mobile_phone domain)
+        if _has_any_word(text_lower, ["why", "how come", "find out", "find whether", "find if", "check if", "investigate", "where is", "does file", "error", "crash", "failed", "won't open", "can't open"]):
             intent_type = "information_need"
             domain = "diagnostic"
             goal = f"Investigate cause or evidence for: '{user_text[:60]}'"
@@ -335,24 +365,24 @@ class SemanticGoalInterpreter:
             req_caps = ["filesystem.search", "system.probe"]
 
         # 2. Operational Action Commands SECOND
-        elif any(k in text_lower for k in ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
+        elif _has_any_word(text_lower, ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
             intent_type = "action_intent"
-            if "phone" in text_lower or "mobile" in text_lower or "call" in text_lower or "sms" in text_lower or "battery" in text_lower or "charged" in text_lower:
+            if _has_any_word(text_lower, ["phone", "mobile", "call", "sms", "battery", "charged"]):
                 domain = "mobile_phone"
                 goal = f"Execute mobile phone operation: '{user_text[:60]}'"
                 outcome = "Mobile phone action completed via ADB"
                 req_caps = ["phone.adb", "phone.control"]
-            elif "youtube" in text_lower or "google" in text_lower or "search web" in text_lower:
+            elif _has_any_word(text_lower, ["youtube", "google", "search web"]):
                 domain = "web_research"
                 goal = f"Perform web search or research: '{user_text[:60]}'"
                 outcome = "Web search results retrieved"
                 req_caps = ["browser.open", "web.search"]
-            elif "find" in text_lower or "file" in text_lower or "ordinary" in text_lower or "document" in text_lower or "song" in text_lower:
+            elif _has_any_word(text_lower, ["find", "file", "ordinary", "document", "song"]):
                 domain = "filesystem"
                 goal = f"Locate or inspect local file: '{user_text[:60]}'"
                 outcome = "Matching file path identified"
                 req_caps = ["filesystem.search", "filesystem.read"]
-            elif "screenshot" in text_lower or "screen" in text_lower:
+            elif _has_any_word(text_lower, ["screenshot", "screen"]):
                 domain = "vision_desktop"
                 goal = f"Capture and analyze active screen window"
                 outcome = "Desktop screen capture saved and analyzed"

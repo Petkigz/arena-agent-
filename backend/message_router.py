@@ -315,6 +315,16 @@ class MessageRouter:
 
             reply = result.get("assistant_reply") or result.get("reply") or ""
             if reply:
+                # Honest status for parked goals (live complaint: 'the task is
+                # still going on but I can't track it'). Nothing runs in the
+                # background when a goal lands in waiting_for_evidence — say
+                # so instead of leaving the owner wondering.
+                state = result.get("goal_lifecycle_state")
+                if state == "waiting_for_evidence" and "waiting_for_evidence" not in reply.lower():
+                    reply += (
+                        "\n\n[status: goal parked as waiting_for_evidence — no background "
+                        "task is running. Ask me to re-check and I'll gather evidence again.]"
+                    )
                 return reply
 
             # Cycle succeeded but produced no reply — surface the lifecycle state.

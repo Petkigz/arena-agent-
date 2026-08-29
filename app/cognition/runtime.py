@@ -1948,6 +1948,7 @@ class CognitiveRuntime:
                 lesson="",
                 gate_decision=gate.gate_name,
                 goal_verified=False,
+                goal_lifecycle_state=tracker.current_state.value,
             )
             return {
                 "success": False,
@@ -1991,6 +1992,7 @@ class CognitiveRuntime:
                 lesson="",
                 gate_decision=gate.gate_name,
                 goal_verified=False,
+                goal_lifecycle_state=tracker.current_state.value,
             )
             return {
                 "success": False,
@@ -2312,6 +2314,7 @@ class CognitiveRuntime:
             lesson=lesson_text,
             gate_decision=gate.gate_name,
             goal_verified=verification.verified_success,
+            goal_lifecycle_state=tracker.current_state.value,
         )
 
         verification_unknown = tracker.current_state == GoalLifecycleState.WAITING_FOR_EVIDENCE
@@ -2738,6 +2741,7 @@ class CognitiveRuntime:
                     lesson="",
                     gate_decision="llm_unavailable",
                     goal_verified=False,
+                    goal_lifecycle_state=tracker.current_state.value,
                 )
                 return {
                     "request_success": True,
@@ -2788,7 +2792,8 @@ class CognitiveRuntime:
                 surprisal=0.0,
                 lesson="",
                 gate_decision="passed",
-                goal_verified=verify_res.verified_success
+                goal_verified=verify_res.verified_success,
+                goal_lifecycle_state=tracker.current_state.value,
             )
             self._integrate_phase_modules(
                 user_text=user_text,
@@ -2873,7 +2878,8 @@ class CognitiveRuntime:
                 surprisal=0.1,
                 lesson=trace.reflection_lesson,
                 gate_decision="passed",
-                goal_verified=verify_res.verified_success
+                goal_verified=verify_res.verified_success,
+                goal_lifecycle_state=tracker.current_state.value,
             )
             self._integrate_phase_modules(
                 user_text=user_text,
@@ -2905,7 +2911,27 @@ class CognitiveRuntime:
         # Branch C: DEFER / SAFELY ASK USER
         elif reasoning_action == ReasoningAction.DEFER:
             tracker.transition(GoalLifecycleState.DEFERRED, "Evidence or capabilities are insufficient for a safe decision.")
-            defer_msg = f"Deferred task: {last_decision.reason if last_decision else 'Evidence or capabilities are insufficient for a safe decision.'}"
+            reason = (
+                last_decision.reason if last_decision
+                else "Evidence or capabilities are insufficient for a safe decision."
+            )
+            # Actionable defer: the owner must learn WHAT was missing and that
+            # nothing is silently running in the background. A bare
+            # "Deferred task: …" reads like the assistant ignoring them (live
+            # complaint: 'I can't chat in the other chats' — misrouted queries
+            # landed here with a terse non-answer).
+            unavailable = [cap for cap, ok in (capability_map or {}).items() if not ok]
+            missing_txt = (
+                f" Missing capabilities: {', '.join(unavailable)}." if unavailable else ""
+            )
+            defer_msg = (
+                f"Deferred: {reason}\n\n"
+                f"I classified this as a {goal_rep.primary_intent_type} in the "
+                f"{goal_rep.target_domain} domain.{missing_txt} I haven't started "
+                "anything in the background — nothing is pending. If I picked the "
+                "wrong domain (e.g. you meant your PC, not your phone), rephrase "
+                "and I'll take another pass."
+            )
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=defer_msg,
@@ -2914,7 +2940,8 @@ class CognitiveRuntime:
                 surprisal=0.0,
                 lesson="",
                 gate_decision="deferred",
-                goal_verified=False
+                goal_verified=False,
+                goal_lifecycle_state=tracker.current_state.value,
             )
             self._integrate_phase_modules(
                 user_text=user_text,
@@ -3059,7 +3086,8 @@ class CognitiveRuntime:
                 surprisal=0.0,
                 lesson="",
                 gate_decision=gate_res.gate_name,
-                goal_verified=False
+                goal_verified=False,
+                goal_lifecycle_state=tracker.current_state.value,
             )
             self._integrate_phase_modules(
                 user_text=user_text,
@@ -3292,7 +3320,8 @@ class CognitiveRuntime:
             surprisal=surprisal,
             lesson=lesson_text,
             gate_decision=gate_res.gate_name,
-            goal_verified=verify_res.verified_success
+            goal_verified=verify_res.verified_success,
+            goal_lifecycle_state=tracker.current_state.value,
         )
         trace.model_used = agent_res.get("model_used", "fast")
 

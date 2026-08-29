@@ -87,6 +87,34 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
             question_kind="power_status",
         )
 
+    # ── File existence questions ('do i have a song called kaba on my pc') ──
+    # Live bug: this question was routed to the mobile_phone domain (substring
+    # 'call' matched 'called') and DEFERRED with a terse non-answer. A
+    # file-existence question is directly observable: search the user's home
+    # directory and answer from the evidence.
+    file_q = re.search(
+        r"\b(do i have|is there|have i got|got)\b.{0,40}\b"
+        r"(song|track|album|file|document|photo|picture|image|video|movie|clip|pdf|folder|presentation|spreadsheet|note)s?\b"
+        r"(?:.{0,40}\b(?:called|named|titled)\b\s*(.+?))?"
+        r"\s*(?:on my (?:pc|computer|machine|laptop|desktop))?\s*[?.!]*$",
+        t,
+    )
+    if file_q:
+        name = (file_q.group(3) or "").strip().strip("'\"")
+        if name:
+            name = re.split(r"\s+on\s+my\s+", name)[0].strip().strip("'\"?.! ")
+        if name and 1 <= len(name) <= 80:
+            home = os.path.expanduser("~")
+            return ObservationPlan(
+                action_type="search_files",
+                payload={"query": name, "root_dir": home, "max_results": 20},
+                evidence_hint=(
+                    f"Filesystem search under the user's home directory for '{name}' — "
+                    "answer whether it exists from these results."
+                ),
+                question_kind="file_existence",
+            )
+
     # Connected devices / USB.
     if re.search(r"\b(connected|attached|usb|devices?|drives?|mount(ed|s)?|printers?|cameras?|scanners?)\b.{0,20}\b(what|list|show|connected|plugged)\b|\bwhat.{0,10}\b(devices|usb|drives)\b|\b(list|show).{0,10}\b(devices|usb|drives|printers|cameras)\b", t):
         return ObservationPlan(
@@ -138,7 +166,6 @@ def plan_observation(text: str) -> Optional[ObservationPlan]:
 
     # Downloads folder contents.
     if re.search(r"\bdownloads?\b|\bdownload folder\b", t):
-        import os
         downloads = os.path.join(os.path.expanduser("~"), "Downloads")
         return ObservationPlan(
             action_type="list_directory",
@@ -221,6 +248,22 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
     """Render an executed observation into compact evidence text for the LLM."""
     try:
         data = result if isinstance(result, dict) else {}
+        if plan.action_type == "search_files":
+            # search_files returns a plain list of matches (possibly empty) —
+            # an EMPTY list is valid evidence of absence, not an error.
+            results = result if isinstance(result, list) else []
+            query = plan.payload.get("query", "?")
+            root = plan.payload.get("root_dir", "the workspace")
+            if results:
+                paths = "; ".join(str(r.get("file_path", r)) for r in results[:10])
+                return (
+                    f"OBSERVED from filesystem search for '{query}': {len(results)} match(es) "
+                    f"under {root}: {paths}"
+                )
+            return (
+                f"OBSERVED from filesystem search for '{query}': NO matches found under {root}. "
+                "Answer from this evidence — the file was not found there."
+            )
         if plan.action_type == "list_directory" and data.get("success"):
             parts = []
             for listing in data.get("listings", []):

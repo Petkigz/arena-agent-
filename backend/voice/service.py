@@ -475,6 +475,21 @@ class VoiceService:
                 await ws_manager.send_audio_to_conversation(conv_id, pcm)
                 # Hold SPEAKING while the client plays the audio (int16 @ 16 kHz).
                 await asyncio.sleep(len(pcm) / 32000.0 + 0.25)
+            else:
+                # Piper model not installed — fall back to the OS TTS driver
+                # (pyttsx3; SAPI5 on Windows) so spoken replies still work.
+                # Live complaint: 'audio reply seems not available' — the WS
+                # voice path used Piper ONLY, so machines without a Piper
+                # voice model got silent replies.
+                pcm = await asyncio.to_thread(self._synthesize_wav_to_pcm16k, text)
+                if pcm:
+                    await ws_manager.send_audio_to_conversation(conv_id, pcm)
+                    await asyncio.sleep(len(pcm) / 32000.0 + 0.25)
+                else:
+                    app_logger.warning(
+                        "Voice reply skipped: no TTS engine produced audio "
+                        "(install piper-tts + a voice model, or a system TTS driver)."
+                    )
         except Exception as e:
             app_logger.error(f"Voice reply TTS failed: {e}")
 
@@ -482,6 +497,41 @@ class VoiceService:
             "type": "voice_state",
             "state": VoiceState.IDLE.value,
         })
+
+    @staticmethod
+    def _synthesize_wav_to_pcm16k(text: str) -> Optional[bytes]:
+        """Synthesize via the piper→pyttsx3 fallback chain and return 16 kHz
+        mono int16 PCM (what the WS voice clients expect), or None when no
+        engine produced audio."""
+        import wave as _wave
+        try:
+            from app.perception.text_to_speech import LocalTextToSpeech
+            res = LocalTextToSpeech.synthesize_speech(text)
+            if not res or not res.get("success") or not res.get("file_path"):
+                return None
+            with _wave.open(res["file_path"], "rb") as w:
+                n_channels = w.getnchannels()
+                sample_width = w.getsampwidth()
+                frame_rate = w.getframerate()
+                raw = w.readframes(w.getnframes())
+            if sample_width != 2:
+                app_logger.warning(f"TTS fallback: unsupported sample width {sample_width}")
+                return None
+            samples = np.frombuffer(raw, dtype=np.int16)
+            if n_channels == 2:
+                samples = samples.reshape(-1, 2).mean(axis=1).astype(np.int16)
+            elif n_channels != 1:
+                return None
+            if frame_rate != 16000:
+                duration = len(samples) / float(frame_rate)
+                n_out = max(1, int(duration * 16000))
+                positions = np.linspace(0.0, len(samples) - 1.0, n_out)
+                resampled = np.interp(positions, np.arange(len(samples)), samples.astype(np.float64))
+                samples = np.clip(resampled, -32768, 32767).astype(np.int16)
+            return samples.tobytes()
+        except Exception as exc:
+            app_logger.warning(f"Voice reply TTS fallback failed: {exc}")
+            return None
 
     def _parse_voice_command(self, transcript: str) -> Optional[str]:
         """Parse voice transcript into command.

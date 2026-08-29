@@ -2454,6 +2454,55 @@ def test_experiment_endpoint(req: ExperimentRequest):
         target_guest_os=req.target_guest_os or "auto"
     )
 
+@router.get("/cognition/open-goals")
+def list_open_goals_endpoint(limit: int = Query(20, ge=1, le=200)):
+    """Trackable parked goals (live complaint: 'the task is still going on but
+    I can't track it in any way').
+
+    Lists every recent goal whose lifecycle ended in a NON-terminal state —
+    `waiting_for_evidence`. Important honesty note baked into the response:
+    these goals are PARKED, not running. No background task exists for them;
+    asking the assistant to re-check a goal re-runs evidence gathering.
+    Deferred/achieved/failed goals are terminal and excluded.
+    """
+    try:
+        with db._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT trace_id, user_input, assistant_reply, goal_lifecycle_state,
+                       goal_verified, created_at, latency_ms
+                FROM cognitive_traces
+                WHERE goal_lifecycle_state = 'waiting_for_evidence'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        goals = [
+            {
+                "trace_id": r[0],
+                "goal": r[1],
+                "last_reply": (r[2] or "")[:200],
+                "state": r[3],
+                "verified": bool(r[4]),
+                "created_at": r[5],
+                "latency_ms": r[6],
+            }
+            for r in rows
+        ]
+        return {
+            "success": True,
+            "open_goal_count": len(goals),
+            "open_goals": goals,
+            "note": (
+                "waiting_for_evidence goals are parked, not running: no background "
+                "task exists. Ask the assistant to re-check a goal to gather "
+                "evidence again."
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list open goals: {e}")
+
 @router.post("/cognition/synthesize-capability")
 def synthesize_capability_endpoint(req: CapabilitySynthesizeRequest):
     return CapabilityFactory.synthesize_capability(
