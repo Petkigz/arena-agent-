@@ -102,7 +102,11 @@ _FILE_ACTION_INTENT = (
 # a directory listing.
 _FILE_CONTENT_INTENT = (
     r"\b(summar\w*|explain|lyrics?|who (?:wrote|sings|sang|made|performed|produced)|"
-    r"artist|meaning|tell me about|review|translate|analy[sz]e|define|about|opinion)\b"
+    r"artist|meaning|tell me about|review|translate|analy[sz]e|define|opinion|"
+    # 'about' only blocks as a content lead ('what about the song called X'),
+    # not as a reference tail ('the song i asked about').
+    r"(?:tell|ask|know|talk|read|learn|more|something|info|information|details?) about|"
+    r"all about|what about|how about)\b"
 )
 
 _PRONOUN_QUERY = (
@@ -245,12 +249,25 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             name = re.split(r"\s+on\s+my\s+", name)[0].strip().strip("'\"?.! ")
         if name and 1 <= len(name) <= 80:
             home = os.path.expanduser("~")
+            # 'do i have a song called london' must not be answered with the
+            # tzdata 'Europe\London' folder: point the model at media files.
+            media_noun = file_q.group(2)
+            media_hint = ""
+            if media_noun in (
+                "song", "track", "album", "music", "audio", "recording",
+                "video", "movie", "clip", "photo", "picture", "image",
+            ):
+                media_hint = (
+                    f" The user asked about a {media_noun} — prioritize matching media "
+                    "files (.mp3/.wav/.flac/.m4a/.ogg etc.) and ignore unrelated "
+                    "directories that merely contain the name."
+                )
             return ObservationPlan(
                 action_type="search_files",
                 payload={"query": name, "root_dir": home, "max_results": 20},
                 evidence_hint=(
                     f"Filesystem search under the user's home directory for '{name}' — "
-                    "answer whether it exists from these results."
+                    "answer whether it exists from these results." + media_hint
                 ),
                 question_kind="file_existence",
             )
@@ -273,20 +290,28 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         r".{0,60}\bon my (?:pc|computer|machine|laptop|desktop)\b", t,
     ))
     noun_or_ext = has_file_noun or has_extension or have_on_pc
-    search_verb = re.search(r"\b(search|find|locate|look for)\b", t) is not None
+    search_verb = re.search(
+        r"\b(search|find|locate|look(?:ing)? for|search(?:ing|ed)? for|trying to find)\b", t
+    ) is not None
     read_intent = bool(re.search(
-        r"\b(list|show|find|search|locate|look for|enumerate|all|every|any|"
+        r"\b(list|show|find|search|locate|look for|looking for|searching for|trying to find|"
+        r"want to find|need to find|want to know|wanna know|enumerate|all|every|any|"
         r"how many|how much|where|which|what|do i have|does my (?:pc|computer|machine) have|"
-        r"do i own|did i (?:save|put|download)|is there|have i got|got|"
+        r"do i own|did i (?:save|put|download)|is there|have i got|got|do you see|did you find|"
         r"can|could|do|does|did|is|are|was|were|will|would)\b", t,
     )) or t.endswith("?")
     blocked_intent = re.search(_FILE_ACTION_INTENT + "|" + _FILE_CONTENT_INTENT, t) is not None
 
     name = _extract_file_question_subject(t)
 
-    # Follow-up pronouns: 'where is it located' / 'find it' / 'is it on my
-    # pc' right after a file question — resolve the subject from context.
-    if name is None and recent_user_messages and re.search(_PRONOUN_QUERY, t):
+    # Follow-up pronouns/references: 'where is it located', 'find it', or
+    # 'where's the song i asked about' — no name in THIS message, so resolve
+    # the subject from the conversation's recent turns.
+    context_ref = re.search(_PRONOUN_QUERY, t) or (
+        bool(re.search(r"\bwhere\b|\blocation\b|\bpath\b|\bfolder\b|\bdirectory\b", t))
+        and has_file_noun
+    )
+    if name is None and recent_user_messages and context_ref:
         prev_name = _extract_pronoun_subject(recent_user_messages)
         if prev_name:
             name = prev_name
@@ -303,6 +328,21 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         )
         kind = "file_location" if is_location else ("file_existence" if is_existence else "file_search")
         max_results = 20 if kind == "file_existence" else 50
+        # 'do i have a song called london' must not be answered with the
+        # tzdata 'Europe\London' folder: when the question names a medium
+        # (song/music/video/...), tell the model to prefer matching files of
+        # that type and ignore same-named directories.
+        media_noun = re.search(
+            r"\b(song|songs|track|tracks|album|music|audio|recording|audiobook|podcast|"
+            r"video|videos|movie|movies|clip|photo|photos|picture|pictures|image|images)\b", t
+        )
+        media_hint = ""
+        if media_noun:
+            media_hint = (
+                f" The user asked about {media_noun.group(1)} — prioritize matching media "
+                "files (.mp3/.wav/.flac/.m4a/.ogg etc.) and ignore unrelated directories "
+                "that merely contain the name."
+            )
         return ObservationPlan(
             action_type="search_files",
             payload={"query": name, "root_dir": home, "max_results": max_results},
@@ -311,6 +351,7 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
                 + ("give the full path(s) of every match from these results."
                    if is_location else
                    "answer from these results.")
+                + media_hint
             ),
             question_kind=kind,
         )
@@ -433,7 +474,11 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         )
 
     # Installed applications (NOT running/startup — those have their own patterns).
-    if re.search(r"\b(installed|what).{0,24}\b(apps?|programs?|applications?|software)\b|\bwhich software\b", t) and not re.search(r"\b(running|startup|boot|auto.?start|services?)\b", t):
+    if re.search(
+        r"\b(installed|what|which|how many|how much|list|show|any|do i have|got)\b.{0,30}"
+        r"\b(apps?|programs?|applications?|software|games?)\b|\bwhich software\b",
+        t,
+    ) and not re.search(r"\b(running|startup|boot|auto.?start|services?)\b", t):
         return ObservationPlan(
             action_type="list_apps",
             payload={},

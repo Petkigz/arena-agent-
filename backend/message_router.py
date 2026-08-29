@@ -353,7 +353,7 @@ class MessageRouter:
                     recent_user_messages = [
                         m.get("content", "") for m in history
                         if m.get("role") == "user" and m.get("content") != content
-                    ][-5:]
+                    ][-8:]
                 except Exception:
                     recent_user_messages = []
             # Conversational routing (live-hardware lesson): a thinking-class

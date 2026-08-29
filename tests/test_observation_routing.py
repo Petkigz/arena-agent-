@@ -318,3 +318,41 @@ def test_host_context_patterns_beat_broad_file_block():
         assert plan.question_kind == "desktop_contents"
     plan = plan_observation("what's in my downloads folder")
     assert plan.question_kind == "downloads_folder"
+
+
+def test_export_failure_phrases_from_live_chats():
+    """Every misrouted phrasing from the owner's real chat export (2026-08-29)
+    routes to evidence now. Each line cites the live failure it prevents."""
+    ctx = ["do i have a song called kaba on my pc"]
+
+    # 12:37 — 'the system cannot verify this directly as it lacks current
+    # evidence from your desktop. Could you please highlight or click...'
+    plan = plan_observation("im looking for a song called kaba")
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.payload["query"] == "kaba"
+
+    # 12:36 — 38s of LLM flailing, 'could you please describe what kind of
+    # song', goal parked as waiting_for_evidence.
+    plan = plan_observation(
+        "i want to know where the song i asked is located", recent_user_messages=ctx
+    )
+    assert plan is not None and plan.question_kind == "file_location"
+    assert plan.payload["query"] == "kaba"
+
+    plan = plan_observation("where's the song i asked about?", recent_user_messages=ctx)
+    assert plan is not None and plan.question_kind == "file_location"
+
+    # 13:11 — 'let's observe the list of applications...' non-answer.
+    for q in ("how many games do i have on my pc", "what games do i have installed"):
+        plan = plan_observation(q)
+        assert plan is not None and plan.question_kind == "installed_apps"
+
+    # 11:35 — answered with the tzdata 'Europe\\London' folder; the hint must
+    # steer the model to actual media files.
+    plan = plan_observation("do i have a song called london on my pc")
+    assert plan.question_kind == "file_existence"
+    assert "prioritize matching media" in plan.evidence_hint
+
+    # Reference tails must not read as content intent.
+    assert plan_observation("tell me all about the song called yesterday") is None
+    assert plan_observation("tell me about the song called london") is None
