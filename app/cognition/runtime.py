@@ -2367,6 +2367,7 @@ class CognitiveRuntime:
         audio_path: Optional[str] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
         recent_user_messages: Optional[List[str]] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         """
         Authoritative Closed-Loop Predictive Cognitive Cycle with Goal Lifecycle & Verification:
@@ -2725,7 +2726,22 @@ class CognitiveRuntime:
                     )
             except Exception:
                 pass
-            messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
+            messages = [{"role": "system", "content": system_instruction}]
+            # Conversational memory: without prior turns the model cannot
+            # answer follow-ups ('can you answer the question i asked last'
+            # got a hallucinated Windows-Defender task). Inject recent turns
+            # (current message excluded — it is appended below).
+            history_turns = [
+                {"role": m.get("role"), "content": m.get("content", "")}
+                for m in (conversation_history or [])
+                if m.get("role") in ("user", "assistant") and m.get("content")
+            ][-12:]
+            messages.extend(history_turns)
+            if history_turns:
+                app_logger.info(
+                    f"Conversational answer with {len(history_turns)} prior turns in context."
+                )
+            messages.append({"role": "user", "content": user_text})
             # Evidence-grounded answers go to the MAIN model: the model's job
             # here is just 'read this data and answer', and the small model
             # demonstrably fumbles it — the owner kept getting 'I can't access

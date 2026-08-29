@@ -430,6 +430,92 @@ def test_capability_questions_answer_from_tool_registry():
     assert "NEVER claim it cannot access" in ev
 
 
+def test_internet_capability_questions_answer_from_tool_registry():
+    """Live transcript: 'can you access the internet' got 'without direct
+    internet connectivity ... I can't confirm' — while the registry holds
+    web_search, browser sessions, ping/DNS. Route these to list_capabilities
+    with an internet-focused evidence answer."""
+    routes = [
+        "can you access the internet",
+        "do you have internet access",
+        "do you have internet",
+        "can you browse the web",
+        "can you go online",
+        "can you search the web",
+        "are you connected to the internet",
+        "are you online",
+        "is there internet",
+    ]
+    for q in routes:
+        plan = plan_observation(q)
+        assert plan is not None and plan.question_kind == "capability_selfcheck", f"missed: {q}"
+        assert plan.action_type == "list_capabilities", q
+        assert plan.payload.get("focus") == "internet", q
+
+    # Polite TASKS are not capability questions — ' for ' marks a real request.
+    for q in [
+        "can you search the web for the best laptop",
+        "search the web for weather in kampala",
+        "browse the web for me",
+    ]:
+        plan = plan_observation(q)
+        assert plan is None or plan.question_kind != "capability_selfcheck", q
+
+    # Local-machine access questions keep the non-internet evidence focus.
+    assert plan_observation("can you access my computer").payload.get("focus") is None
+
+    from app.tools.manifest import get_tool_manifest
+    res = get_tool_manifest()["list_capabilities"]["handler"]({})
+    ev = render_observation_evidence(res, plan_observation("can you access the internet"))
+    assert "web_search" in ev, "internet evidence must name the actual web tools"
+    assert "NEVER claim it has no internet access" in ev
+    # The local-access evidence text must be unchanged.
+    ev_local = render_observation_evidence(res, plan_observation("can you access my computer"))
+    assert "NEVER claim it cannot access" in ev_local
+
+
+def test_conversational_answers_include_history(tmp_path):
+    """Live transcript: 'can you answer the question i asked last now' got a
+    hallucinated Windows-Defender task — the ANSWER branch sent the LLM only
+    the current message. Prior turns must now be in the messages payload."""
+    import app.llm as llm_mod
+    from app.cognition.runtime import CognitiveRuntime
+
+    captured = {}
+
+    def fake_generate(messages=None, complexity="fast", max_tokens=150, **kw):
+        captured["messages"] = messages
+        return {"choices": [{"message": {"content": "The word was pinecone."}}],
+                "model": "qwen2.5-3b-instruct"}
+
+    runtime = CognitiveRuntime(db_path=str(tmp_path / "rt.db"))
+    history = [
+        {"role": "user", "content": "remember the word pinecone"},
+        {"role": "assistant", "content": "Got it — pinecone."},
+        {"role": "user", "content": "thanks"},
+        {"role": "assistant", "content": "Anytime."},
+    ]
+    with patch.object(llm_mod.llm_client, "generate_chat_completion",
+                      side_effect=fake_generate):
+        res = runtime.process_cognitive_cycle(
+            "what was the word i asked you to remember",
+            conversation_history=history,
+        )
+        assert res.get("success") is True or res.get("request_success") is True, res
+
+        msgs = captured["messages"]
+        roles = [m["role"] for m in msgs]
+        # System first, current user turn LAST, history in between.
+        assert roles[0] == "system" and roles[-1] == "user"
+        assert "remember the word pinecone" in [m["content"] for m in msgs]
+        assert "what was the word i asked you to remember" == msgs[-1]["content"]
+
+        # Without history the payload is exactly system + current turn.
+        captured.clear()
+        runtime.process_cognitive_cycle("what is the capital of france")
+        assert len(captured["messages"]) == 2
+
+
 def test_evidence_answers_use_main_model(tmp_path):
     """Evidence-grounded answers are routed to the MAIN model: the small
     model demonstrably fumbled them ('I can't access your computer' with

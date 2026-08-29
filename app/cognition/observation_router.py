@@ -290,6 +290,35 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             question_kind="capability_selfcheck",
         )
 
+    # ── Internet / web capability self-check: 'can you access the internet /
+    # do you have internet?' — same failure family as the access apology
+    # above (live transcript: 'can you access the internet' got 'without
+    # direct internet connectivity ... I can't confirm'). The registry holds
+    # web tools (web_search, browser sessions) and network tools (ping, DNS,
+    # traceroute): observable fact, answer from it. Gated to capability
+    # QUESTIONS ('can/could/do/are you …'); a polite TASK like 'can you
+    # search the web for X' contains ' for ' and is left to the task paths.
+    internet_cap = re.search(
+        r"\b(?:can|could|do|does)\s+you\s+"
+        r"(?:access|use|browse|search|check|get|go|connect(?:ed)?(?:\s+to)?)\b"
+        r".{0,25}\b(internet|web|online|network|wifi|websites?|webpages?)\b"
+        r"|\bdo you have\b.{0,20}\b(internet|web|online|network|wifi|internet connection)\b"
+        r"|\bare you (?:online|connected)\b"
+        r"|\bis there (?:an )?internet\b",
+        t,
+    )
+    if internet_cap and " for " not in t:
+        return ObservationPlan(
+            action_type="list_capabilities",
+            payload={"focus": "internet"},
+            evidence_hint=(
+                "Registered tool inventory from the capability registry — answer "
+                "the internet/web capability question from this evidence; the "
+                "registry contains web and network tools."
+            ),
+            question_kind="capability_selfcheck",
+        )
+
     # ── File existence questions ('do i have a song called kaba on my pc') ──
     # Live bug: this question was routed to the mobile_phone domain (substring
     # 'call' matched 'called') and DEFERRED with a terse non-answer. A
@@ -619,10 +648,30 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
                 f"- {cat}: {', '.join(names[:8])}" + (" …" if len(names) > 8 else "")
                 for cat, names in cats.items()
             )
-            return (
+            base = (
                 f"OBSERVED from the capability registry: {data.get('tool_count', '?')} registered "
                 f"tools across {len(cats)} categories:\n{cat_lines}\n"
-                "Answer ONLY from this evidence. The agent demonstrably HAS local access — "
+            )
+            if plan.payload.get("focus") == "internet":
+                web_tools = cats.get("web", [])
+                # web_search is the headline capability — alphabetical slicing
+                # would bury it behind the browser_* tools.
+                web_headline = [n for n in web_tools if n == "web_search"] + [
+                    n for n in web_tools if n != "web_search"
+                ]
+                net_tools = cats.get("network", [])
+                return (
+                    base
+                    + "Answer ONLY from this evidence. The agent demonstrably HAS "
+                    f"internet/web tools — web ({', '.join(web_headline[:8])}) and network "
+                    f"({', '.join(net_tools[:5])}). NEVER claim it has no internet access "
+                    "or cannot browse/search the web; those tools are registered. If the "
+                    "user wants live proof of connectivity, offer to run a network check "
+                    "(ping / resolve_dns)."
+                )
+            return (
+                base
+                + "Answer ONLY from this evidence. The agent demonstrably HAS local access — "
                 "filesystem tools (search, move, copy, delete), app inventory, OS control, "
                 "screen capture. NEVER claim it cannot access this machine; if a specific "
                 "task needs approval, say which action and that it will ask."

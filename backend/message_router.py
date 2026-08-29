@@ -260,10 +260,12 @@ class MessageRouter:
                     **step,
                 })
 
-            # Build messages for LLM with conversation history
+            # Build conversational history for the runtime. The user message
+            # was JUST appended by add_to_history above, so drop it — the
+            # runtime re-appends the current turn itself.
             history = get_conversation_history(conversation_id)
-            llm_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            llm_messages.extend(history)
+            if history and history[-1].get("role") == "user" and history[-1].get("content") == content:
+                history = history[:-1]
 
             # Route through the authoritative cognitive runtime (world model, beliefs,
             # reasoning loop, goal verification, memory) rather than a raw LLM call.
@@ -274,6 +276,7 @@ class MessageRouter:
                 audio_path=audio_path,
                 attachments=attachments,
                 conversation_id=conversation_id,
+                conversation_history=history[-16:],
             )
 
             # Surface the exact pending scope to the owner. This event is only a
@@ -334,6 +337,7 @@ class MessageRouter:
         audio_path: Optional[str] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
         conversation_id: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """Route the message through CognitiveRuntime (the authoritative cognitive path).
 
@@ -383,6 +387,7 @@ class MessageRouter:
                 audio_path=audio_path,
                 attachments=attachments,
                 recent_user_messages=recent_user_messages,
+                conversation_history=conversation_history,
             )
 
             if not isinstance(result, dict):
