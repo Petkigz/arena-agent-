@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useModelSettingsStore, type ModelConfig } from '../../stores';
 import { ArrowLeft, Brain, Mic, Volume2, Gauge, Zap, Cpu, Shield, RotateCcw, CheckCircle, XCircle, Layers } from 'lucide-react';
-import { apiKeyHeader } from '../../services/api';
+import { apiKeyHeader, apiUrl } from '../../services/api';
 
 interface LoraAdapter {
   name: string;
@@ -84,21 +84,21 @@ export function ModelSettingsPage() {
     let cancelled = false;
     const headers = apiKeyHeader();
     // Fetch LoRA status — include API key so it works when ARENA_API_KEY enabled (security)
-    fetch('/loras/status', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
+    fetch(apiUrl('/loras/status'), { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && data) setLoraStatus(data);
     }).catch(() => {});
-    fetch('/loras/training-candidates', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
+    fetch(apiUrl('/loras/training-candidates'), { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && Array.isArray(data?.candidates)) setTrainingCandidates(data.candidates);
     }).catch(() => {});
     // Fetch VLM status — include API key
-    fetch('/vision/vlm-status', { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
+    fetch(apiUrl('/vision/vlm-status'), { headers }).then((r) => r.ok ? r.json() : null).then((data) => {
       if (!cancelled && data) setVlmStatus(data);
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
   const refreshCandidates = async () => {
-    const response = await fetch('/loras/training-candidates', { headers: apiKeyHeader() });
+    const response = await fetch(apiUrl('/loras/training-candidates'), { headers: apiKeyHeader() });
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data?.candidates)) setTrainingCandidates(data.candidates);
@@ -109,7 +109,7 @@ export function ModelSettingsPage() {
     setCandidateBusy(candidate.candidate_id);
     try {
       if (approved) {
-        const saved = await fetch(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}`, {
+        const saved = await fetch(apiUrl(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
           body: JSON.stringify({
@@ -121,7 +121,7 @@ export function ModelSettingsPage() {
         });
         if (!saved.ok) throw new Error('Could not save the exact pair before approval');
       }
-      const response = await fetch(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}/decision`, {
+      const response = await fetch(apiUrl(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}/decision`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify({ approved, note: approved ? 'Approved in Model Settings' : 'Rejected in Model Settings' }),
@@ -144,7 +144,7 @@ export function ModelSettingsPage() {
 
   const saveCandidate = async (candidate: TrainingCandidate) => {
     setCandidateBusy(candidate.candidate_id);
-    const response = await fetch(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}`, {
+    const response = await fetch(apiUrl(`/loras/training-candidates/${encodeURIComponent(candidate.candidate_id)}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({
@@ -161,7 +161,7 @@ export function ModelSettingsPage() {
 
   const exportSkill = async (skillName: string) => {
     setCandidateBusy(`export:${skillName}`);
-    const response = await fetch('/loras/training-candidates/export', {
+    const response = await fetch(apiUrl('/loras/training-candidates/export'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({ skill_name: skillName }),
@@ -177,7 +177,7 @@ export function ModelSettingsPage() {
   const addOwnerCorrection = async () => {
     setCandidateBusy('owner-correction');
     try {
-      const response = await fetch('/loras/training-candidates/owner-correction', {
+      const response = await fetch(apiUrl('/loras/training-candidates/owner-correction'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify(correction),
@@ -198,7 +198,7 @@ export function ModelSettingsPage() {
     setEvaluationMessage('');
     setEvaluationReport(null);
     try {
-      const response = await fetch('/loras/evaluations', {
+      const response = await fetch(apiUrl('/loras/evaluations'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify(evaluationForm),
@@ -220,7 +220,7 @@ export function ModelSettingsPage() {
     if (!evaluationReport?.deployment_eligible) return;
     setEvaluationBusy(true);
     try {
-      const response = await fetch('/loras/deploy-evaluated', {
+      const response = await fetch(apiUrl('/loras/deploy-evaluated'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify({ report_id: evaluationReport.report_id }),
@@ -229,7 +229,7 @@ export function ModelSettingsPage() {
       if (!data?.runtime_applied) throw new Error(data?.error || 'Provider deployment was not verified');
       setEvaluationMessage('Provider model verified and applied for default requests in this process.');
       setEvaluationReport((current) => current ? { ...current, runtime_applied: true } : current);
-      const status = await fetch('/loras/status', { headers: apiKeyHeader() });
+      const status = await fetch(apiUrl('/loras/status'), { headers: apiKeyHeader() });
       if (status.ok) setLoraStatus(await status.json());
     } catch (error) {
       setEvaluationMessage(error instanceof Error ? error.message : 'Deployment failed');
@@ -471,8 +471,8 @@ export function ModelSettingsPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              fetch('/loras/activate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() }, body: JSON.stringify({ adapter_name: a.name }) })
-                                .then(() => fetch('/loras/status', { headers: apiKeyHeader() }).then((r) => r.json()).then(setLoraStatus));
+                              fetch(apiUrl('/loras/activate'), { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() }, body: JSON.stringify({ adapter_name: a.name }) })
+                                .then(() => fetch(apiUrl('/loras/status'), { headers: apiKeyHeader() }).then((r) => r.json()).then(setLoraStatus));
                             }}
                             className="px-2 py-1 text-xs bg-accent-primary text-white rounded"
                           >
@@ -488,7 +488,7 @@ export function ModelSettingsPage() {
                 {loraStatus.active && (
                   <button
                     onClick={() => {
-                      fetch('/loras/deactivate', { method: 'POST', headers: apiKeyHeader() }).then(() => fetch('/loras/status', { headers: apiKeyHeader() }).then((r) => r.json()).then(setLoraStatus));
+                      fetch(apiUrl('/loras/deactivate'), { method: 'POST', headers: apiKeyHeader() }).then(() => fetch(apiUrl('/loras/status'), { headers: apiKeyHeader() }).then((r) => r.json()).then(setLoraStatus));
                     }}
                     className="px-3 py-1.5 text-sm bg-background-surface text-text-secondary rounded"
                   >

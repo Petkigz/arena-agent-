@@ -3,7 +3,22 @@ import { logger } from './logger';
  * API service for communicating with Arena backend.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+/**
+ * Backend origin for HTTP calls. Mirrors websocket.ts (`ws://${hostname}:8000`):
+ * works under `vite dev` (localhost:5173 → localhost:8000) AND when the built
+ * SPA is served by the backend itself on any host (LAN/Android), where a
+ * hardcoded "localhost:8000" would break every request.
+ */
+const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+
+/**
+ * Turn a root-relative backend path (e.g. '/loras/status') into an absolute URL.
+ * Use this everywhere instead of a bare fetch('/…'), which only works when the
+ * page is served from the backend origin and silently 404s under `vite dev`.
+ */
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
 
 /**
  * The API key the WebSocket uses (VITE_API_KEY), reused for HTTP so every

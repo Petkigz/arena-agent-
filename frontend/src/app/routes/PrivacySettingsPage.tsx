@@ -4,7 +4,7 @@ import { Card } from '../../components/ui';
 import { usePrivacySettingsStore } from '../../stores';
 import { ArrowLeft, Database, BarChart3, Lock, FileText, Download, Upload } from 'lucide-react';
 import { notifications } from '../../services/notifications';
-import { apiKeyHeader } from '../../services/api';
+import { apiKeyHeader, apiUrl } from '../../services/api';
 import {
   decidePendingApproval,
   decideReviewedPlan,
@@ -138,19 +138,19 @@ export function PrivacySettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/owner-control', { headers: apiKeyHeader() })
+    fetch(apiUrl('/owner-control'), { headers: apiKeyHeader() })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Control policy unavailable')))
       .then((data) => { if (!cancelled) setOwnerPolicy(data.policy); })
       .catch(() => { if (!cancelled) notifications.error('Could not load owner control policy'); });
-    fetch('/owner-control/adaptive-autonomy', { headers: apiKeyHeader() })
+    fetch(apiUrl('/owner-control/adaptive-autonomy'), { headers: apiKeyHeader() })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => { if (!cancelled && data?.profile) setAdaptiveProfile(data.profile); })
       .catch(() => {});
-    fetch('/benchmarks/intelligence/latest', { headers: apiKeyHeader() })
+    fetch(apiUrl('/benchmarks/intelligence/latest'), { headers: apiKeyHeader() })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => { if (!cancelled && data?.report) setBenchmarkReport(data.report); })
       .catch(() => {});
-    const loadExecutions = () => fetch('/owner-control/executions?limit=20', { headers: apiKeyHeader() })
+    const loadExecutions = () => fetch(apiUrl('/owner-control/executions?limit=20'), { headers: apiKeyHeader() })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => { if (!cancelled && Array.isArray(data?.executions)) setControlledExecutions(data.executions); })
       .catch(() => {});
@@ -169,10 +169,10 @@ export function PrivacySettingsPage() {
       }
     });
     Promise.all([
-      fetch('/owner-control/autonomous-goals?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
-      fetch('/owner-control/autonomy-runs?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
-      fetch('/owner-control/autonomy-schedule?limit=50', { headers: apiKeyHeader() }).then((r) => r.json()),
-      fetch('/owner-control/autonomy-envelope', { headers: apiKeyHeader() }).then((r) => r.json()),
+      fetch(apiUrl('/owner-control/autonomous-goals?limit=50'), { headers: apiKeyHeader() }).then((r) => r.json()),
+      fetch(apiUrl('/owner-control/autonomy-runs?limit=50'), { headers: apiKeyHeader() }).then((r) => r.json()),
+      fetch(apiUrl('/owner-control/autonomy-schedule?limit=50'), { headers: apiKeyHeader() }).then((r) => r.json()),
+      fetch(apiUrl('/owner-control/autonomy-envelope'), { headers: apiKeyHeader() }).then((r) => r.json()),
     ]).then(([goals, events, schedule, envelope]) => {
       if (!cancelled) {
         setAutonomousGoals(Array.isArray(goals?.goals) ? goals.goals : []);
@@ -192,7 +192,7 @@ export function PrivacySettingsPage() {
     const next = { ...autonomyEnvelope, ...patch };
     setAutonomyEnvelope(next);
     setAutonomyBusy('envelope');
-    const response = await fetch('/owner-control/autonomy-envelope', {
+    const response = await fetch(apiUrl('/owner-control/autonomy-envelope'), {
       method: 'PUT', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify(patch),
     });
@@ -204,7 +204,7 @@ export function PrivacySettingsPage() {
 
   const updateScheduleStatus = async (scheduleId: string, status: string) => {
     setAutonomyBusy(scheduleId);
-    const response = await fetch(`/owner-control/autonomy-schedule/${encodeURIComponent(scheduleId)}/status`, {
+    const response = await fetch(apiUrl(`/owner-control/autonomy-schedule/${encodeURIComponent(scheduleId)}/status`), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({ status }),
     });
@@ -216,7 +216,7 @@ export function PrivacySettingsPage() {
 
   const executeNextAutonomousGoal = async () => {
     setAutonomyBusy('execute-next');
-    const response = await fetch('/owner-control/autonomous-goals/execute-next', { method: 'POST', headers: apiKeyHeader() });
+    const response = await fetch(apiUrl('/owner-control/autonomous-goals/execute-next'), { method: 'POST', headers: apiKeyHeader() });
     const data = await response.json().catch(() => ({}));
     if (response.ok && data?.plan) notifications.success(`Goal processed through action gates — plan ${data.plan.plan_id || ''}`);
     else notifications.error(data?.detail || data?.note || 'No approved goal is ready');
@@ -226,7 +226,7 @@ export function PrivacySettingsPage() {
   const createOwnerDirective = async () => {
     if (!newDirective.title.trim()) return;
     setAutonomyBusy('create-directive');
-    const response = await fetch('/owner-control/autonomous-goals', {
+    const response = await fetch(apiUrl('/owner-control/autonomous-goals'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({ ...newDirective, approve_for_planning: true }),
     });
@@ -242,7 +242,7 @@ export function PrivacySettingsPage() {
   const createScheduledDirective = async () => {
     if (!newSchedule.title.trim() || !newSchedule.run_at) return;
     setAutonomyBusy('create-schedule');
-    const response = await fetch('/owner-control/autonomy-schedule', {
+    const response = await fetch(apiUrl('/owner-control/autonomy-schedule'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({ ...newSchedule, timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', approve_for_planning: true }),
     });
@@ -258,7 +258,7 @@ export function PrivacySettingsPage() {
   const decideAutonomousGoal = async (goalId: string, approved: boolean) => {
     setAutonomyBusy(goalId);
     try {
-      const response = await fetch(`/owner-control/autonomous-goals/${encodeURIComponent(goalId)}/decision`, {
+      const response = await fetch(apiUrl(`/owner-control/autonomous-goals/${encodeURIComponent(goalId)}/decision`), {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify({ approved }),
       });
@@ -272,7 +272,7 @@ export function PrivacySettingsPage() {
 
   const prioritizeAutonomousGoal = async (goalId: string, priority: string) => {
     setAutonomyBusy(goalId);
-    const response = await fetch(`/owner-control/autonomous-goals/${encodeURIComponent(goalId)}/priority`, {
+    const response = await fetch(apiUrl(`/owner-control/autonomous-goals/${encodeURIComponent(goalId)}/priority`), {
       method: 'PUT', headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({ priority }),
     });
@@ -359,7 +359,7 @@ export function PrivacySettingsPage() {
   };
 
   const refreshExecutions = async () => {
-    const response = await fetch('/owner-control/executions?limit=20', { headers: apiKeyHeader() });
+    const response = await fetch(apiUrl('/owner-control/executions?limit=20'), { headers: apiKeyHeader() });
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data?.executions)) setControlledExecutions(data.executions);
@@ -368,7 +368,7 @@ export function PrivacySettingsPage() {
 
   const cancelExecution = async (executionId: string) => {
     setExecutionBusy(executionId);
-    const response = await fetch(`/owner-control/executions/${encodeURIComponent(executionId)}/cancel`, {
+    const response = await fetch(apiUrl(`/owner-control/executions/${encodeURIComponent(executionId)}/cancel`), {
       method: 'POST', headers: apiKeyHeader(),
     });
     if (response.ok) notifications.success('Cancellation requested; waiting for a cooperative checkpoint');
@@ -379,7 +379,7 @@ export function PrivacySettingsPage() {
 
   const requestRollback = async (executionId: string) => {
     setExecutionBusy(executionId);
-    const response = await fetch(`/owner-control/executions/${encodeURIComponent(executionId)}/request-rollback`, {
+    const response = await fetch(apiUrl(`/owner-control/executions/${encodeURIComponent(executionId)}/request-rollback`), {
       method: 'POST', headers: apiKeyHeader(),
     });
     if (response.ok) notifications.success('Rollback compensation added to pending approvals');
@@ -391,7 +391,7 @@ export function PrivacySettingsPage() {
   const runIntelligenceBenchmark = async () => {
     setBenchmarkBusy(true);
     try {
-      const response = await fetch('/benchmarks/intelligence/run', {
+      const response = await fetch(apiUrl('/benchmarks/intelligence/run'), {
         method: 'POST',
         headers: apiKeyHeader(),
       });
@@ -413,7 +413,7 @@ export function PrivacySettingsPage() {
   const updateExplorationBudget = async (maximum: number) => {
     setControlBusy(true);
     try {
-      const response = await fetch('/owner-control/adaptive-autonomy/exploration-budget', {
+      const response = await fetch(apiUrl('/owner-control/adaptive-autonomy/exploration-budget'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify({ max_exploration_goals: maximum }),
@@ -432,7 +432,7 @@ export function PrivacySettingsPage() {
   const updateOwnerPolicy = async (patch: Partial<OwnerControlPolicy>) => {
     setControlBusy(true);
     try {
-      const response = await fetch('/owner-control', {
+      const response = await fetch(apiUrl('/owner-control'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify(patch),
@@ -451,7 +451,7 @@ export function PrivacySettingsPage() {
   const setEmergencyPause = async (paused: boolean) => {
     setControlBusy(true);
     try {
-      const response = await fetch('/owner-control/pause', {
+      const response = await fetch(apiUrl('/owner-control/pause'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
         body: JSON.stringify({ paused }),
@@ -745,7 +745,7 @@ export function PrivacySettingsPage() {
                       <button onClick={() => decideAutonomousGoal(goal.goal_id, false)} className="px-2 py-1 border border-border rounded">Reject</button>
                     </div>}
                     {goal.status === 'approved' && <button onClick={async () => {
-                      const response = await fetch(`/owner-control/autonomous-goals/${encodeURIComponent(goal.goal_id)}/defer`, { method: 'POST', headers: apiKeyHeader() });
+                      const response = await fetch(apiUrl(`/owner-control/autonomous-goals/${encodeURIComponent(goal.goal_id)}/defer`), { method: 'POST', headers: apiKeyHeader() });
                       const data = await response.json().catch(() => ({}));
                       if (response.ok) setAutonomousGoals((current) => current.map((item) => item.goal_id === goal.goal_id ? data.goal : item));
                     }} className="px-2 py-1 border border-border rounded">Defer before execution</button>}

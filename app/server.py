@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import settings
 from app.utils.logger import app_logger
+from app.utils.spa import FRONTEND_DIST, spa_index_or_none as _spa_index_or_none
 
 # ── Core REST routes (127) — previously served only by `uvicorn app.main:app` ──
 from app.main import router as core_router
@@ -193,14 +194,9 @@ async def lifespan(app: FastAPI):
 # SPA (frontend) serving
 # ============================================================================
 
-FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
-
-
-def _spa_index_or_none() -> FileResponse | None:
-    index_path = FRONTEND_DIST / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    return None
+# FRONTEND_DIST and _spa_index_or_none live in app.utils.spa (imported above)
+# so app/main.py can share the exact same SPA-serving logic for API routes
+# that collide with SPA page paths (GET /settings, GET /projects/{id}).
 
 
 # ============================================================================
@@ -249,6 +245,16 @@ def create_app() -> FastAPI:
             spa = _spa_index_or_none()
             if spa is not None:
                 return spa
+            # Browser hit us but there is no built SPA to serve. Return the
+            # machine-readable status plus an explicit instruction instead of
+            # silently showing raw JSON with no explanation.
+            return JSONResponse({
+                "status": "online",
+                "app_name": "Arena - Local AI Assistant",
+                "version": "2.0.0",
+                "docs": "/docs",
+                "message": "Frontend not built. Run 'cd frontend && npm run build' to serve the web UI from this server.",
+            })
         return {
             "status": "online",
             "app_name": "Arena - Local AI Assistant",
@@ -277,6 +283,20 @@ def create_app() -> FastAPI:
     app.include_router(device_router, dependencies=_auth_deps)
     app.include_router(theme_router, dependencies=_auth_deps)
     app.include_router(speaker_router, dependencies=_auth_deps)
+
+    # ── Static mounts (must live on the app itself) ──
+    # FastAPI's include_router() silently DROPS Mount routes attached to an
+    # APIRouter, so the equivalent router.mount() calls in app/main.py never
+    # reached the unified server: every /static/* and /audio/* URL returned 404
+    # even though the files existed on disk. /audio is what TTS playback uses
+    # (TextToSpeech returns audio_url="/audio/<file>.wav"), so mounting it here
+    # is required for voice replies to actually play in the web/desktop UIs.
+    _static_dir = Path(__file__).parent / "static"
+    if _static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+    _audio_dir = settings.DATA_DIR / "audio"
+    _audio_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/audio", StaticFiles(directory=str(_audio_dir)), name="audio")
 
     # ── Health & conversations ──
     @app.get("/health")

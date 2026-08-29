@@ -16,6 +16,7 @@ from app.tasks import TaskManager, TaskCreate, TaskUpdate, Task
 from app.llm import llm_client, require_real_completion
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
+from app.utils.spa import spa_for_browsers
 
 from app.tools.manifest import _LazyImportProxy
 YouTubeLearner = _LazyImportProxy("app.tools.youtube_learner", "YouTubeLearner")
@@ -93,6 +94,10 @@ router = APIRouter()
 # Global System State
 SYSTEM_STATE = "active"  # "active" or "sleeping"
 
+# NOTE: these router.mount() calls are DEAD — FastAPI's include_router() drops
+# Mount routes, so they never reach the assembled app (see the app-level mounts
+# at the bottom of this module and in app/server.py). Kept only so `router`
+# remains self-describing for anyone reading top-down.
 # Mount static files directory if it exists
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
@@ -795,8 +800,13 @@ def list_projects_endpoint(
         }
 
 @router.get("/projects/{project_id}")
-def get_project_endpoint(project_id: str):
+def get_project_endpoint(project_id: str, request: Request):
     """Get project + resume context."""
+    # SPA page route: browsers deep-linking/refreshing on /projects/{id} must
+    # get the app, not raw JSON (API clients still receive JSON).
+    spa = spa_for_browsers(request)
+    if spa is not None:
+        return spa
     try:
         from app.cognition.runtime import CognitiveRuntime
         runtime = CognitiveRuntime.get_instance()
@@ -968,7 +978,12 @@ def intelligence_benchmark_history_endpoint(
 
 # ── Shared settings (cross-platform: web / desktop / Android) ────────────────
 @router.get("/settings")
-def get_settings_endpoint():
+def get_settings_endpoint(request: Request):
+    # SPA page route: browsers deep-linking/refreshing on /settings must get
+    # the app, not raw JSON (API clients still receive JSON).
+    spa = spa_for_browsers(request)
+    if spa is not None:
+        return spa
     return get_settings()
 
 
@@ -2680,3 +2695,15 @@ from app.api.self_awareness import (  # re-exported for existing callers/tests
 )
 app.include_router(_self_awareness_router, dependencies=[Depends(_legacy_verify_request)])
 app.include_router(_vault_router, dependencies=[Depends(_legacy_verify_request)])
+
+# ── Static mounts (app-level) ──
+# The router.mount() calls near the top of this module are silently DROPPED by
+# app.include_router() above (FastAPI does not carry Mount routes through
+# include_router), so /static/* and /audio/* would 404. Mount them on the app
+# directly. app/server.py (the unified entry point) mounts the same paths.
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(_static_dir):
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+_legacy_audio_dir = settings.DATA_DIR / "audio"
+_legacy_audio_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=str(_legacy_audio_dir)), name="audio")

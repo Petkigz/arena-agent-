@@ -1,4 +1,4 @@
-import { apiKeyHeader } from './api';
+import { apiKeyHeader, apiUrl } from './api';
 
 export interface AuthorizedExecutionInput {
   authorizationId: string;
@@ -10,7 +10,7 @@ export interface AuthorizedExecutionInput {
 
 export async function revokeAuthorization(authorizationId: string): Promise<boolean> {
   try {
-    const response = await fetch(`/owner-control/authorizations/${encodeURIComponent(authorizationId)}`, {
+    const response = await fetch(apiUrl(`/owner-control/authorizations/${encodeURIComponent(authorizationId)}`), {
       method: 'DELETE',
       headers: apiKeyHeader(),
     });
@@ -144,7 +144,7 @@ export async function executeAuthorizedAction(
   input: AuthorizedExecutionInput
 ): Promise<AuthorizedExecutionResult> {
   try {
-    const response = await fetch('/owner-control/execute-authorized', {
+    const response = await fetch(apiUrl('/owner-control/execute-authorized'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
       body: JSON.stringify({

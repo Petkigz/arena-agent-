@@ -279,6 +279,14 @@ REST routes, the `/api/*` routers (files/code/attachments), voice, and the SPA.
 PYTHONPATH=. .venv/bin/uvicorn app.server:app --host 127.0.0.1 --port 8000 --reload
 ```
 
+> **Web UI:** the browser app at `http://127.0.0.1:8000` is the built React SPA
+> from `frontend/`. Until you run `cd frontend && npm ci && npm run build`
+> (output lands in `frontend/dist/`), visiting `/` in a browser returns a JSON
+> status object with a `message` saying the frontend isn't built — that's
+> expected, not a broken server. For frontend development with hot reload, run
+> `npm run dev` in `frontend/` (the app talks to the backend on port 8000
+> directly, so the backend must be running too).
+
 To expose beyond localhost (LAN / Android over the network), authentication is
 **required** — set a strong key and it is enforced on *every* route and the
 WebSocket:
