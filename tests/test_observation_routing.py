@@ -202,3 +202,119 @@ def test_enumeration_evidence_renders_the_full_list():
     # Empty result is honest evidence of absence.
     empty = render_observation_evidence([], plan)
     assert "NO matches" in empty
+
+
+def test_broad_file_question_coverage():
+    """The bar is deliberately low: any question naming a file subject gets a
+    real search, so the owner never sees 'I don't have file access' again."""
+    routes = [
+        "give me a list of all of the songs called london i have",
+        "list all songs called london",
+        "how many songs called london do i have",
+        "which songs do i have called london?",
+        "find all documents called report",
+        "where is the song called tema ensingo?",
+        "where can i find the file called notes",
+        "search my pc for london",
+        "find london",
+        "look for tema ensingo",
+        "locate the file report",
+        "do i have london on my pc",
+        "any songs called london?",
+        "does my computer have a song called london",
+        "do you see a song called london",
+        "what's london.mp3?",
+        "do i have london.mp3",
+        "show me everything called london",
+        "got a song called kaba?",
+    ]
+    for q in routes:
+        plan = plan_observation(q)
+        assert plan is not None and plan.action_type == "search_files", f"missed: {q}"
+        assert plan.payload["query"], f"no query for: {q}"
+        assert plan.payload["root_dir"], "search must be rooted somewhere"
+
+    # Action/content questions about the same names stay with their pipelines.
+    for q in [
+        "play the song called london",
+        "delete all files called temp",
+        "open the document called report",
+        "summarize the file called report",
+        "what are the lyrics of the song called london",
+        "tell me about the song called london",
+        "find out why my pc is slow",
+        "search for the report i made yesterday",
+        # action phrasings that must reach their action pipelines
+        "can you change my desktop wallpaper to C:\\pics\\w.jpg",
+        "set the wallpaper to sunset.jpg",
+        "how many icons do i have on my desktop?",
+    ]:
+        plan = plan_observation(q)
+        assert not (plan and plan.action_type == "search_files"), f"over-triggered: {q}"
+
+
+def test_more_pronoun_followups_resolve():
+    ctx = ["do i have a song called tema ensingo on my pc"]
+    for q in ["where is it?", "find it", "is it on my pc?", "where did i save it"]:
+        plan = plan_observation(q, recent_user_messages=ctx)
+        assert plan is not None, f"missed: {q}"
+        assert plan.payload["query"] == "tema ensingo"
+
+
+def test_export_chats_redacts_and_includes_all_sections(tmp_path):
+    """scripts/export_chats.py: one command produces a shareable file with
+    conversations, traces and audit events — home paths redacted."""
+    import sqlite3
+    from app.database import DatabaseManager
+    from scripts.export_chats import export
+
+    db_path = str(tmp_path / "assistant.db")
+    db = DatabaseManager(db_path)
+    db.add_conversation_message("conv_x", "user", "do i have a song called kaba")
+    db.add_conversation_message("conv_x", "assistant", f"Found it at {tmp_path}\\Music\\kaba.mp3")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS cognitive_traces (trace_id TEXT, user_input TEXT,"
+        " assistant_reply TEXT, model_used TEXT, latency_ms REAL, goal_verified INTEGER,"
+        " goal_lifecycle_state TEXT, gate_decision TEXT, created_at TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " timestamp TEXT, action TEXT, status TEXT, details TEXT, level INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO cognitive_traces (trace_id, user_input, assistant_reply, model_used,"
+        " latency_ms, goal_verified, created_at) VALUES (?,?,?,?,?,?,?)",
+        ("trace_t1", "do i have a song called kaba", "yes", "fast", 12.5, 1, "t"),
+    )
+    conn.execute(
+        "INSERT INTO audit_logs (timestamp, action, status, details, level) VALUES (?,?,?,?,?)",
+        ("t", "create_task", "success", str(tmp_path / "secret"), 0),
+    )
+    conn.commit()
+    conn.close()
+
+    out = tmp_path / "export.md"
+    export(db_path, str(out), messages=10, traces=5, audits=5, full=False,
+           redact=True, home=str(tmp_path))
+    text = out.read_text(encoding="utf-8")
+
+    assert "do i have a song called kaba" in text
+    assert "conv_x" in text
+    assert "trace_t1" in text and "goal_verified=yes" in text
+    assert "create_task" in text
+    # Home/tmp paths must not leak verbatim.
+    assert str(tmp_path) not in text
+
+
+def test_host_context_patterns_beat_broad_file_block():
+    """Specialized host patterns (desktop, downloads) keep their questions
+    even though the broad file matcher also smells a file."""
+    import app.cognition.observation_router as obr
+    with patch("app.cognition.observation_router._desktop_directories",
+               return_value=["/tmp/Desktop"]):
+        plan = plan_observation("how many files do i have on my desktop?")
+        assert plan.question_kind == "desktop_contents"
+    plan = plan_observation("what's in my downloads folder")
+    assert plan.question_kind == "downloads_folder"

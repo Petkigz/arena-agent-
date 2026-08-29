@@ -43,7 +43,8 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
     )])
 
     with patch.object(runtime.loop, "run", return_value=mock_trace), \
-         patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal):
+         patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal), \
+         patch("app.cognition.observation_router.plan_observation", return_value=None):
         res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         assert res["success"] is True
@@ -95,7 +96,8 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
 
     with patch.object(runtime.loop, "run", return_value=mock_trace), \
          patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal), \
-         patch("app.cognition.goal_replanner.GoalReplanner.execute_reassessment_and_replan", side_effect=mock_replan):
+         patch("app.cognition.goal_replanner.GoalReplanner.execute_reassessment_and_replan", side_effect=mock_replan), \
+         patch("app.cognition.observation_router.plan_observation", return_value=None):
         res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         # Plan A executed, failed, Plan B executed

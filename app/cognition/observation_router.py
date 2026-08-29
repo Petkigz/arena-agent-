@@ -45,6 +45,22 @@ def _desktop_directories() -> List[str]:
     return dirs
 
 
+def _clean_subject(name: Optional[str]) -> Optional[str]:
+    """Validate an extracted subject: non-empty, sane length, not a
+    prepositional fragment ('in that movie') or bare pronoun."""
+    if not name:
+        return None
+    name = name.strip().strip("'\"?.! ")
+    if not (1 <= len(name) <= 80):
+        return None
+    if re.match(
+        r"^(?:in|on|at|of|by|for|from|with|to|as|the|a|an|that|this|it|there|here|my|your|called|named|titled)\b",
+        name,
+    ):
+        return None
+    return name
+
+
 def _extract_file_subject(text: str) -> Optional[str]:
     """Pull '<name>' out of '... called/named/titled <name> ...' file phrasing."""
     m = re.search(
@@ -56,15 +72,112 @@ def _extract_file_subject(text: str) -> Optional[str]:
         return None
     name = m.group(1).strip().strip("'\"")
     name = re.split(r"\s+on\s+my\s+", name)[0].strip().strip("'\"?.! ")
-    if 1 <= len(name) <= 80:
-        return name
-    return None
+    return _clean_subject(name)
 
 
 _FILE_NOUN = (
     r"(song|track|album|file|document|photo|picture|image|video|movie|clip|"
-    r"pdf|folder|presentation|spreadsheet|note|audio|music|recording)s?"
+    r"pdf|folder|presentation|spreadsheet|note|audio|music|recording|"
+    r"audiobook|ebook|podcast|episode|ringtone|wallpaper|beat|remix|"
+    r"sample|font|archive|screenshot|backup|everything|anything)s?"
 )
+
+_FILE_EXTS = (
+    r"mp3|wav|flac|m4a|aac|ogg|opus|mid|midi|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|"
+    r"jpg|jpeg|png|gif|bmp|webp|svg|mp4|mkv|avi|mov|wmv|webm|zip|rar|7z|tar|gz|"
+    r"exe|msi|apk|iso|json|xml|yml|yaml|py|js|ts|html|css|java|ps1|bat|ttf"
+)
+
+# Questions that want the file ITSELF acted on (open/play/delete/…) are NOT
+# read-only searches — the action pipeline owns them.
+_FILE_ACTION_INTENT = (
+    r"\b(play|open|launch|start|run|execute|delete|deleting|deleted|remove|removing|removed|"
+    r"rename|renaming|renamed|move|moving|moved|copy|copying|copied|cut|send|sending|sent|"
+    r"email|share|sharing|upload|install|uninstall|edit|editing|modify|write|create|make|"
+    r"set|change|changing|changed|apply|switch|"
+    r"convert|compress|extract|burn|print|download|downloading|downloaded)\b"
+)
+
+# Questions ABOUT a named work (summary, lyrics, artist) want knowledge, not
+# a directory listing.
+_FILE_CONTENT_INTENT = (
+    r"\b(summar\w*|explain|lyrics?|who (?:wrote|sings|sang|made|performed|produced)|"
+    r"artist|meaning|tell me about|review|translate|analy[sz]e|define|about|opinion)\b"
+)
+
+_PRONOUN_QUERY = (
+    r"\b(where (?:is|are|was|were|can i find) (?:it|that)|where'?s (?:it|that)|"
+    r"where did i (?:save|put|download) (?:it|that)|(?:look for|find|search for|locate) (?:it|that)|"
+    r"(?:location|path|folder|directory) of (?:it|that)|"
+    r"is (?:it|that) on my (?:pc|computer|machine|laptop|desktop))\b"
+)
+
+_BARE_SEARCH_STOPWORDS = (
+    r"^(out|it|me|him|her|them|us|this|that|something|anything|everything|"
+    r"up|down|new|a|an|the|my|some|more|another|one|two)\b"
+)
+
+
+def _extract_search_name(t: str) -> Optional[str]:
+    """Extract a search subject from bare search phrasing ('find london',
+    'search my pc for tema ensingo', 'locate the file report')."""
+    m = re.search(r"\b(?:search|find|locate|look for)\b\s*(.*)$", t)
+    if not m:
+        return None
+    rest = m.group(1).strip()
+    rest = re.sub(r"^(?:my|the|a|an|all|any|every)\s+", "", rest)
+    rest = re.sub(r"^(?:pc|computer|machine|laptop|desktop|system|phone|drive)\s+(?:for\s+)?", "", rest)
+    rest = re.sub(r"^(?:files?|music|songs?|tracks?|documents?|photos?|pictures?|videos?|movies?)\s+(?:for\s+|called\s+|named\s+)?", "", rest)
+    rest = re.sub(r"\s+on (?:my|the) (?:pc|computer|machine|laptop|desktop)\s*[?.!]*$", "", rest)
+    rest = rest.strip().strip("'\"?.! ")
+    if not rest or len(rest) < 2 or len(rest) > 60:
+        return None
+    if re.match(_BARE_SEARCH_STOPWORDS, rest):
+        return None
+    if re.search(r"\b(yesterday|last week|last night|made|created|wrote|edited|about)\b", rest):
+        return None  # topical/time reference, not a filename
+    if len(rest.split()) > 5:
+        return None
+    return rest
+
+
+def _extract_file_question_subject(t: str) -> Optional[str]:
+    """Best-effort subject for a file question: 'called X', quoted \"X\",
+    an X.ext token, 'do i have X on my pc', or bare search phrasing."""
+    name = _extract_file_subject(t)
+    if name:
+        return name
+    quoted = re.search(r'["\']([^"\']{1,80})["\']', t)
+    if quoted:
+        return quoted.group(1).strip()
+    ext_token = re.search(r"\b([\w\- ]{1,60}\.(?:" + _FILE_EXTS + r"))\b", t)
+    if ext_token:
+        return ext_token.group(1).strip()
+    # 'do i have london on my pc' — no noun, but the 'on my pc' tail grounds
+    # it as a host question.
+    have_on_pc = re.search(
+        r"\b(?:do i have|have i got|is there|does my (?:pc|computer) have)\s+"
+        r"(?:a|an|the|any)?\s*(.+?)\s+on my (?:pc|computer|machine|laptop|desktop)\b",
+        t,
+    )
+    if have_on_pc:
+        cand = have_on_pc.group(1).strip().strip("'\"?.! ")
+        if 1 <= len(cand) <= 60:
+            return cand
+    return _extract_search_name(t)
+
+
+def _extract_pronoun_subject(recent_user_messages: List[str]) -> Optional[str]:
+    """Scan back through prior turns for a file question with a subject."""
+    for prev in reversed(recent_user_messages):
+        prev_l = (prev or "").lower().strip()
+        if not prev_l:
+            continue
+        if re.search(r"\b" + _FILE_NOUN + r"\b", prev_l):
+            prev_name = _extract_file_subject(prev_l) or _extract_file_question_subject(prev_l)
+            if prev_name:
+                return prev_name
+    return None
 
 
 def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None) -> Optional[ObservationPlan]:
@@ -142,55 +255,64 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
                 question_kind="file_existence",
             )
 
-    # ── File enumeration / location questions ────────────────────────────
-    # Live bug: only yes/no existence questions were observable. 'give me a
-    # list of all of the songs called london i have' fell through to the LLM,
-    # which answered 'I don't have direct access to your files' — while the
-    # deterministic search tool sat unused. List/count/where variants get the
-    # same evidence-grounded treatment, with a bigger result cap.
+    # ── File questions (broad): enumeration / location / any search intent ──
+    # Live bug: only yes/no existence questions ('do i have a song called X')
+    # were observable. 'give me a list of all of the songs called london i
+    # have' fell through to the LLM, which apologized about having no file
+    # access while the deterministic search tool sat unused. The bar is now
+    # deliberately LOW: any question that names a file subject and doesn't
+    # clearly want an ACTION on it or content ABOUT it gets a real search —
+    # a false positive costs one cheap directory walk; a false negative
+    # produces the 'I don't have access' apology the owner is tired of.
     has_file_noun = re.search(r"\b" + _FILE_NOUN + r"\b", t) is not None
-    enum_trigger = re.search(
-        r"\b(list|show|find|enumerate|all|every|how many|how much)\b"
-        r"|\bgive me a list\b"
-        r"|\b(which|what)\b.{0,60}\b(?:do i have|i have|have i got|are there)\b",
-        t,
-    ) and not re.search(r"\ball about\b", t)
-    name = _extract_file_subject(t)
+    has_extension = re.search(r"\b[\w\-]+\.(?:" + _FILE_EXTS + r")\b", t) is not None
+    # 'do i have london on my pc' — the 'on my pc' tail grounds it as a host
+    # question even without a file noun.
+    have_on_pc = bool(re.search(
+        r"\b(?:do i have|have i got|is there|does my (?:pc|computer) have|did i (?:save|put|download))\b"
+        r".{0,60}\bon my (?:pc|computer|machine|laptop|desktop)\b", t,
+    ))
+    noun_or_ext = has_file_noun or has_extension or have_on_pc
+    search_verb = re.search(r"\b(search|find|locate|look for)\b", t) is not None
+    read_intent = bool(re.search(
+        r"\b(list|show|find|search|locate|look for|enumerate|all|every|any|"
+        r"how many|how much|where|which|what|do i have|does my (?:pc|computer|machine) have|"
+        r"do i own|did i (?:save|put|download)|is there|have i got|got|"
+        r"can|could|do|does|did|is|are|was|were|will|would)\b", t,
+    )) or t.endswith("?")
+    blocked_intent = re.search(_FILE_ACTION_INTENT + "|" + _FILE_CONTENT_INTENT, t) is not None
 
-    # Follow-up pronouns: 'where is it located' / 'where is it' after a file
-    # question about a named subject — resolve 'it' from the previous turn.
-    if name is None and recent_user_messages:
-        pronoun_q = re.search(
-            r"\b(where (?:is|are|was|were) it|where'?s it|where (?:is|are) that|"
-            r"where did i (?:save|put|download) it|"
-            r"(?:location|path|folder|directory) of it)\b",
-            t,
-        )
-        if pronoun_q:
-            for prev in reversed(recent_user_messages):
-                prev_l = (prev or "").lower().strip()
-                if not prev_l:
-                    continue
-                if re.search(r"\b" + _FILE_NOUN + r"\b", prev_l):
-                    prev_name = _extract_file_subject(prev_l)
-                    if prev_name:
-                        name = prev_name
-                        has_file_noun = True
-                        break
+    name = _extract_file_question_subject(t)
 
-    if has_file_noun and name and (enum_trigger or re.search(r"\bwhere\b|\blocation\b|\bpath\b", t)):
+    # Follow-up pronouns: 'where is it located' / 'find it' / 'is it on my
+    # pc' right after a file question — resolve the subject from context.
+    if name is None and recent_user_messages and re.search(_PRONOUN_QUERY, t):
+        prev_name = _extract_pronoun_subject(recent_user_messages)
+        if prev_name:
+            name = prev_name
+            noun_or_ext = True
+            read_intent = True
+
+    if name and not blocked_intent and ((noun_or_ext and read_intent) or search_verb):
         home = os.path.expanduser("~")
         is_location = bool(re.search(r"\bwhere\b|\blocation\b|\bpath\b|\bfolder\b|\bdirectory\b", t))
+        is_existence = bool(re.search(
+            r"\b(do i have|is there|have i got|got|does my (?:pc|computer) have|do i own|any)\b", t
+        )) and not search_verb and not is_location and not re.search(
+            r"\b(how many|how much|list|all|every|show|give|which|what|enumerate)\b", t
+        )
+        kind = "file_location" if is_location else ("file_existence" if is_existence else "file_search")
+        max_results = 20 if kind == "file_existence" else 50
         return ObservationPlan(
             action_type="search_files",
-            payload={"query": name, "root_dir": home, "max_results": 50},
+            payload={"query": name, "root_dir": home, "max_results": max_results},
             evidence_hint=(
                 f"Filesystem search under the user's home directory for '{name}' — "
                 + ("give the full path(s) of every match from these results."
                    if is_location else
-                   "enumerate every match from these results.")
+                   "answer from these results.")
             ),
-            question_kind="file_location" if is_location else "file_search",
+            question_kind=kind,
         )
 
     # Connected devices / USB.
