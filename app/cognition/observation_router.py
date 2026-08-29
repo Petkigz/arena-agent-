@@ -268,6 +268,28 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             question_kind="power_status",
         )
 
+    # ── Capability self-check: 'can you access my computer / use it for
+    # tasks?' — the recurring 'I don't have access' apology is factually
+    # wrong: the tool registry is observable. Answer from it. (See the
+    # separate 'can you see my desktop' screen pattern below — see/view is
+    # deliberately NOT in this verb list.)
+    if re.search(
+        r"\b(?:can|could|do|does)\s+you\s+(?:access|use|control|manage|handle)\b"
+        r".{0,30}\b(computer|pc|machine|system|laptop|files?|filesystem|desktop|data|tasks?)\b"
+        r"|\bdo you have (?:access|permission)s?\b.{0,30}\b(computer|pc|machine|system|laptop|files?|filesystem|desktop)\b",
+        t,
+    ):
+        return ObservationPlan(
+            action_type="list_capabilities",
+            payload={},
+            evidence_hint=(
+                "Registered tool inventory from the capability registry — answer "
+                "capability questions from this evidence; the agent demonstrably "
+                "has filesystem, app, and OS-control tools."
+            ),
+            question_kind="capability_selfcheck",
+        )
+
     # ── File existence questions ('do i have a song called kaba on my pc') ──
     # Live bug: this question was routed to the mobile_phone domain (substring
     # 'call' matched 'called') and DEFERRED with a terse non-answer. A
@@ -591,6 +613,20 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
             windows = data.get("open_windows", data.get("windows", []))
             titles = ", ".join(str(w) for w in windows[:25])
             return f"OBSERVED open windows: {windows and len(windows)} — {titles}"
+        if plan.action_type == "list_capabilities" and data.get("success"):
+            cats = data.get("categories", {})
+            cat_lines = "\n".join(
+                f"- {cat}: {', '.join(names[:8])}" + (" …" if len(names) > 8 else "")
+                for cat, names in cats.items()
+            )
+            return (
+                f"OBSERVED from the capability registry: {data.get('tool_count', '?')} registered "
+                f"tools across {len(cats)} categories:\n{cat_lines}\n"
+                "Answer ONLY from this evidence. The agent demonstrably HAS local access — "
+                "filesystem tools (search, move, copy, delete), app inventory, OS control, "
+                "screen capture. NEVER claim it cannot access this machine; if a specific "
+                "task needs approval, say which action and that it will ask."
+            )
         if plan.action_type == "list_apps" and data.get("success"):
             apps = data.get("applications", data.get("apps", []))
             if plan.question_kind == "installed_games":

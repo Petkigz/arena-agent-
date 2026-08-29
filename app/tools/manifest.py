@@ -275,7 +275,30 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
             "availability": checker,
         }
 
+    def _list_capabilities():
+        """Manifest handler: the agent's real tool inventory (Level 0).
+
+        'Can you access my computer / use it for tasks?' kept getting 'I
+        don't have access' apologies from the small model. The honest answer
+        is an observable fact: enumerate the registered tool manifest.
+        """
+        try:
+            from app.tools.manifest import get_tool_manifest
+            manifest = get_tool_manifest()
+        except Exception as exc:
+            return {"success": False, "error": f"Could not read tool manifest: {exc}"}
+        categories: Dict[str, list] = {}
+        for action, entry in manifest.items():
+            categories.setdefault(str(entry.get("category", "other")), []).append(action)
+        return {
+            "success": True,
+            "tool_count": len(manifest),
+            "categories": {cat: sorted(names) for cat, names in sorted(categories.items())},
+        }
+
     # ── OS / system ─────────────────────────────────────────────────────────
+    add("list_capabilities", "self_awareness", 0, "Enumerate the agent's registered tool inventory (evidence for capability questions)",
+        _ignore_payload(_list_capabilities))
     add("launch_app", "os_control", 2, "Launch an installed application",
         _wrap(SystemAppInventory.launch_any_app, "app_query", "app_name"))
     add("list_apps", "os_control", 0, "List installed applications",

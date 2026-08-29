@@ -2726,6 +2726,13 @@ class CognitiveRuntime:
             except Exception:
                 pass
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
+            # Evidence-grounded answers go to the MAIN model: the model's job
+            # here is just 'read this data and answer', and the small model
+            # demonstrably fumbles it — the owner kept getting 'I can't access
+            # your computer' replies WITH evidence in the context.
+            if observation_evidence:
+                complexity = "main"
+                app_logger.info("Evidence-grounded answer routed to the main model.")
             llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
             if llm_res.get("simulated") or llm_res.get("id") == "chat-simulated":

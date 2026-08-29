@@ -398,3 +398,64 @@ def test_games_questions_get_game_aware_evidence():
     assert "Epic Games Launcher" in ev and "Football Manager 2024" in ev
     assert "Microsoft Word" not in ev
     assert "count/list the games" in ev
+
+
+def test_capability_questions_answer_from_tool_registry():
+    """'Can you access my computer / use it for tasks?' kept producing 'I
+    don't have access' apologies. The fact is observable: the tool registry."""
+    routes = [
+        "can you access my computer",
+        "can you use the computer for tasks",
+        "can you control my pc",
+        "do you have access to my files",
+    ]
+    for q in routes:
+        plan = plan_observation(q)
+        assert plan is not None and plan.question_kind == "capability_selfcheck", f"missed: {q}"
+        assert plan.action_type == "list_capabilities"
+
+    # Action requests and the screen pattern are NOT capability questions.
+    assert plan_observation("can you see my desktop").question_kind == "screen_contents"
+    for q in ["can you open the file called report", "can you play music"]:
+        plan = plan_observation(q)
+        assert plan is None or plan.question_kind != "capability_selfcheck", q
+
+    from app.tools.manifest import get_tool_manifest
+    res = get_tool_manifest()["list_capabilities"]["handler"]({})
+    assert res["success"] and res["tool_count"] > 20
+    assert "filesystem" in res["categories"] and "search_files" in res["categories"]["filesystem"]
+
+    ev = render_observation_evidence(res, plan_observation("can you access my computer"))
+    assert "registered tools" in ev
+    assert "NEVER claim it cannot access" in ev
+
+
+def test_evidence_answers_use_main_model(tmp_path):
+    """Evidence-grounded answers are routed to the MAIN model: the small
+    model demonstrably fumbled them ('I can't access your computer' with
+    evidence in context)."""
+    import app.llm as llm_mod
+    from app.cognition.runtime import CognitiveRuntime
+
+    captured = {}
+
+    def fake_generate(messages=None, complexity="fast", max_tokens=150, **kw):
+        captured["complexity"] = complexity
+        return {"choices": [{"message": {"content": "Found 2 files."}}],
+                "model": "qwen2.5-9b-instruct"}
+
+    runtime = CognitiveRuntime(db_path=str(tmp_path / "rt.db"))
+    with patch.object(llm_mod.llm_client, "generate_chat_completion",
+                      side_effect=fake_generate):
+        res = runtime.process_cognitive_cycle("do i have a song called kaba on my pc")
+        assert res.get("success") is True or res.get("request_success") is True, res
+        assert captured["complexity"] == "main", (
+            "evidence-grounded answer must use the main model"
+        )
+
+        # Non-evidence conversational answers stay on the fast model.
+        captured.clear()
+        res2 = runtime.process_cognitive_cycle("what is the capital of france")
+        assert captured["complexity"] == "fast", (
+            "plain conversational answer should keep the fast model"
+        )
