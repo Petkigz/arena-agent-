@@ -173,6 +173,33 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
                                      if k in OSActionPlan.__dataclass_fields__})
             return execute_os_plan(parsed)
         return {"success": False, "error": "plan dict required"}
+
+    def _os_control_plan_route(request, query, user_text, goal_text):
+        """Manifest handler for the ROUTING SIGNAL name itself.
+
+        Live bug (owner audit 2026-08-28): a proposal with action_type
+        'os_control_plan' reached the gate, which didn't know the name and
+        blocked it as 'Unknown action' — approving it would then have failed
+        as 'unsupported capability'. os_control_plan is a routing signal that
+        the runtime normally converts to os_control_execute BEFORE proposing;
+        this alias makes any leak safe: gate sees a known Level-2 tool, and
+        execution plans + executes the request through the normal planner.
+        """
+        from app.cognition.os_control_planner import plan_os_action, execute_os_plan
+        request_text = request or query or user_text or goal_text
+        if not request_text:
+            return {
+                "success": False,
+                "error": "os_control_plan needs the request text "
+                         "(payload keys: request/query/user_text)",
+            }
+        plan = plan_os_action(request_text)
+        if plan is None:
+            return {
+                "success": False,
+                "error": f"OS-control planner could not produce a command for: {request_text}",
+            }
+        return execute_os_plan(plan)
     DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
     DocumentManager = _LazyImportProxy("app.tools.doc_manager", "DocumentManager")
     FinanceTraderTool = _LazyImportProxy("app.tools.finance_trader", "FinanceTraderTool")
@@ -261,6 +288,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DeepOSController.press_hotkey, "keys", "grounding_id", "expected_topology_sha256"))
     add("os_control_execute", "os_control", 2, "Execute a planned OS settings command (LLM-planned, gate-approved, verified); handles ANY OS action cross-platform",
         _wrap(_os_control_execute, "plan")),
+    add("os_control_plan", "os_control", 2, "Routing alias: plan and execute a general OS-control request (settings, taskbar, icons) via the LLM planner",
+        _wrap(_os_control_plan_route, "request", "query", "user_text", "goal_text")),
 
     add("set_wallpaper", "os_control", 2, "Set the desktop wallpaper from an image file; verified by re-reading, reversible via the previous wallpaper path",
         _wrap(DesktopControl.set_wallpaper, "image_path", "path"))
@@ -296,6 +325,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(UniversalFilesystem.copy_file_verified, "source_path", "destination_path"))
     add("remove_verified_copy", "filesystem", 3, "Remove an exact unchanged copied artifact",
         _wrap(UniversalFilesystem.remove_verified_copy, "file_path", "expected_sha256"))
+    add("delete_files", "filesystem", 3, "Reversible delete: send named files to a recoverable trash area under the home directory (owner approval required)",
+        _wrap(UniversalFilesystem.trash_files, "file_paths", "paths", "trash_root"))
     add("compress_files", "filesystem", 2, "Compress files to a zip",
         _wrap(UniversalFilesystem.compress_zip, "source_paths", "output_zip_path"))
     add("resize_image", "filesystem", 2, "Resize an image",

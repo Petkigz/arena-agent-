@@ -71,7 +71,7 @@ def _extract_file_subject(text: str) -> Optional[str]:
     if not m:
         return None
     name = m.group(1).strip().strip("'\"")
-    name = re.split(r"\s+on\s+my\s+", name)[0].strip().strip("'\"?.! ")
+    name = re.split(r"\s+(?:on|in|from)\s+my\s+", name)[0].strip().strip("'\"?.! ")
     return _clean_subject(name)
 
 
@@ -246,7 +246,7 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
     if file_q:
         name = (file_q.group(3) or "").strip().strip("'\"")
         if name:
-            name = re.split(r"\s+on\s+my\s+", name)[0].strip().strip("'\"?.! ")
+            name = re.split(r"\s+(?:on|in|from)\s+my\s+", name)[0].strip().strip("'\"?.! ")
         if name and 1 <= len(name) <= 80:
             home = os.path.expanduser("~")
             # 'do i have a song called london' must not be answered with the

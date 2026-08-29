@@ -177,6 +177,158 @@ class MasterAgentOrchestrator:
                     "source": "universal_filesystem"
                 })
 
+        elif action_type in ("move_file", "copy_file_verified"):
+            # File management: resolve bare names ('move kaba.mp3 to my music
+            # folder') to real paths via filesystem search, then execute the
+            # verified move/copy. Live bug: the matcher routed these but the
+            # payload carried no operands, execution failed, and the LLM
+            # apologized about lacking file access.
+            from pathlib import Path as _P
+            from app.tools.universal_filesystem import UniversalFilesystem
+
+            def _find_by_name(name: str) -> Dict[str, Any]:
+                """Bare name -> path evidence under the user's home dir."""
+                direct = _P(name).expanduser()
+                if direct.exists():
+                    return {"resolved": str(direct)}
+                hits = UniversalFilesystem.search_filesystem(
+                    name, root_dir=str(_P.home()), max_results=4)
+                exact = [h for h in hits if h.get("file_name", "").lower() == name.lower()]
+                pool = exact or hits
+                if len(pool) == 1:
+                    return {"resolved": pool[0]["file_path"]}
+                if not pool:
+                    return {"error": f"couldn't find any file matching '{name}'"}
+                return {
+                    "error": f"found {len(pool)} files matching '{name}': "
+                             + "; ".join(h["file_path"] for h in pool[:4])
+                             + " — tell me which one",
+                    "matches": [h["file_path"] for h in pool[:4]],
+                }
+
+            _KNOWN_FOLDERS = {
+                "music": "Music", "music folder": "Music", "my music": "Music",
+                "my music folder": "Music", "desktop": "Desktop",
+                "my desktop": "Desktop", "documents": "Documents",
+                "my documents": "Documents", "documents folder": "Documents",
+                "downloads": "Downloads", "download folder": "Downloads",
+                "my downloads": "Downloads", "pictures": "Pictures",
+                "my pictures": "Pictures", "photos": "Pictures",
+                "videos": "Videos", "my videos": "Videos", "movies": "Videos",
+            }
+
+            src = payload.get("source_path")
+            if not src:
+                src_name = payload.get("source_name")
+                if not src_name:
+                    # LLM-proposed payloads may carry other key spellings.
+                    src_name = (payload.get("file_name") or payload.get("name")
+                                or payload.get("query"))
+                if src_name:
+                    found = _find_by_name(str(src_name))
+                    if found.get("error"):
+                        executed_actions.append(
+                            f"Couldn't {action_type}: {found['error']}.")
+                        execution_success = False
+                        src = None
+                    else:
+                        src = found["resolved"]
+            dst = payload.get("destination_path")
+            dst_name = payload.get("destination_name")
+            if src and not dst:
+                if dst_name:
+                    key = str(dst_name).strip().lower().rstrip(".,!?")
+                    folder = _KNOWN_FOLDERS.get(key)
+                    if folder:
+                        dst = str(_P.home() / folder / _P(src).name)
+                    elif re.search(r"\.[A-Za-z0-9]{2,6}$", str(dst_name)):
+                        # 'rename london.mp3 to test.mp3' — same directory.
+                        dst = str(_P(src).parent / str(dst_name))
+                    else:
+                        dst_dir = _P(dst_name).expanduser()
+                        if dst_dir.is_dir():
+                            dst = str(dst_dir / _P(src).name)
+                        else:
+                            executed_actions.append(
+                                f"Couldn't resolve destination '{dst_name}' — name the "
+                                "folder (e.g. 'my music folder' or 'my desktop').")
+                            execution_success = False
+            if src and dst and execution_success:
+                if action_type == "move_file":
+                    res = UniversalFilesystem.rename_or_move(src, dst)
+                else:
+                    res = UniversalFilesystem.copy_file_verified(src, dst)
+                raw_output_data["file_op_res"] = res
+                if res.get("success"):
+                    verb = "Moved" if action_type == "move_file" else "Copied"
+                    executed_actions.append(
+                        f"{verb} '{_P(src).name}' -> '{dst}'.")
+                    execution_facts.append({
+                        "subject": _P(src).name.lower(),
+                        "predicate": "file_path",
+                        "value": dst,
+                        "source": "universal_filesystem",
+                    })
+                else:
+                    execution_success = False
+                    executed_actions.append(f"File operation failed: {res.get('error')}")
+            elif not execution_success:
+                raw_output_data["file_op_error"] = executed_actions
+            else:
+                executed_actions.append(
+                    "Couldn't identify which file to operate on — name the file "
+                    "(e.g. 'move kaba.mp3 to my music folder').")
+                execution_success = False
+
+        elif action_type == "delete_files":
+            # Reversible delete: resolve names -> paths under the home
+            # directory, then move to the recoverable trash area. Level 3:
+            # this branch only runs after the owner approved it in chat.
+            from pathlib import Path as _P
+            from app.tools.universal_filesystem import UniversalFilesystem
+
+            names = payload.get("names") or ([payload["name"]] if payload.get("name") else [])
+            explicit_paths = payload.get("file_paths") or payload.get("paths") or []
+            targets: list = list(explicit_paths)
+            unresolved: list = []
+            for n in names:
+                if not n:
+                    continue
+                direct = _P(str(n)).expanduser()
+                if direct.exists():
+                    targets.append(str(direct))
+                    continue
+                hits = UniversalFilesystem.search_filesystem(
+                    str(n), root_dir=str(_P.home()), max_results=50)
+                if not hits:
+                    unresolved.append(n)
+                else:
+                    targets.extend(h["file_path"] for h in hits)
+            if unresolved:
+                executed_actions.append(
+                    "Couldn't find: " + ", ".join(f"'{u}'" for u in unresolved) + ".")
+            if targets:
+                res = UniversalFilesystem.trash_files(targets)
+                raw_output_data["delete_res"] = res
+                if res.get("trashed"):
+                    executed_actions.append(
+                        f"Deleted (moved to trash, recoverable): "
+                        + ", ".join(m["original"] for m in res["trashed"])
+                        + f". Restore from: {res.get('trash_session')}")
+                    execution_facts.append({
+                        "subject": "filesystem",
+                        "predicate": "file_delete",
+                        "value": f"{len(res['trashed'])} files to trash",
+                        "source": "universal_filesystem",
+                    })
+                if res.get("errors"):
+                    execution_success = False
+                    executed_actions.append("Some deletions failed: " + "; ".join(res["errors"]))
+            else:
+                execution_success = False
+                if not unresolved:
+                    executed_actions.append("No files matched — nothing was deleted.")
+
         elif action_type in ["phone_command", "make_phone_call", "send_sms"]:
             from app.tools.android_adb_controller import AndroidADBController
             phone_query = payload.get("query") or payload.get("command") or payload.get("action") or user_text

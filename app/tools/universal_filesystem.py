@@ -39,6 +39,60 @@ class UniversalFilesystem:
         return {"success":verified,"removed_path":str(path),"expected_sha256":expected_sha256,"environment_verified":verified,"side_effects":verified,"rollback_supported":False}
 
     @classmethod
+    def trash_files(cls, file_paths: List[str], trash_root: Optional[str] = None) -> Dict[str, Any]:
+        """REVERSIBLE delete: move files to a recoverable trash area.
+
+        'delete the file called X' is a Level-3 action the owner must approve;
+        when approved it still must not be irreversible on day one. Files are
+        moved (not unlinked) into <home>/.arena_trash/<timestamp>/ with their
+        full original path recorded so recovery is trivial and auditable.
+        Only paths under the user's home directory are accepted — system
+        locations are refused outright.
+        """
+        import time
+        home = Path.home().resolve()
+        trash_base = Path(trash_root or home / ".arena_trash")
+        if not file_paths:
+            return {"success": False, "error": "No file paths supplied"}
+        if len(file_paths) > 50:
+            return {"success": False, "error": f"Refusing to trash {len(file_paths)} paths at once (limit 50)"}
+        session_dir = trash_base / time.strftime("%Y%m%d-%H%M%S")
+        moved: List[Dict[str, str]] = []
+        errors: List[str] = []
+        for raw in file_paths:
+            try:
+                src = Path(raw).expanduser().resolve()
+                if not src.exists():
+                    errors.append(f"Not found: {src}")
+                    continue
+                if home not in src.parents:
+                    errors.append(f"Outside home directory, refused: {src}")
+                    continue
+                dst = session_dir / src.relative_to(home)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                if dst.exists():
+                    errors.append(f"Already in trash: {dst}")
+                    continue
+                shutil.move(str(src), str(dst))
+                moved.append({"original": str(src), "trash_path": str(dst)})
+                audit_logger.info(f"Trashed (reversible delete) '{src}' -> '{dst}'")
+            except Exception as exc:
+                errors.append(f"{raw}: {exc}")
+        return {
+            "success": bool(moved) and not errors,
+            "trashed": moved,
+            "trash_session": str(session_dir),
+            "errors": errors,
+            "environment_verified": all(not Path(m["original"]).exists() for m in moved),
+            "side_effects": bool(moved),
+            "reversible": True,
+            "message": (
+                f"Moved {len(moved)} file(s) to {session_dir} — recoverable."
+                if moved else "Nothing was deleted."
+            ),
+        }
+
+    @classmethod
     def search_filesystem(cls, query: str, root_dir: Optional[str] = None, max_results: int = 20) -> List[Dict[str, Any]]:
         """
         Searches all directories for files matching query string across filesystem.

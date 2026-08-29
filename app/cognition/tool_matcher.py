@@ -125,6 +125,91 @@ _RELIMG_RE = re.compile(r"(?:[\w.\-]+/)*[\w.\-]+\.(?:jpg|jpeg|png|bmp|webp|gif)"
 _MIN_SCORE = 2.0
 _MIN_MARGIN = 1.0
 
+# ── File operations with explicit operands ────────────────────────────────
+# Live bug (owner chat export 2026-08-29): 'move kaba.mp3 to my music
+# folder' matched move_file but the payload was EMPTY — execution got no
+# operands and failed, and the LLM apologized about lacking file access.
+# 'rename london.mp3 to test.mp3' matched nothing at all. These patterns
+# route file-management requests deterministically AND carry the operands.
+_FILE_OP_NOUN = r"(?:files?|songs?|tracks?|albums?|documents?|docs?|photos?|pictures?|images?|videos?|movies?|clips?|notes?|folders?|archives?)"
+_EXT_TOKEN = r"\.[A-Za-z0-9]{2,6}"
+_MOVE_RE = re.compile(
+    r"\b(?:move|rename)\s+(?:the\s+|my\s+|all\s+|every\s+)?"
+    r"(?:" + _FILE_OP_NOUN + r"\s+)?(?:called\s+|named\s+)?"
+    r"(.+?)\s+(?:to|into|in)\s+(.+?)\s*[?.!]*$", re.I)
+_COPY_RE = re.compile(
+    r"\bcopy\s+(?:the\s+|my\s+|all\s+)?"
+    r"(?:" + _FILE_OP_NOUN + r"\s+)?(?:called\s+|named\s+)?"
+    r"(.+?)\s+(?:to|into|in)\s+(.+?)\s*[?.!]*$", re.I)
+_DELETE_CALLED_RE = re.compile(
+    r"\b(?:delete|remove|trash)\s+(?:(?:all|every|the)\s+)?"
+    r"(?:" + _FILE_OP_NOUN + r"\s+)?(?:called\s+|named\s+)\s*(.+?)\s*[?.!]*$", re.I)
+_DELETE_FILE_RE = re.compile(
+    r"\b(?:delete|remove|trash)\s+(?:(?:all|every|the)\s+)?(?:files?\s+)?"
+    r"([\w\-.,'\"() ]+" + _EXT_TOKEN + r"(?:\s*(?:,|and)\s*[\w\-.,'\"() ]+" + _EXT_TOKEN + r")*)\s*[?.!]*$",
+    re.I)
+
+
+def _strip_trailing_clause(name: str) -> str:
+    """'kaba from my playlist' -> 'kaba': drop subordinate clauses that
+    aren't part of the file name."""
+    return re.split(r"\s+(?:from|on|in|that|which|because)\s+", name.strip(), maxsplit=1, flags=re.I)[0].strip()
+
+
+def _looks_like_path(text: str) -> bool:
+    return bool(re.search(r"[\\/]|^[A-Za-z]:", text))
+
+
+def _file_op_payload(source: str, destination: Optional[str] = None) -> Dict[str, Any]:
+    """Build a payload carrying BOTH name forms; the execution layer resolves
+    bare names to real paths via filesystem search."""
+    payload: Dict[str, Any] = {}
+    source = _strip_trailing_clause(source)
+    if _looks_like_path(source):
+        payload["source_path"] = source
+    else:
+        payload["source_name"] = source
+    if destination is not None:
+        destination = destination.strip()
+        if _looks_like_path(destination):
+            payload["destination_path"] = destination
+        else:
+            payload["destination_name"] = destination
+    return payload
+
+
+def _match_file_operation(text: str) -> Optional[ToolMatch]:
+    """Deterministic file-management routing: move/rename/copy/delete with
+    operands. Requires a file-ish signal (extension token, file noun, or
+    called/named) so non-file sentences fall through untouched."""
+    has_ext = bool(re.search(_EXT_TOKEN + r"\b", text))
+    has_noun = bool(re.search(r"\b" + _FILE_OP_NOUN + r"\b", text))
+
+    m = _MOVE_RE.search(text)
+    if m and (has_ext or has_noun or "called" in text or "named" in text):
+        return ToolMatch(action_type="move_file", score=3.0,
+                         payload=_file_op_payload(m.group(1), m.group(2)),
+                         matched_terms=("move/rename",))
+    m = _COPY_RE.search(text)
+    if m and (has_ext or has_noun or "called" in text or "named" in text):
+        return ToolMatch(action_type="copy_file_verified", score=3.0,
+                         payload=_file_op_payload(m.group(1), m.group(2)),
+                         matched_terms=("copy",))
+    m = _DELETE_CALLED_RE.search(text)
+    if m:
+        name = _strip_trailing_clause(m.group(1))
+        if name:
+            return ToolMatch(action_type="delete_files", score=3.0,
+                             payload={"name": name},
+                             matched_terms=("delete-by-name",))
+    m = _DELETE_FILE_RE.search(text)
+    if m and (has_ext or has_noun):
+        names = [n.strip() for n in re.split(r"\s*(?:,|and)\s*", m.group(1).strip()) if n.strip()]
+        return ToolMatch(action_type="delete_files", score=3.0,
+                         payload={"names": names},
+                         matched_terms=("delete",))
+    return None
+
 
 @dataclass(frozen=True)
 class ToolMatch:
@@ -198,6 +283,12 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
     if not ((words & CONTROL_VERBS) or comm_verb_with_number):
         return None
 
+    # File management with explicit operands routes deterministically (and
+    # carries source/destination names — live bug: empty payloads).
+    file_op = _match_file_operation(text)
+    if file_op is not None:
+        return file_op
+
     try:
         if manifest is None:
             from app.tools.manifest import get_tool_manifest
@@ -241,7 +332,7 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
         if _is_os_control_request(text):
             return ToolMatch(
                 action_type=OS_CONTROL_ACTION, score=1.0,
-                payload={}, matched_terms=("os_settings",))
+                payload={"request": user_text}, matched_terms=("os_settings",))
         return None
     scored.sort(key=lambda item: item[0], reverse=True)
     best_score, best, matched_terms = scored[0]
@@ -250,7 +341,7 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
         if _is_os_control_request(text):
             return ToolMatch(
                 action_type=OS_CONTROL_ACTION, score=1.0,
-                payload={}, matched_terms=("os_settings",))
+                payload={"request": user_text}, matched_terms=("os_settings",))
         return None
     if len(scored) > 1 and (best_score - scored[1][0]) < _MIN_MARGIN and scored[1][0] >= _MIN_SCORE:
         return None  # ambiguous: let the normal pipeline handle it

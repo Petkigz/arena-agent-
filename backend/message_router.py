@@ -374,6 +374,11 @@ class MessageRouter:
                 self.runtime.process_cognitive_cycle,
                 user_text=content,
                 complexity=complexity,
+                # session_id = conversation_id: pending approvals are recorded
+                # under the conversation, so the router can surface them to
+                # THIS chat (live bug: approvals landed under a random
+                # sess_<hex> and the owner never saw the approval request).
+                session_id=conversation_id,
                 image_path=image_path,
                 audio_path=audio_path,
                 attachments=attachments,
@@ -621,6 +626,65 @@ class MessageRouter:
                     "single_use": True,
                 } if req.authorization_id else None,
             })
+
+        # Closing the loop (live lesson: approving in chat used to mint a
+        # grant and then do NOTHING — the owner approved 'delete files' and
+        # sat there until they re-asked, which produced a fresh approval
+        # request instead of the action). An approval now executes the exact
+        # authorized proposal and streams the result into the conversation.
+        if approved and req.authorization_id and getattr(self, "runtime", None):
+            import asyncio as _asyncio
+            import uuid as _uuid
+
+            from app.cognition.action_proposal import ActionProposal
+
+            proposal = ActionProposal(
+                action_type=req.action_type,
+                payload=req.payload,
+                authorization_id=req.authorization_id,
+                plan_id=getattr(req, "plan_id", None),
+                decision_stage="authorization",
+            )
+            proposal.proposal_id = req.proposal_id or proposal.proposal_id
+            execution_goal_text = req.goal_text or req.action_type
+
+            def _run_authorized() -> Dict[str, Any]:
+                return self.runtime.execute_authorized_proposal(
+                    proposal, user_text=execution_goal_text,
+                )
+
+            try:
+                result = await _asyncio.to_thread(_run_authorized)
+            except Exception as exc:
+                app_logger.error(f"Authorized execution after approval failed: {exc}", exc_info=True)
+                result = {"success": False, "assistant_reply": f"Approved action failed: {exc}"}
+
+            conversation_id = req.conversation_id
+            summary = (
+                result.get("assistant_reply")
+                or ("; ".join(result.get("executed_actions") or []))
+                or ("Executed approved action." if result.get("success") else "Approved action did not complete.")
+            )
+            app_logger.info(
+                f"Authorized execution after approval: {req.action_type} "
+                f"success={result.get('success')}"
+            )
+            if conversation_id:
+                message_id = f"msg_{_uuid.uuid4().hex[:12]}"
+                try:
+                    add_to_history(conversation_id, "assistant", summary, message_id=message_id)
+                except Exception as exc:
+                    app_logger.warning(f"Could not persist approval result: {exc}")
+                tokens = self._tokenize_response(summary) or [" "]
+                for i, token in enumerate(tokens):
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "message_token",
+                        "conversation_id": conversation_id,
+                        "message_id": message_id,
+                        "token": token,
+                        "done": i == len(tokens) - 1,
+                    })
+                    await asyncio.sleep(0.02)
 
 
 # Global message router instance
