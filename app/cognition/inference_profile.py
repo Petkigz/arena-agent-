@@ -235,6 +235,29 @@ def apply_persisted_profile() -> Optional[InferenceProfile]:
             "Inference profile applied at startup (main=%s, fast=%s)",
             profile.main_model, profile.fast_model,
         )
+        # Silent-degradation guard (live incident: main quietly became the
+        # 3b, so 'Evidence-grounded answer routed to the main model' still
+        # hit the small model that fumbles evidence). Warn loudly when the
+        # persisted MAIN equals FAST while the measured hardware tier
+        # recommends a bigger main — evidence answers and the OS planner
+        # both depend on MAIN.
+        try:
+            recommended = InferenceProfile.recommended()
+            if (
+                profile.main_model
+                and profile.main_model == profile.fast_model
+                and recommended.main_model != profile.main_model
+            ):
+                app_logger.warning(
+                    "Inference profile: MAIN model '%s' equals the FAST model — "
+                    "evidence-grounded answers and the OS planner will run on the "
+                    "small model. The measured hardware tier recommends '%s' for "
+                    "main. Load it in LM Studio and set it via the Model Settings "
+                    "page or POST /models/config {\"main_model\": \"%s\"}.",
+                    profile.main_model, recommended.main_model, recommended.main_model,
+                )
+        except Exception:
+            pass
         return profile
     except Exception as exc:
         app_logger.warning(f"Could not apply persisted inference profile: {exc}")

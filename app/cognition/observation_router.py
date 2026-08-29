@@ -360,6 +360,72 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
                 question_kind="file_existence",
             )
 
+    # ── Follow-up 'what about X' right after a file/music question ──
+    # Live transcript: 'give me a list of all the songs called kaba' was
+    # answered from search evidence, then the follow-up 'what about ordinaryr
+    # by alex warren' fell to the raw LLM and got an improvised answer
+    # instead of another filesystem search. Route it when the follow-up
+    # names a media/file noun itself OR the recent turns established
+    # file/music context (via recent_user_messages).
+    what_about = re.match(r"^\s*(?:what|how)\s+about\s+(.+?)\s*[?.!]*$", t)
+    if what_about:
+        subject = what_about.group(1).strip()
+        media_ctx = any(
+            re.search(
+                r"\b(song|track|album|music|file|document|photo|picture|image|"
+                r"video|movie|clip|pdf|folder|presentation|spreadsheet)s?\b",
+                m,
+            )
+            for m in (recent_user_messages or [])
+        )
+        m_noun = re.match(
+            r"^(?:the\s+)?(song|track|album|file|document|photo|picture|image|"
+            r"video|movie|clip|pdf|folder)s?\s+(?:called\s+|named\s+)?(.+)$",
+            subject,
+        )
+        if m_noun:
+            followup_name = m_noun.group(2).strip()
+        elif media_ctx:
+            followup_name = subject
+        else:
+            followup_name = ""
+        # 'X by <artist>' — media files are usually named 'Artist - Title.ext';
+        # search the title, keep the artist as a preference hint.
+        artist = ""
+        m_artist = re.match(r"^(.*?)\s+by\s+([A-Za-z][\w\s.&'-]+)$", followup_name)
+        if m_artist:
+            followup_name, artist = m_artist.group(1).strip(), m_artist.group(2).strip()
+        followup_name = followup_name.strip("\"'").strip()
+        # Pronoun/filler subjects ('how about another one') are not names —
+        # leave them to the conversational path.
+        if re.fullmatch(
+            r"(?:another(?:\s+one)?|more|that|it|this|them|those|these|one|"
+            r"the\s+(?:other|rest|same)(?:\s+one)?)",
+            followup_name,
+        ):
+            followup_name = ""
+        if followup_name and 1 <= len(followup_name) <= 80:
+            home = os.path.expanduser("~")
+            hint = (
+                f"Filesystem search under the user's home directory for '{followup_name}'"
+            )
+            if artist:
+                hint += (
+                    f" (asked as '{followup_name}' by '{artist}' — prefer media files "
+                    "matching both, e.g. 'Artist - Title.ext')"
+                )
+            hint += (
+                " — answer whether it exists from these results. Prioritize matching "
+                "media files (.mp3/.wav/.flac/.m4a/.ogg etc.) and ignore unrelated "
+                "directories that merely contain the name."
+            )
+            return ObservationPlan(
+                action_type="search_files",
+                payload={"query": followup_name, "root_dir": home, "max_results": 20},
+                evidence_hint=hint,
+                question_kind="file_search",
+            )
+
     # ── File questions (broad): enumeration / location / any search intent ──
     # Live bug: only yes/no existence questions ('do i have a song called X')
     # were observable. 'give me a list of all of the songs called london i

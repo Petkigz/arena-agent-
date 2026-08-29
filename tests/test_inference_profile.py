@@ -423,3 +423,67 @@ def test_benchmark_counts_reasoning_model_samples():
     empty = module.benchmark_model(
         httpx.Client(transport=TrulyEmpty()), "http://127.0.0.1:1234/v1", "m")
     assert empty["success"] is False and "no content and no reasoning" in empty["errors"][0]
+
+
+def test_apply_persisted_profile_warns_when_main_equals_fast(tmp_path):
+    """Live incident: the persisted MAIN quietly became the 3b (same as
+    FAST), so 'routed to the main model' still hit the small model that
+    fumbles evidence. Startup must warn loudly while the measured tier
+    recommends a bigger main."""
+    from app.cognition.inference_profile import apply_persisted_profile
+
+    class Recorder:
+        def __init__(self):
+            self.lines = []
+
+        def info(self, msg, *args):
+            self.lines.append(msg % args if args else msg)
+
+        def warning(self, msg, *args):
+            self.lines.append(msg % args if args else msg)
+
+    path = tmp_path / "ip.json"
+    # Tier-2 machine (recommends 9b main / 3b fast) with a degraded profile.
+    with patch("app.cognition.inference_profile._hardware_tier", return_value=tier(2, 24.0, 4096)):
+        store = InferenceProfileStore(path)
+        store.update({"main_model": "qwen2.5-3b-instruct", "fast_model": "qwen2.5-3b-instruct"})
+
+        import app.cognition.inference_profile as ipmod
+        rec = Recorder()
+        with patch.object(ipmod, "inference_profile_store", store), \
+                patch.object(ipmod, "app_logger", rec):
+            profile = apply_persisted_profile()
+
+    assert profile is not None
+    assert config_module.settings.MAIN_MODEL == "qwen2.5-3b-instruct"
+    assert any("equals the FAST model" in line for line in rec.lines), rec.lines
+    assert any("qwen2.5-9b-instruct" in line for line in rec.lines), rec.lines
+
+
+def test_apply_persisted_profile_silent_when_main_differs_from_fast(tmp_path):
+    """A sane profile (main != fast) must not nag at startup."""
+    from app.cognition.inference_profile import apply_persisted_profile
+
+    class Recorder:
+        def __init__(self):
+            self.lines = []
+
+        def info(self, msg, *args):
+            self.lines.append(msg % args if args else msg)
+
+        def warning(self, msg, *args):
+            self.lines.append(msg % args if args else msg)
+
+    path = tmp_path / "ip.json"
+    with patch("app.cognition.inference_profile._hardware_tier", return_value=tier(2, 24.0, 4096)):
+        store = InferenceProfileStore(path)
+        store.update({"main_model": "qwen2.5-9b-instruct", "fast_model": "qwen2.5-3b-instruct"})
+
+        import app.cognition.inference_profile as ipmod
+        rec = Recorder()
+        with patch.object(ipmod, "inference_profile_store", store), \
+                patch.object(ipmod, "app_logger", rec):
+            profile = apply_persisted_profile()
+
+    assert profile is not None
+    assert not any("equals the FAST model" in line for line in rec.lines), rec.lines

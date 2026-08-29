@@ -545,3 +545,35 @@ def test_evidence_answers_use_main_model(tmp_path):
         assert captured["complexity"] == "fast", (
             "plain conversational answer should keep the fast model"
         )
+
+
+def test_what_about_followup_routes_to_file_search():
+    """Live transcript: 'give me a list of all the songs called kaba' was
+    answered from search evidence, then 'what about ordinaryr by alex warren'
+    fell to the raw LLM and got an improvised answer. The follow-up must
+    trigger another filesystem search when file/music context is present."""
+    ctx = ["give me a list of all the songs called kaba in my pc"]
+
+    plan = plan_observation("what about ordinaryr by alex warren", recent_user_messages=ctx)
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.payload["query"] == "ordinaryr"
+    assert plan.question_kind == "file_search"
+    assert "alex warren" in plan.evidence_hint
+
+    # Without the ' by <artist>' tail.
+    plan = plan_observation("what about kaba", recent_user_messages=ctx)
+    assert plan is not None and plan.payload["query"] == "kaba"
+
+    # Explicit media noun routes even without prior context.
+    plan = plan_observation("what about the song ordinary")
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.payload["query"] == "ordinary"
+
+    # Pronoun/filler subjects are NOT names — leave them to the LLM path.
+    for q in ["how about another one", "what about it", "what about more"]:
+        plan = plan_observation(q, recent_user_messages=ctx)
+        assert plan is None or plan.question_kind != "file_search", q
+
+    # No file/music context and no media noun -> not a file question.
+    plan = plan_observation("what about privacy settings", recent_user_messages=["change my theme"])
+    assert plan is None or plan.question_kind != "file_search"
