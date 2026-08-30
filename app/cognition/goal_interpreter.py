@@ -539,24 +539,19 @@ class SemanticGoalInterpreter:
                     # (available None) stays a candidate but carries its
                     # honest state downstream so the planner can probe before
                     # committing and the owner sees the risk before execution.
-                    checker = entry.get("availability")
+                    # ONE canonical interpretation (P0 review #1): the
+                    # registry's interpret_availability — dicts, booleans and
+                    # no-kwarg checkers all keep their verbatim meaning.
+                    try:
+                        from app.cognition.tool_registry import interpret_availability
+                        _status = interpret_availability(entry.get("availability"), probe=False)
+                    except Exception:
+                        _status = {"available": None, "status": "not_checked"}
                     availability_state = "available"
-                    if callable(checker):
-                        try:
-                            _status = checker(probe=False)
-                        except TypeError:
-                            _status = checker()
-                        except Exception:
-                            _status = None
-                        if not isinstance(_status, dict):
-                            # Plain-boolean checkers keep their verbatim
-                            # meaning: True / False / None (NOT_CHECKED) —
-                            # never coerced.
-                            _status = {"available": _status}
-                        if _status.get("available") is False:
-                            continue
-                        if _status.get("available") is None:
-                            availability_state = "not_checked"
+                    if _status.get("available") is False:
+                        continue
+                    if _status.get("available") is None:
+                        availability_state = "not_checked"
 
                     # 1. SEMANTIC RELEVANCE to this goal (name + entity
                     # description + manifest description token overlap).

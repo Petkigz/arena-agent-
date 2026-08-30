@@ -161,13 +161,26 @@ class InvestigationExecutor:
                 False, plan.tool,
                 error=f"Requires gated execution (safety level {safety} > {self.max_safety_level}); "
                       f"autonomous investigations may only run Level <= {self.max_safety_level} probes.")
-        checker = entry.get("availability")
-        if callable(checker):
-            try:
-                if checker() is False:
-                    return ActionResult(False, plan.tool, error="Integration is currently offline or unconfigured.")
-            except Exception as exc:
-                return ActionResult(False, plan.tool, error=f"Availability check failed: {exc}")
+        # Canonical availability (P0 review #1): ONE interpretation — the
+        # registry's interpret_availability. The old `checker() is False`
+        # never fired: manifest checkers return DICTS, and
+        # {"available": False, ...} is truthy, so a missing dependency was
+        # 'discovered' by attempting the handler.
+        try:
+            from app.cognition.tool_registry import interpret_availability
+            status = interpret_availability(entry.get("availability"), probe=True)
+        except Exception as exc:
+            return ActionResult(False, plan.tool, error=f"Availability check failed: {exc}")
+        if status.get("available") is False:
+            detail = (
+                status.get("missing_dependency")
+                or status.get("error")
+                or status.get("status")
+                or "dependency unavailable"
+            )
+            return ActionResult(
+                False, plan.tool,
+                error=f"Integration is currently offline or unconfigured: {detail}.")
         handler = entry.get("handler")
         if not callable(handler):
             return ActionResult(False, plan.tool, error="Tool is not registered")

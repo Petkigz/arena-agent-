@@ -33,6 +33,31 @@ def set_shared_registry(registry) -> None:
     _shared_registry = registry
 
 
+def interpret_availability(checker, probe: bool = False) -> Dict[str, Any]:
+    """The ONE canonical availability interpretation (P0 review #1).
+
+    Manifest availability checkers return DICTS:
+        {"available": True,  "status": "available"}
+        {"available": False, "status": "dependency_unavailable", ...}
+        {"available": None,  "status": "not_checked"}
+    A dict like {"available": False} is TRUTHY — any truthiness-based reading
+    (``if checker():`` / ``if checker() is False:``) silently attempts the
+    handler with a missing dependency. Every consumer (registry, planner
+    funnel, investigation executor) routes through this function instead of
+    maintaining its own interpretation. Plain-boolean and no-kwarg checkers
+    keep their verbatim meaning; None is never coerced.
+    """
+    if not callable(checker):
+        return {"available": True, "status": "available"}
+    try:
+        status = checker(probe=probe)
+    except TypeError:
+        status = checker()
+    if not isinstance(status, dict):
+        status = {"available": status}
+    return status
+
+
 class ToolRegistry:
     """Centralized Registry for all system capabilities with gate verification & observation hooks."""
 
@@ -106,10 +131,7 @@ class ToolRegistry:
                 return {"name": key, **cached[1]}
 
         checker = entry.get("availability")
-        if checker is None:
-            status = {"available": True, "status": "available"}
-        else:
-            status = checker(probe=probe)
+        status = interpret_availability(checker, probe=probe)
 
         # Cache DECISIVE results only. available=None (NOT_CHECKED) must keep
         # flowing through verbatim — never coerced, never frozen as knowledge.
