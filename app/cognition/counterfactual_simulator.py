@@ -76,6 +76,74 @@ class CounterfactualSimulator:
         "default": {"cpu": 0.3, "memory": 0.3, "time": 5},
     }
 
+    # Honest priors for untested actions (P0 #14): an action with no
+    # execution history is a coin flip, never confident-by-default; an
+    # UNREGISTERED action is even less certain.
+    _UNTESTED_SURPRISAL = 0.5
+    _UNREGISTERED_SURPRISAL = 0.7
+
+    # Native executable actions that are NOT manifest tools (open_application
+    # and friends, executed by the master agent's resolvers) are still REAL,
+    # proven execution paths. They must not be classified as 'unregistered'
+    # by the surprisal prior — live regression caught by the full suite:
+    # open_application ranked below web_search and rerouted a replan test.
+    _NATIVE_EXECUTABLES = ("open_application", "launch_app", "search_files",
+                           "phone_command", "make_phone_call", "send_sms",
+                           "screen_capture", "opsec_audit", "daily_briefing",
+                           "investigate", "diagnostic", "formulate_answer",
+                           "answer", "workflow_execute", "observe")
+
+    @staticmethod
+    def _snapshot_manifest_levels() -> Dict[str, int]:
+        levels: Dict[str, int] = {}
+        try:
+            from app.tools.manifest import get_tool_manifest
+            levels = {
+                name: int(entry.get("safety_level", 0))
+                for name, entry in get_tool_manifest().items()
+            }
+        except Exception:
+            levels = {}
+        for _native in CounterfactualSimulator._NATIVE_EXECUTABLES:
+            levels.setdefault(_native, 1)
+        return levels
+
+    @staticmethod
+    def _estimate_surprisal(act_type: str, manifest_levels: Dict[str, int]) -> tuple:
+        """Honest pre-execution uncertainty (P0 bottleneck #14): how
+        surprised WOULD we be by this branch's outcome?
+
+        Derived from Arena's verified execution history
+        (app.cognition.action_outcomes — built for exactly this purpose and
+        previously ignored here in favor of a hardcoded 0.15):
+
+        * outcome DISPERSION: an action whose verified outcomes are
+          consistent (always or never succeeds) is predictable — low
+          surprisal. A 50/50 action is genuinely unpredictable — high
+          surprisal. This is what makes the term DISCRIMINATE between
+          branches.
+        * Wilson interval WIDTH: few samples keep the interval wide, so
+          thin evidence stays uncertain instead of masquerading as
+          knowledge.
+        * No history at all: the honest coin-flip prior (0.5), labeled as
+          such — never a fake confident constant.
+
+        Returns (surprisal, source_label)."""
+        try:
+            from app.cognition.action_outcomes import action_outcome_store
+            est = action_outcome_store.estimate(act_type)
+        except Exception:
+            est = None
+        if est is not None and getattr(est, "n", 0) > 0:
+            p = max(0.0, min(1.0, float(est.smoothed_success_rate)))
+            dispersion = 2.0 * p * (1.0 - p)
+            width = max(0.0, float(est.wilson_high) - float(est.wilson_low))
+            surprisal = min(1.0, max(0.0, 0.6 * dispersion + 0.4 * width))
+            return surprisal, f"learned (n={est.n})"
+        if act_type in manifest_levels:
+            return CounterfactualSimulator._UNTESTED_SURPRISAL, "prior (no execution history)"
+        return CounterfactualSimulator._UNREGISTERED_SURPRISAL, "prior (unregistered action)"
+
     @staticmethod
     def _simulate_one_branch(
         idx_act: tuple,
@@ -172,8 +240,15 @@ class CounterfactualSimulator:
         # Combined adjustment: outcome history × lessons × skill transfer × resources
         combined_adj = history_adj * lesson_adj * skill_adj * resource_adj
 
+        # 5. Honest surprisal (P0 #14): evidence-derived uncertainty that
+        # actually discriminates branches — consistent verified outcomes are
+        # predictable, 50/50 outcomes are not, and no history is an honest
+        # prior instead of a decorative 0.15.
+        surprisal, surprisal_source = CounterfactualSimulator._estimate_surprisal(
+            act_type, manifest_levels)
+
         # Composite utility = (0.5*GoalFit + 0.3*(1 - Risk) + 0.2*(1 - Surprisal)) × combined_adjustment
-        base_utility = 0.5 * goal_fit + 0.3 * (1.0 - risk) + 0.2 * (1.0 - 0.15)
+        base_utility = 0.5 * goal_fit + 0.3 * (1.0 - risk) + 0.2 * (1.0 - surprisal)
         utility = round(base_utility * combined_adj, 4)
 
         history_note = f", HistoryAdj={combined_adj:.2f}" if combined_adj != 1.0 else ""
@@ -192,7 +267,8 @@ class CounterfactualSimulator:
         consequences = {
             "expected_benefit": round(goal_fit, 4),
             "risk": round(risk, 4),
-            "uncertainty": 0.15,
+            "uncertainty": round(surprisal, 4),
+            "uncertainty_source": surprisal_source,
             "reversible": risk < 0.70,
             "predicted_state_change": dict(pred.expected_changes),
         }
@@ -203,9 +279,12 @@ class CounterfactualSimulator:
             predicted_state_change=pred.expected_changes,
             risk_score=risk,
             goal_fit_score=goal_fit,
-            estimated_surprisal=0.15,
+            estimated_surprisal=round(surprisal, 4),
             utility_score=utility,
-            reasoning_summary=f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, Utility={utility:.4f}{history_note}",
+            reasoning_summary=(
+                f"Branch '{act_name}' ({act_type}): GoalFit={goal_fit:.2f}, Risk={risk:.2f}, "
+                f"Surprisal={surprisal:.2f} [{surprisal_source}], Utility={utility:.4f}{history_note}"
+            ),
             candidate_payload=dict(payload),
             history_adjustment=combined_adj,
             authorization_requirement=authorization_requirement,
@@ -227,15 +306,7 @@ class CounterfactualSimulator:
         app_logger.info(f"CounterfactualSimulator running parallel simulation for goal: '{target_goal}' ({len(candidate_actions)} branches)")
 
         # Snapshot manifest levels once: deterministic and thread-safe.
-        manifest_levels: Dict[str, int] = {}
-        try:
-            from app.tools.manifest import get_tool_manifest
-            manifest_levels = {
-                name: int(entry.get("safety_level", 0))
-                for name, entry in get_tool_manifest().items()
-            }
-        except Exception:
-            manifest_levels = {}
+        manifest_levels = CounterfactualSimulator._snapshot_manifest_levels()
 
         def branch_fn(idx_act):
             return cls._simulate_one_branch(

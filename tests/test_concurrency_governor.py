@@ -165,9 +165,7 @@ def test_counterfactual_simulation_uses_measured_workers(tmp_path, monkeypatch):
     result = CounterfactualSimulator.simulate_competing_branches("open and search documents", candidates)
 
     # Same branch set as serial computation, same winner by utility.
-    manifest_levels = {}
-    from app.tools.manifest import get_tool_manifest
-    manifest_levels = {n: int(e.get("safety_level", 0)) for n, e in get_tool_manifest().items()}
+    manifest_levels = CounterfactualSimulator._snapshot_manifest_levels()
     serial = [
         CounterfactualSimulator._simulate_one_branch(
             (i, act), target_goal="open and search documents", goal_type=None,
