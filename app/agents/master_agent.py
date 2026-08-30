@@ -366,27 +366,113 @@ class MasterAgentOrchestrator:
             phone_query = payload.get("query") or payload.get("command") or payload.get("action") or user_text
             phone_lower = str(phone_query).lower()
 
+            def _resolve_phone_target(query_text: str) -> tuple[str, str]:
+                """Resolve a phone target WITHOUT EVER inventing a number
+                (P0 bottleneck #10 — the old code fell back to a fake
+                a hardcoded fake fallback number, which could text a real wrong person).
+
+                Order: explicit payload number > dialable number in the
+                request's recipient slot > contacts-store lookup by name.
+                Unknown or ambiguous names become clarifications, never
+                guesses. Returns (number, provenance_or_problem)."""
+                num = str(payload.get("phone_number") or payload.get("number") or "").strip()
+                if num:
+                    return num, ""
+                # A number in the recipient slot: 'text 0771234567 ...' or
+                # 'call +256 700 123456'. Digits elsewhere (dates, quantities
+                # in the message body) must never be assembled into a number.
+                m_num = re.search(
+                    r"(?:text|sms|call|dial|ring)\s+([+][0-9][0-9\s\-().]{5,}|[0-9][0-9\s\-().]{5,})",
+                    str(query_text).lower())
+                if m_num:
+                    digits = "".join(c for c in m_num.group(1) if c.isdigit() or c == "+")
+                    if len(digits) >= 3:
+                        return digits, ""
+                # Contact-name resolution against the REAL contacts store.
+                m_name = re.search(
+                    r"(?:text|sms|call|dial|ring)\s+([a-z][a-z'\u2019.\-]*)",
+                    str(query_text).lower())
+                # Filler words after the verb are not a recipient
+                # ('send a text message', 'text me when you're done').
+                _FILLER = {
+                    "a", "an", "the", "to", "me", "him", "her", "them",
+                    "back", "now", "please", "message", "msg", "text",
+                    "sms", "someone", "anybody",
+                }
+                if m_name and m_name.group(1).strip() in _FILLER:
+                    m_name = None
+                if m_name:
+                    name = m_name.group(1).strip()
+                    try:
+                        from app.tools.contacts import ContactsTool
+                        matches = [c for c in ContactsTool.list_contacts(name) if c.get("name")]
+                    except Exception as exc:
+                        return "", f"contact lookup failed ({exc})"
+                    with_phone = [c for c in matches if str(c.get("phone", "")).strip()]
+                    if len(with_phone) == 1:
+                        return str(with_phone[0]["phone"]).strip(), (
+                            f"number resolved from contact '{with_phone[0]['name']}'")
+                    if len(with_phone) > 1:
+                        listing = ", ".join(
+                            f"{c['name']} ({c['phone']})" for c in with_phone[:5])
+                        return "", f"multiple contacts match '{name}': {listing}. Which one?"
+                    if matches:
+                        return "", (f"contact '{matches[0].get('name', name)}' has no "
+                                    f"phone number stored")
+                    return "", f"I don't have a contact named '{name}' with a phone number"
+                return "", "no phone number or contact name was given"
+
             if "sms" in phone_lower or "text" in phone_lower or payload.get("sms_body"):
-                num = payload.get("phone_number") or payload.get("number") or "555-0199"
-                sms_msg = payload.get("sms_body") or payload.get("message") or phone_query
-                adb_res = AndroidADBController.send_sms(num, str(sms_msg))
-                if adb_res.get("success"):
-                    executed_actions.append(f"Sent SMS text to {num} via Android ADB.")
-                else:
+                num, resolution = _resolve_phone_target(phone_query)
+                if not num:
+                    # P0 #10: STOP. Never invent a number.
                     execution_success = False
-                    executed_actions.append(f"Failed to send SMS to {num}: {adb_res.get('error', 'Device offline')}")
+                    executed_actions.append(
+                        f"SMS not sent — {resolution}. Which number should I text?")
+                    raw_output_data["phone_res"] = {
+                        "success": False,
+                        "error": f"Phone target unresolved: {resolution}.",
+                        "clarification_required": True,
+                    }
+                else:
+                    sms_msg = payload.get("sms_body") or payload.get("message")
+                    if not sms_msg:
+                        # Prefer the message body after the recipient name
+                        # ('text John I'm running late' -> "I'm running late").
+                        m_body = re.search(
+                            r"(?:text|sms)\s+(?:[+]?[0-9][0-9\s\-().]{5,}|[a-z][a-z'\u2019.\-]*)\s+(.+)",
+                            str(phone_query), re.I)
+                        sms_msg = m_body.group(1).strip() if m_body else phone_query
+                    adb_res = AndroidADBController.send_sms(num, str(sms_msg))
+                    raw_output_data["phone_res"] = adb_res
+                    if adb_res.get("success"):
+                        provenance = f" ({resolution})" if resolution else ""
+                        executed_actions.append(f"Sent SMS text to {num} via Android ADB{provenance}.")
+                    else:
+                        execution_success = False
+                        executed_actions.append(f"Failed to send SMS to {num}: {adb_res.get('error', 'Device offline')}")
 
             elif "call" in phone_lower or "dial" in phone_lower or action_type == "make_phone_call":
-                num = payload.get("phone_number") or payload.get("number")
+                num, resolution = _resolve_phone_target(phone_query)
                 if not num:
-                    digits = "".join(c for c in str(phone_query) if c.isdigit() or c in "+*#")
-                    num = digits if len(digits) >= 3 else "555-0199"
-                adb_res = AndroidADBController.make_phone_call(num)
-                if adb_res.get("success"):
-                    executed_actions.append(f"Initiated phone call to {num} via Android ADB.")
-                else:
+                    # P0 #10: STOP. Never invent a number.
                     execution_success = False
-                    executed_actions.append(f"Failed to make phone call to {num}: {adb_res.get('error', 'Device offline')}")
+                    executed_actions.append(
+                        f"Call not placed — {resolution}. Which number should I call?")
+                    raw_output_data["phone_res"] = {
+                        "success": False,
+                        "error": f"Phone target unresolved: {resolution}.",
+                        "clarification_required": True,
+                    }
+                else:
+                    adb_res = AndroidADBController.make_phone_call(num)
+                    raw_output_data["phone_res"] = adb_res
+                    if adb_res.get("success"):
+                        provenance = f" ({resolution})" if resolution else ""
+                        executed_actions.append(f"Initiated phone call to {num} via Android ADB{provenance}.")
+                    else:
+                        execution_success = False
+                        executed_actions.append(f"Failed to make phone call to {num}: {adb_res.get('error', 'Device offline')}")
 
             elif "photo" in phone_lower or "camera" in phone_lower:
                 adb_res = AndroidADBController.take_camera_photo()
