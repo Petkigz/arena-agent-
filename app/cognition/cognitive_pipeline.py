@@ -19,15 +19,64 @@ class CognitivePipeline:
         app_logger.info(f"CognitivePipeline routing request for session '{session_id}' to CognitiveRuntime...")
 
         runtime = CognitiveRuntime.get_instance()
-        res = runtime.process_cognitive_cycle(user_text, complexity=complexity, session_id=session_id)
+        try:
+            res = runtime.process_cognitive_cycle(user_text, complexity=complexity, session_id=session_id)
+        except Exception as exc:
+            # The bridge must never manufacture success — a runtime crash is
+            # an honest failure with a reason, not a 500 or a fake 'True'.
+            app_logger.error(f"CognitiveRuntime raised during process_cognitive_cycle: {exc}")
+            res = {
+                "request_success": False,
+                "success": False,
+                "execution_success": False,
+                "goal_verified": False,
+                "goal_lifecycle_state": "failed",
+                "assistant_reply": "The cognitive engine failed to process this request.",
+                "reason": f"runtime exception: {exc}",
+                "executed_actions": [],
+            }
+        if not isinstance(res, dict):
+            app_logger.error(f"CognitiveRuntime returned a non-dict result ({type(res).__name__}).")
+            res = {
+                "request_success": False,
+                "success": False,
+                "goal_lifecycle_state": "failed",
+                "reason": f"runtime returned {type(res).__name__}, expected dict",
+                "executed_actions": [],
+            }
+
+        success = bool(res.get("success"))
+        reason = res.get("reason")
+        if not success and not reason:
+            # Never a bare failure: derive the 'why' from real runtime fields.
+            reason = f"goal not verified (lifecycle state: {res.get('goal_lifecycle_state') or 'unknown'})"
+        if not success:
+            app_logger.info(
+                "CognitivePipeline returning honest failure for session '%s': %s",
+                session_id, reason,
+            )
 
         return {
-            "success": True,
+            # ── Honest outcome propagation — the runtime's verdict, never
+            #    manufactured. (Live P0: the old bridge returned success=True
+            #    even when the cycle ended blocked/unverified, which made
+            #    normal testing read as gaslighting.)
+            "success": success,
+            "request_success": bool(res.get("request_success", success)),
+            "execution_success": res.get("execution_success"),
+            "goal_verified": res.get("goal_verified"),
+            "verification_unknown": res.get("verification_unknown"),
+            "goal_lifecycle_state": res.get("goal_lifecycle_state"),
+            "action_type": res.get("action_type"),
+            "reasoning_action": res.get("reasoning_action"),
+            "llm_available": res.get("llm_available"),
+            "reason": reason,
+            # ── Identity / telemetry ──
             "session_id": res.get("session_id", session_id),
             "trace_id": res.get("trace_id", f"trace_{uuid.uuid4().hex[:8]}"),
             "user_text": user_text,
             "assistant_reply": res.get("assistant_reply", "Done."),
             "executed_actions": res.get("executed_actions", []),
             "latency_ms": res.get("latency_ms", 0.0),
-            "model_used": res.get("model_used", "fast")
+            "model_used": res.get("model_used", "fast"),
         }

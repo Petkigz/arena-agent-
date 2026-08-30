@@ -600,6 +600,12 @@ def chat_with_local_brain(req: ChatRequest):
         "model": pipeline_res.get("model_used", "CognitivePipeline"),
         "trace_id": pipeline_res.get("trace_id"),
         "session_id": pipeline_res.get("session_id"),
+        # Honest outcome propagation (the pipeline never manufactures
+        # success): clients can now see WHY a cycle failed.
+        "success": pipeline_res.get("success"),
+        "goal_verified": pipeline_res.get("goal_verified"),
+        "goal_lifecycle_state": pipeline_res.get("goal_lifecycle_state"),
+        "reason": pipeline_res.get("reason"),
         "choices": [{
             "index": 0,
             "message": {
@@ -1895,7 +1901,11 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
     tts_res = LocalTextToSpeech.synthesize_speech(assistant_text)
 
     return {
-        "success": True,
+        # Honest outcome from the cognitive pipeline — never manufactured.
+        "success": bool(pipeline_res.get("success")),
+        "reason": pipeline_res.get("reason"),
+        "goal_verified": pipeline_res.get("goal_verified"),
+        "goal_lifecycle_state": pipeline_res.get("goal_lifecycle_state"),
         "user_text": user_text,
         "assistant_text": assistant_text,
         "audio_url": tts_res.get("audio_url", ""),
