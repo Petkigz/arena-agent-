@@ -392,7 +392,10 @@ class SemanticGoalInterpreter:
     ) -> List[Dict[str, Any]]:
         """
         Synthesizes candidate execution strategies by combining:
-        1. Domain baseline strategy branches
+        1. Domain baseline strategy branches (the domain prior)
+        1.5 Manifest semantic discovery: ranked tools matching THIS goal
+            across the entire tool universe (capability discovery + semantic
+            matching, not domain-hard-coded shortlists)
         2. System capabilities registered in WorldModel / ToolRegistry (if world_model supplied)
         3. MemoryStore reflections and past learned lessons for similar queries (if memory_store supplied)
 
@@ -404,6 +407,30 @@ class SemanticGoalInterpreter:
 
         # 1. Base domain candidate strategies
         candidates.extend(cls.build_candidates_for_domain(domain_clean, user_text))
+
+        # 1.5 Manifest semantic discovery (P0 bottleneck #3): candidate
+        # generation must flow goal -> capability discovery -> semantic
+        # matching -> candidates over the FULL tool universe, not just the
+        # domain's hard-coded baseline ('filesystem' used to propose only
+        # search_files + web_search while compress/pdf/git/... tools sat
+        # unreachable). The baseline stays as the domain prior; discovery
+        # adds every tool that semantically matches THIS goal.
+        try:
+            from app.cognition.tool_matcher import rank_tools
+            already = {c.get("action_type") for c in candidates}
+            for match in rank_tools(user_text, limit=5, domain_hint=domain_clean):
+                if match.action_type in already or match.action_type == "formulate_answer":
+                    continue
+                candidates.append({
+                    "name": f"Discovered capability: {match.action_type}",
+                    "action_type": match.action_type,
+                    "payload": match.payload or {"query": user_text},
+                    "source": "manifest_discovery",
+                    "score": match.score,
+                })
+                already.add(match.action_type)
+        except Exception as exc:
+            app_logger.warning(f"Manifest candidate discovery unavailable: {exc}")
 
         # 2. Ingest learned strategy lessons from MemoryStore if explicitly supplied
         if memory_store is not None:

@@ -349,3 +349,71 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
     return ToolMatch(action_type=best, score=best_score,
                      runner_up=scored[1][1] if len(scored) > 1 else None,
                      payload=payload, matched_terms=matched_terms)
+
+
+def rank_tools(
+    user_text: str,
+    limit: int = 6,
+    domain_hint: Optional[str] = None,
+    manifest: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List[ToolMatch]:
+    """Ranked capability DISCOVERY over the full manifest (P0 bottleneck #3).
+
+    The manifest is the unified capability source; candidate generation must
+    come from it by semantic matching, not from a hard-coded shortlist per
+    domain. This exposes the scoring engine that match_control_tool uses
+    internally, minus its act-gating (control verbs, winner margin): discovery
+    PROPOSES, the planner and the action gates still decide.
+
+    Scoring per tool: token overlap with the tool name + description, phrase
+    synonyms, verbatim tool-name words, plus a boost when the tool's manifest
+    category equals the goal's domain (domain knowledge informs ranking
+    without hard-coding candidates)."""
+    text = (user_text or "").lower().strip()
+    if len(text) < 4:
+        return []
+    try:
+        if manifest is None:
+            from app.tools.manifest import get_tool_manifest
+            manifest = get_tool_manifest()
+    except Exception as exc:
+        app_logger.warning(f"Tool discovery could not load the manifest: {exc}")
+        return []
+
+    words = set(re.findall(r"[a-z_]+", text))
+    text_tokens = set(_tokens(text))
+    scored: List[Tuple[float, str, Tuple[str, ...]]] = []
+    for action_type, entry in manifest.items():
+        haystack = f"{action_type.replace('_', ' ')} {entry.get('description', '')}".lower()
+        tool_tokens = set(_tokens(haystack))
+        overlap = text_tokens & tool_tokens
+        score = float(len(overlap))
+        matched: List[str] = list(overlap)
+        for phrase in SYNONYMS.get(action_type, []):
+            phrase_tokens = set(re.findall(r"[a-z_]+", phrase))
+            if phrase in text or (phrase_tokens and phrase_tokens <= words):
+                score += 2.0
+                matched.append(phrase)
+        name_words = set(action_type.split("_")) - STOPWORDS
+        if name_words and name_words <= words:
+            score += 2.0
+            matched.append(action_type)
+        if domain_hint and str(entry.get("category", "")) == str(domain_hint):
+            score += 1.5
+        if score > 0:
+            scored.append((score, action_type, tuple(sorted(set(matched)))))
+
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    discovered: List[ToolMatch] = []
+    for score, action_type, matched_terms in scored[: max(1, limit)]:
+        if score < 1.5:
+            break  # weak single-token overlaps are noise the domain baseline covers
+        payload = _extract_payload(user_text, action_type=action_type)
+        payload.setdefault("query", user_text)
+        discovered.append(ToolMatch(
+            action_type=action_type,
+            score=score,
+            payload=payload,
+            matched_terms=matched_terms,
+        ))
+    return discovered
