@@ -28,16 +28,31 @@ def test_default_scope_is_all_user_files_not_the_agent_dir(fake_home):
     assert str(settings.BASE_DIR) not in str(hits[0]["file_path"])
 
 
-def test_scope_inference_picks_the_smallest_sensible_scope():
+def test_content_type_words_never_narrow_the_scope():
+    """'song'/'pdf'/'photo' describe WHAT a file is, not WHERE it is — the
+    file can live anywhere on the PC. Content words must not narrow the
+    search; only explicit location phrases may."""
     cases = [
-        ("find my song called kaba", "music"),
-        ("where is the contract.pdf document", "documents"),
-        ("the downloaded installer", "downloads"),
-        ("vacation photo from the camera", "pictures"),
-        ("that movie clip", "videos"),
-        ("clean up my desktop", "desktop"),
-        ("something in your workspace", "workspace"),
+        ("find my song called kaba", "all_user_files"),
+        ("the song kaba", "all_user_files"),
+        ("where is contract.pdf", "all_user_files"),
+        ("vacation photo from the camera", "all_user_files"),
+        ("that movie clip", "all_user_files"),
+        ("the downloaded installer", "all_user_files"),
         ("kaba", "all_user_files"),
+    ]
+    for query, expected in cases:
+        assert UniversalFilesystem.infer_scope_from_query(query) == expected, query
+
+
+def test_explicit_location_phrases_do_narrow():
+    cases = [
+        ("find kaba in my music folder", "music"),
+        ("the installer in downloads", "downloads"),
+        ("notes on the desktop", "desktop"),
+        ("search your workspace", "workspace"),
+        ("report in documents folder", "documents"),
+        ("the song in my videos folder", "videos"),
     ]
     for query, expected in cases:
         assert UniversalFilesystem.infer_scope_from_query(query) == expected, query

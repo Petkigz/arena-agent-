@@ -341,8 +341,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("list_directory", "filesystem", 0, "Read-only listing of directory entries (evidence for host-state questions)",
         _wrap(UniversalFilesystem.list_directory, "directories", "include_hidden"))
     add("search_files", "filesystem", 0,
-        "Search the filesystem by scope (workspace/home/desktop/documents/downloads/"
-        "music/pictures/videos/all_user_files; smallest sensible scope inferred from the query)",
+        "Search the filesystem (default: ALL user files across drives; narrow with an explicit "
+        "scope — workspace/home/desktop/documents/downloads/music/pictures/videos/all_user_files — "
+        "when the user names a location)",
         _wrap(UniversalFilesystem.search_filesystem, "query", "root_dir", "scope", "max_results"))
     add("move_file", "filesystem", 2, "Rename/move a file",
         _wrap(UniversalFilesystem.rename_or_move, "source_path", "destination_path"))

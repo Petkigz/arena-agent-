@@ -120,23 +120,28 @@ class UniversalFilesystem:
         "music", "pictures", "videos", "all_user_files",
     )
 
-    _SCOPE_QUERY_HINTS = {
-        "music": ("song", "songs", "music", "audio", "mp3", "album",
-                  "lyrics", "flac", "wav", "track"),
-        "pictures": ("photo", "photos", "picture", "pictures", "image",
-                     "images", "screenshot", "screenshots", "wallpaper",
-                     "camera", "jpeg", "jpg", "png", "gif"),
-        "videos": ("video", "videos", "movie", "movies", "clip", "clips",
-                   "film", "mkv", "mp4", "avi"),
-        "documents": ("document", "documents", "doc", "docs", "pdf",
-                      "spreadsheet", "excel", "word", "presentation",
-                      "invoice", "resume", "cv", "contract", "report",
-                      "essay", "letter"),
-        "downloads": ("download", "downloads", "downloaded", "installer",
-                      "setup", "exe", "msi"),
-        "desktop": ("desktop",),
-        "workspace": ("workspace", "arena", "your files", "your folder",
-                      "your directory"),
+    # Location-EXPLICIT patterns only. Content-type words ('song', 'photo',
+    # 'document') describe WHAT a file is, never WHERE it is — a song can
+    # live in Downloads, on the Desktop, or on another drive, so they must
+    # NOT narrow the search. A scope is inferred only when the query names a
+    # place: 'in my music folder', 'the installer in downloads',
+    # 'notes on the desktop', 'your workspace'.
+    _LOCATION_SCOPE_PATTERNS = {
+        "workspace": (r"\b(your|arena'?s?)\s+(workspace|files|folder|directory)\b",
+                      r"\bworkspace\b"),
+        "desktop": (r"\b(on|in|under|inside)\s+(the\s+|my\s+)?desktop\b",
+                    r"\bdesktop\s+(folder|directory)\b"),
+        "downloads": (r"\b(in|under|inside)\s+(my\s+|the\s+)?downloads?\b",
+                      r"\bdownloads?\s+(folder|directory)\b"),
+        "documents": (r"\b(in|under|inside)\s+(my\s+|the\s+)?documents?\s+(folder|directory)\b",
+                      r"\bdocuments?\s+(folder|directory)\b"),
+        "music": (r"\b(in|under|inside)\s+(my\s+|the\s+)?music\b",
+                  r"\bmusic\s+(folder|directory)\b"),
+        "pictures": (r"\b(in|under|inside)\s+(my\s+|the\s+)?pictures?\s+(folder|directory)\b",
+                     r"\bpictures?\s+(folder|directory)\b"),
+        "videos": (r"\b(in|under|inside)\s+(my\s+|the\s+)?videos?\s+(folder|directory)\b",
+                   r"\bvideos?\s+(folder|directory)\b"),
+        "home": (r"\bhome\s+(directory|folder)\b", r"\bin\s+my\s+home\b"),
     }
 
     @classmethod
@@ -185,15 +190,18 @@ class UniversalFilesystem:
 
     @classmethod
     def infer_scope_from_query(cls, query: str) -> str:
-        """Smallest sensible scope for a query, from its own words:
-        'find my song kaba' -> music; 'contract.pdf' -> documents. No hint
-        -> all_user_files (a personal assistant searches the user's files,
-        not its own install directory)."""
+        """Infer a scope ONLY from explicit location phrases.
+
+        'find my song called kaba' -> all_user_files (the song can be
+        anywhere on the PC — 'song' is a content type, not a place).
+        'find kaba in my music folder' -> music. Default: all_user_files —
+        a personal assistant searches the user's whole machine, not one
+        folder and not its own install directory."""
         text = str(query or "").lower()
-        for scope in ("music", "pictures", "videos", "documents",
-                      "downloads", "desktop", "workspace"):
-            for kw in cls._SCOPE_QUERY_HINTS[scope]:
-                if re.search(rf"\b{re.escape(kw)}\b", text):
+        for scope in ("workspace", "desktop", "downloads", "documents",
+                      "music", "pictures", "videos", "home"):
+            for pattern in cls._LOCATION_SCOPE_PATTERNS[scope]:
+                if re.search(pattern, text):
                     return scope
         return "all_user_files"
 
@@ -214,8 +222,9 @@ class UniversalFilesystem:
           2. explicit ``scope`` — one of KNOWN_SCOPES (workspace, home,
              desktop, documents, downloads, music, pictures, videos,
              all_user_files), the planner's smallest-sensible-scope choice;
-          3. inferred from the query itself ('find my song kaba' -> music,
-             'contract.pdf' -> documents);
+          3. inferred ONLY from explicit location phrases ('find kaba in my
+             music folder' -> music) — content-type words ('song', 'pdf')
+             never narrow: a file can live anywhere on the PC;
           4. otherwise all_user_files — the USER'S files, never the agent's
              own install directory (the old root_dir=None default searched
              Arena's BASE_DIR).
