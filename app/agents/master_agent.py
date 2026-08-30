@@ -55,26 +55,58 @@ class MasterAgentOrchestrator:
             app_name = payload.get("app_name") or payload.get("app") or payload.get("app_query") or payload.get("query")
             if not app_name:
                 match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
-                app_name = match.group(1).strip() if match else "explorer"
-            res = SystemAppInventory.launch_any_app(app_name)
-            raw_output_data["launch_res"] = res
-            if res.get("success"):
-                executed_actions.append(f"Launched application '{res.get('app_name', app_name).title()}' on your PC.")
+                app_name = match.group(1).strip() if match else ""
+                # A capture that is ONLY a generic placeholder names nothing
+                # ('open the app' must not launch an app literally named
+                # 'app' — same invention family as the old explorer default).
+                if app_name.lower().strip() in {
+                    "app", "application", "the app", "it", "that", "them",
+                    "please", "now", "something",
+                }:
+                    app_name = ""
+            if not app_name:
+                # P0 bottleneck #9: NEVER invent a default application. The
+                # old 'explorer' fallback turned an ambiguous request into a
+                # silently WRONG action — and because explorer is actually
+                # installed, the wrong request SUCCEEDED. Ambiguity is a
+                # clarification request, not a guess.
+                execution_success = False
+                clarification = (
+                    "No application was specified — I don't know which application "
+                    "you mean. Which application should I open?"
+                )
+                executed_actions.append(clarification)
+                raw_output_data["launch_res"] = {
+                    "success": False,
+                    "error": "No application specified in the request.",
+                    "clarification_required": True,
+                }
                 execution_facts.append({
-                    "subject": res.get("app_name", app_name).lower(),
-                    "predicate": "launch_command",
-                    "value": "succeeded",
-                    "source": "system_app_inventory"
+                    "subject": "application_launch",
+                    "predicate": "launch_target",
+                    "value": "unspecified",
+                    "source": "master_agent",
                 })
             else:
-                execution_success = False
-                executed_actions.append(f"Failed to launch application '{app_name}': {res.get('error', 'Launch error')}")
-                execution_facts.append({
-                    "subject": app_name.lower(),
-                    "predicate": "launch_command",
-                    "value": "failed",
-                    "source": "system_app_inventory"
-                })
+                res = SystemAppInventory.launch_any_app(app_name)
+                raw_output_data["launch_res"] = res
+                if res.get("success"):
+                    executed_actions.append(f"Launched application '{res.get('app_name', app_name).title()}' on your PC.")
+                    execution_facts.append({
+                        "subject": res.get("app_name", app_name).lower(),
+                        "predicate": "launch_command",
+                        "value": "succeeded",
+                        "source": "system_app_inventory"
+                    })
+                else:
+                    execution_success = False
+                    executed_actions.append(f"Failed to launch application '{app_name}': {res.get('error', 'Launch error')}")
+                    execution_facts.append({
+                        "subject": app_name.lower(),
+                        "predicate": "launch_command",
+                        "value": "failed",
+                        "source": "system_app_inventory"
+                    })
 
         elif action_type == "web_search":
             from app.tools.desktop_control import DesktopControl
