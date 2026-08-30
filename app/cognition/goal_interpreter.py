@@ -96,6 +96,40 @@ class SemanticGoalRepresentation:
     provenance_source: str = "inferred_from_user"
     parsed_goal_summary: str = ""   # Legacy string summary for backward compatibility
 
+# ---------------------------------------------------------------------------
+# Dynamic candidate breadth (P0 review #3)
+#
+# A fixed 5-result discovery funnel can lose a NECESSARY capability before
+# planning begins: "find the PDF, extract page 4, summarize it, convert it
+# and save it" needs ~6 capabilities. Breadth now scales with two honest
+# signals, whichever is larger:
+#   * the request's complexity tier (fast 5 / main 10 / deep 20), and
+#   * the number of DISTINCT action verbs the goal names — a five-step
+#     sentence needs several capabilities no matter how it was routed.
+# ---------------------------------------------------------------------------
+_BREADTH_VERBS = {
+    "find", "search", "locate", "list", "open", "launch", "read", "view",
+    "extract", "parse", "summarize", "convert", "transform", "save", "write",
+    "create", "make", "copy", "move", "rename", "delete", "remove",
+    "compress", "zip", "unzip", "send", "email", "upload", "download",
+    "install", "update", "check", "verify", "monitor", "analyze", "compare",
+    "count", "merge", "split", "edit", "modify", "format", "generate",
+    "translate", "transcribe", "print", "scan", "backup", "sync", "schedule",
+    "record", "capture", "play", "organize", "sort", "filter", "clean",
+}
+
+_COMPLEXITY_BREADTH = {"fast": 5, "main": 10, "deep": 20}
+_MAX_BREADTH = 24
+
+
+def candidate_breadth(user_text: str, complexity: str = "fast") -> int:
+    """How many discovered capabilities the candidate funnel may surface."""
+    base = _COMPLEXITY_BREADTH.get(complexity, 8)
+    words = set(re.findall(r"[a-z_]+", (user_text or "").lower()))
+    verb_breadth = 2 * len(words & _BREADTH_VERBS)
+    return max(base, min(verb_breadth, _MAX_BREADTH))
+
+
 class SemanticGoalInterpreter:
     """
     Goal Representation v2 Layer.
@@ -424,7 +458,8 @@ class SemanticGoalInterpreter:
         goal_rep: Optional[SemanticGoalRepresentation] = None,
         memory_store: Optional[Any] = None,
         world_model: Optional[Any] = None,
-        tool_registry: Optional[Any] = None
+        tool_registry: Optional[Any] = None,
+        complexity: str = "fast",
     ) -> List[Dict[str, Any]]:
         """
         Synthesizes candidate execution strategies by combining:
@@ -454,7 +489,11 @@ class SemanticGoalInterpreter:
         try:
             from app.cognition.tool_matcher import rank_tools
             already = {c.get("action_type") for c in candidates}
-            for match in rank_tools(user_text, limit=5, domain_hint=domain_clean):
+            for match in rank_tools(
+                user_text,
+                limit=candidate_breadth(user_text, complexity),
+                domain_hint=domain_clean,
+            ):
                 if match.action_type in already or match.action_type == "formulate_answer":
                     continue
                 candidates.append({
@@ -594,7 +633,7 @@ class SemanticGoalInterpreter:
 
                 ranked.sort(key=lambda item: item[0], reverse=True)
                 existing_actions = {c.get("action_type") for c in candidates}
-                for score, cap, cap_name in ranked[:8]:
+                for score, cap, cap_name in ranked[:candidate_breadth(user_text, complexity)]:
                     if cap_name in existing_actions:
                         continue
                     candidates.append({
@@ -871,7 +910,8 @@ class SemanticGoalInterpreter:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
         candidates = cls.synthesize_candidates_from_context(
-            domain, user_text, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
+            domain, user_text, memory_store=memory_store, world_model=world_model,
+            tool_registry=tool_registry, complexity=complexity
         )
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 
