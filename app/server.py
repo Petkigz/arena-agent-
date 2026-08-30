@@ -52,6 +52,48 @@ from backend.api.theme_routes import router as theme_router
 from backend.api.speaker_routes import router as speaker_router
 
 
+def _windows_is_elevated() -> bool:
+    """True only when the PROCESS runs with the full admin token (UAC)."""
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def _log_elevation_status(is_elevated=None, platform=None, logger=None) -> None:
+    """Tell the owner plainly whether the agent process is elevated.
+
+    Windows confusion (live question): an admin ACCOUNT still launches
+    processes with a filtered standard token unless the shell itself was
+    'Run as administrator'. The agent's file/OS-control tools execute with
+    whatever rights THIS process has — least privilege is the safe posture,
+    so elevated runs get a warning, standard runs get a reassuring info line.
+    """
+    import sys as _sys
+
+    if platform is None:
+        platform = _sys.platform
+    if not str(platform).startswith("win"):
+        return
+    if is_elevated is None:
+        is_elevated = _windows_is_elevated()
+    log = logger or app_logger
+    if is_elevated:
+        log.warning(
+            "Arena is running ELEVATED (administrator). No feature requires "
+            "admin rights, and every file/OS-control action — including "
+            "mistakes — would execute with full system access. Recommended: "
+            "restart from a normal (non-elevated) PowerShell."
+        )
+    else:
+        log.info(
+            "Arena is running with standard user privileges (recommended) — "
+            "actions are limited to this account's permissions."
+        )
+
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -179,6 +221,8 @@ async def lifespan(app: FastAPI):
             "It must only be bound to localhost (--host 127.0.0.1). To allow LAN "
             "access, set ARENA_API_KEY (all routes + WS will then require it)."
         )
+
+    _log_elevation_status()
 
     yield
 
