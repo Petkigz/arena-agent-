@@ -214,7 +214,10 @@ class BrowserAutomation:
                 browser = cls._launch(playwright.chromium, use_profile=use_profile)
                 if browser is None:
                     return {"success": False, "refused": True,
-                            "error": "Browser profile is already in use by another Arena session"}
+                            "error": "Browser profile is already in use by another Arena session",
+                            "request_success": False, "browser_available": False,
+                            "page_retrieved": False, "interaction_executed": False,
+                            "environment_verified": False, "execution_success": False}
                 page = browser.new_page()
                 page.goto(url, timeout=30000, wait_until="domcontentloaded")
                 cooperative_checkpoint("before_download_click")
@@ -570,6 +573,9 @@ class BrowserAutomation:
         if not url.startswith(("http://", "https://")):
             url = f"https://{url}"
 
+        interaction_requested = _interaction_steps_requested(
+            steps, fill_inputs, click_selectors, submit_form)
+
         # Safety Check: Submitting forms or publishing data requires Level 3
         # approval — including submit steps inside a sequential workflow.
         has_submit_step = any(
@@ -583,7 +589,10 @@ class BrowserAutomation:
                     "success": False,
                     "error": f"Policy Blocked: {reason}",
                     "authority_level": level,
-                    "url": url
+                    "url": url,
+                    "request_success": False, "browser_available": False,
+                    "page_retrieved": False, "interaction_executed": False,
+                    "environment_verified": False, "execution_success": False,
                 }
 
         filename = f"browser_{uuid.uuid4().hex[:8]}.png"
@@ -613,6 +622,7 @@ class BrowserAutomation:
                 # bucket params below remain as the legacy one-shot path.
                 extracts: Dict[str, str] = {}
                 step_log: List[Dict[str, Any]] = []
+                legacy_interaction_failures = 0
                 if steps:
                     seq = cls._run_sequential_steps(page, steps)
                     extracts = seq["extracts"]
@@ -625,9 +635,12 @@ class BrowserAutomation:
                         try:
                             if page.is_visible(selector):
                                 page.fill(selector, value)
+                            else:
+                                legacy_interaction_failures += 1
                         except ExecutionCancelled:
                             raise
                         except Exception as ie:
+                            legacy_interaction_failures += 1
                             app_logger.warning(f"Could not fill input '{selector}': {ie}")
 
                 # Click elements if specified
@@ -638,9 +651,12 @@ class BrowserAutomation:
                             if page.is_visible(selector):
                                 page.click(selector)
                                 page.wait_for_timeout(1000)
+                            else:
+                                legacy_interaction_failures += 1
                         except ExecutionCancelled:
                             raise
                         except Exception as ce:
+                            legacy_interaction_failures += 1
                             app_logger.warning(f"Could not click '{selector}': {ce}")
 
                 cooperative_checkpoint("before_browser_capture")
@@ -658,8 +674,25 @@ class BrowserAutomation:
                 evidence=["Playwright page.url", "Playwright page.title", "page screenshot captured"],
             )
 
+            # Honest outcome fields (P0 #8): a real browser drove a real
+            # page; interaction_executed reflects the requested steps (None
+            # = no interaction was requested).
+            if steps:
+                interaction_entries = [
+                    e for e in step_log
+                    if e.get("action") in ("fill", "click", "submit")
+                ]
+                interaction_executed: Optional[bool] = (
+                    bool(interaction_entries) and all(e.get("ok") for e in interaction_entries)
+                ) if interaction_entries else None
+            else:
+                interaction_executed = (
+                    (legacy_interaction_failures == 0) if interaction_requested else None
+                )
+            execution_success = interaction_executed is not False
+
             return {
-                "success": True,
+                "success": execution_success,
                 "url": url,
                 "title": page_title,
                 # Scoped extracts are the workflow's actual objective — when
@@ -674,6 +707,12 @@ class BrowserAutomation:
                 "tab_grounding": tab.to_dict(),
                 "profile_type": "ephemeral",
                 "auth_state": "unknown",
+                "request_success": True,
+                "browser_available": True,
+                "page_retrieved": True,
+                "interaction_executed": interaction_executed,
+                "environment_verified": True,
+                "execution_success": execution_success,
             }
         except ExecutionCancelled:
             raise
@@ -694,15 +733,36 @@ class BrowserAutomation:
                         soup = BeautifulSoup(resp.text, "html.parser")
                         text = soup.get_text(separator="\n", strip=True)
                         title = soup.title.string if soup.title and soup.title.string else url
-                        return {
-                            "success": True,
+                        # Honest outcome fields (P0 #8): the page was
+                        # retrieved, but NO browser automation happened — an
+                        # HTTP GET cannot click, fill, or verify the live
+                        # DOM. Read-only requests legitimately succeed here;
+                        # interaction requests did NOT execute.
+                        execution_success = not interaction_requested
+                        result = {
+                            "success": execution_success,
                             "url": url,
                             "title": title,
                             "content_snippet": text[:5000],
                             "screenshot_path": "",
                             "image_url": "",
-                            "text_length": len(text)
+                            "text_length": len(text),
+                            "request_success": True,
+                            "browser_available": False,
+                            "page_retrieved": True,
+                            "interaction_executed": False,
+                            "environment_verified": False,
+                            "execution_success": execution_success,
+                            "fallback_mode": "http",
                         }
+                        if interaction_requested:
+                            result["error"] = (
+                                "Browser automation unavailable "
+                                f"(Playwright failed: {e}). The page was fetched via HTTP "
+                                "fallback, but the requested fill/click/submit interactions "
+                                "could not execute — no page state was changed or verified."
+                            )
+                        return result
             except ExecutionCancelled:
                 raise
             except Exception:
@@ -721,4 +781,26 @@ class BrowserAutomation:
                 "screenshot_path": "",
                 "image_url": "",
                 "text_length": 0,
+                "request_success": False,
+                "browser_available": False,
+                "page_retrieved": False,
+                "interaction_executed": False,
+                "environment_verified": False,
+                "execution_success": False,
             }
+
+
+def _interaction_steps_requested(
+    steps: Optional[List[Dict[str, Any]]],
+    fill_inputs: Optional[Dict[str, str]],
+    click_selectors: Optional[List[str]],
+    submit_form: bool,
+) -> bool:
+    """Did the caller ask for page INTERACTION (not just reading)?"""
+    if fill_inputs or click_selectors or submit_form:
+        return True
+    return any(
+        str(s.get("action") or s.get("verb") or "").lower().strip()
+        in ("fill", "click", "submit")
+        for s in (steps or [])
+    )

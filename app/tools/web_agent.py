@@ -148,6 +148,13 @@ class WebAgent:
             "steps_executed": len(steps or []),
             "step_log": browser_res.get("step_log", []),
             "extracts": browser_res.get("extracts", {}),
+            # Honest outcome fields (P0 #8) — surfaced, never flattened.
+            "request_success": browser_res.get("request_success", True),
+            "browser_available": browser_res.get("browser_available", None),
+            "page_retrieved": browser_res.get("page_retrieved", None),
+            "interaction_executed": browser_res.get("interaction_executed", None),
+            "environment_verified": browser_res.get("environment_verified", None),
+            "execution_success": browser_res.get("execution_success", True),
             "agent_summary": summary,
             "screenshot_path": browser_res.get("screenshot_path", ""),
             "image_url": browser_res.get("image_url", ""),
