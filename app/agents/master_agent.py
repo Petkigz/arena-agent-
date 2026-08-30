@@ -608,8 +608,12 @@ class MasterAgentOrchestrator:
         else:
             # Check ToolRegistry for dynamically registered capabilities
             try:
-                from app.cognition.tool_registry import ToolRegistry
-                tr = ToolRegistry()
+                # ONE runtime ToolRegistry (P0 #20): reuse the runtime's
+                # event-bus-wired registry — a fresh ToolRegistry() here built
+                # a duplicate on a second EventBus, missing dynamic
+                # registrations and losing tool events.
+                from app.cognition.tool_registry import get_shared_registry
+                tr = get_shared_registry()
                 if action_type in tr._registry:
                     tr_res = tr.execute_registered_tool(action_type, payload)
                     raw_output_data["tr_res"] = tr_res

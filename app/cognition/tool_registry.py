@@ -7,6 +7,32 @@ from app.cognition.action_proposal import ActionProposal, ActionGate, GateResult
 from app.cognition.prediction_engine import PredictionEngine
 from app.cognition.event_bus import EventBus
 
+# ---------------------------------------------------------------------------
+# ONE runtime ToolRegistry (P0 #20)
+#
+# The cognitive runtime owns the authoritative ToolRegistry — the one wired to
+# the runtime's EventBus. Planners, gates and the executor must REUSE it.
+# Constructing ToolRegistry() elsewhere built a duplicate registry (all
+# manifest handlers re-registered) on a SECOND EventBus, so dynamic tool
+# registrations diverged and tool events from dynamic execution went nowhere.
+# ---------------------------------------------------------------------------
+_shared_registry = None
+
+
+def get_shared_registry():
+    """The ONE runtime ToolRegistry (lazily constructed if no runtime owns it)."""
+    global _shared_registry
+    if _shared_registry is None:
+        _shared_registry = ToolRegistry()
+    return _shared_registry
+
+
+def set_shared_registry(registry) -> None:
+    """The runtime installs its event-bus-wired registry as THE shared one."""
+    global _shared_registry
+    _shared_registry = registry
+
+
 class ToolRegistry:
     """Centralized Registry for all system capabilities with gate verification & observation hooks."""
 

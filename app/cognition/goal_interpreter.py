@@ -501,8 +501,9 @@ class SemanticGoalInterpreter:
                 if tool_registry is not None:
                     executable_tools = set(tool_registry._registry.keys())
                 else:
-                    from app.cognition.tool_registry import ToolRegistry
-                    executable_tools = set(ToolRegistry()._registry.keys())
+                    # ONE runtime ToolRegistry (P0 #20) — never a fresh one.
+                    from app.cognition.tool_registry import get_shared_registry
+                    executable_tools = set(get_shared_registry()._registry.keys())
 
                 NATIVE_EXECUTABLE_CAPS = {
                     "open_application", "launch_app", "web_search", "search_files",

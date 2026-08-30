@@ -92,6 +92,11 @@ class CognitiveRuntime:
         self.prediction = PredictionEngine()
         self.counterfactual = CounterfactualSimulator()
         self.registry = ToolRegistry(event_bus=self.events)
+        # ONE registry for the whole ask->understand->choose->execute path
+        # (P0 #20): planners, gates and the master-agent executor reuse THIS
+        # instance instead of constructing duplicate registries.
+        from app.cognition.tool_registry import set_shared_registry
+        set_shared_registry(self.registry)
         # Phase 1B: Strategy outcome tracking for learning from experience
         from app.cognition.strategy_outcomes import StrategyOutcomeStore
         self.outcomes = StrategyOutcomeStore(db_path=path)
