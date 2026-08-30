@@ -33,7 +33,7 @@ from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.cognition.action_proposal import ActionProposal, ActionGate
 from app.cognition.tool_registry import ToolRegistry
 from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction
-from app.cognition.reasoning_loop import CognitiveReasoningLoop
+from app.cognition.reasoning_loop import CognitiveReasoningLoop, ReasoningBudget
 from app.cognition.prompt_slicer import PromptSlicerEngine
 from app.cognition.trace import CognitiveTrace
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
@@ -62,7 +62,7 @@ class CognitiveRuntime:
                     cls._instance = CognitiveRuntime(db_path=db_path)
         return cls._instance
 
-    def __init__(self, db_path: Optional[str] = None, max_steps: int = 3) -> None:
+    def __init__(self, db_path: Optional[str] = None, max_steps: int = 12) -> None:
         path = db_path or str(settings.DB_PATH)
         self.state = CognitiveState()
         # Phase 3: hardware self-awareness — the agent's model of its own machine.
@@ -2763,6 +2763,9 @@ class CognitiveRuntime:
         app_logger.info(f"Capability Awareness: Required={goal_rep.required_capabilities} -> Status={capability_map} (ActionAvailable={action_available})")
 
         # Run Authoritative Cognitive Reasoning Loop with dynamic capability map
+        # P0 #13: the reasoning loop runs on a per-cycle BUDGET (time /
+        # tool calls / risk), scaled to the effective complexity — not the
+        # old arbitrary max_steps=3 stop that ended investigations mid-flight.
         loop_trace = self.loop.run(
             subject=user_text[:30].strip() or "user_query",
             predicate=query_pred,
@@ -2770,7 +2773,8 @@ class CognitiveRuntime:
             source=SourceType.USER_INPUT,
             task_id=session_id,
             action_available=action_available,
-            available_capabilities=capability_map
+            available_capabilities=capability_map,
+            budget=ReasoningBudget.for_complexity(complexity),
         )
 
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
