@@ -19,6 +19,14 @@ StepVerifier evaluates a step's OWN declared contract:
 
 Deterministic, no LLM, and testable with a plain dict cycle result.
 
+Criterion evaluation (P0 #16): success_criteria / failure_conditions are no
+longer copied around — they run through the criterion_evaluator pipeline
+(NL criterion -> structured predicate -> observation -> deterministic
+evaluation -> PASS/FAIL/UNKNOWN, each with a basis trail). A criterion that
+an observation REFUTES fails the step even when the runtime's goal_verified
+says True; a criterion that cannot be evaluated is UNKNOWN and honestly
+blocks COMPLETION instead of being waved through.
+
 The epistemic ladder (P0 #15) — three SEPARATE states, never collapsed:
 
     ACTION_ATTEMPTED → ENVIRONMENT_OBSERVED → POSTCONDITION_VERIFIED
@@ -39,6 +47,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from app.cognition.criterion_evaluator import (
+    CriterionResult,
+    evaluate_criteria,
+)
 
 # Confidence is evidence-derived, never a hard-coded 1.0 on success.
 VERIFIED_CONFIDENCE = 0.9        # postcondition verified against a real observation
@@ -65,6 +78,8 @@ class StepVerificationResult:
     action_attempted: bool = False
     environment_observed: bool = False
     postcondition_verified: bool = False
+    # Per-criterion pipeline results (P0 #16): predicate, status, basis.
+    criterion_results: List[CriterionResult] = field(default_factory=list)
 
 
 class StepVerifier:
@@ -103,15 +118,80 @@ class StepVerifier:
             cycle_result.get(k) for k in _OBSERVATION_SIGNAL_KEYS
         )
 
-        # 1. Definitive failure: the cycle reached a failed/blocked/deferred state.
+        # Criterion pipeline (P0 #16): actually EVALUATE the step's declared
+        # postconditions against what the cycle observed — instead of copying
+        # them and deferring entirely to goal_verified.
+        success_criteria = list(getattr(step, "success_criteria", None) or [])
+        failure_conditions = list(getattr(step, "failure_conditions", None) or [])
+        criterion_results = evaluate_criteria(success_criteria, cycle_result)
+        failure_results = evaluate_criteria(failure_conditions, cycle_result)
+        passed = [r for r in criterion_results if r.status == "pass"]
+        refuted = [r for r in criterion_results if r.status == "fail"]
+        unevaluable = [r for r in criterion_results if r.status == "unknown"]
+        triggered_failures = [r.criterion for r in failure_results if r.status == "pass"]
+        met_criteria = [r.criterion for r in passed]
+        unmet_criteria = [r.criterion for r in refuted + unevaluable]
+
+        # 1b. Deterministic refutation: an OBSERVATION contradicts a declared
+        #     postcondition, or a declared failure condition was observed true.
+        #     This outranks goal_verified — a green runtime verdict cannot
+        #     overwrite a refuted postcondition.
+        if refuted or triggered_failures:
+            reasons = [f"'{r.criterion}': {r.basis}" for r in refuted]
+            reasons += [f"failure condition '{c}' observed" for c in triggered_failures]
+            return StepVerificationResult(
+                status="failed",
+                confidence=FAILED_CONFIDENCE,
+                met_criteria=met_criteria,
+                unmet_criteria=unmet_criteria,
+                triggered_failure_conditions=triggered_failures,
+                explanation="postcondition refuted by observation — " + "; ".join(reasons[:3]),
+                action_attempted=action_attempted,
+                environment_observed=environment_observed,
+                criterion_results=criterion_results + failure_results,
+            )
+
+        # 1c. Step-contract override (P0 #16): every declared criterion PASSED
+        #     against real observations. This verifier's authority is the
+        #     step's OWN contract, not the runtime's goal-level verdict — a
+        #     goal narrative failure (unrelated reply, model offline, a later
+        #     stage blocked) does not undo postconditions that were actually
+        #     observed. Steps that never ran cannot get here: without
+        #     execution there are no observations, and their criteria stay
+        #     UNKNOWN.
+        if (
+            success_criteria
+            and passed
+            and len(passed) == len(success_criteria)
+            and environment_observed
+        ):
+            return StepVerificationResult(
+                status="verified",
+                confidence=VERIFIED_CONFIDENCE,
+                met_criteria=met_criteria,
+                unmet_criteria=[],
+                explanation="all declared criteria observed satisfied — "
+                + "; ".join(f"'{r.criterion}': {r.basis}" for r in passed[:3]),
+                action_attempted=action_attempted,
+                environment_observed=True,
+                postcondition_verified=True,
+                criterion_results=criterion_results + failure_results,
+            )
+
+        # 1. Lifecycle failure (now subordinate to the criterion verdicts
+        #    above): the cycle reached a failed/blocked/deferred state and no
+        #    declared criterion was refuted or observed-satisfied.
         if verified is False and lifecycle in ("failed", "blocked", "deferred"):
             return StepVerificationResult(
                 status="failed",
                 confidence=FAILED_CONFIDENCE,
-                triggered_failure_conditions=list(getattr(step, "failure_conditions", []) or [lifecycle]),
+                met_criteria=met_criteria,
+                unmet_criteria=unmet_criteria,
+                triggered_failure_conditions=(triggered_failures or list(failure_conditions) or [lifecycle]),
                 explanation=f"cycle ended in '{lifecycle}': {cycle_result.get('assistant_reply', '')[:120]}",
                 action_attempted=action_attempted,
                 environment_observed=environment_observed,
+                criterion_results=criterion_results + failure_results,
             )
 
         # 2. Required-evidence enforcement: a step that declares a prerequisite
@@ -136,10 +216,37 @@ class StepVerifier:
         #    ever from real observation signals carried by the cycle result,
         #    never inferred from the attempt — and now the third rung:
         #    POSTCONDITION_VERIFIED, the declared outcome confirmed against
-        #    that observation.
-        postcondition_verified = verified is True and environment_observed
+        #    that observation. With declared criteria, the third rung requires
+        #    every one of them to have PASSED deterministic evaluation.
+        postcondition_verified = (
+            verified is True
+            and environment_observed
+            and not refuted
+            and not unevaluable
+            and (not success_criteria or len(passed) == len(success_criteria))
+        )
 
         if verified is True:
+            # Criteria were declared but could not all be evaluated: the step
+            # is NOT complete, no matter what goal_verified says. Name exactly
+            # which criteria are stuck and why.
+            if success_criteria and unevaluable:
+                stuck = "; ".join(f"'{r.criterion}' — {r.basis}" for r in unevaluable[:3])
+                confidence = (
+                    ATTEMPT_ONLY_CONFIDENCE if action_attempted and not environment_observed
+                    else UNVERIFIED_CONFIDENCE
+                )
+                return StepVerificationResult(
+                    status="unverified",
+                    confidence=confidence,
+                    met_criteria=met_criteria,
+                    unmet_criteria=unmet_criteria,
+                    explanation=f"criteria not verifiable from observations: {stuck}",
+                    action_attempted=action_attempted,
+                    environment_observed=environment_observed,
+                    postcondition_verified=False,
+                    criterion_results=criterion_results + failure_results,
+                )
             if declares_evidence and not environment_observed:
                 if action_attempted:
                     # Attempt without observation: the world may have changed but
@@ -176,20 +283,24 @@ class StepVerifier:
             return StepVerificationResult(
                 status="verified",
                 confidence=confidence,
-                met_criteria=list(getattr(step, "success_criteria", None) or []),
+                met_criteria=met_criteria or list(getattr(step, "success_criteria", None) or []),
+                unmet_criteria=unmet_criteria,
                 explanation="step outcome verified"
                 + (" against an observed environment" if postcondition_verified else " (conversational)"),
                 action_attempted=action_attempted,
                 environment_observed=environment_observed,
                 postcondition_verified=postcondition_verified,
+                criterion_results=criterion_results + failure_results,
             )
 
         # 4. verified False/None but not provably failed → unknown.
         return StepVerificationResult(
             status="unverified",
             confidence=UNVERIFIED_CONFIDENCE,
-            unmet_criteria=list(getattr(step, "success_criteria", None) or ["goal_verified"]),
+            met_criteria=met_criteria,
+            unmet_criteria=unmet_criteria or list(getattr(step, "success_criteria", None) or ["goal_verified"]),
             explanation="step outcome could not be verified (no confirming evidence)",
             action_attempted=action_attempted,
             environment_observed=environment_observed,
+            criterion_results=criterion_results + failure_results,
         )

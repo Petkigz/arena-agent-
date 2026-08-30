@@ -140,7 +140,7 @@ class GoalReplanner:
             fallbacks = [
                 {"name": "Web Research Fallback Strategy", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}},
                 {"name": "Diagnostic Investigation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}},
-                {"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}}
+                {"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": __import__("app.cognition.goal_interpreter", fromlist=["extract_search_query"]).extract_search_query(user_text), "action_type": "search_files"}}
             ]
             plan_b_candidates = [
                 f for f in fallbacks

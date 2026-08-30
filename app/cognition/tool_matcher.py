@@ -247,7 +247,18 @@ def _extract_payload(text: str, action_type: str = "") -> Dict[str, Any]:
     if url:
         payload["url"] = url.group(0)
     # Search queries: extract JUST the search terms, not the whole sentence.
-    if action_type == "web_search":
+    if action_type == "search_files":
+        # search_files matches filename SUBSTRINGS — the whole user sentence
+        # can never match a filename (found live during P0 #16: every such
+        # search returned 0 results). Extract the content terms.
+        try:
+            from app.cognition.goal_interpreter import extract_search_query
+            query = extract_search_query(text)
+            if query:
+                payload["query"] = query
+        except Exception:
+            pass
+    elif action_type == "web_search":
         # Strip browser/app instructions before extracting the query.
         cleaned = re.sub(r"(?:can\s+you\s+)?(?:open|launch|start|use)\s+\w+\s+(?:and|then|to)\s+", "", text, flags=re.I)
         search = _SEARCH_AFTER_RE.search(cleaned)

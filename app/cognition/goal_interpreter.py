@@ -8,6 +8,39 @@ from typing import Dict, Any, List, Optional, Tuple
 from app.llm import llm_client
 from app.utils.logger import app_logger
 
+# ---------------------------------------------------------------------------
+# Search query extraction (sentence-as-query bug, found live during P0 #16)
+#
+# search_files matches FILENAME SUBSTRINGS. Feeding it the whole user sentence
+# ("Find all PDF files in the documents folder") can never match a filename, so
+# every such search returned 0 results. Extract the content terms instead:
+# strip command words and location phrases, KEEP content-type words (pdf, song,
+# photo...) — they are legitimate filename substrings. (Item-12 discipline:
+# content words may be used as QUERY terms; they must never narrow SCOPE.)
+# ---------------------------------------------------------------------------
+_LOCATION_PHRASE = re.compile(
+    r"\b(?:in|on|under|inside|from)\s+(?:my\s+|the\s+|a\s+)?"
+    r"(?:documents?|downloads?|desktop|music|pictures?|videos?|home|pc|computer|laptop|machine|c:|d:|e:|f:)"
+    r"(?:\s+(?:folder|directory|dir|drive))?\b",
+    re.IGNORECASE,
+)
+_QUERY_COMMAND_WORDS = {
+    "find", "search", "locate", "look", "for", "all", "any", "the", "a", "an",
+    "my", "me", "please", "can", "you", "could", "i", "want", "to", "show",
+    "get", "give", "list", "open", "up", "of", "and", "with", "there", "is",
+    "are", "was", "were", "have", "has", "do", "does", "some", "where",
+    "file", "files", "folder", "folders", "directory", "directories",
+}
+
+
+def extract_search_query(user_text: str) -> str:
+    """Content terms of a search request, suitable for filename-substring match."""
+    text = _LOCATION_PHRASE.sub(" ", user_text or "")
+    tokens = [t for t in re.findall(r"[\w.\-]+", text)
+              if t.lower() not in _QUERY_COMMAND_WORDS]
+    return " ".join(tokens) if tokens else (user_text or "").strip()
+
+
 @dataclass
 class SemanticGoalSchemaValidationResult:
     is_valid: bool
@@ -341,13 +374,13 @@ class SemanticGoalInterpreter:
         candidates = []
         if domain_clean == "diagnostic":
             candidates.append({"name": "Diagnostic Investigation Probe", "action_type": "investigate", "payload": {"query": user_text, "action_type": "investigate"}})
-            candidates.append({"name": "Filesystem Search Probe", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}})
+            candidates.append({"name": "Filesystem Search Probe", "action_type": "search_files", "payload": {"query": extract_search_query(user_text), "action_type": "search_files"}})
         elif domain_clean == "mobile_phone":
             candidates.append({"name": "Android ADB Phone Command", "action_type": "phone_command", "payload": {"query": user_text, "action_type": "phone_command"}})
         elif domain_clean == "web_research":
             candidates.append({"name": "Web Search & Browser Research", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
         elif domain_clean == "filesystem":
-            candidates.append({"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": user_text, "action_type": "search_files"}})
+            candidates.append({"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": extract_search_query(user_text), "action_type": "search_files"}})
             candidates.append({"name": "Web Research Fallback", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
         elif domain_clean == "vision_desktop":
             candidates.append({"name": "Desktop Screen Capture & Vision", "action_type": "screen_capture", "payload": {"query": user_text, "action_type": "screen_capture"}})
@@ -370,10 +403,13 @@ class SemanticGoalInterpreter:
             except Exception:
                 primary = None
             if primary:
+                # search_files matches filename substrings — the raw sentence
+                # can never match one (found live during P0 #16).
+                primary_query = extract_search_query(user_text) if primary == "search_files" else user_text
                 candidates.append({
                     "name": f"Manifest capability: {primary}",
                     "action_type": primary,
-                    "payload": {"query": user_text, "action_type": primary},
+                    "payload": {"query": primary_query, "action_type": primary},
                 })
             candidates.append({"name": "Direct Conversational Answer", "action_type": "formulate_answer", "payload": {"query": user_text, "action_type": "formulate_answer"}})
         else:

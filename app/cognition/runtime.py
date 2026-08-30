@@ -3677,8 +3677,12 @@ class CognitiveRuntime:
             # - os_grounding: live post-action OS probe (process/window check)
             # An executed action with NEITHER is an attempt without observation.
             "environment_observed": _verifier_observed or bool(agent_res.get("os_grounding")),
-            "verification_observed_state": dict(_obs_map) if _verifier_observed else {},
+            "verification_observed_state": (
+                {"observations": dict(_obs_map), "verified_entity_states": dict(_verifier_entity_states)}
+                if _verifier_observed else {}
+            ),
             "verification_met_conditions": list(getattr(verify_res, "met_conditions", []) or []),
+            "verification_failed_conditions": list(getattr(verify_res, "failed_conditions", []) or []),
             "controlled_execution_id": control_result.get("controlled_execution_id"),
             "cancel_requested": control_result.get("cancel_requested", False),
             "cancellation_observed": control_result.get("cancellation_observed", False),
