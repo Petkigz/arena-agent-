@@ -334,6 +334,7 @@ class ADBLaunchAppRequest(BaseModel):
 class FileSearchRequest(BaseModel):
     query: str
     root_dir: Optional[str] = None
+    scope: Optional[str] = None  # workspace|home|desktop|documents|downloads|music|pictures|videos|all_user_files
     max_results: int = 20
 
 class FileMoveRequest(BaseModel):
@@ -2711,7 +2712,9 @@ def android_launch_app_endpoint(req: ADBLaunchAppRequest):
 
 @router.post("/filesystem/search")
 def fs_search_endpoint(req: FileSearchRequest):
-    return UniversalFilesystem.search_filesystem(req.query, root_dir=req.root_dir, max_results=req.max_results)
+    return UniversalFilesystem.search_filesystem(
+        req.query, root_dir=req.root_dir, scope=getattr(req, "scope", None),
+        max_results=req.max_results)
 
 @router.post("/filesystem/move")
 def fs_move_endpoint(req: FileMoveRequest):

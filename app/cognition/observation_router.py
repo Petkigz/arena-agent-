@@ -36,23 +36,16 @@ class ObservationPlan:
 
 
 def _file_search_roots() -> List[str]:
-    """Roots for user-file questions: home directory first, then every other
-    fixed drive on Windows (the owner's music does not always live under the
-    profile — live incident: 'songs called kaba/ordinary' exist on another
-    drive while the agent only walked C:\\Users\\... and reported nothing).
+    """Roots for user-file questions: the all_user_files scope from the
+    unified filesystem scope system (home + every other fixed drive on
+    Windows — the owner's music does not always live under the profile;
+    live incident: 'songs called kaba/ordinary' existed on another drive
+    while the agent walked only C:\\Users\\... and reported nothing).
+    Single source of truth: UniversalFilesystem.resolve_scope_roots.
     This is still a scoped walk, NOT an Everything-style MFT index — evidence
     text must stay honest about that."""
-    home = os.path.expanduser("~")
-    roots = [home]
-    if sys.platform.startswith("win"):
-        home_drive = os.path.splitdrive(home)[0].upper()
-        for letter in string.ascii_uppercase:
-            drive = f"{letter}:\\"
-            if f"{letter}:" == home_drive:
-                continue
-            if os.path.exists(drive):
-                roots.append(drive)
-    return roots
+    from app.tools.universal_filesystem import UniversalFilesystem
+    return [str(r) for r in UniversalFilesystem.resolve_scope_roots("all_user_files")]
 
 
 def _desktop_directories() -> List[str]:

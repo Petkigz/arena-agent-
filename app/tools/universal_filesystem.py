@@ -1,5 +1,7 @@
 import os
+import re
 import shutil
+import string
 import sys
 import zipfile
 import subprocess
@@ -104,6 +106,97 @@ class UniversalFilesystem:
 
     _INDEX_TTL_S = 1800.0  # cache trusted for fast-path hits up to 30 min
 
+    # ------------------------------------------------------------------
+    # P0 bottleneck #12: explicit search scopes. The old default
+    # (root_dir=None -> Arena's BASE_DIR) made 'find my song called Kaba'
+    # search the AGENT'S OWN INSTALL DIRECTORY — wrong semantics for a
+    # personal desktop assistant. Scopes are the vocabulary now; the
+    # smallest sensible one is inferred from the query, and a narrow
+    # scope that finds NOTHING escalates to all_user_files instead of
+    # fabricating absence.
+    # ------------------------------------------------------------------
+    KNOWN_SCOPES = (
+        "workspace", "home", "desktop", "documents", "downloads",
+        "music", "pictures", "videos", "all_user_files",
+    )
+
+    _SCOPE_QUERY_HINTS = {
+        "music": ("song", "songs", "music", "audio", "mp3", "album",
+                  "lyrics", "flac", "wav", "track"),
+        "pictures": ("photo", "photos", "picture", "pictures", "image",
+                     "images", "screenshot", "screenshots", "wallpaper",
+                     "camera", "jpeg", "jpg", "png", "gif"),
+        "videos": ("video", "videos", "movie", "movies", "clip", "clips",
+                   "film", "mkv", "mp4", "avi"),
+        "documents": ("document", "documents", "doc", "docs", "pdf",
+                      "spreadsheet", "excel", "word", "presentation",
+                      "invoice", "resume", "cv", "contract", "report",
+                      "essay", "letter"),
+        "downloads": ("download", "downloads", "downloaded", "installer",
+                      "setup", "exe", "msi"),
+        "desktop": ("desktop",),
+        "workspace": ("workspace", "arena", "your files", "your folder",
+                      "your directory"),
+    }
+
+    @classmethod
+    def resolve_scope_roots(cls, scope: str) -> List[Path]:
+        """Resolve a named scope to concrete search roots.
+
+        all_user_files = the home tree plus every other fixed drive on
+        Windows (the owner's music does not always live under the profile —
+        live incident: 'songs called kaba' on another drive while the agent
+        walked only the profile and reported nothing)."""
+        s = str(scope or "").strip().lower()
+        home = Path.home()
+        if s == "workspace":
+            return [Path(settings.BASE_DIR)]
+        if s == "home":
+            return [home]
+        if s == "all_user_files":
+            roots = [home]
+            if sys.platform.startswith("win"):
+                home_drive = os.path.splitdrive(str(home))[0].upper()
+                for letter in string.ascii_uppercase:
+                    drive = f"{letter}:\\"
+                    if f"{letter}:" == home_drive:
+                        continue
+                    if os.path.exists(drive):
+                        roots.append(Path(drive))
+            return roots
+        folder_map = {
+            "desktop": "Desktop", "documents": "Documents",
+            "downloads": "Downloads", "music": "Music",
+            "pictures": "Pictures", "videos": "Videos",
+        }
+        if s in folder_map:
+            target = home / folder_map[s]
+            if target.exists():
+                return [target]
+            # Honest fallback: the canonical folder is absent on this machine
+            # (localized or redirected profile). Search the home superset
+            # rather than an empty scope — a superset can only find MORE,
+            # never fabricate a miss.
+            app_logger.info(
+                f"Search scope '{s}': {target} does not exist; falling back to the home directory.")
+            return [home]
+        app_logger.warning(f"Unknown search scope '{scope}'; using all_user_files.")
+        return cls.resolve_scope_roots("all_user_files")
+
+    @classmethod
+    def infer_scope_from_query(cls, query: str) -> str:
+        """Smallest sensible scope for a query, from its own words:
+        'find my song kaba' -> music; 'contract.pdf' -> documents. No hint
+        -> all_user_files (a personal assistant searches the user's files,
+        not its own install directory)."""
+        text = str(query or "").lower()
+        for scope in ("music", "pictures", "videos", "documents",
+                      "downloads", "desktop", "workspace"):
+            for kw in cls._SCOPE_QUERY_HINTS[scope]:
+                if re.search(rf"\b{re.escape(kw)}\b", text):
+                    return scope
+        return "all_user_files"
+
     @classmethod
     def search_filesystem(
         cls,
@@ -111,43 +204,102 @@ class UniversalFilesystem:
         root_dir: Optional[Any] = None,
         max_results: int = 20,
         timeout_s: float = 15.0,
+        scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Live (non-indexed) filename search: exact substring matches first,
-        typo-tolerant fuzzy matches as a fallback.
+        """Scoped filename search for a personal desktop assistant (P0 #12).
+
+        Scope resolution, in order:
+          1. explicit ``root_dir`` (path or list) — callers that know exactly
+             where to look;
+          2. explicit ``scope`` — one of KNOWN_SCOPES (workspace, home,
+             desktop, documents, downloads, music, pictures, videos,
+             all_user_files), the planner's smallest-sensible-scope choice;
+          3. inferred from the query itself ('find my song kaba' -> music,
+             'contract.pdf' -> documents);
+          4. otherwise all_user_files — the USER'S files, never the agent's
+             own install directory (the old root_dir=None default searched
+             Arena's BASE_DIR).
+
+        A narrow scope that finds NOTHING escalates once to all_user_files:
+        a miss in ~/Music is not proof the song doesn't exist elsewhere, and
+        this search must never fabricate absence. Escalated entries carry
+        ``scope_escalated``; every scoped result carries ``scope``.
 
         Everything (voidtools) reads the NTFS master file table and sees every
         file on every drive instantly; this tool WALKS the tree — but keeps a
         persistent filename index (data/file_index.db) so repeat searches are
         instant. Index hits are existence-verified; misses always fall through
-        to a live walk, so the index can never fabricate absence:
-
-          * ``root_dir`` may be a single path or a LIST of paths (None → the
-            app base directory). Directories are matched as well as files —
-            an album folder named 'Kaba' is a hit, not a miss.
-          * System/junk directories are pruned; a ``timeout_s`` budget bounds
-            huge trees (a timeout returns partial results, never hangs).
-          * When nothing matches exactly, a fuzzy pass kicks in (the owner
-            asked for 'ordinaryr' and the file is 'Ordinary'): candidates are
-            scored per filename token so 'Artist - Title.ext' matches the
-            bare title. Fuzzy entries carry ``fuzzy_match``/``fuzzy_score``.
+        to a live walk, so the index can never fabricate absence. Directories
+        match as well as files; system/junk directories are pruned; a
+        ``timeout_s`` budget bounds huge trees (a timeout returns partial
+        results, never hangs). When nothing matches exactly, a typo-tolerant
+        fuzzy pass kicks in (query 'ordinaryr', file 'Ordinary'), scored per
+        filename token so 'Artist - Title.ext' matches the bare title.
         """
+        query_raw = (query or "").strip()
+        if not query_raw:
+            return []
+
+        scope_resolved: Optional[str] = None
+        if root_dir is not None:
+            if isinstance(root_dir, (list, tuple)):
+                roots = [Path(r) for r in root_dir if str(r or "").strip()]
+            else:
+                roots = [Path(str(root_dir))]
+        else:
+            if scope is None:
+                scope = cls.infer_scope_from_query(query_raw)
+            elif scope not in cls.KNOWN_SCOPES:
+                app_logger.warning(
+                    f"Unknown search scope '{scope}'; inferring from the query instead.")
+                scope = cls.infer_scope_from_query(query_raw)
+            scope_resolved = scope
+            roots = cls.resolve_scope_roots(scope)
+
+        def _tag(entries: List[Dict[str, Any]], escalated: bool = False) -> List[Dict[str, Any]]:
+            if scope_resolved is not None or escalated:
+                for e in entries:
+                    e["scope"] = scope_resolved or "all_user_files"
+                    if escalated:
+                        e["scope_escalated"] = True
+            return entries
+
+        results = cls._search_roots(query_raw, roots, max_results, timeout_s)
+
+        # Never fabricate absence from a narrow scope (P0 #12): a miss in
+        # ~/Music is not proof the song isn't on the Desktop or another
+        # drive. Escalate once to all_user_files before reporting nothing.
+        if (
+            not results
+            and scope_resolved is not None
+            and scope_resolved not in ("all_user_files", "home")
+        ):
+            esc_roots = cls.resolve_scope_roots("all_user_files")
+            if {str(r) for r in esc_roots} - {str(r) for r in roots}:
+                app_logger.info(
+                    f"Scope '{scope_resolved}' found no matches for '{query_raw}'; "
+                    "escalating to all_user_files before reporting absence.")
+                results = cls._search_roots(query_raw, esc_roots, max_results, timeout_s)
+                return _tag(results, escalated=True)
+        return _tag(results)
+
+    @classmethod
+    def _search_roots(
+        cls,
+        query_raw: str,
+        roots: List[Path],
+        max_results: int = 20,
+        timeout_s: float = 15.0,
+    ) -> List[Dict[str, Any]]:
+        """Core walk: exact substring matches first, fuzzy fallback, bounded
+        by a timeout, accelerated by the existence-verified file index."""
         import difflib
         import re as _re
         import time as _time
 
-        query_raw = (query or "").strip()
-        if not query_raw:
-            return []
         query_lower = query_raw.lower()
         query_norm = _re.sub(r"[^a-z0-9]+", "", query_lower)
         query_tokens = [t for t in _re.split(r"[^a-z0-9]+", query_lower) if len(t) >= 3]
-
-        if root_dir is None:
-            roots = [Path(settings.BASE_DIR)]
-        elif isinstance(root_dir, (list, tuple)):
-            roots = [Path(r) for r in root_dir if str(r or "").strip()]
-        else:
-            roots = [Path(str(root_dir))]
 
         # ── Index fast path ────────────────────────────────────────────────
         # All roots freshly indexed? Answer from the cache — but VERIFY each
@@ -338,7 +490,6 @@ class UniversalFilesystem:
             m["fuzzy_match"] = True
         return fuzzy[:max_results]
 
-    @classmethod
     @classmethod
     def list_directory(cls, directories: List[Dict[str, Any]], include_hidden: bool = False) -> Dict[str, Any]:
         """Read-only listing of directory entries (Level-0 observation).
