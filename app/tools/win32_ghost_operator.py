@@ -49,7 +49,6 @@ class Win32GhostOperator:
         return windows
 
     @staticmethod
-    @staticmethod
     def bind_window(windows, query: str) -> Dict[str, Any]:
         """Bind ONE window from a title query — uniquely, or refuse.
 
