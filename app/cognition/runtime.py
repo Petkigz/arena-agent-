@@ -3112,6 +3112,10 @@ class CognitiveRuntime:
                 "executed_actions": [investigation_summary],
                 "action_type": "investigate",
                 "reasoning_action": "investigate",
+                # Epistemic ladder (P0 #15): probes that RAN and RETURNED are a
+                # real environmental observation; a probe-free investigation is
+                # not one, however nicely it was narrated.
+                "environment_observed": bool(loop_trace.results),
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.1,
                 "reflection_lesson": trace.reflection_lesson,
@@ -3624,6 +3628,24 @@ class CognitiveRuntime:
             goal_verified=verify_res.verified_success,
         )
 
+        # Epistemic ladder (P0 #15): extract the HONEST observation signals from
+        # the verifier result. observed_state is a non-empty scaffold by design;
+        # only its inner observations map (with a real evidence source) or
+        # non-unknown verified entity states mean the world was actually sensed.
+        _verifier_obs_map = dict(
+            (getattr(verify_res, "observed_state", None) or {}).get("observations") or {}
+        )
+        _verifier_entity_states = dict(
+            (getattr(verify_res, "observed_state", None) or {}).get("verified_entity_states") or {}
+        )
+        _obs_map = _verifier_obs_map
+        _verifier_observed = (
+            bool(_verifier_obs_map)
+            and _verifier_obs_map.get("evidence_source") != "not_observed"
+        ) or any(
+            bool(s) and s != "unknown" for s in _verifier_entity_states.values()
+        )
+
         return {
             "request_success": True,
             "execution_success": exec_success,
@@ -3646,6 +3668,17 @@ class CognitiveRuntime:
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
             "latency_ms": round(latency, 2),
+            # Epistemic ladder (P0 #15): carrying the REAL observation signals so
+            # StepVerifier never has to infer observation from the attempt.
+            # - the GoalVerifier's observations map / verified entity states: the
+            #   world was actually probed (its scaffold is ALWAYS non-empty, so we
+            #   extract the honest inner signals: "evidence_source": "not_observed"
+            #   means nothing was seen)
+            # - os_grounding: live post-action OS probe (process/window check)
+            # An executed action with NEITHER is an attempt without observation.
+            "environment_observed": _verifier_observed or bool(agent_res.get("os_grounding")),
+            "verification_observed_state": dict(_obs_map) if _verifier_observed else {},
+            "verification_met_conditions": list(getattr(verify_res, "met_conditions", []) or []),
             "controlled_execution_id": control_result.get("controlled_execution_id"),
             "cancel_requested": control_result.get("cancel_requested", False),
             "cancellation_observed": control_result.get("cancellation_observed", False),

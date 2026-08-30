@@ -45,11 +45,51 @@ def test_evidence_declaring_step_with_observation_is_verified():
         "goal_lifecycle_state": "achieved",
         "reasoning_action": "act",
         "executed_actions": [{"action_type": "system_probe"}],
+        "environment_observed": True,  # the cycle actually sensed the world
         "assistant_reply": "observed",
     }
     v = StepVerifier.verify_step(step, result, available_evidence=None)
     assert v.status == "verified"
     assert v.confidence == 0.9
+    assert v.action_attempted and v.environment_observed and v.postcondition_verified
+
+
+def test_attempt_without_observation_is_not_verified():
+    """P0 #15: 'I attempted the action' is NOT 'I observed the resulting
+    environmental state.' An executed action with no observation signal
+    must not complete an evidence-declaring step — and is WORSE than no
+    evidence at all (we changed the world and never looked)."""
+    step = _Step(produces=["current_state"])
+    result = {
+        "goal_verified": True,
+        "goal_lifecycle_state": "achieved",
+        "reasoning_action": "act",
+        "executed_actions": [{"action_type": "delete_file"}],
+        "assistant_reply": "done",
+    }
+    v = StepVerifier.verify_step(step, result, available_evidence=None)
+    assert v.status == "unverified"
+    assert v.confidence == 0.3
+    assert v.action_attempted is True
+    assert v.environment_observed is False
+    assert v.postcondition_verified is False
+    assert "attempt is not observation" in v.explanation
+
+
+def test_os_grounding_counts_as_observation():
+    """A post-action OS probe (process/window check) is a real observation."""
+    step = _Step(produces=["app_running"])
+    result = {
+        "goal_verified": True,
+        "goal_lifecycle_state": "achieved",
+        "reasoning_action": "act",
+        "executed_actions": [{"action_type": "launch_app"}],
+        "os_grounding": {"process_running": True},
+    }
+    v = StepVerifier.verify_step(step, result, available_evidence=None)
+    assert v.status == "verified"
+    assert v.confidence == 0.9
+    assert v.environment_observed is True
 
 
 def test_plain_step_without_declared_evidence_can_be_conversational():
@@ -71,7 +111,8 @@ def test_failed_lifecycle_maps_to_failed():
 
 def test_requires_evidence_enforced_when_set_provided():
     step = _Step(requires=["root_cause"])
-    result = {"goal_verified": True, "goal_lifecycle_state": "achieved", "reasoning_action": "act", "executed_actions": [{}]}
+    result = {"goal_verified": True, "goal_lifecycle_state": "achieved", "reasoning_action": "act",
+              "executed_actions": [{}], "environment_observed": True}
     # Evidence "root_cause" not in the available set → unverified.
     v = StepVerifier.verify_step(step, result, available_evidence={"current_state"})
     assert v.status == "unverified"
@@ -95,6 +136,7 @@ def test_plan_enforces_requires_evidence_dataflow(tmp_path):
                 "goal_verified": True, "assistant_reply": "ok",
                 "goal_lifecycle_state": "achieved", "reasoning_action": "act",
                 "executed_actions": [{"action_type": "probe"}],
+                "environment_observed": True,  # the probe actually returned
             }
 
     from app.cognition.autonomous_goal_executor import ExecutionPlan
