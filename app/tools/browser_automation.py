@@ -484,74 +484,148 @@ class BrowserAutomation:
 
     _SEQ_STEP_LIMIT = 40
     _WAIT_CAP_MS = 15000
+    # P0 review #6: execution semantics are EXPLICIT. Defaulting autonomous
+    # workflows to continue-on-failure let a failed login be followed by
+    # 'click dashboard' and 'delete record' — bizarre and dangerous.
+    _SEQ_FAIL_POLICIES = ("abort", "continue", "recover")
+    _RECOVER_RETRY_WAIT_MS = 1000
 
     @classmethod
-    def _run_sequential_steps(cls, page: Any, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Execute an ORDERED web workflow (P0 bottleneck #6).
+    def _execute_seq_step(cls, page: Any, i: int, verb: str, step: Dict[str, Any],
+                          entry: Dict[str, Any], extracts: Dict[str, str]) -> bool:
+        """Run ONE workflow step against the current page state."""
+        try:
+            cooperative_checkpoint(f"browser_step_{i}_{verb}")
+            if verb == "navigate":
+                url = str(step.get("url", "")).strip()
+                if url:
+                    if not url.startswith(("http://", "https://")):
+                        url = f"https://{url}"
+                    page.goto(url, timeout=30000, wait_until="domcontentloaded")
+            elif verb == "fill":
+                selector = step.get("selector")
+                if selector:
+                    page.fill(selector, str(step.get("value", "")))
+            elif verb == "click":
+                selector = step.get("selector")
+                if selector:
+                    page.click(selector)
+                    # Let the DOM settle before the next step locates
+                    # elements this click creates.
+                    page.wait_for_timeout(500)
+            elif verb == "submit":
+                selector = str(step.get("selector") or "form")
+                if page.query_selector(selector):
+                    page.click(selector)
+                else:
+                    page.keyboard.press("Enter")
+                page.wait_for_timeout(1000)
+            elif verb == "extract":
+                selector = step.get("selector")
+                if selector and page.query_selector(selector):
+                    text = page.inner_text(selector)
+                elif page.query_selector("body"):
+                    text = page.inner_text("body")
+                else:
+                    text = ""
+                extracts[str(selector or f"step_{i}")] = (text or "")[:5000]
+            elif verb == "wait":
+                try:
+                    ms = int(step.get("ms", 0) or 0)
+                except (TypeError, ValueError):
+                    ms = 0
+                page.wait_for_timeout(max(0, min(ms, cls._WAIT_CAP_MS)))
+            else:
+                # A syntax-level error: retrying cannot fix it.
+                entry["error"] = f"unsupported action '{verb}'"
+                entry["retryable"] = False
+        except ExecutionCancelled:
+            raise
+        except Exception as exc:
+            entry["error"] = f"{type(exc).__name__}: {exc}"
+        entry["ok"] = "error" not in entry
+        return entry["ok"]
+
+    @classmethod
+    def _run_sequential_steps(cls, page: Any, steps: List[Dict[str, Any]],
+                              fail_policy: str = "abort") -> Dict[str, Any]:
+        """Execute an ORDERED web workflow (P0 bottleneck #6, review #6).
 
         Each step runs against the page state left by the previous one —
         click -> wait -> DOM update -> fill -> click -> wait -> extract —
         never bucketed into all-fills-then-all-clicks (which broke real
-        sites whose forms only exist after an earlier click). A failing
-        step is logged and DOES NOT abort the workflow; the step log
-        reports exactly what happened, per step."""
+        sites whose forms only exist after an earlier click).
+
+        fail_policy — what a failed step means for the workflow:
+          abort     (default) a REQUIRED step failure stops the workflow
+                    immediately; later steps NEVER run. Autonomous browser
+                    work is destructive-capable — 'login failed' must not
+                    be followed by 'delete record'.
+          continue  every step runs regardless; failures are logged per
+                    step. The old behavior, now an explicit opt-in for
+                    best-effort scraping.
+          recover   a failed required step is retried once (after a short
+                    settle wait); success continues the workflow, a second
+                    failure aborts it.
+
+        Steps may declare "optional": true — under ANY policy an optional
+        step failure is logged and skipped, never aborting the workflow.
+        """
+        policy = str(fail_policy or "").lower().strip()
+        if policy not in cls._SEQ_FAIL_POLICIES:
+            if policy:
+                app_logger.warning(
+                    f"Unknown browser fail_policy '{fail_policy}'; using 'abort' (safe default)")
+            policy = "abort"
+
         extracts: Dict[str, str] = {}
         step_log: List[Dict[str, Any]] = []
-        for i, step in enumerate((steps or [])[: cls._SEQ_STEP_LIMIT]):
+        aborted_at: Optional[int] = None
+        capped = (steps or [])[: cls._SEQ_STEP_LIMIT]
+        for i, step in enumerate(capped):
             verb = str(step.get("action") or step.get("verb") or "").lower().strip()
-            entry: Dict[str, Any] = {"index": i, "action": verb}
-            try:
-                cooperative_checkpoint(f"browser_step_{i}_{verb}")
-                if verb == "navigate":
-                    url = str(step.get("url", "")).strip()
-                    if url:
-                        if not url.startswith(("http://", "https://")):
-                            url = f"https://{url}"
-                        page.goto(url, timeout=30000, wait_until="domcontentloaded")
-                elif verb == "fill":
-                    selector = step.get("selector")
-                    if selector:
-                        page.fill(selector, str(step.get("value", "")))
-                elif verb == "click":
-                    selector = step.get("selector")
-                    if selector:
-                        page.click(selector)
-                        # Let the DOM settle before the next step locates
-                        # elements this click creates.
-                        page.wait_for_timeout(500)
-                elif verb == "submit":
-                    selector = str(step.get("selector") or "form")
-                    if page.query_selector(selector):
-                        page.click(selector)
-                    else:
-                        page.keyboard.press("Enter")
-                    page.wait_for_timeout(1000)
-                elif verb == "extract":
-                    selector = step.get("selector")
-                    if selector and page.query_selector(selector):
-                        text = page.inner_text(selector)
-                    elif page.query_selector("body"):
-                        text = page.inner_text("body")
-                    else:
-                        text = ""
-                    extracts[str(selector or f"step_{i}")] = (text or "")[:5000]
-                elif verb == "wait":
-                    try:
-                        ms = int(step.get("ms", 0) or 0)
-                    except (TypeError, ValueError):
-                        ms = 0
-                    page.wait_for_timeout(max(0, min(ms, cls._WAIT_CAP_MS)))
-                else:
-                    entry["error"] = f"unsupported action '{verb}'"
-                entry["ok"] = "error" not in entry
-            except ExecutionCancelled:
-                raise
-            except Exception as exc:
-                entry["ok"] = False
-                entry["error"] = f"{type(exc).__name__}: {exc}"
-                app_logger.warning(f"Sequential browser step {i} ({verb}) failed: {exc}")
+            optional = bool(step.get("optional"))
+            entry: Dict[str, Any] = {"index": i, "action": verb, "optional": optional}
+            ok = cls._execute_seq_step(page, i, verb, step, entry, extracts)
+
+            if not ok and optional:
+                # Optional steps never abort anything, under any policy.
+                entry["skipped_as_optional"] = True
+                app_logger.info(f"Sequential browser step {i} ({verb}) failed but is optional; continuing")
+            elif not ok and policy == "recover" and entry.get("retryable", True):
+                entry["first_error"] = entry.get("error")
+                entry.pop("error", None)
+                entry["attempt"] = 2
+                page.wait_for_timeout(cls._RECOVER_RETRY_WAIT_MS)
+                ok = cls._execute_seq_step(page, i, verb, step, entry, extracts)
+                entry["recovered"] = ok
+                if ok:
+                    app_logger.info(f"Sequential browser step {i} ({verb}) recovered on retry")
+
+            if not ok and not optional and policy in ("abort", "recover"):
+                aborted_at = i
+                entry["aborted_workflow"] = True
+                remaining = len(capped) - i - 1
+                app_logger.warning(
+                    f"Sequential browser step {i} ({verb}) failed under fail_policy='{policy}'; "
+                    f"aborting workflow, {remaining} later step(s) will NOT run")
+                step_log.append(entry)
+                break
+
+            if not ok and policy == "continue":
+                app_logger.warning(
+                    f"Sequential browser step {i} ({verb}) failed; fail_policy='continue' runs the rest anyway")
             step_log.append(entry)
-        return {"extracts": extracts, "step_log": step_log}
+
+        return {
+            "extracts": extracts,
+            "step_log": step_log,
+            "fail_policy": policy,
+            "aborted": aborted_at is not None,
+            "aborted_at": aborted_at,
+            "steps_planned": len(capped),
+            "steps_executed": len(step_log),
+        }
 
     @classmethod
     def navigate_and_extract(
@@ -562,6 +636,7 @@ class BrowserAutomation:
         submit_form: bool = False,
         use_profile: bool = False,
         steps: Optional[List[Dict[str, Any]]] = None,
+        fail_policy: str = "abort",
     ) -> Dict[str, Any]:
         """
         Automates real browser navigation using Playwright with HTTP fallback.
@@ -623,10 +698,14 @@ class BrowserAutomation:
                 extracts: Dict[str, str] = {}
                 step_log: List[Dict[str, Any]] = []
                 legacy_interaction_failures = 0
+                workflow_aborted = False
+                aborted_at_step = None
                 if steps:
-                    seq = cls._run_sequential_steps(page, steps)
+                    seq = cls._run_sequential_steps(page, steps, fail_policy=fail_policy)
                     extracts = seq["extracts"]
                     step_log = seq["step_log"]
+                    workflow_aborted = bool(seq.get("aborted"))
+                    aborted_at_step = seq.get("aborted_at")
 
                 # Fill out input fields if specified
                 elif fill_inputs:
@@ -689,10 +768,16 @@ class BrowserAutomation:
                 interaction_executed = (
                     (legacy_interaction_failures == 0) if interaction_requested else None
                 )
-            execution_success = interaction_executed is not False
+            # An aborted workflow did not achieve its objective, even when
+            # the steps that DID run all succeeded — success=False is the
+            # honest outcome (P0 review #6).
+            execution_success = interaction_executed is not False and not workflow_aborted
 
             return {
                 "success": execution_success,
+                "workflow_aborted": workflow_aborted,
+                "aborted_at_step": aborted_at_step,
+                "fail_policy": fail_policy,
                 "url": url,
                 "title": page_title,
                 # Scoped extracts are the workflow's actual objective — when

@@ -84,19 +84,114 @@ def test_wait_is_capped():
     assert page.ops == [("wait", BrowserAutomation._WAIT_CAP_MS)]
 
 
-def test_failing_step_does_not_abort_the_workflow():
+def test_failed_required_step_aborts_by_default():
+    """THE review #6 case: login fails -> 'click dashboard' and 'delete
+    record' must NEVER run. Default fail_policy is abort."""
+    page = FakePage(fail_on={"fill"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#login-email", "value": "a@b.c"},
+        {"action": "click", "selector": "#dashboard"},
+        {"action": "click", "selector": "#delete-record"},
+    ])
+    assert res["aborted"] is True
+    assert res["aborted_at"] == 0
+    assert res["steps_executed"] == 1  # only the failed step ran
+    # The later steps were NOT attempted — ops proves it.
+    assert ("click", "#dashboard") not in page.ops
+    assert ("click", "#delete-record") not in page.ops
+    assert res["step_log"][0]["ok"] is False
+    assert res["step_log"][0]["aborted_workflow"] is True
+
+
+def test_continue_policy_is_explicit_opt_in():
+    """The old continue-on-failure semantics survive as an explicit
+    fail_policy='continue' for best-effort scraping."""
     page = FakePage(fail_on={"fill"})
     res = BrowserAutomation._run_sequential_steps(page, [
         {"action": "fill", "selector": "#gone", "value": "x"},
         {"action": "click", "selector": "#next"},
         {"action": "extract", "selector": "#out"},
-    ])
+    ], fail_policy="continue")
+    assert res["aborted"] is False
+    assert res["fail_policy"] == "continue"
     # The failed step is reported honestly…
     assert res["step_log"][0]["ok"] is False and "RuntimeError" in res["step_log"][0]["error"]
     # …and the rest of the sequence still ran.
     assert ("click", "#next") in page.ops
     assert ("extract", "#out") in page.ops
     assert res["step_log"][1]["ok"] is True
+
+
+def test_optional_step_failure_never_aborts():
+    page = FakePage(fail_on={"fill"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#cookie-banner", "value": "x", "optional": True},
+        {"action": "click", "selector": "#next"},
+        {"action": "extract", "selector": "#out"},
+    ])  # default policy: abort
+    assert res["aborted"] is False
+    assert res["step_log"][0]["skipped_as_optional"] is True
+    assert ("click", "#next") in page.ops
+    assert ("extract", "#out") in page.ops
+
+
+def test_recover_policy_retries_once_then_continues():
+    class FlakyPage(FakePage):
+        """Fails the FIRST fill, succeeds on retry."""
+        def __init__(self):
+            super().__init__()
+            self.failed_once = False
+
+        def fill(self, selector, value):
+            if not self.failed_once:
+                self.failed_once = True
+                raise RuntimeError("transient element detach")
+            self.ops.append(("fill", selector, value))
+
+    page = FlakyPage()
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#email", "value": "a@b.c"},
+        {"action": "click", "selector": "#next"},
+    ], fail_policy="recover")
+    assert res["aborted"] is False
+    assert res["step_log"][0]["recovered"] is True
+    assert res["step_log"][0]["attempt"] == 2
+    assert res["step_log"][0]["ok"] is True
+    assert ("click", "#next") in page.ops
+
+
+def test_recover_policy_aborts_when_retry_also_fails():
+    page = FakePage(fail_on={"fill"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#email", "value": "a@b.c"},
+        {"action": "click", "selector": "#next"},
+    ], fail_policy="recover")
+    assert res["aborted"] is True
+    assert res["aborted_at"] == 0
+    assert res["step_log"][0]["recovered"] is False
+    assert ("click", "#next") not in page.ops
+
+
+def test_unknown_policy_falls_back_to_abort():
+    page = FakePage(fail_on={"fill"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#gone", "value": "x"},
+        {"action": "click", "selector": "#next"},
+    ], fail_policy="yolo")
+    assert res["fail_policy"] == "abort"
+    assert res["aborted"] is True
+    assert ("click", "#next") not in page.ops
+
+
+def test_unsupported_action_is_a_failure_under_abort():
+    page = FakePage()
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "teleport", "selector": "#q"},
+        {"action": "click", "selector": "#next"},
+    ])
+    assert res["aborted"] is True
+    assert "unsupported action" in res["step_log"][0]["error"]
+    assert ("click", "#next") not in page.ops
 
 
 def test_submit_step_hits_the_level3_policy_gate():
