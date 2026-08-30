@@ -488,6 +488,9 @@ class SemanticGoalInterpreter:
         # adds every tool that semantically matches THIS goal.
         try:
             from app.cognition.tool_matcher import rank_tools
+            from app.tools.manifest import get_tool_manifest
+            from app.cognition.tool_registry import interpret_availability
+            manifest_entries = get_tool_manifest()
             already = {c.get("action_type") for c in candidates}
             for match in rank_tools(
                 user_text,
@@ -496,10 +499,23 @@ class SemanticGoalInterpreter:
             ):
                 if match.action_type in already or match.action_type == "formulate_answer":
                     continue
+                # ONE canonical interpretation (P0 review #1): a KNOWN
+                # missing dependency spends no candidate slot. NOT_CHECKED
+                # flows verbatim — the planner probes before committing.
+                entry = manifest_entries.get(match.action_type) or {}
+                try:
+                    _status = interpret_availability(entry.get("availability"), probe=False)
+                except Exception:
+                    _status = {"available": None, "status": "not_checked"}
+                if _status.get("available") is False:
+                    continue
+                payload = dict(match.payload or {"query": user_text})
+                if _status.get("available") is None:
+                    payload["availability"] = "not_checked"
                 candidates.append({
                     "name": f"Discovered capability: {match.action_type}",
                     "action_type": match.action_type,
-                    "payload": match.payload or {"query": user_text},
+                    "payload": payload,
                     "source": "manifest_discovery",
                     "score": match.score,
                 })
@@ -633,7 +649,7 @@ class SemanticGoalInterpreter:
 
                 ranked.sort(key=lambda item: item[0], reverse=True)
                 existing_actions = {c.get("action_type") for c in candidates}
-                for score, cap, cap_name in ranked[:candidate_breadth(user_text, complexity)]:
+                for score, cap, cap_name in ranked[:max(candidate_breadth(user_text, complexity), 8)]:
                     if cap_name in existing_actions:
                         continue
                     candidates.append({

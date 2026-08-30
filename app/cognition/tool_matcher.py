@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.utils.logger import app_logger
+from app.cognition.semantic_matcher import semantic_scores
 
 # Phone numbers: international (+256...), local (077...), or short codes.
 # Used to gate communication verbs so "Call John" doesn't false-match
@@ -218,6 +219,10 @@ class ToolMatch:
     runner_up: Optional[str] = None
     payload: Dict[str, Any] = field(default_factory=dict)
     matched_terms: Tuple[str, ...] = ()
+    # Semantic layer (P0 review #4): calibrated 0..1 conceptual relevance
+    # and which backend produced it ("embeddings" | "local" | "none").
+    semantic_score: Optional[float] = None
+    semantic_backend: Optional[str] = None
 
 
 def _tokens(text: str) -> List[str]:
@@ -398,12 +403,38 @@ def rank_tools(
 
     words = set(re.findall(r"[a-z_]+", text))
     text_tokens = set(_tokens(text))
+
+    # Semantic layer (P0 review #4): conceptual relevance from goal/tool
+    # embeddings when a local embedding model is loaded, else in-process
+    # fuzzy TF-IDF. Keywords answer "which tools mention these words";
+    # semantics answers "which capability is conceptually appropriate".
+    # The backend may be unavailable; discovery must not care.
+    try:
+        # Description MEANING only: the name is the lexical layer's evidence
+        # (verbatim hits, synonyms) — scoring it here too double-counted and
+        # let name-only matches saturate the threshold on tiny corpora.
+        tool_texts = {
+            action_type: str(entry.get("description", "") or "").lower()
+            for action_type, entry in manifest.items()
+        }
+        sem_scores, sem_backend = semantic_scores(user_text, tool_texts)
+    except Exception:
+        sem_scores, sem_backend = {}, "none"
+
     scored: List[Tuple[float, str, Tuple[str, ...]]] = []
     for action_type, entry in manifest.items():
         haystack = f"{action_type.replace('_', ' ')} {entry.get('description', '')}".lower()
         tool_tokens = set(_tokens(haystack))
         overlap = text_tokens & tool_tokens
         score = float(len(overlap))
+        sem = float(sem_scores.get(action_type, 0.0))
+        # Fusion: semantic relevance ADDS to lexical evidence. Max boost
+        # (2.5) sits just above the 1.5 noise floor, so a strong conceptual
+        # match with ZERO token overlap enters the candidate set, while an
+        # exact name+synonym hit still outranks conceptual-only matches.
+        # Weak similarity (< 0.5 calibrated) is NOT evidence — char-trigram
+        # fuzziness alone made 'photo' look like 'phone' — so it never boosts.
+        score = score + (2.5 * sem if sem >= 0.5 else 0.0)
         matched: List[str] = list(overlap)
         for phrase in SYNONYMS.get(action_type, []):
             phrase_tokens = set(re.findall(r"[a-z_]+", phrase))
@@ -421,7 +452,10 @@ def rank_tools(
             matched.append(action_type)
         if domain_hint and str(entry.get("category", "")) == str(domain_hint):
             score += 1.5
-        if score > 0:
+        # Conceptual-only matches (zero lexical evidence) still enter when
+        # semantic similarity is strong; the fused score must then clear the
+        # 1.5 noise floor on semantic evidence alone.
+        if score > 0 or sem >= 0.6:
             scored.append((score, action_type, tuple(sorted(set(matched)))))
 
     scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
@@ -436,5 +470,7 @@ def rank_tools(
             score=score,
             payload=payload,
             matched_terms=matched_terms,
+            semantic_score=round(sem_scores.get(action_type, 0.0), 4),
+            semantic_backend=sem_backend if sem_scores else None,
         ))
     return discovered
