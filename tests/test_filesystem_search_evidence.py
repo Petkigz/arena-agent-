@@ -174,3 +174,60 @@ def test_fuzzy_still_rejects_junk(tmp_path):
     the tree yields nothing."""
     home = _make_tree(tmp_path)
     assert UniversalFilesystem.search_filesystem("zzznope", root_dir=str(home)) == []
+
+
+def test_artist_tail_stripped_from_file_question():
+    """Live bug: 'do i have a song called ordinary by alex warren' searched
+    for the whole phrase 'ordinary by alex warren' — which matches neither
+    the exact filename ('Alex Warren - Ordinary.mp3') nor the fuzzy matcher
+    (word order reversed). The artist must be stripped into a hint."""
+    plan = plan_observation("do i have a song called ordinary by alex warren")
+    assert plan is not None and plan.action_type == "search_files"
+    assert plan.payload["query"] == "ordinary"
+    assert "alex warren" in plan.evidence_hint.lower()
+
+    # Broad phrasing gets the same treatment.
+    plan2 = plan_observation("give me a list of all the songs called ordinary by alex warren")
+    assert plan2 is not None and plan2.action_type == "search_files"
+    assert plan2.payload["query"] == "ordinary"
+
+
+def test_word_order_independent_fuzzy_match(tmp_path):
+    """Even WITH the artist left in the query, token-set scoring must match
+    'ordinary by alex warren' to 'Alex Warren - Ordinary.mp3'."""
+    home = _make_tree(tmp_path)
+    hits = UniversalFilesystem.search_filesystem(
+        "ordinary by alex warren", root_dir=str(tmp_path / "driveF")
+    )
+    assert hits and "Ordinary" in hits[0]["file_name"]
+    assert hits[0].get("fuzzy_match") is True
+
+
+def test_persistent_index_accelerates_without_lying(tmp_path):
+    """The agent's own mini-Everything: a persistent filename index.
+    - warm searches are cache hits (existence-verified)
+    - a file CREATED after indexing is still found (miss -> live walk)
+    - a file DELETED after indexing is never reported (verified out)
+    """
+    from app.tools.file_index import get_file_index, reset_file_index
+
+    reset_file_index(str(tmp_path / "file_index.db"))
+    home = _make_tree(tmp_path)
+    roots = [str(tmp_path)]
+
+    cold = UniversalFilesystem.search_filesystem("ordinary", root_dir=roots)
+    assert any("Ordinary" in h["file_name"] for h in cold)
+
+    warm = UniversalFilesystem.search_filesystem("ordinary", root_dir=roots)
+    assert any("Ordinary" in h["file_name"] for h in warm)
+    assert get_file_index().stats["hits"] >= 1, "second search must use the index"
+
+    # Created after indexing -> still found (never a stale miss).
+    (tmp_path / "home" / "Music" / "Brand New Track.mp3").write_text("x")
+    fresh = UniversalFilesystem.search_filesystem("brand new track", root_dir=roots)
+    assert any("Brand New Track" in h["file_name"] for h in fresh)
+
+    # Deleted after indexing -> never reported (existence-verified out).
+    (tmp_path / "home" / "Music" / "Kaba - Official Video.mp3").unlink()
+    gone = UniversalFilesystem.search_filesystem("kaba", root_dir=[str(tmp_path / "home")])
+    assert not any("Kaba" in h["file_name"] for h in gone)

@@ -67,6 +67,23 @@ def _desktop_directories() -> List[str]:
     return dirs
 
 
+def _strip_artist_tail(name: str) -> tuple:
+    """'ordinary by alex warren' -> ('ordinary', 'alex warren').
+
+    Live bug: the file question kept the artist in the search query
+    ('ordinary by alex warren') — the file 'Alex Warren - Ordinary.mp3'
+    contains neither that phrase (exact miss) nor the same word order
+    (fuzzy miss), so a correctly-spelled question answered 'not there'.
+    Media files are named 'Artist - Title.ext': search the title, keep the
+    artist as a preference hint."""
+    m = re.match(r"^(.*?)\s+by\s+([A-Za-z][\w\s.&'-]+)$", name.strip())
+    if m:
+        title, artist = m.group(1).strip(), m.group(2).strip()
+        if title and len(title) >= 2:
+            return title, artist
+    return name.strip(), ""
+
+
 def _clean_subject(name: Optional[str]) -> Optional[str]:
     """Validate an extracted subject: non-empty, sane length, not a
     prepositional fragment ('in that movie') or bare pronoun."""
@@ -357,6 +374,9 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         name = (file_q.group(3) or "").strip().strip("'\"")
         if name:
             name = re.split(r"\s+(?:on|in|from)\s+my\s+", name)[0].strip().strip("'\"?.! ")
+        artist = ""
+        if name:
+            name, artist = _strip_artist_tail(name)
         if name and 1 <= len(name) <= 80:
             home = os.path.expanduser("~")
             # 'do i have a song called london' must not be answered with the
@@ -377,7 +397,10 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
                 payload={"query": name, "root_dir": _file_search_roots(), "max_results": 20},
                 evidence_hint=(
                     f"Filesystem search for '{name}' (user home + other fixed drives) — "
-                    "answer whether it exists from these results." + media_hint
+                    "answer whether it exists from these results."
+                    + (f" The owner named the artist '{artist}' — prefer files matching both "
+                       "artist and title (e.g. 'Artist - Title.ext')." if artist else "")
+                    + media_hint
                 ),
                 question_kind="file_existence",
             )
@@ -495,6 +518,7 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             read_intent = True
 
     if name and not blocked_intent and ((noun_or_ext and read_intent) or search_verb):
+        name, _artist = _strip_artist_tail(name)
         home = os.path.expanduser("~")
         is_location = bool(re.search(r"\bwhere\b|\blocation\b|\bpath\b|\bfolder\b|\bdirectory\b", t))
         is_existence = bool(re.search(

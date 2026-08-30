@@ -102,6 +102,8 @@ class UniversalFilesystem:
         "msocache", "recovery", "onedrivetemp", "dist-info",
     }
 
+    _INDEX_TTL_S = 1800.0  # cache trusted for fast-path hits up to 30 min
+
     @classmethod
     def search_filesystem(
         cls,
@@ -114,8 +116,10 @@ class UniversalFilesystem:
         typo-tolerant fuzzy matches as a fallback.
 
         Everything (voidtools) reads the NTFS master file table and sees every
-        file on every drive instantly; this tool WALKS the tree, so it is
-        scoped and budgeted instead:
+        file on every drive instantly; this tool WALKS the tree — but keeps a
+        persistent filename index (data/file_index.db) so repeat searches are
+        instant. Index hits are existence-verified; misses always fall through
+        to a live walk, so the index can never fabricate absence:
 
           * ``root_dir`` may be a single path or a LIST of paths (None → the
             app base directory). Directories are matched as well as files —
@@ -136,6 +140,7 @@ class UniversalFilesystem:
             return []
         query_lower = query_raw.lower()
         query_norm = _re.sub(r"[^a-z0-9]+", "", query_lower)
+        query_tokens = [t for t in _re.split(r"[^a-z0-9]+", query_lower) if len(t) >= 3]
 
         if root_dir is None:
             roots = [Path(settings.BASE_DIR)]
@@ -143,6 +148,36 @@ class UniversalFilesystem:
             roots = [Path(r) for r in root_dir if str(r or "").strip()]
         else:
             roots = [Path(str(root_dir))]
+
+        # ── Index fast path ────────────────────────────────────────────────
+        # All roots freshly indexed? Answer from the cache — but VERIFY each
+        # hit still exists, so deletions/moves can never be reported stale.
+        try:
+            from app.tools.file_index import get_file_index
+            index = get_file_index()
+            root_strs = [str(r) for r in roots]
+            if all(index.root_age(rs) < cls._INDEX_TTL_S for rs in root_strs):
+                cached = index.lookup_exact(query_raw, root_strs, limit=max_results * 2)
+                verified = [m for m in cached if os.path.exists(m["file_path"])]
+                if verified:
+                    try:
+                        p = Path(verified[0]["file_path"])
+                        verified[0]["size_bytes"] = p.stat().st_size if p.is_file() else 0
+                        verified[0]["extension"] = p.suffix.lower()
+                    except OSError:
+                        pass
+                    for m in verified[1:]:
+                        m["size_bytes"] = 0
+                        m["extension"] = Path(m["file_path"]).suffix.lower()
+                    index.stats["hits"] += 1
+                    app_logger.info(
+                        f"File index cache hit: {len(verified[:max_results])} verified match(es) "
+                        f"for '{query_raw}' across {len(root_strs)} indexed root(s)."
+                    )
+                    return verified[:max_results]
+                index.stats["misses"] += 1
+        except Exception as exc:
+            app_logger.warning(f"File index fast path skipped ({exc}); using live walk.")
 
         exact: List[Dict[str, Any]] = []
         fuzzy: List[Dict[str, Any]] = []
@@ -166,21 +201,36 @@ class UniversalFilesystem:
             """Best similarity between the query and the name / its tokens —
             'ordinaryr' vs 'Alex Warren - Ordinary.mp3' must score on the
             'ordinary' token, not the whole artist-prefixed string.
-            Adjacent transpositions ('kbaa' for 'kaba') get an anagram boost:
-            character edit distance punishes swaps that a human never notices."""
+            Adjacent transpositions ('kbaa' for 'kaba') get an anagram boost,
+            and word ORDER is ignored via a token-set comparison
+            ('ordinary by alex warren' vs 'Alex Warren - Ordinary.mp3')."""
             norm = _re.sub(r"[^a-z0-9]+", "", name.lower())
             best = difflib.SequenceMatcher(None, query_norm, norm).ratio()
             if sorted(query_norm) == sorted(norm):
                 best = max(best, 1.0)
-            for token in _re.split(r"[^a-z0-9]+", name.lower()):
-                t = token.strip()
-                if len(t) >= 3:
-                    best = max(
-                        best,
-                        difflib.SequenceMatcher(None, query_norm, t).ratio(),
-                    )
-                    if sorted(query_norm) == sorted(t):
-                        best = max(best, 1.0)
+            name_tokens = [t for t in _re.split(r"[^a-z0-9]+", name.lower()) if len(t) >= 3]
+            for t in name_tokens:
+                best = max(
+                    best,
+                    difflib.SequenceMatcher(None, query_norm, t).ratio(),
+                )
+                if sorted(query_norm) == sorted(t):
+                    best = max(best, 1.0)
+            # Token-set ratio: same words in a different order still match —
+            # difflib alone scores 'ordinarybyalexwarren' vs
+            # 'alexwarrenordinary' at 0.54 because the shared blocks sit on
+            # opposite sides.
+            if len(query_tokens) >= 2:
+                joined_q = " ".join(sorted(query_tokens))
+                joined_n = " ".join(sorted(name_tokens))
+                best = max(
+                    best,
+                    difflib.SequenceMatcher(None, joined_q, joined_n).ratio(),
+                )
+                # Subset direction: the query's words all appearing in the
+                # name (plus filler like 'by') is a strong signal.
+                if set(query_tokens) <= set(name_tokens):
+                    best = max(best, 0.95)
             return best
 
         # Cheap fuzzy prefilter: the query's characters must (mostly) be
@@ -189,26 +239,54 @@ class UniversalFilesystem:
         # its FIRST THREE CHARS diverge, which a positional prefilter
         # ('ori' in name) would wrongly reject.
         q_chars = set(query_norm)
-        q_need = max(3, len(q_chars) - 1)
+        q_need = max(3, len(q_chars) - 2)
 
         def _prefilter(name_lower: str) -> bool:
             return len(q_chars & set(name_lower)) >= q_need
+
+        record_index = False
+        try:
+            from app.tools.file_index import get_file_index
+            index = get_file_index()
+            record_index = True
+            index.stats["walks"] += 1
+        except Exception:
+            record_index = False
 
         for search_root in roots:
             if not search_root.exists():
                 continue
             if _time.monotonic() > deadline:
                 break
+            root_str = str(search_root)
+            index_batch: List[tuple] = []
+            root_complete = True
+            if record_index:
+                try:
+                    index.begin_root(root_str)
+                except Exception:
+                    record_index = False
+
+            def _flush_index() -> None:
+                if record_index and index_batch:
+                    try:
+                        index.add_entries(root_str, index_batch)
+                    except Exception:
+                        pass
+                    index_batch.clear()
+
             try:
                 walk = os.walk(search_root)
                 for root, dirs, files in walk:
                     if _time.monotonic() > deadline:
+                        root_complete = False
                         break
                     # Prune system/junk directories in-place (os.walk reuses
                     # the mutated list).
                     dirs[:] = [d for d in dirs if d.lower() not in cls._SKIP_DIRS]
                     for d in dirs:
                         dl = d.lower()
+                        index_batch.append((d, str(Path(root) / d), 1))
                         if query_lower in dl:
                             exact.append(_entry(Path(root) / d, d, True))
                         elif (
@@ -224,6 +302,7 @@ class UniversalFilesystem:
                             fuzzy.append(e)
                     for f in files:
                         fl = f.lower()
+                        index_batch.append((f, str(Path(root) / f), 0))
                         if query_lower in fl:
                             exact.append(_entry(Path(root) / f, f, False))
                         elif (
@@ -239,6 +318,14 @@ class UniversalFilesystem:
                             fuzzy.append(e)
                     if len(exact) >= max_results:
                         break
+                    if len(index_batch) >= 4096:
+                        _flush_index()
+                _flush_index()
+                if record_index:
+                    # An exact-match early break stops the walk early: the
+                    # index for this root is partial (still useful — it is
+                    # only ever an accelerator).
+                    index.finish_root(root_str, complete=root_complete and len(exact) < max_results)
             except Exception as e:
                 app_logger.warning(f"Error during filesystem search: {e}")
 
