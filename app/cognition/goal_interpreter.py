@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from app.llm import llm_client
 from app.utils.logger import app_logger
 
@@ -433,9 +433,13 @@ class SemanticGoalInterpreter:
             app_logger.warning(f"Manifest candidate discovery unavailable: {exc}")
 
         # 2. Ingest learned strategy lessons from MemoryStore if explicitly supplied
+        lesson_text = ""
         if memory_store is not None:
             try:
                 past_memories = memory_store.search(user_text, limit=3)
+                lesson_text = " ".join(
+                    str(getattr(mem, "content", "") or "") for mem in past_memories
+                ).lower()
                 for mem in past_memories:
                     if hasattr(mem, "content") and any(k in str(mem.content).lower() for k in ["strategy", "used", "worked", "lesson"]):
                         candidates.append({
@@ -447,7 +451,15 @@ class SemanticGoalInterpreter:
             except Exception as e:
                 app_logger.warning(f"Memory candidate synthesis note: {e}")
 
-        # 3. Inspect WorldModel capability graph for active, EXECUTABLE capabilities if explicitly supplied
+        # 3. Inspect the WorldModel capability graph for active, EXECUTABLE
+        # capabilities if explicitly supplied. P0 bottleneck #4: the old
+        # `active_caps[:5]` slice considered only the five most-recently-seen
+        # entities (find_entities orders by last_seen DESC) — the rest of the
+        # capability graph was invisible no matter how relevant. Now ALL
+        # capabilities flow through a ranked discovery funnel:
+        #   semantic relevance -> availability -> safety ->
+        #   historical success -> resource cost -> top candidates
+        # (the final cut is a RANKED cut, not an arbitrary position slice).
         if world_model is not None:
             try:
                 if tool_registry is not None:
@@ -463,21 +475,90 @@ class SemanticGoalInterpreter:
                     "formulate_answer", "answer", "workflow_execute"
                 }
 
-                active_caps = world_model.find_entities(entity_type="capability")
-                for cap in active_caps[:5]:
-                    cap_name = cap.name.lower().replace(" ", "_")
-                    # EXECUTABILITY VERIFICATION: Ensure capability has an active handler before synthesizing candidate
+                try:
+                    from app.tools.manifest import get_tool_manifest as _gtm
+                    manifest = _gtm()
+                except Exception:
+                    manifest = {}
+
+                lowered = (user_text or "").lower()
+                text_tokens = {t for t in re.findall(r"[a-z_]+", lowered) if len(t) > 2}
+                words = set(re.findall(r"[a-z_]+", lowered))
+                ranked: List[Tuple[float, Any, str]] = []
+                for cap in world_model.find_entities(entity_type="capability"):
+                    cap_name = str(getattr(cap, "name", "") or "").lower().replace(" ", "_")
+                    if not cap_name:
+                        continue
+                    # AVAILABILITY (hard): a capability must have an active
+                    # handler before it can become a candidate.
                     is_executable = (cap_name in executable_tools) or (cap_name in NATIVE_EXECUTABLE_CAPS) or any(ec in cap_name for ec in NATIVE_EXECUTABLE_CAPS)
-                    if is_executable:
-                        if cap_name not in [c.get("action_type") for c in candidates]:
-                            candidates.append({
-                                "name": f"Dynamic Capability: {cap.name}",
-                                "action_type": cap_name,
-                                "payload": {"query": user_text, "action_type": cap_name},
-                                "source": "world_model_capability"
-                            })
-                    else:
+                    if not is_executable:
                         app_logger.warning(f"CandidateSynthesizer: Skipping non-executable capability entity '{cap.name}'")
+                        continue
+                    entry = manifest.get(cap_name) or {}
+                    # AVAILABILITY (soft): an optional integration whose
+                    # manifest availability check reports offline cannot run
+                    # now — don't spend a candidate slot on it.
+                    checker = entry.get("availability")
+                    if callable(checker):
+                        try:
+                            if checker() is False:
+                                continue
+                        except Exception:
+                            pass
+
+                    # 1. SEMANTIC RELEVANCE to this goal (name + entity
+                    # description + manifest description token overlap).
+                    cap_attr = getattr(cap, "attributes", None)
+                    try:
+                        cap_desc = str((cap_attr or {}).get("description", "") or "")
+                    except Exception:
+                        cap_desc = ""
+                    hay = f"{cap_name.replace('_', ' ')} {cap_desc} {str(entry.get('description', '') or '')}".lower()
+                    cap_tokens = {t for t in re.findall(r"[a-z_]+", hay) if len(t) > 2}
+                    score = float(len(text_tokens & cap_tokens))
+                    name_words = set(cap_name.split("_")) - {"and", "the"}
+                    if name_words and name_words <= words:
+                        score += 2.0
+                    # 2. SAFETY: prefer lower safety levels (less destructive,
+                    # more autonomous). Unknown level (custom hotloaded tool)
+                    # is treated as gated.
+                    try:
+                        safety = float(entry.get("safety_level", 2) or 0)
+                    except Exception:
+                        safety = 2.0
+                    score -= 0.75 * safety
+                    # 3. HISTORICAL SUCCESS: episodic lessons that name this
+                    # capability, plus the entity's recorded confidence.
+                    if cap_name in lesson_text or cap_name.replace("_", " ") in lesson_text:
+                        score += 1.5
+                    try:
+                        score += min(float(getattr(cap, "confidence", 1.0) or 0.0), 1.0)
+                    except Exception:
+                        pass
+                    # 4. RESOURCE COST: honored when the executor records a
+                    # duration on the entity ('avg_duration_s'); no-op until
+                    # such data exists.
+                    try:
+                        cost = float((cap_attr or {}).get("avg_duration_s", 0) or 0)
+                    except Exception:
+                        cost = 0.0
+                    score -= min(cost, 2.0)
+                    ranked.append((score, cap, cap_name))
+
+                ranked.sort(key=lambda item: item[0], reverse=True)
+                existing_actions = {c.get("action_type") for c in candidates}
+                for score, cap, cap_name in ranked[:8]:
+                    if cap_name in existing_actions:
+                        continue
+                    candidates.append({
+                        "name": f"Dynamic Capability: {cap.name}",
+                        "action_type": cap_name,
+                        "payload": {"query": user_text, "action_type": cap_name},
+                        "source": "world_model_capability",
+                        "score": score,
+                    })
+                    existing_actions.add(cap_name)
             except Exception as e:
                 app_logger.warning(f"WorldModel capability candidate synthesis note: {e}")
 
