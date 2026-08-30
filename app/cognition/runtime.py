@@ -1372,6 +1372,83 @@ class CognitiveRuntime:
             ),
         }
 
+    # ------------------------------------------------------------------
+    # P0 bottleneck #11: SUPPORTED / AVAILABLE / READY are separate concepts.
+    #   supported  — an implementation actually exists in the codebase
+    #   available  — the device/integration is really present right now:
+    #                True (probed present), False (probed absent), or None
+    #                (honestly unverified — never silently optimistic)
+    #   ready      — usable now: supported AND not probed-absent. Attemptable
+    #                capabilities whose device can't be cheaply probed stay
+    #                attemptable; failures then surface honestly at execution
+    #                (item-1 contract) instead of being pre-claimed here.
+    # The old NATIVE_CAPABILITIES set marked every entry True with no
+    # backing: microphone.capture/record had NO implementation anywhere,
+    # and camera.capture never probed the webcam.
+    # ------------------------------------------------------------------
+    NATIVE_CAPABILITY_BACKING: Dict[str, Dict[str, Any]] = {
+        "llm.generate": {
+            "evidence": "LLM client implementation (LM Studio endpoint); live reachability not probed per cycle"},
+        "os.launch_app": {"evidence": "SystemAppInventory.launch_any_app (host-native)"},
+        "filesystem.search": {"evidence": "search_files tool (host-native)"},
+        "filesystem.read": {"evidence": "universal filesystem tools (host-native)"},
+        "browser.open": {"evidence": "open_url via host default browser"},
+        "web.search": {
+            "evidence": "web_search tool (network-dependent; reachability not probed per cycle)"},
+        "screen.capture": {"evidence": "screen_capture tool (host-native)"},
+        "vision.analyze": {
+            "evidence": "VLM vision tools (model-dependent; not probed per cycle)"},
+        "system.probe": {"evidence": "system diagnostics tools (host-native)"},
+        "camera.capture": {
+            "probe": "camera", "evidence": "camera_photo tool — OpenCV webcam device probe"},
+        "camera.photo": {
+            "probe": "camera", "evidence": "camera_photo tool — OpenCV webcam device probe"},
+        "location.resolve": {
+            "probe": "location",
+            "evidence": "resolve_location tool (ADB phone or IP fallback — code always present)"},
+        "location.geolocate": {
+            "probe": "location",
+            "evidence": "resolve_location tool (ADB phone or IP fallback — code always present)"},
+    }
+    # Deliberately NOT backed: microphone.capture / microphone.record have no
+    # implementation in the codebase. Advertising them as native capabilities
+    # was architectural fiction — they stay honestly UNSUPPORTED (and gate to
+    # DEFER) until a real microphone tool is registered.
+    KNOWN_UNIMPLEMENTED_CAPABILITIES = {
+        "microphone.capture", "microphone.record", "microphone.listen",
+    }
+
+    @staticmethod
+    def _probe_camera_availability() -> Optional[bool]:
+        """AVAILABLE, not just SUPPORTED: probe the real webcam (OpenCV +
+        device 0). Probed-absent means honest DEFER, not a failed run."""
+        try:
+            from app.tools.camera_capture import CameraCaptureTool
+            return bool(CameraCaptureTool.is_available())
+        except Exception:
+            return False
+
+    @staticmethod
+    def _probe_location_availability() -> Optional[bool]:
+        # LocationService is a pure-code fallback chain (ADB phone, else IP
+        # geolocation): the implementation's presence is structural.
+        return True
+
+    _CAPABILITY_PROBES = {
+        "camera": _probe_camera_availability.__func__,
+        "location": _probe_location_availability.__func__,
+    }
+
+    def check_capability_status(
+        self,
+        required_capabilities: List[str],
+        target_domain: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """Three-concept capability status: supported / available / ready.
+
+        available=None means 'honestly unverified', never 'assume yes'."""
+        return self._resolve_capability_status(required_capabilities, target_domain)[1]
+
     def check_capability_availability(
         self,
         required_capabilities: List[str],
@@ -1380,20 +1457,46 @@ class CognitiveRuntime:
         """
         P0 Fix: Dynamically resolves capability availability against ToolRegistry,
         CapabilityFactory, WorldModel, and environmental device status without default 'or True'.
+        Values are READY flags (supported and not probed-absent); the
+        three-concept breakdown lives in check_capability_status().
         """
+        cap_map, status_map, ignored = self._resolve_capability_status(
+            required_capabilities, target_domain)
+        if status_map:
+            ladder = {c: s["status"] for c, s in status_map.items()}
+            app_logger.info(f"Capability ladder: {ladder}")
+        if ignored:
+            app_logger.info(f"Unresolvable capability phrases ignored (cannot veto): {ignored}")
+        return cap_map
+
+    def _resolve_capability_status(
+        self,
+        required_capabilities: List[str],
+        target_domain: str
+    ) -> tuple:
         cap_map: Dict[str, bool] = {}
+        status_map: Dict[str, Dict[str, Any]] = {}
         # Live fix: the LLM invents free-text capability phrases ('ability to
         # express emotions verbally'). A phrase that resolves to NO registered
         # tool or native capability cannot veto execution — it is recorded as
         # unresolvable and ignored, and only RESOLVABLE capabilities are gated.
         ignored_phrases: List[str] = []
 
-        NATIVE_CAPABILITIES = {
-            "llm.generate", "os.launch_app", "filesystem.search", "filesystem.read",
-            "browser.open", "web.search", "screen.capture", "vision.analyze",
-            "system.probe", "camera.capture", "camera.photo", "location.resolve",
-            "location.geolocate", "microphone.capture", "microphone.record",
-        }
+        def _record(cap: str, supported: bool, available: Optional[bool], evidence: str) -> None:
+            ready = supported and available is not False
+            status_map[cap] = {
+                "supported": supported,
+                "available": available,
+                "ready": ready,
+                "status": (
+                    "unsupported" if not supported
+                    else "unavailable" if available is False
+                    else "ready" if available is True
+                    else "supported_unverified"
+                ),
+                "evidence": evidence,
+            }
+            cap_map[cap] = ready
 
         registered_tools = set(self.registry._registry.keys())
 
@@ -1422,20 +1525,50 @@ class CognitiveRuntime:
         for cap in required_capabilities:
             cap_clean = cap.lower().strip()
 
+            # 0. Known-unimplemented hardware capability (P0 #11): the name is
+            #    real ('microphone.capture') but NO implementation exists.
+            #    Honestly UNSUPPORTED — it gates to DEFER instead of
+            #    pretending the device is there.
+            if cap_clean in self.KNOWN_UNIMPLEMENTED_CAPABILITIES:
+                _record(cap, supported=False, available=False,
+                        evidence="No implementation registered for this capability in the codebase")
+
             # 1. Device-specific probe check (e.g. ADB phone controller).
             #    Use token/prefix matching — a bare substring "phone" would wrongly
             #    catch "microphone", "telephone", "headphones", etc.
-            if cap_clean.startswith("phone.") or cap_clean == "phone" or \
+            elif cap_clean.startswith("phone.") or cap_clean == "phone" or \
                cap_clean.startswith("adb.") or cap_clean == "adb":
                 try:
                     from app.tools.android_adb_controller import AndroidADBController
-                    cap_map[cap] = AndroidADBController.is_adb_available()
+                    probed = bool(AndroidADBController.is_adb_available())
                 except Exception:
-                    cap_map[cap] = False
+                    probed = False
+                _record(cap, supported=True, available=probed,
+                        evidence="Android ADB device probe")
 
-            # 2. Check native capability list
-            elif any(cap_clean == nc or cap_clean in nc or nc in cap_clean for nc in NATIVE_CAPABILITIES):
-                cap_map[cap] = True
+            # 2. Backed native capability: SUPPORTED by a real implementation;
+            #    AVAILABLE via its device probe when one exists (camera,
+            #    location), None (honestly unverified) when probing would cost
+            #    a live call per cycle (LLM, network, VLM).
+            elif any(cap_clean == nc or cap_clean in nc or nc in cap_clean
+                     for nc in self.NATIVE_CAPABILITY_BACKING):
+                matched = next(nc for nc in self.NATIVE_CAPABILITY_BACKING
+                               if cap_clean == nc or cap_clean in nc or nc in cap_clean)
+                entry = self.NATIVE_CAPABILITY_BACKING[matched]
+                probe_name = entry.get("probe")
+                available: Optional[bool] = None
+                if probe_name:
+                    try:
+                        available = self._CAPABILITY_PROBES[probe_name]()
+                    except Exception:
+                        available = False
+                elif entry["evidence"].startswith(("LLM client", "web_search tool (network",
+                                                   "VLM vision tools")):
+                    available = None  # honest: would cost a live call to verify
+                else:
+                    available = True   # host-native: the running code IS it
+                _record(cap, supported=True, available=available,
+                        evidence=entry["evidence"])
 
             # 3. Check ToolRegistry registered tools (normalized dot/underscore
             #    + action-stem matching so "filesystem.search" → "search_files").
@@ -1444,7 +1577,37 @@ class CognitiveRuntime:
             #    match "quantum_teleportation", just as "phone" would match
             #    "microphone".
             elif self._tool_capability_match(cap_clean, tool_norms):
-                cap_map[cap] = True
+                # SUPPORTED: a registered tool with an active handler.
+                # AVAILABLE: the tool's own availability checker (config
+                # presence, probe=False — no live calls) — an unconfigured
+                # integration (e.g. Telegram without a bot token) defers
+                # honestly here instead of pretending 'handler = ready'.
+                matched_tool = self._find_tool_capability(
+                    cap_clean, self.registry._registry.keys())
+                if matched_tool:
+                    tool_available: Optional[bool] = None
+                    avail_status = "unverified"
+                    try:
+                        # probe=True imports just that tool's module and runs
+                        # its availability checker (config presence; no
+                        # network side effects) — per REQUIRED cap, not per
+                        # cycle, and cached by sys.modules after the first.
+                        info = self.registry.get_tool_availability(matched_tool, probe=True)
+                        if isinstance(info, dict):
+                            # Verbatim True/False/None: 'not_checked' must
+                            # stay unverified, never coerce to unavailable.
+                            tool_available = info.get("available")
+                            if tool_available is None:
+                                tool_available = None
+                            avail_status = str(info.get("status", "unverified"))
+                    except Exception:
+                        tool_available = None  # checker itself failed: unverified
+                    _record(cap, supported=True, available=tool_available,
+                            evidence=f"Registered tool '{matched_tool}' — availability: {avail_status}")
+                else:
+                    _record(cap, supported=True, available=None,
+                            evidence="Registered tool matched by name stem (exact tool "
+                                     "unresolved — availability unverified)")
 
             # 4. Check WorldModel dynamic capabilities synthesized by CapabilityFactory.
             #    Token-boundary matching, NOT bare substrings — same rationale
@@ -1452,7 +1615,8 @@ class CognitiveRuntime:
             #    one ('phone' → 'microphone'), and a long invented phrase must
             #    not accidentally contain a real capability name.
             elif any(self._capability_token_match(cap_clean, wc) for wc in wm_caps):
-                cap_map[cap] = True
+                _record(cap, supported=True, available=None,
+                        evidence="WorldModel capability entity (device presence unverified)")
 
             # 5. Unresolvable phrase (invented by the LLM, matches nothing):
             #    record and IGNORE — it cannot veto real, registered tools.
@@ -1468,7 +1632,26 @@ class CognitiveRuntime:
             app_logger.warning(
                 f"All required capabilities were unresolvable phrases: {ignored_phrases}; "                "treating as unconstrained rather than blocked."
             )
-        return cap_map
+        return cap_map, status_map, ignored_phrases
+
+    @staticmethod
+    def _find_tool_capability(cap_clean: str, registered_tools) -> Optional[str]:
+        """Resolve a capability to a FULL registry tool name for availability
+        lookup. Exact name first, then the capability being one of a tool's
+        name tokens ('telegram' -> send_telegram, 'search' -> search_files).
+        Never resolves via loose stems — 'send_telegram' must not look up a
+        stem like 'telegram' that isn't a real registry key."""
+        cap_tokens = set(cap_clean.replace(".", "_").split("_"))
+        for name in registered_tools:
+            norm = name.lower().replace(".", "_").replace("-", "_")
+            if norm == cap_clean:
+                return norm
+        for name in registered_tools:
+            norm = name.lower().replace(".", "_").replace("-", "_")
+            tn_tokens = set(norm.split("_"))
+            if cap_clean in tn_tokens:
+                return norm
+        return None
 
     @staticmethod
     def _tool_capability_match(cap_clean: str, tool_norms: set) -> bool:

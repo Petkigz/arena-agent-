@@ -68,12 +68,19 @@ def test_location_returns_unknown_when_offline(monkeypatch):
 
 
 def test_native_capabilities_advertised_in_runtime():
-    """The capability map must advertise camera + location + microphone."""
+    """P0 #11 (honest contract): camera + location are advertised READY
+    (backed by real implementations, camera probed); microphone.capture is
+    honestly UNSUPPORTED — the old test pinned the architectural fiction
+    that marked it True with no implementation anywhere."""
+    from unittest.mock import patch
     from app.cognition.runtime import CognitiveRuntime
     rt = CognitiveRuntime(db_path="data/cap_probe.db")
-    caps = rt.check_capability_availability(
-        required_capabilities=["camera.capture", "location.resolve", "microphone.capture"],
-        target_domain="desktop_os",
-    )
-    for k in ("camera.capture", "location.resolve", "microphone.capture"):
-        assert caps.get(k) is True, f"{k} should be a native capability"
+    with patch.dict(CognitiveRuntime._CAPABILITY_PROBES, {"camera": lambda: True}):
+        caps = rt.check_capability_availability(
+            required_capabilities=["camera.capture", "location.resolve", "microphone.capture"],
+            target_domain="desktop_os",
+        )
+    assert caps.get("camera.capture") is True
+    assert caps.get("location.resolve") is True
+    # No microphone implementation exists — advertising it was fiction.
+    assert caps.get("microphone.capture") is False
