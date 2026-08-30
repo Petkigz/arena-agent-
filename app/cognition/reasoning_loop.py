@@ -1,6 +1,6 @@
 """Closed observe -> reason -> investigate -> observe cognitive loop."""
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Optional
 from .action_selection import ActionSelector, InvestigationExecutor, InvestigationPlan, ActionResult
 from .belief_engine import BeliefEngine
@@ -52,6 +52,7 @@ class CognitiveReasoningLoop:
                              observation_type=observation_type,
                              confidence=confidence, task_id=task_id)
         needs = list(information_needs or [])
+        synthesized_need_used = False
         for _ in range(self.max_steps):
             decision = self.cycle.decide(
                 subject,
@@ -70,11 +71,29 @@ class CognitiveReasoningLoop:
             self._emit("reasoning_decision", {"subject": subject, "predicate": predicate, "action": decision.action.value, "confidence": decision.confidence})
             if decision.action in (ReasoningAction.ANSWER, ReasoningAction.DEFER, ReasoningAction.ACT):
                 trace.finished = True; trace.reason = decision.reason; return trace
+            if decision.action is ReasoningAction.INVESTIGATE and decision.information_need is None and not needs and not synthesized_need_used:
+                # P0 bottleneck #5: an INVESTIGATE decision with no explicit
+                # information need used to dead-end the loop BEFORE the
+                # registry was ever consulted ("why couldn't you just
+                # check?"). The user's question IS the information need:
+                # synthesize one (once, bounded) so the manifest-backed
+                # investigation path can actually gather evidence.
+                synthesized_need_used = True
+                decision = replace(decision, information_need=InformationNeed(
+                    question=str(value or subject),
+                    target=subject,
+                    reason="Synthesized from the user's question (no explicit information need supplied).",
+                    priority=0.6,
+                ))
+                needs.append(decision.information_need)
             if decision.action is not ReasoningAction.INVESTIGATE or decision.information_need is None:
                 trace.finished = True; trace.reason = decision.reason; return trace
             plan = self.action_selector.select(decision.information_need)
             if plan is None:
-                trace.finished = True; trace.reason = "No registered investigation is available."; return trace
+                trace.finished = True
+                trace.reason = (f"No safe investigation tool matched the need "
+                                f"'{str(decision.information_need.question)[:60]}'.")
+                return trace
             trace.plans.append(plan)
             if self.cognitive_state is not None:
                 self.cognitive_state.execution.pending_action = plan.tool
@@ -88,7 +107,10 @@ class CognitiveReasoningLoop:
                     self.cognitive_state.execution.pending_action = None
                     self.cognitive_state.touch()
                 trace.finished = True; trace.reason = result.error or "Investigation failed."; return trace
-            evidence_predicate = plan.predicate or decision.information_need.predicate or predicate
+            # Latent bug surfaced by P0 #5: this path never executed while
+            # the registry was empty, and InformationNeed has no 'predicate'
+            # field (question/target/reason/priority).
+            evidence_predicate = plan.predicate or getattr(decision.information_need, "predicate", None) or predicate
             self.engine.ingest(subject, evidence_predicate, result.output,
                              source=SourceType.TOOL_OUTPUT,
                              observation_type="inferred", task_id=task_id)

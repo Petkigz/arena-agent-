@@ -315,7 +315,12 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
             continue  # no number -> cannot dial/text
         for phrase in SYNONYMS.get(action_type, []):
             phrase_tokens = set(re.findall(r"[a-z_]+", phrase))
-            if phrase in text or (phrase_tokens and phrase_tokens <= raw_words):
+            # Single-word synonyms must match on word boundaries: a bare
+            # substring check made 'text' fire inside 'context' (and phone_sms
+            # score 2.0 on nearly every English sentence). Multi-word phrases
+            # keep the contiguous-substring match.
+            phrase_hit = (phrase in text) if " " in phrase else (phrase in words)
+            if phrase_hit or (phrase_tokens and phrase_tokens <= raw_words):
                 score += 2.0
                 matched.append(phrase)
         # The tool's own name appearing verbatim in the message is a strong signal.
@@ -391,7 +396,12 @@ def rank_tools(
         matched: List[str] = list(overlap)
         for phrase in SYNONYMS.get(action_type, []):
             phrase_tokens = set(re.findall(r"[a-z_]+", phrase))
-            if phrase in text or (phrase_tokens and phrase_tokens <= words):
+            # Single-word synonyms must match on word boundaries: a bare
+            # substring check made 'text' fire inside 'context' (and phone_sms
+            # score 2.0 on nearly every English sentence). Multi-word phrases
+            # keep the contiguous-substring match.
+            phrase_hit = (phrase in text) if " " in phrase else (phrase in words)
+            if phrase_hit or (phrase_tokens and phrase_tokens <= words):
                 score += 2.0
                 matched.append(phrase)
         name_words = set(action_type.split("_")) - STOPWORDS

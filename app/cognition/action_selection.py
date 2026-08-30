@@ -1,9 +1,52 @@
 """Turn information needs into bounded, inspectable tool requests."""
 from __future__ import annotations
+import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from .information_gain import InformationNeed
 from app.cognition.action_proposal import ActionProposal
+
+# Autonomous investigations may run read-only/Level-0-1 probes from the
+# manifest; anything higher needs the gated ACT path (owner confirmation),
+# never a quiet background execution.
+INVESTIGATION_MAX_SAFETY_LEVEL = 1
+
+
+def _investigation_arguments(handler: Callable[..., Any], need: InformationNeed,
+                             extracted: Optional[dict] = None) -> Optional[dict[str, Any]]:
+    """Build handler-compatible arguments from an information need.
+
+    Manifest handlers uniformly take a single ``payload`` dict (the wrapper
+    filters keys to the underlying tool's parameters and drops the rest), so
+    the need's question/target plus any text-extracted operands (urls, paths,
+    queries) ride inside it. Returns None when a custom handler requires a
+    parameter the need cannot honestly fill — that tool is skipped, not
+    called with invented values."""
+    try:
+        params = list(inspect.signature(handler).parameters.values())
+    except (TypeError, ValueError):
+        return None
+    named = [p for p in params if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)]
+    has_var_kw = any(p.kind is p.VAR_KEYWORD for p in params)
+    names = {p.name for p in named}
+    if "payload" in names or (has_var_kw and not named):
+        payload = dict(extracted or {})
+        payload.update({
+            "query": need.question, "question": need.question,
+            "text": need.question, "target": need.target,
+        })
+        return {"payload": payload} if "payload" in names else payload
+    if has_var_kw:
+        return {"query": need.question, "question": need.question, "target": need.target}
+    args: dict[str, Any] = {}
+    for p in named:
+        if p.name in ("query", "question", "search", "text", "request", "q"):
+            args[p.name] = need.question
+        elif p.name in ("target", "subject", "name", "host"):
+            args[p.name] = need.target
+        elif p.default is inspect.Parameter.empty:
+            return None  # required parameter we cannot fill honestly
+    return args
 
 @dataclass(frozen=True)
 class InvestigationPlan:
@@ -15,14 +58,58 @@ class InvestigationPlan:
     predicate: Optional[str] = None
 
 class InvestigationRegistry:
-    """Maps semantic information needs to safe, pre-registered probes."""
-    def __init__(self) -> None:
+    """Maps semantic information needs to safe, pre-registered probes.
+
+    P0 bottleneck #5: for needs with no pre-registered probe, planning now
+    falls back to SEMANTIC DISCOVERY over the unified tool manifest — the
+    agent actually has dozens of investigative tools, and 'no registered
+    investigation' while they sit unused was the 'why couldn't you just
+    check?' failure. Discovery is safety-filtered (Level <= 1) and only
+    proposes tools whose required parameters the need can honestly fill;
+    genuinely vague needs still return None (no guessing)."""
+    def __init__(self, max_safety_level: int = INVESTIGATION_MAX_SAFETY_LEVEL) -> None:
         self._probes: dict[str, Callable[[InformationNeed], InvestigationPlan]] = {}
+        self.max_safety_level = int(max_safety_level)
+
     def register(self, target: str, planner: Callable[[InformationNeed], InvestigationPlan]) -> None:
         self._probes[target] = planner
+
     def plan(self, need: InformationNeed) -> Optional[InvestigationPlan]:
         planner = self._probes.get(need.target)
-        return planner(need) if planner else None
+        if planner is not None:
+            return planner(need)
+        return self._plan_from_manifest(need)
+
+    def _plan_from_manifest(self, need: InformationNeed) -> Optional[InvestigationPlan]:
+        try:
+            from app.cognition.tool_matcher import rank_tools
+            from app.tools.manifest import get_tool_manifest
+            manifest = get_tool_manifest()
+        except Exception:
+            return None
+        text = f"{need.question} {need.target} {need.reason}"
+        for match in rank_tools(text, limit=8):
+            entry = manifest.get(match.action_type) or {}
+            try:
+                safety = int(entry.get("safety_level", 3) or 0)
+            except (TypeError, ValueError):
+                safety = 3
+            if safety > self.max_safety_level:
+                continue
+            handler = entry.get("handler")
+            if not callable(handler):
+                continue
+            arguments = _investigation_arguments(handler, need, match.payload)
+            if arguments is None:
+                continue
+            return InvestigationPlan(
+                tool=match.action_type,
+                arguments=arguments,
+                target=need.target,
+                reason=f"Manifest-discovered investigation ({match.action_type}) for: {str(need.question)[:80]}",
+                priority=need.priority,
+            )
+        return None
 
 @dataclass(frozen=True)
 class ActionResult:
@@ -32,17 +119,60 @@ class ActionResult:
     error: Optional[str] = None
 
 class InvestigationExecutor:
-    """Executes only explicitly registered tools; never evaluates arbitrary names."""
-    def __init__(self) -> None:
+    """Executes registered tools first; unknown names fall back to the
+    unified tool manifest (P0 bottleneck #5).
+
+    The manifest fallback never invents tools and never exceeds the
+    autonomous investigation safety ceiling: gated (Level >= 2) tools return
+    an honest 'requires gated execution' refusal, offline integrations
+    report themselves honestly. Explicit registrations always take
+    precedence, so existing behavior is unchanged."""
+    def __init__(self, max_safety_level: int = INVESTIGATION_MAX_SAFETY_LEVEL) -> None:
         self._tools: dict[str, Callable[..., Any]] = {}
+        self.max_safety_level = int(max_safety_level)
+
     def register(self, name: str, tool: Callable[..., Any]) -> None:
         self._tools[name] = tool
+
     def execute(self, plan: InvestigationPlan) -> ActionResult:
         tool = self._tools.get(plan.tool)
-        if tool is None:
+        if tool is not None:
+            try:
+                output = tool(**plan.arguments)
+                return ActionResult(True, plan.tool, output=output)
+            except Exception as exc:
+                return ActionResult(False, plan.tool, error=f"{type(exc).__name__}: {exc}")
+        return self._execute_from_manifest(plan)
+
+    def _execute_from_manifest(self, plan: InvestigationPlan) -> ActionResult:
+        try:
+            from app.tools.manifest import get_tool_manifest
+            entry = get_tool_manifest().get(plan.tool)
+        except Exception as exc:
+            return ActionResult(False, plan.tool, error=f"Tool manifest unavailable: {exc}")
+        if not entry:
             return ActionResult(False, plan.tool, error="Tool is not registered")
         try:
-            output = tool(**plan.arguments)
+            safety = int(entry.get("safety_level", 3) or 0)
+        except (TypeError, ValueError):
+            safety = 3
+        if safety > self.max_safety_level:
+            return ActionResult(
+                False, plan.tool,
+                error=f"Requires gated execution (safety level {safety} > {self.max_safety_level}); "
+                      f"autonomous investigations may only run Level <= {self.max_safety_level} probes.")
+        checker = entry.get("availability")
+        if callable(checker):
+            try:
+                if checker() is False:
+                    return ActionResult(False, plan.tool, error="Integration is currently offline or unconfigured.")
+            except Exception as exc:
+                return ActionResult(False, plan.tool, error=f"Availability check failed: {exc}")
+        handler = entry.get("handler")
+        if not callable(handler):
+            return ActionResult(False, plan.tool, error="Tool is not registered")
+        try:
+            output = handler(**plan.arguments)
             return ActionResult(True, plan.tool, output=output)
         except Exception as exc:
             return ActionResult(False, plan.tool, error=f"{type(exc).__name__}: {exc}")
