@@ -37,14 +37,19 @@ def test_web_agent_rejects_invalid_step():
     assert "invalid action" in res["error"]
 
 
-def test_web_agent_maps_steps_to_browser_params():
+def test_web_agent_preserves_step_order():
+    """P0 #6: steps must reach the browser layer as an ORDERED sequence —
+    the old bucket mapping (all fills, then all clicks, waits dropped)
+    reordered real workflows and broke sites that need
+    click -> wait -> DOM update -> fill -> click -> extract."""
     captured = {}
 
-    def capture(url, fill_inputs=None, click_selectors=None, submit_form=False):
+    def capture(url, fill_inputs=None, click_selectors=None, submit_form=False,
+                use_profile=False, steps=None):
         captured["url"] = url
+        captured["steps"] = steps
         captured["fill"] = fill_inputs
         captured["click"] = click_selectors
-        captured["submit"] = submit_form
         return _fake_browser()
 
     with patch.object(WebAgent, "__module__", "app.tools.web_agent"), \
@@ -54,17 +59,24 @@ def test_web_agent_maps_steps_to_browser_params():
         WebAgent.execute_web_workflow(
             objective="search", target_url="https://example.com",
             steps=[
+                {"action": "click", "selector": "#open-form"},
+                {"action": "wait", "ms": 2000},
                 {"action": "fill", "selector": "#q", "value": "query"},
-                {"action": "click", "selector": "button"},
-                {"action": "submit"},
+                {"action": "click", "selector": "#search-btn"},
+                {"action": "extract", "selector": "#results"},
             ],
             auto_save_memory=False,
         )
 
     assert captured["url"] == "https://example.com"
-    assert captured["fill"] == {"#q": "query"}
-    assert captured["click"] == ["button"]
-    assert captured["submit"] is True
+    # The exact declared order, interleaved — not bucketed.
+    assert [s["action"] for s in captured["steps"]] == [
+        "click", "wait", "fill", "click", "extract"]
+    assert captured["steps"][1]["ms"] == 2000
+    assert captured["steps"][2] == {"action": "fill", "selector": "#q", "value": "query"}
+    assert captured["steps"][3]["selector"] == "#search-btn"
+    # No bucket flattening alongside the sequence.
+    assert captured["fill"] is None and captured["click"] is None
 
 
 def test_web_agent_navigate_step_overrides_url():

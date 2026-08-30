@@ -75,45 +75,38 @@ class WebAgent:
             if bad.get("error"):
                 return {"success": False, **bad, "objective": objective, "target_url": target_url}
 
-        # Partition steps: a leading navigate replaces target_url; everything
-        # else maps to BrowserAutomation's fill/click/submit params.
-        fill_inputs: Dict[str, str] = {}
-        click_selectors: List[str] = []
-        submit_form = False
-        extract_selector: Optional[str] = None
-        wait_ms = 0
-
+        # P0 bottleneck #6: steps are executed AS AN ORDERED SEQUENCE.
+        # The old partitioning into fill/click/submit buckets reordered the
+        # workflow (all fills, then all clicks, waits dropped entirely) —
+        # which breaks real sites requiring click -> wait -> DOM update ->
+        # fill -> click -> extract. Steps are normalized and passed through
+        # in their declared order; BrowserAutomation runs them sequentially.
+        normalized_steps: List[Dict[str, Any]] = []
         for step in (steps or []):
-            verb = step.get("action") or step.get("verb")
+            verb = str(step.get("action") or step.get("verb") or "").lower().strip()
+            entry: Dict[str, Any] = {"action": verb}
             if verb == "navigate":
-                target_url = cls._normalize_url(step.get("url", target_url))
+                target_url = cls._normalize_url(step.get("url") or target_url)
+                entry["url"] = target_url
             elif verb == "fill":
-                sel = step.get("selector")
-                val = step.get("value", "")
-                if sel:
-                    fill_inputs[sel] = str(val)
-            elif verb == "click":
-                sel = step.get("selector")
-                if sel:
-                    click_selectors.append(sel)
-            elif verb == "submit":
-                submit_form = True
-            elif verb == "extract":
-                extract_selector = step.get("selector")
+                entry["selector"] = step.get("selector")
+                entry["value"] = str(step.get("value", ""))
+            elif verb in ("click", "submit", "extract"):
+                if step.get("selector"):
+                    entry["selector"] = step["selector"]
             elif verb == "wait":
                 try:
-                    wait_ms = int(step.get("ms", 0))
+                    entry["ms"] = int(step.get("ms", 0) or 0)
                 except (TypeError, ValueError):
-                    wait_ms = 0
+                    entry["ms"] = 0
+            normalized_steps.append(entry)
 
         target_url = cls._normalize_url(target_url)
 
-        # ── Execute the browser automation ──
+        # ── Execute the browser automation (sequential workflow) ──
         browser_res = BrowserAutomation.navigate_and_extract(
             target_url,
-            fill_inputs=fill_inputs or None,
-            click_selectors=click_selectors or None,
-            submit_form=submit_form,
+            steps=normalized_steps or None,
         )
         if not browser_res.get("success"):
             return browser_res
@@ -153,6 +146,8 @@ class WebAgent:
             "target_url": target_url,
             "page_title": page_title,
             "steps_executed": len(steps or []),
+            "step_log": browser_res.get("step_log", []),
+            "extracts": browser_res.get("extracts", {}),
             "agent_summary": summary,
             "screenshot_path": browser_res.get("screenshot_path", ""),
             "image_url": browser_res.get("image_url", ""),
