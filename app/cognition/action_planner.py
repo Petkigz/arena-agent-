@@ -84,6 +84,15 @@ class ActionPlanner:
         )
         winner = sim_res.winning_branch
 
+        # NOT_CHECKED != AVAILABLE (P0 #21): a candidate whose dependency was
+        # never probed is a RISK, not a capability. Before committing, probe
+        # the chosen tool's dependencies (one module import, cached). A
+        # KNOWN-unavailable winner is skipped in favor of the next branch
+        # that probes available; if nothing is available the winner stands
+        # but the proposal carries the honest state — the missing dependency
+        # must be visible at PLANNING time, not discovered mid-execution.
+        winner = cls._probe_and_select(sim_res, winner)
+
         app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}' (utility {winner.utility_score:.4f})")
 
         # Preserve the complete ranked consideration set, including alternatives
@@ -110,3 +119,73 @@ class ActionPlanner:
             complexity=complexity,
             alternatives_considered=alternatives,
         )
+
+    @classmethod
+    def _probe_and_select(cls, sim_res, winner):
+        """Probe branch dependencies before committing to a winner (P0 #21).
+
+        The registry is the only source of truth:
+        * not_registered — NOT a registry tool (native master-agent path,
+          dynamically registered capability, or a caller-supplied candidate).
+          Other execution paths exist; never invent unavailability.
+        * available True — committable.
+        * available False — dependency KNOWN missing: skip the branch.
+        * available None — NOT_CHECKED even after probing: keep as a
+          last-resort candidate, annotated honestly.
+
+        Probes use probe=True (one module import, cached for
+        ToolRegistry._AVAILABILITY_CACHE_TTL_S).
+        """
+        try:
+            from app.cognition.tool_registry import get_shared_registry
+            registry = get_shared_registry()
+        except Exception:
+            return winner
+
+        branches = sorted(
+            [b for b in sim_res.competing_branches
+             if getattr(b, "branch_name", "") != "Default Fallback"],
+            key=lambda b: getattr(b, "utility_score", 0.0),
+            reverse=True,
+        )
+        if not branches:
+            return winner
+
+        best_unknown = None
+        best_unknown_status = None
+        for branch in branches:
+            action = str(getattr(branch, "hypothetical_action", "") or "")
+            try:
+                status = registry.get_tool_availability(action, probe=True)
+            except Exception as exc:
+                status = {"available": None, "status": f"probe_error:{exc}"}
+            if status.get("status") == "not_registered":
+                return branch
+            if status.get("available") is True:
+                return branch
+            if status.get("available") is None and best_unknown is None:
+                best_unknown, best_unknown_status = branch, status
+            # available False: dependency KNOWN missing — skip this branch.
+        if best_unknown is not None:
+            # Nothing decisively available: keep the highest-utility
+            # not-checked branch, annotated honestly.
+            best_unknown.candidate_payload["availability"] = (
+                best_unknown_status or {"available": None, "status": "not_checked"}
+            )
+            app_logger.warning(
+                f"ActionPlanner: no branch with a probed-available dependency; "
+                f"committing '{best_unknown.hypothetical_action}' with honest "
+                f"availability {best_unknown_status}"
+            )
+            return best_unknown
+        # Every registry branch's dependency is KNOWN missing: keep the
+        # original winner, annotated, so the gate/owner sees it before
+        # execution.
+        winner.candidate_payload["availability"] = {
+            "available": False, "status": "dependency_unavailable",
+        }
+        app_logger.warning(
+            "ActionPlanner: every candidate branch depends on a missing "
+            "dependency; committing the winner with honest availability."
+        )
+        return winner

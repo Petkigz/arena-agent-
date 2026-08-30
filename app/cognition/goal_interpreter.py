@@ -533,16 +533,30 @@ class SemanticGoalInterpreter:
                         app_logger.warning(f"CandidateSynthesizer: Skipping non-executable capability entity '{cap.name}'")
                         continue
                     entry = manifest.get(cap_name) or {}
-                    # AVAILABILITY (soft): an optional integration whose
-                    # manifest availability check reports offline cannot run
-                    # now — don't spend a candidate slot on it.
+                    # AVAILABILITY (soft, honest — P0 #21): NOT_CHECKED is
+                    # NOT AVAILABLE. A KNOWN-missing dependency (available
+                    # False) loses its candidate slot; an unchecked one
+                    # (available None) stays a candidate but carries its
+                    # honest state downstream so the planner can probe before
+                    # committing and the owner sees the risk before execution.
                     checker = entry.get("availability")
+                    availability_state = "available"
                     if callable(checker):
                         try:
-                            if checker() is False:
-                                continue
+                            _status = checker(probe=False)
+                        except TypeError:
+                            _status = checker()
                         except Exception:
-                            pass
+                            _status = None
+                        if not isinstance(_status, dict):
+                            # Plain-boolean checkers keep their verbatim
+                            # meaning: True / False / None (NOT_CHECKED) —
+                            # never coerced.
+                            _status = {"available": _status}
+                        if _status.get("available") is False:
+                            continue
+                        if _status.get("available") is None:
+                            availability_state = "not_checked"
 
                     # 1. SEMANTIC RELEVANCE to this goal (name + entity
                     # description + manifest description token overlap).
@@ -591,7 +605,13 @@ class SemanticGoalInterpreter:
                     candidates.append({
                         "name": f"Dynamic Capability: {cap.name}",
                         "action_type": cap_name,
-                        "payload": {"query": user_text, "action_type": cap_name},
+                        "payload": {
+                            "query": user_text,
+                            "action_type": cap_name,
+                            # NOT_CHECKED != AVAILABLE: carried verbatim so the
+                            # ActionPlanner probes before committing (P0 #21).
+                            "availability": availability_state,
+                        },
                         "source": "world_model_capability",
                         "score": score,
                     })

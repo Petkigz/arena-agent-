@@ -36,9 +36,15 @@ def set_shared_registry(registry) -> None:
 class ToolRegistry:
     """Centralized Registry for all system capabilities with gate verification & observation hooks."""
 
+    # Decisive probe results (available True/False) are cached briefly so
+    # planner-time probing (P0 #21) doesn't re-import a tool module on every
+    # cycle. NOT_CHECKED results are never cached — they carry no information.
+    _AVAILABILITY_CACHE_TTL_S = 300.0
+
     def __init__(self, event_bus: Optional[EventBus] = None) -> None:
         self._registry: Dict[str, Dict[str, Any]] = {}
         self.event_bus = event_bus or EventBus()
+        self._availability_cache: Dict[str, tuple] = {}
         self._register_default_tools()
 
     def register_tool(
@@ -75,7 +81,7 @@ class ToolRegistry:
             )
 
     def get_tool_availability(
-        self, tool_name: str, *, probe: bool = False
+        self, tool_name: str, *, probe: bool = False, refresh: bool = False
     ) -> Dict[str, Any]:
         """Report one capability's availability without probing by default.
 
@@ -92,11 +98,23 @@ class ToolRegistry:
                 "status": "not_registered",
                 "error": f"Tool '{tool_name}' not registered in capability registry.",
             }
+        import time as _time
+        now = _time.monotonic()
+        if not refresh:
+            cached = self._availability_cache.get(key)
+            if cached and now - cached[0] < self._AVAILABILITY_CACHE_TTL_S:
+                return {"name": key, **cached[1]}
+
         checker = entry.get("availability")
         if checker is None:
             status = {"available": True, "status": "available"}
         else:
             status = checker(probe=probe)
+
+        # Cache DECISIVE results only. available=None (NOT_CHECKED) must keep
+        # flowing through verbatim — never coerced, never frozen as knowledge.
+        if isinstance(status, dict) and status.get("available") is not None:
+            self._availability_cache[key] = (now, dict(status))
         return {"name": key, **status}
 
     def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
