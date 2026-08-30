@@ -54,9 +54,21 @@ class ActionPlanner:
         P2 AGI: When hardware_self_model/resource_manager provided, resource-aware adjustment
         penalizes high-cost actions under pressure (RAM/CPU/disk).
         """
-        candidate_list = candidates if candidates is not None else cls.generate_candidate_actions(
-            goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
-        )
+        if candidates is not None:
+            # Explicit capability provenance (P0 review #2): candidates the
+            # CALLER provided are tagged as such (copies — caller dicts are
+            # never mutated). Provenance participates in winner selection.
+            candidate_list = []
+            for c in candidates:
+                copy = dict(c)
+                payload = dict(copy.get("payload") or {})
+                payload.setdefault("provenance", "caller_supplied")
+                copy["payload"] = payload
+                candidate_list.append(copy)
+        else:
+            candidate_list = cls.generate_candidate_actions(
+                goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
+            )
         # Phase 1B/1C/P2: Pass stores for history-influenced + resource-aware selection
         goal_type = goal_rep.primary_intent_type if goal_rep else None
         # Auto-fetch hardware self-model and resource manager from runtime if not provided
@@ -122,19 +134,33 @@ class ActionPlanner:
 
     @classmethod
     def _probe_and_select(cls, sim_res, winner):
-        """Probe branch dependencies before committing to a winner (P0 #21).
+        """Select the winning branch by capability PROVENANCE, then utility.
 
-        The registry is the only source of truth:
-        * not_registered — NOT a registry tool (native master-agent path,
-          dynamically registered capability, or a caller-supplied candidate).
-          Other execution paths exist; never invent unavailability.
-        * available True — committable.
-        * available False — dependency KNOWN missing: skip the branch.
-        * available None — NOT_CHECKED even after probing: keep as a
-          last-resort candidate, annotated honestly.
+        'not registered' never means 'definitely executable elsewhere' (P0
+        review #2): an unregistered candidate must not steal the selection
+        from a probed-available registered one on mere utility order. Each
+        branch is classified by explicit provenance —
 
-        Probes use probe=True (one module import, cached for
-        ToolRegistry._AVAILABILITY_CACHE_TTL_S).
+            native           master-agent execution path (executable by
+                             construction)
+            registry         manifest-registered tool (probed availability)
+            dynamic          runtime-registered tool (probed availability)
+            caller_supplied  candidate the caller provided explicitly
+            unknown          no registry entry, no native path
+
+        — and availability, then ranked in tiers:
+
+            tier 1  verified executable now: native, or registered with
+                    available=True
+            tier 2  registered but NOT_CHECKED even after probing
+            tier 3  unverifiable: caller_supplied / unknown
+            excluded  registered with available=False (dependency KNOWN
+                    missing)
+
+        The highest tier wins; utility decides within a tier. Lower tiers
+        only ever win when no higher tier exists, and their payload is
+        annotated with the honest provenance so the gate and the owner see
+        what kind of capability was committed.
         """
         try:
             from app.cognition.tool_registry import get_shared_registry
@@ -151,36 +177,47 @@ class ActionPlanner:
         if not branches:
             return winner
 
-        best_unknown = None
-        best_unknown_status = None
+        tier1, tier2, tier3 = [], [], []
         for branch in branches:
-            action = str(getattr(branch, "hypothetical_action", "") or "")
-            try:
-                status = registry.get_tool_availability(action, probe=True)
-            except Exception as exc:
-                status = {"available": None, "status": f"probe_error:{exc}"}
-            if status.get("status") == "not_registered":
-                return branch
-            if status.get("available") is True:
-                return branch
-            if status.get("available") is None and best_unknown is None:
-                best_unknown, best_unknown_status = branch, status
-            # available False: dependency KNOWN missing — skip this branch.
-        if best_unknown is not None:
-            # Nothing decisively available: keep the highest-utility
-            # not-checked branch, annotated honestly.
-            best_unknown.candidate_payload["availability"] = (
-                best_unknown_status or {"available": None, "status": "not_checked"}
-            )
+            provenance, status = cls._classify_capability(
+                branch, registry)
+            if provenance in ("registry", "dynamic"):
+                available = status.get("available")
+                if available is False:
+                    continue  # dependency KNOWN missing
+                if available is True:
+                    tier1.append((branch, provenance, status))
+                else:
+                    tier2.append((branch, provenance, status))
+            elif provenance == "native":
+                tier1.append((branch, provenance, status))
+            else:  # caller_supplied / unknown
+                tier3.append((branch, provenance, status))
+
+        if tier1:
+            return tier1[0][0]
+        if tier2:
+            branch, provenance, status = tier2[0]
+            branch.candidate_payload["availability"] = status
+            branch.candidate_payload["provenance"] = provenance
             app_logger.warning(
-                f"ActionPlanner: no branch with a probed-available dependency; "
-                f"committing '{best_unknown.hypothetical_action}' with honest "
-                f"availability {best_unknown_status}"
+                f"ActionPlanner: no verified-executable branch; committing "
+                f"'{branch.hypothetical_action}' ({provenance}) with honest "
+                f"availability {status}"
             )
-            return best_unknown
-        # Every registry branch's dependency is KNOWN missing: keep the
-        # original winner, annotated, so the gate/owner sees it before
-        # execution.
+            return branch
+        if tier3:
+            branch, provenance, status = tier3[0]
+            branch.candidate_payload["provenance"] = provenance
+            app_logger.warning(
+                f"ActionPlanner: no registry-backed branch exists; committing "
+                f"'{branch.hypothetical_action}' with unverifiable provenance "
+                f"'{provenance}'"
+            )
+            return branch
+
+        # Only registry branches remain, every one KNOWN unavailable: the
+        # winner stands, annotated, so the gate/owner sees it before execution.
         winner.candidate_payload["availability"] = {
             "available": False, "status": "dependency_unavailable",
         }
@@ -189,3 +226,28 @@ class ActionPlanner:
             "dependency; committing the winner with honest availability."
         )
         return winner
+
+    @classmethod
+    def _classify_capability(cls, branch, registry) -> tuple:
+        """(provenance, availability_status) for one branch's action type."""
+        action = str(getattr(branch, "hypothetical_action", "") or "")
+        payload = getattr(branch, "candidate_payload", None) or {}
+
+        from app.cognition.counterfactual_simulator import CounterfactualSimulator
+        if action in CounterfactualSimulator._NATIVE_EXECUTABLES:
+            return "native", {"available": True, "status": "native_execution_path"}
+
+        try:
+            status = registry.get_tool_availability(action, probe=True)
+        except Exception as exc:
+            status = {"available": None, "status": f"probe_error:{exc}"}
+
+        if status.get("status") != "not_registered":
+            provenance = "dynamic" if status.get("provenance") == "dynamic" else "registry"
+            return provenance, status
+
+        # Not a registry tool. If the caller supplied this candidate
+        # explicitly, say so; otherwise its provenance is honestly unknown.
+        if payload.get("provenance") == "caller_supplied":
+            return "caller_supplied", status
+        return "unknown", status

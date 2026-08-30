@@ -212,3 +212,112 @@ def test_native_execution_paths_need_no_probe():
     with patch.object(tr_mod, "get_shared_registry", lambda: FakeRegistry()):
         chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
     assert chosen.hypothetical_action == "open_application"
+
+
+# ---------------------------------------------------------------------------
+# P0 review #2: explicit capability provenance — 'not registered' never means
+# 'definitely executable elsewhere'. Ranked tiers, not first-match returns.
+# ---------------------------------------------------------------------------
+
+def _registry_with(**availability_by_tool):
+    class FakeRegistry:
+        def get_tool_availability(self, name, probe=False, refresh=False):
+            if name in availability_by_tool:
+                return {"name": name, **availability_by_tool[name]}
+            return {"name": name, "available": False, "status": "not_registered"}
+    return FakeRegistry()
+
+
+def test_unregistered_high_utility_cannot_steal_selection():
+    """THE review case: A not_registered (utility 0.91) vs B registered and
+    probed-available (utility 0.89). B must win — a proven capability beats
+    an unverifiable one on mere encounter order."""
+    sim = _branches([(0.91, "unregistered_a"), (0.89, "registered_b")])
+    fake = _registry_with(
+        registered_b={"available": True, "status": "available", "provenance": "manifest"},
+    )
+    import app.cognition.tool_registry as tr_mod
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
+    assert chosen.hypothetical_action == "registered_b"
+
+
+def test_native_and_registered_available_compete_by_utility():
+    """Both tier-1 (verified executable): utility decides, not provenance."""
+    sim = _branches([(0.89, "registered_b"), (0.91, "open_application")])
+    fake = _registry_with(
+        registered_b={"available": True, "status": "available", "provenance": "manifest"},
+    )
+    import app.cognition.tool_registry as tr_mod
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
+    assert chosen.hypothetical_action == "open_application"  # higher utility
+
+    sim2 = _branches([(0.92, "registered_b"), (0.91, "open_application")])
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen2 = ActionPlanner._probe_and_select(sim2, sim2.winning_branch)
+    assert chosen2.hypothetical_action == "registered_b"
+
+
+def test_registered_not_checked_outranks_unknown():
+    """Tier 2 (registered, NOT_CHECKED after probe) beats tier 3 (unknown)."""
+    sim = _branches([(0.95, "mystery_unknown"), (0.60, "registered_unchecked")])
+    fake = _registry_with(
+        registered_unchecked={"available": None, "status": "not_checked",
+                              "provenance": "manifest"},
+    )
+    import app.cognition.tool_registry as tr_mod
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
+    assert chosen.hypothetical_action == "registered_unchecked"
+    assert chosen.candidate_payload["provenance"] == "registry"
+    assert chosen.candidate_payload["availability"]["available"] is None
+
+
+def test_unknown_only_field_annotates_provenance():
+    """Nothing backed by the registry exists: the highest-utility unknown
+    branch wins and its payload SAYS the provenance is unverifiable."""
+    sim = _branches([(0.9, "mystery_a"), (0.5, "mystery_b")])
+    fake = _registry_with()
+    import app.cognition.tool_registry as tr_mod
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
+    assert chosen.hypothetical_action == "mystery_a"
+    assert chosen.candidate_payload["provenance"] == "unknown"
+
+
+def test_caller_supplied_provenance_is_tagged_and_ranked_last():
+    """Explicit candidates are tagged caller_supplied; unregistered ones stay
+    tier 3 behind a registered-available branch."""
+    sim = _branches([(0.95, "custom_one"), (0.60, "registered_b")])
+    sim.competing_branches[0].candidate_payload["provenance"] = "caller_supplied"
+    fake = _registry_with(
+        registered_b={"available": True, "status": "available", "provenance": "manifest"},
+    )
+    import app.cognition.tool_registry as tr_mod
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
+    assert chosen.hypothetical_action == "registered_b"
+
+    # And when nothing else exists, the caller-supplied branch is chosen and
+    # its provenance is reported honestly.
+    sim2 = _branches([(0.9, "custom_one")])
+    sim2.competing_branches[0].candidate_payload["provenance"] = "caller_supplied"
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen2 = ActionPlanner._probe_and_select(sim2, sim2.winning_branch)
+    assert chosen2.hypothetical_action == "custom_one"
+    assert chosen2.candidate_payload["provenance"] == "caller_supplied"
+
+
+def test_dynamic_registered_tool_is_tier_one():
+    """Runtime-registered tools (provenance 'dynamic') count as verified
+    executable when their probe passes."""
+    sim = _branches([(0.95, "unregistered_a"), (0.89, "hotloaded_tool")])
+    fake = _registry_with(
+        hotloaded_tool={"available": True, "status": "available",
+                        "provenance": "dynamic"},
+    )
+    import app.cognition.tool_registry as tr_mod
+    with patch.object(tr_mod, "get_shared_registry", lambda: fake):
+        chosen = ActionPlanner._probe_and_select(sim, sim.winning_branch)
+    assert chosen.hypothetical_action == "hotloaded_tool"

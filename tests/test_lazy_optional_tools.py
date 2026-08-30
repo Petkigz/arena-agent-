@@ -82,6 +82,7 @@ def test_manifest_and_registry_do_not_import_optional_tool_modules(monkeypatch):
     assert not OPTIONAL_TOOL_MODULES.keys() & set(imported)
     assert registry.get_tool_availability("web_search") == {
         "name": "web_search",
+        "provenance": "manifest",
         "available": None,
         "status": "not_checked",
     }

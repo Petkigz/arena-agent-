@@ -80,7 +80,11 @@ class ToolRegistry:
         description: str = "",
         safety_level: int = 0,
         availability: Optional[Callable[..., Dict[str, Any]]] = None,
+        provenance: str = "dynamic",
     ) -> None:
+        """provenance: 'manifest' (default tool set) or 'dynamic'
+        (registered at runtime). Exposed through get_tool_availability so
+        capability provenance is explicit end to end (P0 review #2)."""
         self._registry[name.lower()] = {
             "name": name,
             "category": category,
@@ -88,6 +92,7 @@ class ToolRegistry:
             "description": description,
             "safety_level": safety_level,
             "availability": availability,
+            "provenance": provenance,
         }
 
     def _register_default_tools(self) -> None:
@@ -103,6 +108,7 @@ class ToolRegistry:
                 description=entry.get("description", ""),
                 safety_level=entry.get("safety_level", 0),
                 availability=entry.get("availability"),
+                provenance="manifest",
             )
 
     def get_tool_availability(
@@ -125,10 +131,11 @@ class ToolRegistry:
             }
         import time as _time
         now = _time.monotonic()
+        _provenance = entry.get("provenance", "manifest")
         if not refresh:
             cached = self._availability_cache.get(key)
             if cached and now - cached[0] < self._AVAILABILITY_CACHE_TTL_S:
-                return {"name": key, **cached[1]}
+                return {"name": key, "provenance": _provenance, **cached[1]}
 
         checker = entry.get("availability")
         status = interpret_availability(checker, probe=probe)
@@ -137,7 +144,7 @@ class ToolRegistry:
         # flowing through verbatim — never coerced, never frozen as knowledge.
         if isinstance(status, dict) and status.get("available") is not None:
             self._availability_cache[key] = (now, dict(status))
-        return {"name": key, **status}
+        return {"name": key, "provenance": _provenance, **status}
 
     def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
         """Return deterministic per-tool availability records."""

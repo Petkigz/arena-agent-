@@ -24,8 +24,12 @@ class _ResourceManager:
 def _plan_with_restricted_alternative() -> ActionProposal:
     # Keep this unit test focused on stage separation rather than loading every
     # optional tool handler in the full manifest.
+    # search_files is a NATIVE execution path (provenance tier 1 by
+    # construction); send_email is registry-backed. Utility decides between
+    # tier-1 branches — the safe native wins on the equal score (P0 review #2
+    # semantics: an unregistered candidate no longer steals the selection).
     manifest = {
-        "read_file": {"safety_level": 0},
+        "search_files": {"safety_level": 0},
         "send_email": {"safety_level": 3},
     }
     with patch("app.tools.manifest.get_tool_manifest", return_value=manifest):
@@ -34,8 +38,8 @@ def _plan_with_restricted_alternative() -> ActionProposal:
             candidates=[
                 {
                     "name": "Inspect a local draft",
-                    "action_type": "read_file",
-                    "payload": {"file_path": "README.md"},
+                    "action_type": "search_files",
+                    "payload": {"query": "draft"},
                 },
                 {
                     "name": "Send the result externally",
@@ -65,7 +69,7 @@ def test_planner_preserves_ranked_restricted_alternatives():
 def test_restricted_alternative_does_not_block_selected_safe_recommendation():
     proposal = _plan_with_restricted_alternative()
     # The safe branch is first on an equal utility score and is recommended.
-    assert proposal.action_type == "read_file"
+    assert proposal.action_type == "search_files"
     assert any(
         a["authorization_requirement"] == "explicit_owner_approval"
         for a in proposal.alternatives_considered
@@ -78,7 +82,7 @@ def test_restricted_alternative_does_not_block_selected_safe_recommendation():
         ),
         patch(
             "app.tools.manifest.get_tool_manifest",
-            return_value={"read_file": {"safety_level": 0}},
+            return_value={"search_files": {"safety_level": 0}},
         ),
     ):
         result = ActionGate.evaluate_proposal(proposal)
