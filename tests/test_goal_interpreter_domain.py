@@ -10,10 +10,9 @@ offline heuristic), so they are NOT asserted here.
 from app.cognition.goal_interpreter import SemanticGoalInterpreter, SemanticGoalRepresentation
 
 VALID_INTENTS = {"action_intent", "information_need", "knowledge_query"}
-VALID_DOMAINS = {
-    "desktop_os", "filesystem", "web_research", "mobile_phone",
-    "vision_desktop", "diagnostic", "conversation",
-}
+# The valid-domain set is manifest-unified now (P0 #2): the seven legacy
+# domains PLUS every manifest tool category. Import it instead of copying.
+VALID_DOMAINS = SemanticGoalInterpreter._valid_domains()
 LIST_FIELDS = [
     "constraints", "assumptions", "unknowns", "preconditions",
     "success_conditions", "failure_conditions", "required_capabilities",

@@ -72,7 +72,120 @@ class SemanticGoalInterpreter:
     """
 
     VALID_INTENTS = {"action_intent", "information_need", "knowledge_query"}
-    VALID_DOMAINS = {"desktop_os", "filesystem", "web_research", "mobile_phone", "vision_desktop", "diagnostic", "conversation"}
+    # ── Manifest-unified domain model (P0 bottleneck #2) ────────────────────
+    # The tool manifest is the unified capability source (23 categories,
+    # 170+ tools). The semantic layer used to reason in only seven legacy
+    # domains and SQUASHED everything else (unknown domain → 'desktop_os'/
+    # 'diagnostic') — the same family of misroute that deferred a PC song
+    # question to phone.adb. Valid domains are now the manifest categories
+    # plus the legacy aliases (kept so existing routing stays stable).
+    LEGACY_DOMAINS = {
+        "desktop_os", "filesystem", "web_research", "mobile_phone",
+        "vision_desktop", "diagnostic", "conversation",
+    }
+    VALID_DOMAINS = set(LEGACY_DOMAINS)  # static backward-compatible view
+
+    _manifest_domains_cache = None
+
+    @classmethod
+    def _valid_domains(cls):
+        if cls._manifest_domains_cache is None:
+            domains = set(cls.LEGACY_DOMAINS)
+            try:
+                from app.tools.manifest import get_tool_manifest
+                domains |= {
+                    str(entry.get("category"))
+                    for entry in get_tool_manifest().values()
+                    if entry.get("category")
+                }
+            except Exception as exc:
+                app_logger.warning(f"Manifest categories unavailable for domain validation: {exc}")
+            cls._manifest_domains_cache = domains
+            cls.VALID_DOMAINS = domains  # keep the legacy attribute in sync
+        return cls._manifest_domains_cache
+
+    # Keyword hints → manifest-category domain. Checked AFTER the diagnostic
+    # branch (investigation intents keep their semantics) and BEFORE the
+    # legacy action-keyword branches (which would otherwise swallow these
+    # into filesystem/desktop_os). Deliberately conservative: no bare
+    # 'pdf'/'photo'/'image'/'web' tokens — those collide with file-search,
+    # screenshot and web-research phrasing that must keep its routing.
+    _MANIFEST_DOMAIN_KEYWORDS = [
+        ("code", ["python", "javascript", "typescript", "script", "scripts", "code",
+                  "coding", "refactor", "compile", "unit test", "code review",
+                  "git", "github", "commit", "pull request", "merge branch",
+                  "bug in my code", "codebase"]),
+        ("data", ["csv", "sql", "database", "dataframe", "pandas", "data analysis",
+                  "analyze data", "analyze this data", "spreadsheet", "excel",
+                  "sqlite", "postgres"]),
+        ("documents", ["merge pdf", "split pdf", "combine pdf", "extract pages",
+                       "pdf form", "convert to pdf", "create a pdf", "sign pdf",
+                       "compress pdf", "docx file", "word document", "pdfs",
+                       "these pdf", "the pdf", "both pdf"]),
+        ("finance", ["budget", "transaction", "transactions", "expense", "expenses",
+                     "crypto", "portfolio", "spending", "income"]),
+        ("messaging", ["telegram", "whatsapp", "send a message"]),
+        ("network", ["ping", "dns", "traceroute", "port scan", "check port",
+                     "whois", "network status", "my network"]),
+        ("security", ["opsec", "security audit", "vulnerability", "malware",
+                      "clipboard"]),
+        ("vision", ["ocr", "analyze image", "read the text in", "take a photo",
+                    "camera photo"]),
+        ("learning", ["lora", "loras", "fine-tune", "finetune"]),
+        ("productivity", ["daily briefing", "briefing", "content ideas",
+                          "business opportunities"]),
+        ("location", ["where am i", "my location", "geolocate"]),
+        ("integration", ["webhook"]),
+        ("audio", ["prosody", "tone analysis"]),
+        ("knowledge", ["teach you a skill", "learn a new skill", "index knowledge"]),
+        ("sandbox", ["sandbox"]),
+        ("system", ["running processes", "process list", "cpu usage",
+                    "memory usage", "ram usage", "system status"]),
+        ("self_awareness", ["what can you do", "your capabilities",
+                            "what are you capable of"]),
+    ]
+
+    # When the natural tool for a domain lives in another manifest category,
+    # name it explicitly (capability awareness resolves real tool names).
+    _DOMAIN_CAP_OVERRIDES = {
+        "code": ["run_coding_agent", "generate_tests", "code_audit"],
+    }
+
+    @classmethod
+    def _detect_manifest_domain(cls, text_lower: str):
+        """(domain, representative_caps) for a manifest-category hit, else None."""
+        for domain, keywords in cls._MANIFEST_DOMAIN_KEYWORDS:
+            if _has_any_word(text_lower, keywords):
+                return domain, cls._representative_caps(domain)
+        return None
+
+    @classmethod
+    def _representative_caps(cls, domain: str):
+        """Real tool names for the domain: capability awareness resolves them
+        against the registry, so an unavailable integration defers HONESTLY
+        instead of the goal pretending 'llm.generate' covers it."""
+        overrides = list(cls._DOMAIN_CAP_OVERRIDES.get(domain, []))
+        if overrides:
+            return overrides
+        try:
+            from app.tools.manifest import get_tool_manifest
+            tools = [
+                action
+                for action, entry in get_tool_manifest().items()
+                if str(entry.get("category")) == domain
+            ]
+            if tools:
+                # Prefer read-only (Level 0) representatives; otherwise name
+                # the category's real tools so availability is checked truly.
+                level0 = [
+                    action for action, entry in get_tool_manifest().items()
+                    if str(entry.get("category")) == domain
+                    and int(entry.get("safety_level", 99)) == 0
+                ]
+                return (level0 or tools)[:3]
+        except Exception:
+            pass
+        return ["llm.generate"]
 
     @classmethod
     def validate_schema(cls, parsed_json: Any) -> SemanticGoalSchemaValidationResult:
@@ -105,8 +218,8 @@ class SemanticGoalInterpreter:
             errors.append("Missing or non-string 'target_domain'")
         else:
             clean_domain = raw_domain.lower().strip()
-            if clean_domain not in cls.VALID_DOMAINS:
-                errors.append(f"Invalid 'target_domain' '{raw_domain}'. Must be one of {cls.VALID_DOMAINS}")
+            if clean_domain not in cls._valid_domains():
+                errors.append(f"Invalid 'target_domain' '{raw_domain}'. Must be one of {sorted(cls._valid_domains())}")
 
         # 3. Validate goal & desired outcome
         goal = parsed_json.get("goal")
@@ -209,7 +322,10 @@ class SemanticGoalInterpreter:
             else:
                 clean_intent = "knowledge_query"
 
-        if clean_domain not in cls.VALID_DOMAINS:
+        if clean_domain not in cls._valid_domains():
+            # Defensive fallback ONLY for genuinely invalid domains — a real
+            # manifest category (code/data/finance/...) must never be squashed
+            # into the legacy seven.
             if clean_intent == "action_intent":
                 clean_domain = "desktop_os"
             elif clean_intent == "information_need":
@@ -238,6 +354,28 @@ class SemanticGoalInterpreter:
         elif domain_clean == "desktop_os":
             candidates.append({"name": "Desktop Application Launch", "action_type": "open_application", "payload": {"query": user_text, "action_type": "open_application"}})
             candidates.append({"name": "Web Browser Fallback Search", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+        elif domain_clean in cls._valid_domains():
+            # Manifest-category domain: propose the category's primary
+            # Level-0 (read-only) tool so the ACT path can genuinely execute,
+            # plus the conversational fallback. Gates still apply to anything
+            # beyond read-only.
+            try:
+                from app.tools.manifest import get_tool_manifest
+                primary = next(
+                    (action for action, entry in get_tool_manifest().items()
+                     if str(entry.get("category")) == domain_clean
+                     and int(entry.get("safety_level", 99)) == 0),
+                    None,
+                )
+            except Exception:
+                primary = None
+            if primary:
+                candidates.append({
+                    "name": f"Manifest capability: {primary}",
+                    "action_type": primary,
+                    "payload": {"query": user_text, "action_type": primary},
+                })
+            candidates.append({"name": "Direct Conversational Answer", "action_type": "formulate_answer", "payload": {"query": user_text, "action_type": "formulate_answer"}})
         else:
             candidates.append({"name": "Direct Conversational Answer", "action_type": "formulate_answer", "payload": {"query": user_text, "action_type": "formulate_answer"}})
         return candidates
@@ -363,6 +501,27 @@ class SemanticGoalInterpreter:
             outcome = "Diagnostic evidence gathered and reported"
             unknowns = ["underlying error cause", "evidence availability"]
             req_caps = ["filesystem.search", "system.probe"]
+
+        # 1.5 Manifest-category domains: route to the manifest's own
+        # vocabulary (coding/data/pdf/finance/git/...). Runs BEFORE the
+        # legacy action branches so 'write a python script to organize my
+        # files' is a CODE task, not a filesystem/desktop_os task.
+        manifest_hit = cls._detect_manifest_domain(text_lower)
+        if manifest_hit is not None:
+            manifest_domain, manifest_caps = manifest_hit
+            domain = manifest_domain
+            req_caps = manifest_caps
+            # Action-ish verbs in a manifest-domain request make it an
+            # action intent; questions stay knowledge queries.
+            if _has_any_word(text_lower, [
+                "write", "create", "generate", "build", "make", "run",
+                "execute", "analyze", "analyse", "send", "merge", "split",
+                "convert", "extract", "fill", "summarize", "summarise",
+            ]):
+                intent_type = "action_intent"
+                goal = f"Accomplish {manifest_domain} task: '{user_text[:60]}'"
+                outcome = f"{manifest_domain} capability applied to the owner's request"
+                success_conditions = [f"{manifest_domain}_result_delivered = true"]
 
         # 2. Operational Action Commands SECOND
         elif _has_any_word(text_lower, ["open", "launch", "start", "run", "search", "call", "sms", "photo", "screenshot", "briefing", "play", "find"]):
