@@ -122,3 +122,47 @@ def test_bucket_params_still_work_legacy_path():
         {"action": "fill", "selector": "#b", "value": "2"},
     ])
     assert page.ops == [("fill", "#a", "1"), ("fill", "#b", "2")]
+
+
+def test_wait_ms_becomes_a_real_page_wait():
+    """P0 bottleneck #7 (regression pin): 'wait 5000' must mean a
+    five-second page wait. The old WebAgent parsed wait_ms into a local
+    variable that never reached the browser layer — waits were silently
+    dropped (only the fixed 1s post-click sleep existed)."""
+    page = FakePage()
+    BrowserAutomation._run_sequential_steps(page, [
+        {"action": "click", "selector": "#load-more"},
+        {"action": "wait", "ms": 5000},
+        {"action": "extract", "selector": "#results"},
+    ])
+    # Exactly five seconds, executed between the click and the extract.
+    assert ("wait", 5000) in page.ops
+    i_click = page.ops.index(("click", "#load-more"))
+    i_wait = page.ops.index(("wait", 5000))
+    i_extract = page.ops.index(("extract", "#results"))
+    assert i_click < i_wait < i_extract
+
+
+def test_web_agent_passes_wait_ms_through():
+    """WebAgent must forward the parsed ms to the browser layer inside the
+    ordered steps (the old code computed wait_ms and dropped it)."""
+    from unittest.mock import patch
+    from app.tools.web_agent import WebAgent
+
+    captured = {}
+
+    def capture(url, **kw):
+        captured.update(kw)
+        return {"success": True, "url": url, "title": "t", "content_snippet": "x",
+                "screenshot_path": "", "image_url": "", "text_length": 1,
+                "step_log": [], "extracts": {}}
+
+    with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", side_effect=capture), \
+         patch("app.tools.web_agent.llm_client.generate_chat_completion",
+               return_value={"choices": [{"message": {"content": "ok"}}], "model": "m"}):
+        WebAgent.execute_web_workflow(
+            objective="timing", target_url="https://example.com",
+            steps=[{"action": "wait", "ms": 5000}],
+            auto_save_memory=False)
+
+    assert captured["steps"] == [{"action": "wait", "ms": 5000}]
