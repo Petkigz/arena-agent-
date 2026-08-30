@@ -2936,7 +2936,16 @@ class CognitiveRuntime:
             if observation_evidence:
                 complexity = "main"
                 app_logger.info("Evidence-grounded answer routed to the main model.")
-            llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
+            # Task-dependent output budget (P0 #19): plain chat vs reading
+            # evidence and answering need very different room to think.
+            from app.llm import output_budget
+            llm_res = llm_client.generate_chat_completion(
+                messages=messages, complexity=complexity,
+                max_tokens=output_budget(
+                    "evidence_answer" if observation_evidence else "conversational",
+                    complexity,
+                ),
+            )
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
             if llm_res.get("simulated") or llm_res.get("id") == "chat-simulated":
                 tracker.transition(
@@ -3045,7 +3054,12 @@ class CognitiveRuntime:
             if common_sense_context:
                 system_instruction += common_sense_context
             messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
-            llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
+            # Investigation produced evidence; the reply reconciles it.
+            from app.llm import output_budget
+            llm_res = llm_client.generate_chat_completion(
+                messages=messages, complexity=complexity,
+                max_tokens=output_budget("evidence_answer", complexity),
+            )
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
             obs_state = self.capture_observed_world_state([investigation_summary], assistant_reply, goal_rep)

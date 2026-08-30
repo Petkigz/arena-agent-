@@ -5,7 +5,7 @@ import re
 import json
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional, Tuple
-from app.llm import llm_client
+from app.llm import llm_client, output_budget
 from app.utils.logger import app_logger
 
 # ---------------------------------------------------------------------------
@@ -810,7 +810,7 @@ class SemanticGoalInterpreter:
                         {"role": "user", "content": f"Parse goal v2: '{user_text}'"}
                     ],
                     complexity="fast",
-                    max_tokens=300
+                    max_tokens=output_budget("structured", "fast")
                 )
                 if (
                     llm_res

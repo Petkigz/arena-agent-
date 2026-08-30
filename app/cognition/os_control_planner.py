@@ -220,12 +220,15 @@ def plan_os_action(user_text: str, llm_client=None) -> Optional[OSActionPlan]:
         # the main route is broken (live case: profile named a model LM
         # Studio doesn't have loaded -> HTTP 400 -> simulated response ->
         # planner dead -> every OS request fell through to chat deflection).
+        from app.llm import output_budget
         response = llm_client.generate_chat_completion(
-            messages=messages, complexity="main", max_tokens=300)
+            messages=messages, complexity="main",
+            max_tokens=output_budget("structured", "main"))
         if response.get("simulated") or response.get("id") == "chat-simulated":
             app_logger.info("OS planner: main model unavailable; retrying with fast model.")
             response = llm_client.generate_chat_completion(
-                messages=messages, complexity="fast", max_tokens=300)
+                messages=messages, complexity="fast",
+                max_tokens=output_budget("structured", "fast"))
         if response.get("simulated") or response.get("id") == "chat-simulated":
             app_logger.warning("OS planner refused simulated LLM response (no real model).")
             return None

@@ -14,7 +14,7 @@ import sys
 from app.config import settings
 from app.database import db
 from app.tasks import TaskManager, TaskCreate, TaskUpdate, Task
-from app.llm import llm_client, require_real_completion
+from app.llm import llm_client, output_budget, require_real_completion
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
 from app.utils.spa import spa_for_browsers
@@ -1762,7 +1762,7 @@ def read_doc_endpoint(req: DocReadRequest):
             llm_res = llm_client.generate_chat_completion(
                 messages=[{"role": "user", "content": summary_prompt}],
                 complexity="main",
-                max_tokens=600
+                max_tokens=output_budget("evidence_answer", "main")
             )
             ai_summary = require_real_completion(llm_res)
             mem_id = KnowledgeIndexer.index_doc_knowledge(result, ai_summary)

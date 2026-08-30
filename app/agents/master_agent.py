@@ -658,7 +658,11 @@ class MasterAgentOrchestrator:
 
         system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=executed_actions)
         messages = [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_text}]
-        llm_res = llm_client.generate_chat_completion(messages=messages, complexity=complexity, max_tokens=150)
+        from app.llm import output_budget
+        llm_res = llm_client.generate_chat_completion(
+            messages=messages, complexity=complexity,
+            max_tokens=output_budget("action_summary", complexity),
+        )
         try:
             assistant_reply = require_real_completion(llm_res)
             HumanNatureEngine.assimilate_human_experience(user_text, assistant_reply)

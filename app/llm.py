@@ -7,6 +7,47 @@ from app.cognition.execution_control import (
     run_cancellable_blocking_call,
 )
 
+# ---------------------------------------------------------------------------
+# Task-dependent output token budgets (P0 #19)
+#
+# A fixed max_tokens=150 on the main conversational/action paths made the
+# model LOOK stupid: replies truncated mid-sentence, plans and structured
+# reasoning cut off, entity resolution dying silently — the classic
+# "the model doesn't understand" that was really "the planner gave it a
+# tiny budget". Budgets now scale with task KIND (what the output IS) and
+# complexity (fast/main/deep).
+#
+# These are OUTPUT budgets per single completion. The reasoning loop's
+# ReasoningBudget.max_tokens remains the per-cycle ceiling, so every budget
+# below stays under it (fast 2048 / main 8192 / deep 32768).
+# ---------------------------------------------------------------------------
+OUTPUT_TOKEN_BUDGETS = {
+    # Plain conversational reply — enough for a real answer, not an essay.
+    "conversational":  {"fast": 300, "main": 800,  "deep": 1600},
+    # Read evidence/data from the context and answer (search results, probes,
+    # documents). Understanding + reconciling evidence takes more room.
+    "evidence_answer": {"fast": 500, "main": 1200, "deep": 2400},
+    # What I just did, briefly — action confirmations.
+    "action_summary":  {"fast": 200, "main": 500,  "deep": 900},
+    # Structured reasoning: goal interpretation JSON, OS command plans,
+    # entity resolution, multi-step planning. The "understand ambiguity"
+    # step — starved at 150/300 tokens before.
+    "structured":      {"fast": 600, "main": 1500, "deep": 3000},
+}
+
+
+def output_budget(kind: str, complexity: str = "fast") -> int:
+    """Output token budget for a task kind at a complexity level.
+
+    Unknown kind is a programming error and fails loudly (this is a static
+    table); unknown complexity falls back to the 'main' column.
+    """
+    table = OUTPUT_TOKEN_BUDGETS.get(kind)
+    if table is None:
+        raise ValueError(f"unknown output budget kind: {kind!r}")
+    return table.get(complexity, table["main"])
+
+
 class LocalLLMClient:
     def __init__(self, base_url: str = settings.LM_STUDIO_URL):
         self.base_url = base_url.rstrip('/')
