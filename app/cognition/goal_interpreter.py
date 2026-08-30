@@ -151,13 +151,18 @@ class SemanticGoalInterpreter:
         "vision_desktop", "diagnostic", "conversation",
     }
     VALID_DOMAINS = set(LEGACY_DOMAINS)  # static backward-compatible view
+    # P0 review #5: an agent must not pretend it knows the domain. 'unknown'
+    # is the honest answer when classification has no evidence — capability
+    # discovery (manifest semantics, world-model caps, memory lessons)
+    # resolves the goal, not a guessed domain prior.
+    UNKNOWN_DOMAIN = "unknown"
 
     _manifest_domains_cache = None
 
     @classmethod
     def _valid_domains(cls):
         if cls._manifest_domains_cache is None:
-            domains = set(cls.LEGACY_DOMAINS)
+            domains = set(cls.LEGACY_DOMAINS) | {cls.UNKNOWN_DOMAIN}
             try:
                 from app.tools.manifest import get_tool_manifest
                 domains |= {
@@ -390,15 +395,13 @@ class SemanticGoalInterpreter:
                 clean_intent = "knowledge_query"
 
         if clean_domain not in cls._valid_domains():
-            # Defensive fallback ONLY for genuinely invalid domains — a real
-            # manifest category (code/data/finance/...) must never be squashed
-            # into the legacy seven.
-            if clean_intent == "action_intent":
-                clean_domain = "desktop_os"
-            elif clean_intent == "information_need":
-                clean_domain = "diagnostic"
-            else:
-                clean_domain = "conversation"
+            # P0 review #5: unknown domain stays UNKNOWN. Guessing
+            # desktop_os/diagnostic/conversation from the intent type was an
+            # artificial prior — 'not classified' is not 'desktop'. A real
+            # manifest category (code/data/finance/...) is still recognized
+            # above; anything else flows on as 'unknown' and capability
+            # discovery proposes what the goal actually needs.
+            clean_domain = cls.UNKNOWN_DOMAIN
 
         return clean_intent, clean_domain
 
@@ -421,6 +424,13 @@ class SemanticGoalInterpreter:
         elif domain_clean == "desktop_os":
             candidates.append({"name": "Desktop Application Launch", "action_type": "open_application", "payload": {"query": user_text, "action_type": "open_application"}})
             candidates.append({"name": "Web Browser Fallback Search", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
+        elif domain_clean == cls.UNKNOWN_DOMAIN:
+            # Honest baseline (P0 review #5): no domain prior, no guessed
+            # candidates. The manifest semantic discovery (step 1.5), the
+            # world-model capability funnel, and memory lessons propose what
+            # the goal actually needs; if none of them fires, the
+            # conversational answer is the truthful action.
+            candidates.append({"name": "Direct Conversational Answer", "action_type": "formulate_answer", "payload": {"query": user_text, "action_type": "formulate_answer"}})
         elif domain_clean in cls._valid_domains():
             # Manifest-category domain: propose the category's primary
             # Level-0 (read-only) tool so the ACT path can genuinely execute,
@@ -862,7 +872,7 @@ class SemanticGoalInterpreter:
                 system_prompt = (
                     "You are a Goal Representation v2 Decomposition Engine. Parse user input into JSON with keys: "
                     "'primary_intent_type' (action_intent, information_need, knowledge_query), "
-                    "'target_domain' (desktop_os, filesystem, web_research, mobile_phone, vision_desktop, diagnostic, conversation), "
+                    "'target_domain' (a capability domain such as desktop_os, filesystem, web_research, mobile_phone, vision_desktop, diagnostic, conversation, or a manifest category like code/data/finance; use 'unknown' when uncertain — never guess), "
                     "'goal' (1 phrase actionable goal), "
                     "'desired_outcome' (1 phrase target state), "
                     "'entities' (array of string noun entities), "
