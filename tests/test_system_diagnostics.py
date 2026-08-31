@@ -294,3 +294,132 @@ def test_process_dying_between_passes_is_skipped_not_invented(monkeypatch):
     names = [p["name"] for p in result["top_processes_by_cpu"]]
     assert names == ["survivor"], names
     assert "gone_app" not in [p["name"] for p in result["top_processes_by_memory"]]
+
+
+# ── temperature says temperature; throttling needs evidence (P1 review) ─────
+# 'hottest >= 80' is a high-temperature HEURISTIC, not throttling detection.
+# The old field name (thermal_throttling_possible) overstated that fact; the
+# commit/manifest wording ("throttling flag") did too. Now: the heuristic is
+# named for what it measures and carries its threshold; actual throttling is
+# a separate, platform-evidence-only observation.
+
+class _Sensor:
+    def __init__(self, current, label="CPU", high=None, critical=None):
+        self.current = current
+        self.label = label
+        self.high = high
+        self.critical = critical
+
+
+class _ProcResult:
+    def __init__(self, rc=0, stdout=""):
+        self.returncode = rc
+        self.stdout = stdout
+        self.stderr = ""
+
+
+def _fake_sensors(monkeypatch, current_c):
+    import app.tools.system_diagnostics as mod
+    monkeypatch.setattr(
+        mod.psutil, "sensors_temperatures",
+        staticmethod(lambda: {"coretemp": [_Sensor(current_c)]}))
+
+
+def test_hot_sensor_reports_threshold_fact_not_throttling(monkeypatch):
+    _fake_sensors(monkeypatch, 85.0)
+    result = SystemDiagnostics.temperature()
+    # The honest rename: no more 'thermal_throttling_possible'.
+    assert "thermal_throttling_possible" not in result
+    assert result["thermal_threshold_exceeded"] is True
+    # The heuristic's basis is visible, inspectable evidence.
+    assert result["threshold_celsius"] == 80.0
+    assert result["hottest"]["current_celsius"] == 85.0
+
+
+def test_cool_sensor_threshold_not_exceeded(monkeypatch):
+    _fake_sensors(monkeypatch, 42.0)
+    result = SystemDiagnostics.temperature()
+    assert result["thermal_threshold_exceeded"] is False
+    assert result["threshold_celsius"] == 80.0
+
+
+def test_throttling_observed_is_platform_evidence_never_the_heuristic(monkeypatch):
+    """A hot sensor with NO readable platform source must NOT report
+    throttling — the evidence field says honestly unavailable instead."""
+    import app.tools.system_diagnostics as mod
+    _fake_sensors(monkeypatch, 95.0)  # very hot: heuristic maxed
+    monkeypatch.setattr(mod, "run_cancellable_subprocess",
+                        lambda cmd, timeout: _ProcResult(rc=1))
+    result = SystemDiagnostics.temperature()
+    evidence = result["thermal_throttling_observed"]
+    assert evidence["available"] is False
+    assert evidence["reason"]
+    assert "observed" not in evidence  # no claim without evidence
+
+
+def test_kernel_log_throttling_record_is_observed(monkeypatch):
+    import app.tools.system_diagnostics as mod
+    _fake_sensors(monkeypatch, 85.0)
+    monkeypatch.setattr(mod, "run_cancellable_subprocess", lambda cmd, timeout: _ProcResult(
+        stdout="Jul 12 10:00:01 host kernel: cpu clock throttled\n"))
+    result = SystemDiagnostics.temperature()
+    evidence = result["thermal_throttling_observed"]
+    assert evidence["available"] is True
+    assert evidence["observed"] is True
+    assert evidence["source"].startswith("kernel log")
+
+
+def test_clean_kernel_log_is_negative_evidence(monkeypatch):
+    """A readable source with no throttling records is a real observation:
+    observed=False, not 'unknown'."""
+    import app.tools.system_diagnostics as mod
+    _fake_sensors(monkeypatch, 85.0)
+    monkeypatch.setattr(mod, "run_cancellable_subprocess",
+                        lambda cmd, timeout: _ProcResult(stdout=""))
+    result = SystemDiagnostics.temperature()
+    evidence = result["thermal_throttling_observed"]
+    assert evidence["available"] is True
+    assert evidence["observed"] is False
+
+
+def test_windows_speed_limit_event_is_observed(monkeypatch):
+    """Platform routing: the Windows path reads Kernel-Processor-Power
+    Event 37 (firmware is limiting the processor)."""
+    import app.tools.system_diagnostics as mod
+    _fake_sensors(monkeypatch, 85.0)
+    seen = {}
+
+    def fake_run(cmd, timeout):
+        seen["cmd"] = cmd
+        return _ProcResult(stdout="TimeCreated: 2026-08-30\nMessage: The speed of processor 0 is being limited\n")
+
+    monkeypatch.setattr(mod, "run_cancellable_subprocess", fake_run)
+    monkeypatch.setattr(mod.platform, "system", lambda: "Windows")
+    result = SystemDiagnostics.temperature()
+    evidence = result["thermal_throttling_observed"]
+    assert evidence["available"] is True and evidence["observed"] is True
+    assert "Kernel-Processor-Power" in " ".join(seen["cmd"])
+
+
+def test_macos_cpu_speed_limit_is_observed(monkeypatch):
+    import app.tools.system_diagnostics as mod
+    _fake_sensors(monkeypatch, 85.0)
+    monkeypatch.setattr(mod, "run_cancellable_subprocess", lambda cmd, timeout: _ProcResult(
+        stdout="CPU/thermal level = 2\nCPU_Speed_Limit = 75\n"))
+    monkeypatch.setattr(mod.platform, "system", lambda: "Darwin")
+    result = SystemDiagnostics.temperature()
+    evidence = result["thermal_throttling_observed"]
+    assert evidence["available"] is True
+    assert evidence["observed"] is True
+    assert evidence["cpu_speed_limit_percent"] == 75
+
+
+def test_macos_full_speed_limit_is_not_throttling(monkeypatch):
+    import app.tools.system_diagnostics as mod
+    _fake_sensors(monkeypatch, 85.0)
+    monkeypatch.setattr(mod, "run_cancellable_subprocess", lambda cmd, timeout: _ProcResult(
+        stdout="CPU_Speed_Limit = 100\n"))
+    monkeypatch.setattr(mod.platform, "system", lambda: "Darwin")
+    result = SystemDiagnostics.temperature()
+    evidence = result["thermal_throttling_observed"]
+    assert evidence["observed"] is False

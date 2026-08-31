@@ -27,6 +27,7 @@ from __future__ import annotations
 import datetime
 import os
 import platform
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -210,14 +211,87 @@ class SystemDiagnostics:
                     **({"critical_celsius": e.critical} if e.critical else {}),
                 })
         hottest = max(readings, key=lambda r: r["current_celsius"])
+        # A TEMPERATURE fact, not a throttling fact (P1 review): crossing
+        # 80C is a risk heuristic with a visible threshold. Actual
+        # throttling is reported separately, from platform evidence only.
+        threshold_c = 80.0
         return {
             "success": True,
             "available": True,
             "captured_at": _now_iso(),
             "sensors": readings,
             "hottest": hottest,
-            "thermal_throttling_possible": hottest["current_celsius"] >= 80,
+            "thermal_threshold_exceeded": hottest["current_celsius"] >= threshold_c,
+            "threshold_celsius": threshold_c,
+            "thermal_throttling_observed": cls._thermal_throttling_evidence(),
         }
+
+    @classmethod
+    def _thermal_throttling_evidence(cls) -> Dict[str, Any]:
+        """Whether the PLATFORM recorded actual CPU thermal throttling.
+
+        Evidence-aware by design: a hot sensor is a RISK heuristic; these
+        are OBSERVATIONS — kernel log throttling records (Linux), firmware
+        CPU speed-limit events (Windows Event 37, Kernel-Processor-Power)
+        or the power-management thermal state (macOS pmset). Unreadable
+        sources are reported honestly unavailable, never guessed from the
+        temperature alone.
+        """
+        system = platform.system()
+        try:
+            if system == "Linux":
+                out = run_cancellable_subprocess(
+                    ["journalctl", "-k", "--no-pager", "-g", "throttl", "-n", "5"],
+                    timeout=8)
+                if out.returncode != 0:
+                    return _honest_unavailable(
+                        "thermal_throttling_observed",
+                        f"kernel log not readable (rc={out.returncode})")
+                lines = [l.strip() for l in (out.stdout or "").splitlines()
+                         if l.strip()]
+                return {"available": True, "observed": bool(lines),
+                        "source": "kernel log (journalctl -k, 'throttl')",
+                        "records": lines[:3]}
+            if system == "Windows":
+                out = run_cancellable_subprocess(
+                    ["powershell", "-NoProfile", "-Command",
+                     "Get-WinEvent -FilterHashtable @{LogName='System'; "
+                     "ProviderName='Microsoft-Windows-Kernel-Processor-Power'; "
+                     "Id=37} -MaxEvents 3 | Format-List | Out-String -Width 250"],
+                    timeout=12)
+                if out.returncode != 0:
+                    return _honest_unavailable(
+                        "thermal_throttling_observed",
+                        f"System event log not readable (rc={out.returncode})")
+                lines = [l.strip() for l in (out.stdout or "").splitlines()
+                         if l.strip()]
+                return {"available": True, "observed": bool(lines),
+                        "source": "System log (Kernel-Processor-Power Id 37)",
+                        "records": lines[:3]}
+            if system == "Darwin":
+                out = run_cancellable_subprocess(["pmset", "-g", "therm"],
+                                                  timeout=5)
+                if out.returncode != 0:
+                    return _honest_unavailable(
+                        "thermal_throttling_observed",
+                        f"pmset therm not readable (rc={out.returncode})")
+                # 'CPU_Speed_Limit = 100' = not limited; below 100 means the
+                # OS is limiting CPU speed right now — direct observation.
+                m = re.search(r"CPU_Speed_Limit\s*=\s*(\d+)", out.stdout or "")
+                if not m:
+                    return _honest_unavailable(
+                        "thermal_throttling_observed",
+                        f"pmset therm output not parseable: "
+                        f"{(out.stdout or '').strip()[:80]}")
+                limit = int(m.group(1))
+                return {"available": True, "observed": limit < 100,
+                        "source": "pmset -g therm",
+                        "cpu_speed_limit_percent": limit}
+            return _honest_unavailable(
+                "thermal_throttling_observed",
+                f"no platform throttling evidence source for {system}")
+        except Exception as exc:
+            return _honest_unavailable("thermal_throttling_observed", str(exc))
 
     # ── local network activity ───────────────────────────────────────────
     @classmethod

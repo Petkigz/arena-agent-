@@ -434,7 +434,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         "System performance metrics: CPU load per core, memory and swap pressure, disk usage and disk IO, uptime, top processes",
         _wrap(SystemDiagnostics.system_metrics, "interval", "top"))
     add("temperature_status", "system", 0,
-        "CPU/thermal sensor temperatures (honest platform support; throttling risk flag)",
+        "CPU/thermal sensor temperatures (honest platform support; high-temperature threshold + platform-evidenced throttling records)",
         _wrap(SystemDiagnostics.temperature))
     add("network_activity", "system", 0,
         "Local network activity: throughput counters since boot, active connections, top remote endpoints",
