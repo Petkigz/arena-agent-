@@ -5,11 +5,42 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from .information_gain import InformationNeed
 from app.cognition.action_proposal import ActionProposal
+from app.utils.logger import app_logger
 
 # Autonomous investigations may run read-only/Level-0-1 probes from the
 # manifest; anything higher needs the gated ACT path (owner confirmation),
 # never a quiet background execution.
 INVESTIGATION_MAX_SAFETY_LEVEL = 1
+
+
+def _investigation_breadth(need: InformationNeed) -> int:
+    """Adaptive candidate window for manifest-discovered investigations (P0 #7).
+
+    The old hard limit=8 starved complex, cross-domain investigations: the
+    first eight ranked candidates can ALL be gated or unfillable while a
+    safe, fillable probe sits at rank 9-25. The initial window now scales
+    with two honest signals, reusing the goal interpreter's established
+    breadth discipline (P0 review #3) rather than a second, divergent scale:
+
+      * the need's PRIORITY tier — deep (>= 0.66) -> 20, main (>= 0.33) ->
+        10, fast -> 5. Priority is the need's own urgency: a high-priority
+        unknown deserves a wide first look, not a peephole.
+      * the need's own TEXT breadth — distinct action verbs in the question
+        widen the funnel (a five-step question needs several capabilities
+        no matter how it was routed), up to the shared cap of 24.
+
+    8 is the floor, so simple needs never scan NARROWER than before. When
+    even the widened window finds nothing safe+fillable, _plan_from_manifest
+    expands iteratively — this breadth is the first window, not the ceiling.
+    """
+    from app.cognition.goal_interpreter import candidate_breadth
+    try:
+        priority = float(need.priority or 0.5)
+    except (TypeError, ValueError):
+        priority = 0.5
+    tier = "deep" if priority >= 0.66 else "main" if priority >= 0.33 else "fast"
+    text = f"{need.question} {need.target} {need.reason}"
+    return max(8, candidate_breadth(text, tier))
 
 
 def _investigation_arguments(handler: Callable[..., Any], need: InformationNeed,
@@ -106,27 +137,59 @@ class InvestigationRegistry:
         # runtime-installed investigative tools are plannable, not just
         # manifest ones. (Discovery still ranks over the manifest catalog.)
         from app.cognition.tool_registry import capability_entry
-        for match in rank_tools(text, limit=8):
-            entry = capability_entry(match.action_type) or manifest.get(match.action_type) or {}
-            try:
-                safety = int(entry.get("safety_level", 3) or 0)
-            except (TypeError, ValueError):
-                safety = 3
-            if safety > self.max_safety_level:
-                continue
-            handler = entry.get("handler")
-            if not callable(handler):
-                continue
-            arguments = _investigation_arguments(handler, need, match.payload)
-            if arguments is None:
-                continue
-            return InvestigationPlan(
-                tool=match.action_type,
-                arguments=arguments,
-                target=need.target,
-                reason=f"Manifest-discovered investigation ({match.action_type}) for: {str(need.question)[:80]}",
-                priority=need.priority,
-            )
+
+        # P0 #7 — adaptive breadth + iterative expansion, not a hard limit=8.
+        # rank_tools scores EVERY manifest tool and sorts; its limit is pure
+        # truncation of an already-complete ranking, and the 1.5 noise floor
+        # already removes junk. So discovery ranks ONCE over the whole
+        # manifest, and the scan walks that ranking in EXPANDING windows:
+        # an adaptive initial breadth (see _investigation_breadth), doubling
+        # whenever a whole window contained nothing safe+fillable, until the
+        # ranking is exhausted. The old ceiling could return 'no registered
+        # investigation' while a safe, fillable probe sat at rank 9+ — for a
+        # cross-domain investigation (filesystem, process, network, logs,
+        # browser, database, vision, system state) the first eight ranked
+        # candidates can easily ALL be gated or unfillable. 'No plannable
+        # investigation' is only honest after the WHOLE ranking was scanned.
+        # The scan order never changes: rank order. Expansion never relaxes
+        # the safety ceiling or argument fillability — it only widens WHICH
+        # tools are considered, never what is allowed.
+        ranked = rank_tools(text, limit=max(1, len(manifest)))
+        window = _investigation_breadth(need)
+        start = 0
+        while start < len(ranked):
+            for offset, match in enumerate(ranked[start:start + window]):
+                entry = capability_entry(match.action_type) or manifest.get(match.action_type) or {}
+                try:
+                    safety = int(entry.get("safety_level", 3) or 0)
+                except (TypeError, ValueError):
+                    safety = 3
+                if safety > self.max_safety_level:
+                    continue
+                handler = entry.get("handler")
+                if not callable(handler):
+                    continue
+                arguments = _investigation_arguments(handler, need, match.payload)
+                if arguments is None:
+                    continue
+                rank = start + offset + 1
+                return InvestigationPlan(
+                    tool=match.action_type,
+                    arguments=arguments,
+                    target=need.target,
+                    reason=(f"Manifest-discovered investigation ({match.action_type}, "
+                            f"rank {rank}/{len(ranked)}) for: {str(need.question)[:80]}"),
+                    priority=need.priority,
+                )
+            start += window
+            remaining = len(ranked) - start
+            if remaining > 0:
+                app_logger.info(
+                    f"Investigation discovery: no safe+fillable tool in the first "
+                    f"{start} ranked candidates; expanding window by {min(2 * window, remaining)} "
+                    f"more ({remaining} remaining) for: {str(need.question)[:60]}"
+                )
+                window *= 2
         return None
 
 @dataclass(frozen=True)
