@@ -310,6 +310,21 @@ class UniversalFilesystem:
         query_norm = _re.sub(r"[^a-z0-9]+", "", query_lower)
         query_tokens = [t for t in _re.split(r"[^a-z0-9]+", query_lower) if len(t) >= 3]
 
+        # ── Indexed-provider fast path (P0 review #11) ─────────────────────
+        # Everything-style indexed search answers over EVERY drive instantly
+        # (live NTFS MFT); the Python walker stays as the fallback. Contract:
+        # None -> no provider, fall through; entries -> walker-equivalent,
+        # existence-verified, scoped, source-tagged; [] -> the live index
+        # says no filename contains the query — fall through so the
+        # typo-tolerant fuzzy pass can still help the miss.
+        try:
+            from app.tools.indexed_search import provider_search
+            indexed = provider_search(query_raw, roots, limit=max_results)
+            if indexed:
+                return indexed[:max_results]
+        except Exception as exc:
+            app_logger.info(f"Indexed search fast path skipped ({exc}); using the walker.")
+
         # ── Index fast path ────────────────────────────────────────────────
         # All roots freshly indexed? Answer from the cache — but VERIFY each
         # hit still exists, so deletions/moves can never be reported stale.
