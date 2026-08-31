@@ -67,9 +67,19 @@ from app.cognition.event_bus import EventBus
 # itself, by construction, without a tool handler. ONE list (P0 review #12)
 # — the planner's provenance classifier and the counterfactual simulator
 # both read it from here.
+#
+# Contents are the VERIFIED set this list had when it lived in the
+# counterfactual simulator (all 15 paths remain live action types across
+# the runtime, planner and gate paths). The move to tool_registry must
+# never change membership: a dropped name silently reclassifies a native
+# path as registry/unknown (different provenance, different surprisal
+# treatment), an added name shadows a manifest tool as native. The exact
+# set is pinned by tests/test_capability_authority.py.
 NATIVE_EXECUTABLES = ("open_application", "launch_app", "search_files",
-                      "screen_capture", "list_workspace", "read_file",
-                      "formulate_answer")
+                      "phone_command", "make_phone_call", "send_sms",
+                      "screen_capture", "opsec_audit", "daily_briefing",
+                      "investigate", "diagnostic", "formulate_answer",
+                      "answer", "workflow_execute", "observe")
 
 # ---------------------------------------------------------------------------
 # ONE runtime ToolRegistry (P0 #20)

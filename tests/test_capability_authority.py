@@ -301,3 +301,64 @@ def test_catalog_provider_is_injectable():
 
 def tr_effective(reg, name):
     return reg.effective_capability(name)
+
+
+# ---------------------------------------------------------------------------
+# NATIVE_EXECUTABLES (follow-up review): the ONE native-path list must carry
+# EVERY master-agent-native execution path. The move from the counterfactual
+# simulator silently dropped ten of them (and added two unjustified names);
+# this pins the exact verified set — every path, not just one regression.
+# ---------------------------------------------------------------------------
+
+def test_native_executables_is_the_complete_verified_set():
+    """The exact membership, frozen. A dropped name silently reclassifies a
+    native path as registry/unknown; an added name shadows a manifest tool
+    as native. Any change here must be a deliberate, reviewed decision."""
+    assert set(tr.NATIVE_EXECUTABLES) == {
+        "open_application", "launch_app", "search_files",
+        "phone_command", "make_phone_call", "send_sms",
+        "screen_capture", "opsec_audit", "daily_briefing",
+        "investigate", "diagnostic", "formulate_answer",
+        "answer", "workflow_execute", "observe",
+    }
+
+
+def test_every_native_path_is_classified_native_by_the_planner():
+    """End-to-end, not spot-checked: EVERY entry in the ONE list must be
+    classified 'native' by the planner's provenance classifier, and the
+    counterfactual alias must be the same object (ONE list, not a copy)."""
+    from app.cognition.action_planner import ActionPlanner
+    from app.cognition.counterfactual_simulator import CounterfactualSimulator
+
+    assert CounterfactualSimulator._NATIVE_EXECUTABLES is tr.NATIVE_EXECUTABLES
+
+    class _Branch:
+        def __init__(self, action):
+            self.hypothetical_action = action
+            self.candidate_payload = {}
+
+    for name in tr.NATIVE_EXECUTABLES:
+        provenance, status = ActionPlanner._classify_capability(
+            _Branch(name), tr.get_shared_registry())
+        assert provenance == "native", name
+        assert status["status"] == "native_execution_path", name
+
+
+def test_counterfactual_level_map_covers_every_native_path():
+    """The surprisal snapshot must assign a level to EVERY native path —
+    a dropped name vanishes from the map entirely (native-only paths have
+    no manifest entry to backstop them) and changes counterfactual
+    treatment, not just provenance. Manifest-listed native paths keep
+    their DECLARED level (setdefault is a floor, not an override)."""
+    from app.cognition.counterfactual_simulator import CounterfactualSimulator
+
+    levels = CounterfactualSimulator._snapshot_manifest_levels()
+    for name in tr.NATIVE_EXECUTABLES:
+        assert name in levels, (name, "dropped from the native list?")
+    from app.tools.manifest import get_tool_manifest
+    manifest = get_tool_manifest()
+    for name in tr.NATIVE_EXECUTABLES:
+        if name in manifest:
+            assert levels[name] == int(manifest[name]["safety_level"]), name
+        else:
+            assert levels[name] == 1, name
