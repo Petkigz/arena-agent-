@@ -113,6 +113,18 @@ class _LazyImportProxy:
         return {"available": True, "status": "available"}
 
     def __getattr__(self, method_name: str) -> Callable[..., Any]:
+        if method_name == "tool_availability":
+            # Availability is a property of the PROXY ("can this module's
+            # dependency load?"), never of the resolved symbol. Delegating
+            # it produced an invoke() closure that, called as a checker,
+            # did getattr(loaded_symbol, 'tool_availability') — an
+            # AttributeError for function-symbol proxies (binary_analyze,
+            # binary_strings). Latent until any FULL availability listing
+            # ran (GET /tools/availability without a tool filter); single-
+            # tool probes never touched these names. The proxy's own probe
+            # is the honest checker.
+            return self.availability
+
         def invoke(*args: Any, **kwargs: Any) -> Any:
             return getattr(self._load(), method_name)(*args, **kwargs)
 
