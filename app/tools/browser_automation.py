@@ -575,6 +575,11 @@ class BrowserAutomation:
 
         Steps may declare "optional": true — under ANY policy an optional
         step failure is logged and skipped, never aborting the workflow.
+        Optional failures are also kept OUT of the workflow-level failure
+        counts: the result distinguishes required_steps_failed (the
+        workflow's contract was violated) from optional_steps_failed
+        (best-effort steps that did not happen — reported, never
+        contaminating the overall status).
 
         step_limit — the workflow step ceiling. The default (40) is a
         runaway guard: exceeding it is REPORTED as workflow_truncated with
@@ -645,6 +650,15 @@ class BrowserAutomation:
                     f"Sequential browser step {i} ({verb}) failed; fail_policy='continue' runs the rest anyway")
             step_log.append(entry)
 
+        # P1 review: a failed step's meaning depends on whether it was
+        # REQUIRED. An optional failure (skipped_as_optional) must not be
+        # counted with required failures — downstream consumers aggregating
+        # ok=False over the step log would let a correctly-skipped optional
+        # click turn the whole workflow's interaction status false.
+        required_steps_failed = sum(
+            1 for e in step_log if not e.get("ok") and not e.get("optional"))
+        optional_steps_failed = sum(
+            1 for e in step_log if not e.get("ok") and e.get("optional"))
         return {
             "extracts": extracts,
             "step_log": step_log,
@@ -657,6 +671,8 @@ class BrowserAutomation:
             "truncation_intentional": truncation_intentional,
             "steps_requested": steps_requested,
             "step_limit": effective_limit,
+            "required_steps_failed": required_steps_failed,
+            "optional_steps_failed": optional_steps_failed,
         }
 
     @classmethod
@@ -736,6 +752,10 @@ class BrowserAutomation:
                 workflow_truncated = False
                 steps_requested = 0
                 steps_executed = 0
+                # Legacy bucket params have no optional concept: their
+                # interaction failures are all REQUIRED failures.
+                required_steps_failed = 0
+                optional_steps_failed = 0
                 if steps:
                     seq = cls._run_sequential_steps(page, steps, fail_policy=fail_policy,
                                                     step_limit=step_limit)
@@ -746,6 +766,8 @@ class BrowserAutomation:
                     workflow_truncated = bool(seq.get("workflow_truncated"))
                     steps_requested = seq.get("steps_requested", len(steps))
                     steps_executed = seq.get("steps_executed", len(step_log))
+                    required_steps_failed = seq.get("required_steps_failed", 0)
+                    optional_steps_failed = seq.get("optional_steps_failed", 0)
                     if workflow_truncated and not seq.get("truncation_intentional"):
                         app_logger.warning(
                             f"Browser workflow truncated at the default step ceiling: "
@@ -805,13 +827,34 @@ class BrowserAutomation:
                     e for e in step_log
                     if e.get("action") in ("fill", "click", "submit")
                 ]
-                interaction_executed: Optional[bool] = (
-                    bool(interaction_entries) and all(e.get("ok") for e in interaction_entries)
-                ) if interaction_entries else None
+                # P1 review: only REQUIRED interaction steps define the
+                # workflow's interaction contract. An optional step's
+                # failure (ok=False, skipped_as_optional=True) was already
+                # correctly skipped and the workflow continued — letting it
+                # flip interaction_executed (and through it success=False)
+                # contaminated the whole workflow's status with a
+                # best-effort step's outcome. Optional failures are
+                # reported honestly via optional_steps_failed and the
+                # step_log; they are not the workflow's failure.
+                required_interaction_entries = [
+                    e for e in interaction_entries if not e.get("optional")
+                ]
+                if not interaction_entries:
+                    interaction_executed: Optional[bool] = None
+                elif required_interaction_entries:
+                    interaction_executed = all(
+                        e.get("ok") for e in required_interaction_entries)
+                else:
+                    # Only optional interaction was requested: nothing
+                    # required was violated; vacuously executed.
+                    interaction_executed = True
             else:
                 interaction_executed = (
                     (legacy_interaction_failures == 0) if interaction_requested else None
                 )
+                # Legacy bucket params have no optional steps: every
+                # interaction failure there is a REQUIRED failure.
+                required_steps_failed = legacy_interaction_failures
             # `success` here means BROWSER EXECUTION success: the page was
             # retrieved and the requested workflow ran to completion (P0
             # review #8). It says nothing about whether the OWNER'S
@@ -839,6 +882,8 @@ class BrowserAutomation:
                 "workflow_truncated": workflow_truncated,
                 "steps_requested": steps_requested,
                 "steps_executed": steps_executed,
+                "required_steps_failed": required_steps_failed,
+                "optional_steps_failed": optional_steps_failed,
                 "fail_policy": fail_policy,
                 "url": url,
                 "title": page_title,

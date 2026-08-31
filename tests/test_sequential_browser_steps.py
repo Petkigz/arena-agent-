@@ -388,3 +388,164 @@ def test_navigate_and_extract_fails_on_unintentional_truncation():
     assert res2["workflow_truncated"] is False
     assert res2["steps_executed"] == 60
     assert res2["success"] is True
+
+
+# ── optional failures are not required failures (P1 review) ─────────────────
+# An optional step's failure was already correctly skipped and the workflow
+# continued — but its ok=False still fed all(e["ok"] ...), so an optional
+# click failure flipped the ENTIRE workflow's interaction_executed (and
+# success) to false. Required and optional failures are different facts.
+
+def test_optional_failure_does_not_count_as_required_failure():
+    """The review's exact scenario: navigate / optional click / extract.
+    The optional click fails and is skipped — the workflow's REQUIRED
+    contract is intact, so required_steps_failed must be 0 and the
+    optional failure reported separately."""
+    page = FakePage(fail_on={"click"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "navigate", "url": "https://example.com"},
+        {"action": "click", "selector": "#cookie-banner", "optional": True},
+        {"action": "extract", "selector": "#out"},
+    ])
+    assert res["aborted"] is False
+    assert res["step_log"][1]["skipped_as_optional"] is True
+    assert res["step_log"][1]["ok"] is False        # per-step honesty stays
+    assert res["required_steps_failed"] == 0
+    assert res["optional_steps_failed"] == 1
+    assert ("extract", "#out") in page.ops          # workflow really continued
+
+
+def test_required_failure_is_counted_as_required():
+    """Under 'continue' a required fill fails and the rest still runs — but
+    the failure is a REQUIRED failure, counted as such."""
+    page = FakePage(fail_on={"fill"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "navigate", "url": "https://example.com"},
+        {"action": "fill", "selector": "#email", "value": "a@b.c"},
+        {"action": "extract", "selector": "#out"},
+    ], fail_policy="continue")
+    assert res["aborted"] is False
+    assert res["required_steps_failed"] == 1
+    assert res["optional_steps_failed"] == 0
+
+
+def test_mixed_failures_are_counted_independently():
+    """One optional click failure + one required fill failure: each lands
+    in its own bucket, never merged into one undifferentiated count."""
+    page = FakePage(fail_on={"fill", "click"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "navigate", "url": "https://example.com"},
+        {"action": "click", "selector": "#maybe-banner", "optional": True},
+        {"action": "fill", "selector": "#email", "value": "a@b.c"},
+        {"action": "extract", "selector": "#out"},
+    ], fail_policy="continue")
+    assert res["required_steps_failed"] == 1
+    assert res["optional_steps_failed"] == 1
+    assert ("extract", "#out") in page.ops
+
+
+def test_optional_failure_does_not_contaminate_workflow_success():
+    """End-to-end: navigate / optional click (fails) / extract. The workflow
+    correctly continued — its success and interaction_executed must say so.
+    Before the fix, the skipped optional click flipped both to false."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    class RichPage(FakePage):
+        def set_viewport_size(self, size):
+            pass
+
+        def screenshot(self, path=None, **kw):
+            pass
+
+        def title(self):
+            return "t"
+
+    class FakeBrowser:
+        def new_page(self):
+            return page
+
+        def close(self):
+            pass
+
+    page = RichPage(fail_on={"click"})
+    fake_module = types.ModuleType("playwright")
+    fake_api = types.ModuleType("playwright.sync_api")
+    fake_api.sync_playwright = lambda: MagicMock(
+        __enter__=lambda s: types.SimpleNamespace(chromium=object()),
+        __exit__=lambda *a: False)
+    fake_module.sync_api = fake_api
+    sys.modules.setdefault("playwright", fake_module)
+    sys.modules.setdefault("playwright.sync_api", fake_api)
+
+    with patch.object(BrowserAutomation, "_launch", return_value=FakeBrowser()), \
+         patch.object(BrowserAutomation.GROUNDING, "observe_tab",
+                      return_value=MagicMock(to_dict=lambda: {})):
+        res = BrowserAutomation.navigate_and_extract(
+            "https://example.com",
+            steps=[
+                {"action": "navigate", "url": "https://example.com"},
+                {"action": "click", "selector": "#cookie-banner",
+                 "optional": True},
+                {"action": "extract", "selector": "#out"},
+            ])
+    # The optional click failed and was skipped...
+    assert res["step_log"][1]["skipped_as_optional"] is True
+    assert res["optional_steps_failed"] == 1
+    assert res["required_steps_failed"] == 0
+    # ...and that must NOT contaminate the workflow-level status.
+    assert res["interaction_executed"] is True
+    assert res["success"] is True
+    assert res["extracts"]["#out"] == "text@#out"
+
+
+def test_required_interaction_failure_still_fails_the_workflow():
+    """The other side of the distinction: a REQUIRED interaction failure
+    keeps failing the workflow — only optional failures were re-scoped."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    class RichPage(FakePage):
+        def set_viewport_size(self, size):
+            pass
+
+        def screenshot(self, path=None, **kw):
+            pass
+
+        def title(self):
+            return "t"
+
+    class FakeBrowser:
+        def new_page(self):
+            return page
+
+        def close(self):
+            pass
+
+    page = RichPage(fail_on={"click"})
+    fake_module = types.ModuleType("playwright")
+    fake_api = types.ModuleType("playwright.sync_api")
+    fake_api.sync_playwright = lambda: MagicMock(
+        __enter__=lambda s: types.SimpleNamespace(chromium=object()),
+        __exit__=lambda *a: False)
+    fake_module.sync_api = fake_api
+    sys.modules.setdefault("playwright", fake_module)
+    sys.modules.setdefault("playwright.sync_api", fake_api)
+
+    with patch.object(BrowserAutomation, "_launch", return_value=FakeBrowser()), \
+         patch.object(BrowserAutomation.GROUNDING, "observe_tab",
+                      return_value=MagicMock(to_dict=lambda: {})):
+        res = BrowserAutomation.navigate_and_extract(
+            "https://example.com",
+            steps=[
+                {"action": "navigate", "url": "https://example.com"},
+                {"action": "click", "selector": "#must-exist"},
+                {"action": "extract", "selector": "#out"},
+            ],
+            fail_policy="continue")
+    assert res["required_steps_failed"] == 1
+    assert res["optional_steps_failed"] == 0
+    assert res["interaction_executed"] is False
+    assert res["success"] is False
