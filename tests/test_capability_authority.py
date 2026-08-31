@@ -47,7 +47,7 @@ def test_runtime_registered_capability_is_authoritative():
     with patch.object(tr, "get_shared_registry", lambda: reg), \
          patch.object(tr, "_shared_registry", reg, create=True):
         entry = tr.capability_entry("hotloaded_probe")
-        assert entry is not None and entry["provenance"] == "dynamic"
+        assert entry is not None and entry["source"] == "runtime_install"
         assert tr.capability_safety_or_none("hotloaded_probe") == 1
 
 
@@ -137,9 +137,13 @@ def test_three_tiers_are_distinguishable():
     r = runtime_entry("web_search")
     effective = capability_entry("web_search")
     assert m is not None and m.get("category") == "web"
-    assert r is not None and r.get("provenance") == "manifest"
+    # The raw registry view is the BOOT WIRING copy — the typed source
+    # makes the three tiers MORE distinguishable than the old provenance
+    # strings ever were: static_catalog vs boot_execution_wiring vs
+    # runtime_install (the effective view below resolves to the catalog).
+    assert r is not None and r.get("source") == "boot_execution_wiring"
     assert effective is not None
-    assert effective["resolution"] == "manifest"
+    assert effective["resolution"] == "catalog"
 
 
 def test_runtime_install_intentionally_overrides_the_manifest():
@@ -153,7 +157,7 @@ def test_runtime_install_intentionally_overrides_the_manifest():
     with patch.object(tr, "get_shared_registry", lambda: reg):
         entry = tr.capability_entry("web_search")
         assert entry["resolution"] == "runtime_override"
-        assert entry["provenance"] == "dynamic"
+        assert entry["source"] == "runtime_install"
         assert entry["safety_level"] == 2
         # the authority's safety reading follows the override…
         assert tr.capability_safety_or_none("web_search") == 2
@@ -176,9 +180,9 @@ def test_registry_boot_copies_never_shadow_the_fresh_catalog():
     with patch.object(tr, "get_shared_registry", lambda: reg), \
          patch("app.tools.manifest.get_tool_manifest", return_value=fake_catalog):
         # Fresh catalog entry wins over the registry's manifest-tier copy…
-        assert tr.capability_entry("freshly_patched_tool")["resolution"] == "manifest"
+        assert tr.capability_entry("freshly_patched_tool")["resolution"] == "catalog"
         # …and the registry-only name still resolves (tier 3).
-        assert tr.capability_entry("patched_away_tool")["resolution"] == "registry_copy"
+        assert tr.capability_entry("patched_away_tool")["resolution"] == "registry_fallback"
 
 
 def test_dynamic_override_does_not_leak_into_the_manifest_view():
@@ -233,7 +237,7 @@ def test_capabilities_sees_manifest_rebuild_immediately():
          patch("app.tools.manifest.get_tool_manifest", return_value=rebuilt):
         caps = reg.capabilities()
         # a NEW catalog capability appears without re-registration…
-        assert caps["brand_new_tool"]["resolution"] == "manifest"
+        assert caps["brand_new_tool"]["resolution"] == "catalog"
         # …and a CHANGED safety level is the fresh value, not the boot copy
         assert caps["web_search"]["safety_level"] == 3
         assert caps["web_search"]["description"] == "patched description"
@@ -274,8 +278,8 @@ def test_capabilities_and_capability_entry_never_diverge():
         # the three resolutions all show up in the one universe
         assert caps["web_search"]["resolution"] == "runtime_override"
         assert caps["standalone_probe"]["resolution"] == "runtime_override"
-        assert caps["pdf_merge"]["resolution"] == "manifest"
-        assert caps["gone_from_catalog"]["resolution"] == "registry_copy"
+        assert caps["pdf_merge"]["resolution"] == "catalog"
+        assert caps["gone_from_catalog"]["resolution"] == "registry_fallback"
 
 
 def test_dynamic_override_visible_in_capabilities():
@@ -286,7 +290,7 @@ def test_dynamic_override_visible_in_capabilities():
     caps = reg.capabilities()
     assert caps["web_search"]["resolution"] == "runtime_override"
     assert caps["web_search"]["safety_level"] == 2
-    assert caps["web_search"]["provenance"] == "dynamic"
+    assert caps["web_search"]["source"] == "runtime_install"
     # the catalog view is untouched
     assert tr.manifest_entry("web_search")["safety_level"] == 0
 
@@ -297,7 +301,7 @@ def test_catalog_provider_is_injectable():
     reg = ToolRegistry(catalog_provider=lambda: _fake_catalog())
     caps = reg.capabilities()
     assert set(caps) >= {"web_search", "pdf_merge"}
-    assert caps["pdf_merge"]["resolution"] == "manifest"
+    assert caps["pdf_merge"]["resolution"] == "catalog"
     assert tr_effective(reg, "pdf_merge")["safety_level"] == 2
 
 
@@ -540,3 +544,80 @@ def test_investigation_executor_still_runs_not_checked_tools():
     result = executor.execute(plan)
     assert result.success is True
     assert result.output.get("tool_count", 0) >= 100
+
+
+# ── provenance is TWO disjoint dimensions, not one overlapping field ────────
+# P1 review: 'provenance' and 'resolution' used to carry overlapping
+# meanings (manifest/dynamic/registry_copy/runtime_override all in one
+# bag). The authority view now speaks the typed vocabulary:
+#   source     static_catalog | boot_execution_wiring | runtime_install
+#   resolution catalog | runtime_override | registry_fallback
+# and the legacy 'provenance' key is GONE from the effective view — a
+# consumer cannot conflate the dimensions even by accident.
+
+def test_provenance_dimensions_are_typed_and_disjoint():
+    reg = ToolRegistry()
+    reg.register_tool("override_me", "web",
+                      lambda p: {"success": True}, safety_level=0,
+                      provenance="dynamic")            # runtime install
+    reg.register_tool("shrunk_wiring", "x",
+                      lambda p: {"success": True}, safety_level=0,
+                      provenance="manifest")           # boot wiring
+    fake = _fake_catalog(shrunk_wiring={
+        "name": "shrunk_wiring", "category": "x", "safety_level": 0,
+        "handler": lambda p: {"success": True}})
+    del fake["shrunk_wiring"]                          # catalog shrank
+    reg2 = ToolRegistry(catalog_provider=lambda: fake)
+    reg2.register_tool("override_me", "web",
+                       lambda p: {"success": True}, safety_level=0,
+                       provenance="dynamic")
+    reg2.register_tool("shrunk_wiring", "x",
+                       lambda p: {"success": True}, safety_level=0,
+                       provenance="manifest")
+
+    with patch.object(tr, "get_shared_registry", lambda: reg2):
+        caps = reg2.capabilities()
+
+        # The three resolutions coexist in ONE universe...
+        assert caps["web_search"]["resolution"] == "catalog"
+        assert caps["override_me"]["resolution"] == "runtime_override"
+        assert caps["shrunk_wiring"]["resolution"] == "registry_fallback"
+        # ...and the source dimension is ORTHOGONAL to it: the catalog
+        # winner is static, the override is a runtime install, the
+        # fallback is cached boot wiring.
+        assert caps["web_search"]["source"] == "static_catalog"
+        assert caps["override_me"]["source"] == "runtime_install"
+        assert caps["shrunk_wiring"]["source"] == "boot_execution_wiring"
+
+        # The overlapping legacy field is gone from the authority view:
+        # nothing can conflate the dimensions by accident anymore.
+        for name, entry in caps.items():
+            assert "provenance" not in entry, name
+
+        # The two vocabularies are disjoint BY CONSTRUCTION.
+        sources = {e["source"] for e in caps.values()}
+        resolutions = {e["resolution"] for e in caps.values()}
+        assert sources <= {"static_catalog", "boot_execution_wiring",
+                           "runtime_install"}
+        assert resolutions <= {"catalog", "runtime_override",
+                               "registry_fallback"}
+        assert sources & resolutions == set()
+
+
+def test_source_is_derived_from_legacy_provenance():
+    """Every existing registration keeps its exact semantics: provenance
+    'dynamic' derives source runtime_install (overrides the catalog);
+    manifest-tier derives boot_execution_wiring (never overrides). The
+    override mechanism READS source — the legacy string is metadata."""
+    reg = ToolRegistry()
+    reg.register_tool("dyn_tool", "x", lambda p: {"success": True},
+                      safety_level=0, provenance="dynamic")
+    reg.register_tool("wire_tool", "x", lambda p: {"success": True},
+                      safety_level=0, provenance="manifest")
+    assert reg._runtime_execution_entry("dyn_tool")["source"] == "runtime_install"
+    assert reg._runtime_execution_entry("wire_tool")["source"] == "boot_execution_wiring"
+    # explicit source wins over derivation
+    reg.register_tool("explicit_tool", "x", lambda p: {"success": True},
+                      safety_level=0, provenance="manifest",
+                      source="runtime_install")
+    assert reg.effective_capability("explicit_tool")["source"] == "runtime_install"

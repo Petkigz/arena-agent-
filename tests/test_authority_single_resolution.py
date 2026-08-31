@@ -154,7 +154,7 @@ def test_catalog_only_capability_is_safety_read_probed_and_executable():
     status = reg.get_tool_availability("brand_new_tool", probe=True)
     assert status["available"] is True
     assert status["status"] == "not_registered" or status["status"] == "available"
-    assert status.get("provenance") == "manifest"
+    assert status.get("source") == "static_catalog"
     with gate_sees(reg):
         result = reg.execute_registered_tool("brand_new_tool", {})
     assert result["success"] is True and result.get("ran") is True
@@ -209,7 +209,7 @@ def test_catalog_shrink_keeps_the_registry_copy_executable():
     del catalog["shrinking_tool"]  # the catalog shrinks after boot
 
     entry = reg.effective_capability("shrinking_tool")
-    assert entry is not None and entry["resolution"] == "registry_copy"
+    assert entry is not None and entry["resolution"] == "registry_fallback"
     assert reg.capability_safety("shrinking_tool") == 0
     with gate_sees(reg):
         result = reg.execute_registered_tool("shrinking_tool", {})
@@ -245,7 +245,7 @@ def test_planner_gate_and_execution_share_one_view():
         # Availability comes from the same entry's checker.
         status = reg.get_tool_availability(name, probe=True)
         assert status["available"] is True, name
-        assert status["provenance"] == effective["provenance"], name
+        assert status["source"] == effective["source"], name
 
 
 # ── preserved: unknown is still honestly unknown ────────────────────────────
@@ -425,4 +425,4 @@ def test_raw_wiring_view_still_reachable_deliberately():
         assert tr.runtime_entry("catalog_tool") is None
         # ...while the AUTHORITY resolves the catalog fresh:
         assert (tr.capability_entry("catalog_tool") or {}).get(
-            "resolution") == "manifest"
+            "resolution") == "catalog"

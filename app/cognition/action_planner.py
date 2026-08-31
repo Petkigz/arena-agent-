@@ -243,7 +243,12 @@ class ActionPlanner:
             status = {"available": None, "status": f"probe_error:{exc}"}
 
         if status.get("status") != "not_registered":
-            provenance = "dynamic" if status.get("provenance") == "dynamic" else "registry"
+            # Typed origin (P1 review): source runtime_install == what the
+            # legacy 'dynamic' marker meant; the tier labels below are this
+            # planner's own vocabulary.
+            provenance = ("dynamic"
+                          if status.get("source") == "runtime_install"
+                          else "registry")
             return provenance, status
 
         # Not a registry tool. If the caller supplied this candidate

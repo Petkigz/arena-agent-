@@ -25,6 +25,18 @@ The authority contract — three DISTINCT notions, never conflated:
   * manifest_entry(name)        -> the static CATALOG entry, read fresh
   * runtime_entry(name)         -> what the live registry carries (boot-time
                                    manifest copies AND runtime installs)
+  Provenance is TWO disjoint dimensions (typed vocabulary — 'provenance'
+  and 'resolution' used to overlap; they no longer do):
+  * source (WHERE the entry's wiring came FROM):
+      static_catalog          read fresh from the manifest catalog
+      boot_execution_wiring   the registry's boot-time copy of a catalog
+                              entry (cached wiring, never authoritative)
+      runtime_install         registered at runtime (overrides the catalog)
+  * resolution (HOW a lookup answered):
+      catalog                 the fresh catalog entry won
+      runtime_override        a runtime install won over the catalog
+      registry_fallback       neither — the registry's wiring answered for
+                              a name the catalog no longer lists
   * capability_entry(name)      -> the EFFECTIVE capability:
                                      1. a runtime INSTALL (provenance
                                         'dynamic') OVERRIDES the catalog —
@@ -37,9 +49,12 @@ The authority contract — three DISTINCT notions, never conflated:
                                         boot-time copies never shadow it);
                                      3. else the registry's copy (names the
                                         catalog no longer lists).
-                                   The returned entry is tagged with its
-                                   'resolution': runtime_override | manifest
-                                   | registry_copy.
+                                   The returned entry is tagged with the
+                                   two DISJOINT provenance dimensions:
+                                   'source' (static_catalog |
+                                   boot_execution_wiring | runtime_install)
+                                   and 'resolution' (catalog |
+                                   runtime_override | registry_fallback).
   * capability_safety(name)     -> the ONE safety reading (unknown -> 99,
                                    gated: unvetted is not read-only)
   * internal_probe_safety(name) -> trusted level of a POSITIVELY
@@ -142,9 +157,9 @@ def capability_entry(name: str) -> Optional[Dict[str, Any]]:
     its own version of the capability universe.
 
     Resolution — an override is INTENTIONAL, never accidental:
-      1. a runtime INSTALL (provenance 'dynamic') overrides the catalog:
-         registering a manifest name at runtime patches it on purpose —
-         runtime is the live truth;
+      1. a runtime INSTALL (source 'runtime_install') overrides the
+         catalog: registering a manifest name at runtime patches it on
+         purpose — runtime is the live truth;
       2. else the manifest catalog, read FRESH (a rebuilt or patched
          manifest is visible immediately; the registry's boot-time
          manifest copies never shadow the catalog — stale copies and
@@ -152,8 +167,9 @@ def capability_entry(name: str) -> Optional[Dict[str, Any]]:
       3. else the registry's copy, for names the registry still knows
          but the catalog no longer lists.
 
-    Returns a copy tagged with 'resolution':
-    runtime_override | manifest | registry_copy.
+    Returns a copy tagged with the two disjoint provenance dimensions:
+    'source' (static_catalog | boot_execution_wiring | runtime_install)
+    and 'resolution' (catalog | runtime_override | registry_fallback).
 
     Delegates to ToolRegistry.effective_capability — there is exactly ONE
     implementation of the resolution; this function is the import seam.
@@ -166,8 +182,8 @@ def capability_entry(name: str) -> Optional[Dict[str, Any]]:
         catalog = manifest_entry(name)
         if catalog is not None:
             entry = dict(catalog)
-            entry.setdefault("provenance", "manifest")
-            entry["resolution"] = "manifest"
+            entry["source"] = "static_catalog"
+            entry["resolution"] = "catalog"
             return entry
         return None
 
@@ -371,10 +387,17 @@ class ToolRegistry:
         safety_level: int = 0,
         availability: Optional[Callable[..., Dict[str, Any]]] = None,
         provenance: str = "dynamic",
+        source: str = "",
     ) -> None:
         """provenance: 'manifest' (default tool set) or 'dynamic'
-        (registered at runtime). Exposed through get_tool_availability so
-        capability provenance is explicit end to end (P0 review #2).
+        (registered at runtime) — legacy registration marker, kept for
+        compatibility. source is the TYPED origin (P1 review):
+        'runtime_install' (the default; overrides the catalog) or
+        'boot_execution_wiring' (a cached copy; never overrides). When
+        source is empty it is DERIVED from provenance, so every existing
+        registration keeps its exact semantics. Exposed through
+        get_tool_availability so capability provenance is explicit end
+        to end (P0 review #2).
 
         A registration CHANGES the capability surface (P0 #6): the new entry
         may carry a different handler AND a different availability checker,
@@ -384,6 +407,11 @@ class ToolRegistry:
         a capability that no longer exists in that form.
         """
         key = str(name or "").lower()
+        if not source:
+            # Derived so every legacy registration keeps exact semantics:
+            # 'dynamic' installs override; manifest-tier entries are wiring.
+            source = ("runtime_install" if provenance == "dynamic"
+                      else "boot_execution_wiring")
         self._registry[key] = {
             "name": name,
             "category": category,
@@ -392,6 +420,7 @@ class ToolRegistry:
             "safety_level": safety_level,
             "availability": availability,
             "provenance": provenance,
+            "source": source,
         }
         with self._env_lock:
             self._availability_cache.pop(key, None)
@@ -479,7 +508,7 @@ class ToolRegistry:
         """THE authoritative capability lookup (P0 review #12).
 
         Resolution — an override is INTENTIONAL, never accidental:
-          1. a runtime INSTALL (provenance 'dynamic') overrides the
+          1. a runtime INSTALL (source 'runtime_install') overrides the
              catalog: registering a manifest name at runtime patches it
              on purpose — runtime is the live truth;
           2. else the static catalog, read FRESH through the provider (a
@@ -489,13 +518,15 @@ class ToolRegistry:
              knows but the catalog no longer lists (execution wiring
              survives a catalog shrink).
 
-        Returns a copy tagged with 'resolution':
-        runtime_override | manifest | registry_copy.
+        Returns a copy tagged with the two DISJOINT provenance dimensions:
+          source     static_catalog | boot_execution_wiring | runtime_install
+          resolution catalog | runtime_override | registry_fallback
         """
         key = str(name or "").lower()
         runtime = self._registry.get(key)
-        if runtime is not None and runtime.get("provenance") == "dynamic":
+        if runtime is not None and runtime.get("source") == "runtime_install":
             entry = dict(runtime)
+            entry.pop("provenance", None)  # authority speaks source+resolution
             entry["resolution"] = "runtime_override"
             return entry
         try:
@@ -505,12 +536,13 @@ class ToolRegistry:
         catalog_entry = catalog.get(key)
         if catalog_entry is not None:
             entry = dict(catalog_entry)
-            entry.setdefault("provenance", "manifest")
-            entry["resolution"] = "manifest"
+            entry["source"] = "static_catalog"
+            entry["resolution"] = "catalog"
             return entry
         if runtime is not None:
             entry = dict(runtime)
-            entry["resolution"] = "registry_copy"
+            entry.pop("provenance", None)  # authority speaks source+resolution
+            entry["resolution"] = "registry_fallback"
             return entry
         return None
 
@@ -519,15 +551,19 @@ class ToolRegistry:
         on every call with IDENTICAL semantics to effective_capability():
 
           * every catalog capability, read fresh through the provider
-            (a rebuilt or patched manifest is visible immediately);
-          * runtime installs layered on top — a dynamic registration of
-            a manifest name is an intentional override and WINS;
-          * registry-only names (catalog shrank or runtime-registered
-            with manifest provenance) survive as registry_copy.
+            (a rebuilt or patched manifest is visible immediately) —
+            source static_catalog, resolution catalog;
+          * runtime installs layered on top — a runtime registration of
+            a manifest name is an intentional override and WINS —
+            source runtime_install, resolution runtime_override;
+          * registry-only names (catalog shrank, or boot wiring the
+            catalog no longer lists) survive as registry_fallback.
 
         The boot-time registration table alone is NOT the universe: it is
         an execution-wiring cache that must never shadow the live catalog.
-        Each entry is a copy tagged with 'resolution'.
+        Each entry is a copy tagged with the two DISJOINT provenance
+        dimensions ('source' and 'resolution' — never one overloaded
+        'provenance' field).
         """
         try:
             catalog = self._catalog_provider() or {}
@@ -536,17 +572,19 @@ class ToolRegistry:
         merged: Dict[str, Dict[str, Any]] = {}
         for name, entry in catalog.items():
             view = dict(entry)
-            view.setdefault("provenance", "manifest")
-            view["resolution"] = "manifest"
+            view["source"] = "static_catalog"
+            view["resolution"] = "catalog"
             merged[str(name).lower()] = view
         for name, entry in self._registry.items():
-            if entry.get("provenance") == "dynamic":
+            if entry.get("source") == "runtime_install":
                 view = dict(entry)
+                view.pop("provenance", None)  # authority speaks source+resolution
                 view["resolution"] = "runtime_override"
                 merged[name] = view
             elif name not in merged:
                 view = dict(entry)
-                view["resolution"] = "registry_copy"
+                view.pop("provenance", None)  # authority speaks source+resolution
+                view["resolution"] = "registry_fallback"
                 merged[name] = view
         return merged
 
@@ -644,7 +682,7 @@ class ToolRegistry:
             }
         import time as _time
         now = _time.monotonic()
-        _provenance = entry.get("provenance", "manifest")
+        _source = entry.get("source", "static_catalog")
         with self._env_lock:
             revision = self._environment_revision
         if not refresh:
@@ -655,7 +693,7 @@ class ToolRegistry:
                 and now - cached[0] < self._AVAILABILITY_CACHE_TTL_S
                 and cached[1] == revision
             ):
-                return {"name": key, "provenance": _provenance, **cached[2]}
+                return {"name": key, "source": _source, **cached[2]}
 
         checker = entry.get("availability")
         status = interpret_availability(checker, probe=probe)
@@ -671,8 +709,8 @@ class ToolRegistry:
                 # stale would defeat the revision check entirely.
                 if self._environment_revision == revision:
                     self._availability_cache[key] = (now, revision, recorded)
-            return {"name": key, "provenance": _provenance, **recorded}
-        return {"name": key, "provenance": _provenance, **status}
+            return {"name": key, "source": _source, **recorded}
+        return {"name": key, "source": _source, **status}
 
     def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
         """Return deterministic per-tool availability records for the SAME

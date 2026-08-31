@@ -78,7 +78,7 @@ def test_not_checked_still_flows_verbatim_and_never_freezes():
     assert calls["n"] == 2, "NOT_CHECKED is never cached — it keeps flowing"
     assert first == {
         "name": "unchecked_tool",
-        "provenance": "dynamic",
+        "source": "runtime_install",
         "available": None,
         "status": "not_checked",
     }
