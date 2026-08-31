@@ -520,10 +520,11 @@ class SystemDiagnostics:
     # ── recent system logs ───────────────────────────────────────────────
     @classmethod
     def recent_logs(cls, lines: int = 50, source: Optional[str] = None) -> Dict[str, Any]:
-        """Tail recent SYSTEM log entries (journalctl on Linux, the Windows
-        System event log via wevtutil). Bounded, read-only, with honest
-        per-source status when a log is unreadable or the journal needs
-        privileges the process does not have."""
+        """Tail recent SYSTEM log events (journalctl on Linux, the Windows
+        System event log). Entries are WHOLE events — a multi-line Windows
+        event record is one entry, never fragmented lines. Bounded,
+        read-only, with honest per-source status when a log is unreadable
+        or the journal needs privileges the process does not have."""
         lines = max(1, min(int(lines or 50), 200))
         system = platform.system()
         sources: List[Dict[str, Any]] = []
@@ -583,6 +584,40 @@ class SystemDiagnostics:
         return results or [{"source": "/var/log/syslog", "status": "not present",
                             "entries": []}]
 
+    @staticmethod
+    def _event_records(stdout: str) -> List[str]:
+        """WHOLE multi-line event records, not lines (P1 review).
+
+        Both Windows paths emit one BLOCK per event: wevtutil /f:text marks
+        record starts with 'Event[N]:' (and an event's Description may
+        itself contain blank lines), while Get-WinEvent Format-List
+        separates events with blank lines. Treating lines as entries made
+        one event count as ~8 entries and truncation cut events in half —
+        'last 50 events' became 'first 50 non-empty lines'."""
+        lines = (stdout or "").splitlines()
+        records: List[str] = []
+        starts = [i for i, ln in enumerate(lines)
+                  if re.match(r"\s*Event\[\d+\]:", ln)]
+        if starts:
+            # wevtutil text format: explicit record markers are
+            # authoritative — robust to blank lines inside a description.
+            bounds = starts + [len(lines)]
+            for a, b in zip(bounds, bounds[1:]):
+                records.append(
+                    "\n".join(ln.rstrip() for ln in lines[a:b]).strip())
+        else:
+            # Get-WinEvent Format-List: events separated by blank lines.
+            block: List[str] = []
+            for ln in lines:
+                if ln.strip():
+                    block.append(ln.rstrip())
+                elif block:
+                    records.append("\n".join(block).strip())
+                    block = []
+            if block:
+                records.append("\n".join(block).strip())
+        return [r for r in records if r]
+
     @classmethod
     def _windows_event_log(cls, lines: int) -> Dict[str, Any]:
         """PowerShell Get-WinEvent first — it streams the NEWEST events and is
@@ -599,7 +634,7 @@ class SystemDiagnostics:
             out = None
             app_logger.warning(f"Get-WinEvent probe failed, falling back to wevtutil: {exc}")
         if out is not None and out.returncode == 0:
-            entries = [ln.strip() for ln in (out.stdout or "").splitlines() if ln.strip()]
+            entries = cls._event_records(out.stdout)[:lines]
             return {"source": "event-log (Get-WinEvent)", "status": "ok", "entries": entries}
         # Fallback: the classic wevtutil text query (slow on large logs).
         try:
@@ -615,5 +650,5 @@ class SystemDiagnostics:
             return {"source": "event-log",
                     "status": f"unavailable (rc={out.returncode}): "
                               f"{(out.stderr or '').strip()[:120]}", "entries": []}
-        entries = [ln for ln in (out.stdout or "").splitlines() if ln.strip()]
+        entries = cls._event_records(out.stdout)[:lines]
         return {"source": "event-log", "status": "ok", "entries": entries}

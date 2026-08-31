@@ -547,3 +547,114 @@ def test_second_counter_read_failure_degrades_honestly(monkeypatch):
     assert result["current_throughput"]["available"] is False
     assert result["current_throughput"]["reason"]
     assert result["io_since_boot"]["bytes_sent_mb"] == 1.0
+
+
+# ── Windows event-log entries are WHOLE events, not lines (P1 review) ───────
+# wevtutil /f:text and Get-WinEvent Format-List both emit multi-line blocks
+# per event. The old line-splitting made 1 event count as ~8 entries and
+# truncation cut events in half: 'last 50 events' was really 'first 50
+# non-empty lines'. Downstream reasoning deserves whole records.
+
+_WEVTUTIL_SAMPLE = """Event[0]:
+  Date: 2026-08-30 10:00:01
+  Event ID: 6005
+  Level: Information
+  Computer: OWNER-PC
+  Description:
+    The Event log service was started.
+
+Event[1]:
+  Date: 2026-08-30 10:02:33
+  Event ID: 37
+  Level: Warning
+  Computer: OWNER-PC
+  Description:
+    The speed of processor 0 is being limited by system firmware.
+    The processor has been in this limited performance state for 6 seconds.
+
+Event[2]:
+  Date: 2026-08-30 10:05:12
+  Event ID: 41
+  Description:
+    First paragraph of the description.
+
+    Second paragraph after an internal blank line.
+"""
+
+_WINEVENT_SAMPLE = """TimeCreated  : 2026/08/30 10:05:12
+ProviderName : Microsoft-Windows-Kernel-Power
+Id           : 41
+Message      : The system has rebooted without cleanly shutting down.
+
+TimeCreated  : 2026/08/30 10:02:33
+ProviderName : Microsoft-Windows-Kernel-Processor-Power
+Id           : 37
+Message      : The speed of processor 0 is being limited by system firmware.
+"""
+
+
+def _fake_windows_logs(monkeypatch, winevent_rc=1, winevent_out="",
+                       wevtutil_out=_WEVTUTIL_SAMPLE):
+    import app.tools.system_diagnostics as mod
+    monkeypatch.setattr(mod.platform, "system", lambda: "Windows")
+
+    def fake_run(cmd, timeout):
+        if "Get-WinEvent" in " ".join(cmd):
+            return _ProcResult(rc=winevent_rc, stdout=winevent_out)
+        return _ProcResult(rc=0, stdout=wevtutil_out)
+
+    monkeypatch.setattr(mod, "run_cancellable_subprocess", fake_run)
+
+
+def test_wevtutil_entries_are_whole_events(monkeypatch):
+    """Three Event[N] blocks -> exactly 3 entries, each carrying its full
+    record from Date through Description."""
+    _fake_windows_logs(monkeypatch)
+    result = SystemDiagnostics.recent_logs(lines=50)
+    src = result["sources"][0]
+    assert src["status"] == "ok"
+    assert src["entries"] == 3, "3 events, not ~30 lines"
+    entries = result["entries"]
+    assert len(entries) == 3
+    # Each entry is a complete record, not a fragment.
+    for entry, eid in zip(entries, ("6005", "37", "41")):
+        assert f"Event ID: {eid}" in entry
+        assert "Description:" in entry
+    # The multi-line throttling description stays ONE entry, whole.
+    assert "limited performance state" in entries[1]
+
+
+def test_wevtutil_internal_blank_line_keeps_one_event(monkeypatch):
+    """A Description containing its own blank line (Event[2]) must not split
+    the record — Event[N] markers are authoritative."""
+    _fake_windows_logs(monkeypatch)
+    result = SystemDiagnostics.recent_logs(lines=50)
+    third = result["entries"][2]
+    assert "First paragraph" in third and "Second paragraph" in third
+
+
+def test_truncation_cuts_events_never_halves(monkeypatch):
+    """lines=2 returns the first 2 COMPLETE events — no entry ends
+    mid-record."""
+    _fake_windows_logs(monkeypatch)
+    result = SystemDiagnostics.recent_logs(lines=2)
+    entries = result["entries"]
+    assert len(entries) == 2
+    assert "Event ID: 6005" in entries[0]
+    assert "Event ID: 37" in entries[1] and "Description:" in entries[1]
+    assert all("Description:" in e for e in entries)  # whole records only
+
+
+def test_get_winevent_blocks_group_by_blank_lines(monkeypatch):
+    """Primary path (Get-WinEvent Format-List): events separated by blank
+    lines; each entry keeps its multi-line Message."""
+    _fake_windows_logs(monkeypatch, winevent_rc=0,
+                       winevent_out=_WINEVENT_SAMPLE)
+    result = SystemDiagnostics.recent_logs(lines=10)
+    src = result["sources"][0]
+    assert src["source"] == "event-log (Get-WinEvent)"
+    assert src["entries"] == 2
+    first = result["entries"][0]
+    assert "Id           : 41" in first
+    assert "cleanly shutting down" in first  # multi-line Message intact
+    assert "Id           : 37" in result["entries"][1]
