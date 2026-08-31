@@ -107,6 +107,11 @@ def test_network_activity_reports_counters_and_connections():
     assert isinstance(result["active_connections"], int)
     # The connection table is bounded even on busy hosts.
     assert len(result["connections"]) <= 50
+    # The live rate is a separate, measured fact (real machine).
+    tp = result["current_throughput"]
+    assert tp["available"] is True
+    assert tp["measured_interval_s"] > 0
+    assert tp["bytes_sent_per_s"] >= 0 and tp["bytes_recv_per_s"] >= 0
 
 
 # ── startup programs ────────────────────────────────────────────────────────
@@ -423,3 +428,122 @@ def test_macos_full_speed_limit_is_not_throttling(monkeypatch):
     result = SystemDiagnostics.temperature()
     evidence = result["thermal_throttling_observed"]
     assert evidence["observed"] is False
+
+
+# ── current throughput is a MEASURED rate, not a cumulative counter ─────────
+# P1 review: io_since_boot cannot answer 'what is happening right now' —
+# 100 MB accumulated over 3 days and 100 MB over 10 minutes produce the
+# same counter. The rate is a delta over a real window, reported separately.
+
+class _FakeIO:
+    def __init__(self, sent, recv, psent, precv):
+        self.bytes_sent = sent
+        self.bytes_recv = recv
+        self.packets_sent = psent
+        self.packets_recv = precv
+
+
+def _fake_net_psutil(monkeypatch, readings):
+    """readings: list of _FakeIO returned by successive net_io_counters()
+    calls. Also fakes the connection table (empty)."""
+    import app.tools.system_diagnostics as mod
+    calls = {"n": 0}
+
+    class _FakePsutilNet:
+        CONN_NONE = "NONE"
+        AccessDenied = type(mod.psutil.AccessDenied)
+
+        @staticmethod
+        def net_io_counters():
+            i = min(calls["n"], len(readings) - 1)
+            calls["n"] += 1
+            return readings[i]
+
+        @staticmethod
+        def net_connections(kind="inet"):
+            return []
+
+    monkeypatch.setattr(mod, "psutil", _FakePsutilNet)
+    return calls
+
+
+def test_current_throughput_is_a_measured_rate(monkeypatch):
+    """50 MB sent inside the window -> ~50MB/s reported, with the actual
+    elapsed window reported (never assumed)."""
+    _fake_net_psutil(monkeypatch, [
+        _FakeIO(1_000_000_000, 2_000_000_000, 1_000, 2_000),
+        _FakeIO(1_050_000_000, 2_075_000_000, 1_500, 2_300),
+    ])
+    result = SystemDiagnostics.network_activity(interval=0.15)
+    assert result["success"] is True
+    tp = result["current_throughput"]
+    assert tp["available"] is True
+    assert tp["measured_interval_s"] >= 0.15
+    # rate x window == the measured delta (within timer slop)
+    sent_over_window = tp["bytes_sent_per_s"] * tp["measured_interval_s"]
+    assert abs(sent_over_window - 50_000_000) / 50_000_000 < 0.05, tp
+    recv_over_window = tp["bytes_recv_per_s"] * tp["measured_interval_s"]
+    assert abs(recv_over_window - 75_000_000) / 75_000_000 < 0.05, tp
+    # The cumulative fact is separate and reflects the latest reading.
+    assert result["io_since_boot"]["bytes_sent_mb"] == 1050.0
+
+
+def test_idle_network_distinguishes_now_from_history(monkeypatch):
+    """The review's exact case: 100 MB sent since boot but ZERO traffic in
+    the window -> rate 0.0 while the counter stays huge. One number cannot
+    carry both facts; two fields do."""
+    _fake_net_psutil(monkeypatch, [
+        _FakeIO(100_000_000, 100_000_000, 10_000, 10_000),
+        _FakeIO(100_000_000, 100_000_000, 10_000, 10_000),
+    ])
+    result = SystemDiagnostics.network_activity(interval=0.1)
+    tp = result["current_throughput"]
+    assert tp["available"] is True
+    assert tp["bytes_sent_per_s"] == 0.0
+    assert tp["bytes_recv_per_s"] == 0.0
+    assert result["io_since_boot"]["bytes_sent_mb"] == 100.0
+
+
+def test_counter_reset_during_window_is_honest(monkeypatch):
+    """Interface counters can reset (link down/up): a window straddling the
+    reset measures nothing real — reported honestly unavailable, never a
+    bogus negative or wrapped rate."""
+    _fake_net_psutil(monkeypatch, [
+        _FakeIO(5_000_000_000, 5_000_000_000, 50_000, 50_000),
+        _FakeIO(1_000, 1_000, 10, 10),   # reset mid-window
+    ])
+    result = SystemDiagnostics.network_activity(interval=0.1)
+    tp = result["current_throughput"]
+    assert tp["available"] is False
+    assert tp["reason"]
+    # The cumulative fact survives from the latest (post-reset) reading.
+    assert result["io_since_boot"]["bytes_sent_mb"] == 0.0
+
+
+def test_second_counter_read_failure_degrades_honestly(monkeypatch):
+    """If the second reading fails, the rate is honestly unavailable but
+    the since-boot counters (from the first reading) still ship."""
+    import app.tools.system_diagnostics as mod
+
+    class _FlakyPsutil:
+        CONN_NONE = "NONE"
+        AccessDenied = type(mod.psutil.AccessDenied)
+        calls = {"n": 0}
+
+        @classmethod
+        def net_io_counters(cls):
+            cls.calls["n"] += 1
+            if cls.calls["n"] == 1:
+                return _FakeIO(1_000_000, 1_000_000, 100, 100)
+            raise OSError("counter read failed")
+
+        @staticmethod
+        def net_connections(kind="inet"):
+            return []
+
+    monkeypatch.setattr(mod, "psutil", _FlakyPsutil)
+    result = SystemDiagnostics.network_activity(interval=0.1)
+    assert result["success"] is True
+    assert result["current_throughput"]["available"] is False
+    assert result["current_throughput"]["reason"]
+    assert result["io_since_boot"]["bytes_sent_mb"] == 1.0

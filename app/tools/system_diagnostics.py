@@ -295,22 +295,22 @@ class SystemDiagnostics:
 
     # ── local network activity ───────────────────────────────────────────
     @classmethod
-    def network_activity(cls, top: int = 10) -> Dict[str, Any]:
+    def network_activity(cls, top: int = 10, interval: float = 0.5) -> Dict[str, Any]:
         """Local network ACTIVITY (not connectivity): throughput counters
-        since boot and the live connection table, summarized. Connection
-        visibility depends on OS privileges — the count of sockets that
-        could not be attributed is reported honestly."""
+        since boot, the live transfer RATE measured over `interval`
+        seconds, and the connection table, summarized. The two IO facts are
+        deliberately separate (P1 review): 100 MB since boot over 3 days
+        and 100 MB over 10 minutes produce the same cumulative counter but
+        are completely different answers to 'what is happening right now'.
+        Connection visibility depends on OS privileges — the count of
+        sockets that could not be attributed is reported honestly."""
         top = max(1, min(int(top or 10), 50))
+        interval = max(0.1, min(float(interval or 0.5), 5.0))
         try:
-            io = psutil.net_io_counters()
-            counters = {
-                "bytes_sent_mb": round(io.bytes_sent / 1e6, 2),
-                "bytes_recv_mb": round(io.bytes_recv / 1e6, 2),
-                "packets_sent": io.packets_sent,
-                "packets_recv": io.packets_recv,
-            }
+            io_first = psutil.net_io_counters()
         except Exception as exc:
             return {"success": False, "error": f"net IO counters failed: {exc}"}
+        started = time.monotonic()
 
         connections: List[Dict[str, Any]] = []
         denied = 0
@@ -342,10 +342,61 @@ class SystemDiagnostics:
         top_remotes = sorted(remote_counts.items(), key=lambda kv: kv[1],
                              reverse=True)[:top]
 
+        # CURRENT THROUGHPUT (P1 review): a rate is a delta over a window,
+        # not a counter. The window starts at the first counter reading —
+        # the connection-table sampling above happens INSIDE it — then
+        # sleeps the remainder of `interval` and reads again. The actual
+        # elapsed time is reported, never assumed.
+        throughput: Dict[str, Any]
+        counters: Dict[str, Any]
+        try:
+            elapsed = time.monotonic() - started
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
+            io_second = psutil.net_io_counters()
+            elapsed = time.monotonic() - started
+            counters = {
+                "bytes_sent_mb": round(io_second.bytes_sent / 1e6, 2),
+                "bytes_recv_mb": round(io_second.bytes_recv / 1e6, 2),
+                "packets_sent": io_second.packets_sent,
+                "packets_recv": io_second.packets_recv,
+            }
+            d_sent = io_second.bytes_sent - io_first.bytes_sent
+            d_recv = io_second.bytes_recv - io_first.bytes_recv
+            d_psent = io_second.packets_sent - io_first.packets_sent
+            d_precv = io_second.packets_recv - io_first.packets_recv
+            if min(d_sent, d_recv, d_psent, d_precv) < 0:
+                # Interface counters can reset (link down/up, driver reload):
+                # the window straddling a reset measures nothing real.
+                throughput = _honest_unavailable(
+                    "current_throughput",
+                    "interface counters reset during the measurement window")
+            elif elapsed <= 0:
+                throughput = _honest_unavailable(
+                    "current_throughput", "no measurable interval elapsed")
+            else:
+                throughput = {
+                    "available": True,
+                    "measured_interval_s": round(elapsed, 3),
+                    "bytes_sent_per_s": round(d_sent / elapsed, 2),
+                    "bytes_recv_per_s": round(d_recv / elapsed, 2),
+                    "packets_sent_per_s": round(d_psent / elapsed, 2),
+                    "packets_recv_per_s": round(d_precv / elapsed, 2),
+                }
+        except Exception as exc:
+            throughput = _honest_unavailable("current_throughput", str(exc))
+            counters = {
+                "bytes_sent_mb": round(io_first.bytes_sent / 1e6, 2),
+                "bytes_recv_mb": round(io_first.bytes_recv / 1e6, 2),
+                "packets_sent": io_first.packets_sent,
+                "packets_recv": io_first.packets_recv,
+            }
+
         return {
             "success": True,
             "captured_at": _now_iso(),
             "io_since_boot": counters,
+            "current_throughput": throughput,
             "active_connections": len(connections),
             "connections": connections[:50],
             "unattributable_socket_count": denied if denied else None,

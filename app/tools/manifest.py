@@ -437,8 +437,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         "CPU/thermal sensor temperatures (honest platform support; high-temperature threshold + platform-evidenced throttling records)",
         _wrap(SystemDiagnostics.temperature))
     add("network_activity", "system", 0,
-        "Local network activity: throughput counters since boot, active connections, top remote endpoints",
-        _wrap(SystemDiagnostics.network_activity, "top"))
+        "Local network activity: throughput counters since boot, live transfer rate measured over a short interval, active connections, top remote endpoints",
+        _wrap(SystemDiagnostics.network_activity, "top", "interval"))
     add("startup_programs", "system", 0,
         "Startup programs and enabled services inventory (boot/login autostart)",
         _wrap(SystemDiagnostics.startup_programs))
