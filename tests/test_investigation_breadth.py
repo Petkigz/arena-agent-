@@ -72,7 +72,14 @@ def test_breadth_is_capped():
 
 def _fake_match(action_type: str, score: float):
     from app.cognition.tool_matcher import ToolMatch
-    return ToolMatch(action_type=action_type, score=score, payload={"query": "q"})
+    # matched_terms mark these as lexically-anchored candidates — their
+    # scores (often far above the 2.5 semantic-only ceiling) imply lexical
+    # evidence. The planner's conceptual-only no-guessing gate therefore
+    # does not apply to them; these tests are about scan order, expansion,
+    # safety ceilings and fillability, not about that gate (which has its
+    # own suite in tests/test_no_guessing_under_embeddings.py).
+    return ToolMatch(action_type=action_type, score=score, payload={"query": "q"},
+                     matched_terms=(action_type,))
 
 
 def _registry_with_ranked(ranked, captured=None):
@@ -192,8 +199,10 @@ def test_unfillable_tool_is_skipped_not_guessed():
         return {"success": True}
 
     ranked = [
-        ToolMatch(action_type="strict_tool", score=9.0, payload={}),
-        ToolMatch(action_type="fillable_tool", score=8.0, payload={}),
+        ToolMatch(action_type="strict_tool", score=9.0, payload={},
+                  matched_terms=("strict_tool",)),
+        ToolMatch(action_type="fillable_tool", score=8.0, payload={},
+                  matched_terms=("fillable_tool",)),
     ]
     registry = InvestigationRegistry()
 

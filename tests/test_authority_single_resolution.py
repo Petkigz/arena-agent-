@@ -259,7 +259,7 @@ def test_unknown_names_are_still_refused_everywhere():
 
 # ── plan freshness contracts record the effective safety ────────────────────
 
-def test_plan_freshness_contracts_use_effective_safety():
+def test_plan_freshness_contracts_use_effective_safety(tmp_path):
     """Same bug class, same fix: a plan's action contracts describe the
     capability version that would actually execute."""
     catalog = {"contract_tool": {"name": "contract_tool", "category": "x",
@@ -278,16 +278,20 @@ def test_plan_freshness_contracts_use_effective_safety():
         # builder skips what the runtime does not expose.
 
     from app.cognition.plan_freshness import PlanFreshnessStore
-    import tempfile, pathlib
-    with tempfile.TemporaryDirectory() as td:
-        store = PlanFreshnessStore(pathlib.Path(td) / "fresh.db")
-        snap = store.build_snapshot(FakeReview(), FakeRuntime())
-        contract = snap["action_contracts"][0]
-        assert contract["safety_level"] == 0
+    # tmp_path (not TemporaryDirectory): the store must CLOSE its SQLite
+    # connections so the .db is deletable — on Windows a lingering handle
+    # blocks eager tempdir cleanup (WinError 32). rmtree below proves it.
+    import shutil
+    store = PlanFreshnessStore(tmp_path / "fresh.db")
+    snap = store.build_snapshot(FakeReview(), FakeRuntime())
+    contract = snap["action_contracts"][0]
+    assert contract["safety_level"] == 0
 
-        # The runtime raises the tool's safety level: the contract must
-        # follow the effective view (3), not the stale boot copy (0).
-        reg.register_tool("contract_tool", "x", lambda p: {"success": True},
-                          safety_level=3, provenance="dynamic")
-        snap2 = store.build_snapshot(FakeReview(), FakeRuntime())
-        assert snap2["action_contracts"][0]["safety_level"] == 3
+    # The runtime raises the tool's safety level: the contract must
+    # follow the effective view (3), not the stale boot copy (0).
+    reg.register_tool("contract_tool", "x", lambda p: {"success": True},
+                      safety_level=3, provenance="dynamic")
+    snap2 = store.build_snapshot(FakeReview(), FakeRuntime())
+    assert snap2["action_contracts"][0]["safety_level"] == 3
+    # Windows hygiene: connections are closed, the db file is deletable.
+    shutil.rmtree(tmp_path, ignore_errors=False)

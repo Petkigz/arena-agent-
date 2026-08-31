@@ -159,6 +159,18 @@ class InvestigationRegistry:
         start = 0
         while start < len(ranked):
             for offset, match in enumerate(ranked[start:start + window]):
+                # No-guessing under embeddings (owner-machine finding): a
+                # candidate with ZERO lexical evidence (empty matched_terms)
+                # rests on embedding similarity alone — on a configured
+                # machine that saturates the noise floor at exactly 1.5
+                # (2.5 × calibrated 0.6) and let 'what is this' autonomously
+                # plan a directory listing. Discovery may PROPOSE
+                # conceptual-only candidates (they surface as suggestions);
+                # an AUTONOMOUS plan needs lexical anchoring or clearly
+                # strong semantic confidence, not a calibrated-threshold
+                # near-miss.
+                if not match.matched_terms and (match.semantic_score or 0.0) < 0.75:
+                    continue
                 entry = capability_entry(match.action_type) or manifest.get(match.action_type) or {}
                 try:
                     safety = int(entry.get("safety_level", 3) or 0)

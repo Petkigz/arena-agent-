@@ -425,11 +425,28 @@ class SystemDiagnostics:
 
     @classmethod
     def _windows_event_log(cls, lines: int) -> Dict[str, Any]:
+        """PowerShell Get-WinEvent first — it streams the NEWEST events and is
+        fast even on multi-GB System logs, where wevtutil qe was observed
+        exceeding 20s on the owner machine. wevtutil stays as fallback."""
+        try:
+            out = run_cancellable_subprocess(
+                ["powershell", "-NoProfile", "-Command",
+                 f"Get-WinEvent -LogName System -MaxEvents {lines} "
+                 f"| Format-List | Out-String -Width 250"],
+                timeout=30,
+            )
+        except Exception as exc:
+            out = None
+            app_logger.warning(f"Get-WinEvent probe failed, falling back to wevtutil: {exc}")
+        if out is not None and out.returncode == 0:
+            entries = [ln.strip() for ln in (out.stdout or "").splitlines() if ln.strip()]
+            return {"source": "event-log (Get-WinEvent)", "status": "ok", "entries": entries}
+        # Fallback: the classic wevtutil text query (slow on large logs).
         try:
             out = run_cancellable_subprocess(
                 ["wevtutil", "qe", "System", "/c:" + str(lines),
                  "/rd:true", "/f:text"],
-                timeout=20,
+                timeout=45,
             )
         except Exception as exc:
             return {"source": "event-log", "status": f"unavailable: {exc}",

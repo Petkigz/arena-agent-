@@ -135,10 +135,16 @@ def test_recent_logs_bounded_and_honest_per_source():
 
 
 def test_recent_logs_single_source_filter():
+    import platform
     result = SystemDiagnostics.recent_logs(lines=5, source="journal")
     names = {s["source"] for s in result["sources"]}
-    assert "journalctl" in names
-    assert "/var/log/syslog" not in names
+    if platform.system() == "Windows":
+        # The journal source does not exist on Windows; the platform's own
+        # system log (Event Log) is what a 'journal' request maps to there.
+        assert any("event-log" in n for n in names), names
+    else:
+        assert "journalctl" in names
+        assert "/var/log/syslog" not in names
 
 
 # ── read-only discipline ────────────────────────────────────────────────────

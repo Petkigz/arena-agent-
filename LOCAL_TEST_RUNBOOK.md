@@ -29,13 +29,32 @@ python -m venv .venv
 
 ## 2. Unit suite (the regression gate)
 
+**Before running: shut down LM Studio** (or unload its models). Roughly 13
+tests assert offline behavior — "no LLM configured → success=False",
+"embedding backend is 'local'", "domain is classified as X" — and a running
+LM Studio with a loaded embedding model legitimately flips those outcomes.
+Those are live-environment disagreements, not regressions; run them with
+LM Studio closed and they go green.
+
+Also on Windows: run commands **one per line** — PowerShell 5 does not
+accept `&&`, and `install` is not a command (that's pip). And use the
+**venv** interpreter (`.venv\Scripts\python`), not system Python — a bare
+`python` hits PEP 668's externally-managed environment on some setups and
+mixes dependency sets.
+
 ```bash
 .venv\Scripts\python -m pytest tests/ -q          # Windows
 .venv/bin/python -m pytest tests/ -q              # Linux/macOS
 ```
 
-**Expected:** `2478 passed, 4 skipped` (± a few skips depending on your
+**Expected:** `2482 passed, 4 skipped` (± a few skips depending on your
 optional dependencies — skips are honest, failures are not).
+
+**Windows note:** a handful of pre-existing tests still fail on Windows for
+platform reasons (they assume Linux: `journalctl`, process groups,
+`xdg-open`, the ~15.6ms clock resolution, SQLite-handle cleanup in tests
+that use `TemporaryDirectory` around other modules' connections). None are
+regressions from this branch; the branch's own tests are Windows-clean.
 
 ## 3. Live verification of the fixes (no mocks)
 
