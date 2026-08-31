@@ -663,10 +663,21 @@ class ToolRegistry:
         return {"name": key, "provenance": _provenance, **status}
 
     def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
-        """Return deterministic per-tool availability records."""
+        """Return deterministic per-tool availability records for the SAME
+        capability universe discovery sees (P1 review).
+
+        This iterated the registry's wiring table while capabilities() and
+        get_tool_availability() resolved the EFFECTIVE view — so a rebuilt
+        manifest could add a tool the planner found instantly, while the
+        full listing (the /tools/availability surface) still refused to
+        acknowledge it existed: 'the planner found the new tool, but the
+        listing says it isn't there.' The listing, the single lookup and
+        the discovery universe are ONE authority: iterate the effective
+        universe, and each record resolves through _authority_entry like
+        every other authority consumer."""
         return [
             self.get_tool_availability(name, probe=probe)
-            for name in sorted(self._registry)
+            for name in sorted(self.capabilities())
         ]
 
     def execute_registered_tool(self, tool_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
