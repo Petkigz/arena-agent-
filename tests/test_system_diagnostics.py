@@ -57,6 +57,12 @@ def test_system_metrics_measures_the_machine():
     # Top-process lists are bounded as requested.
     assert len(result["top_processes_by_cpu"]) <= 3
     assert len(result["top_processes_by_memory"]) <= 3
+    # And the CPU list is an actual ranking: non-negative measured floats
+    # in descending order (the fake-psutil suite proves the two-pass
+    # measurement; this catches a real regression in the real path).
+    cpu_vals = [p["cpu_percent"] for p in result["top_processes_by_cpu"]]
+    assert all(isinstance(v, float) and v >= 0.0 for v in cpu_vals), cpu_vals
+    assert cpu_vals == sorted(cpu_vals, reverse=True), cpu_vals
 
 
 def test_system_metrics_inputs_are_bounded():
@@ -158,3 +164,133 @@ def test_probes_are_read_only_by_construction():
     for forbidden in (".kill(", ".terminate(", ".send_signal(", "os.remove(",
                       "shutil.rmtree(", "os.system("):
         assert forbidden not in source, forbidden
+
+
+# ── per-process CPU is MEASURED, not a first-call 0.0 (P1 review) ───────────
+# psutil documents that a process's first non-blocking cpu_percent() is
+# meaningless (no baseline to diff against). The old one-pass sampling
+# sorted those zeros — "top_processes_by_cpu" was pid order wearing a
+# ranking's name. These tests use a fake psutil that faithfully reproduces
+# the documented first-call behavior and prove the ranking uses the SECOND
+# (measured) reading.
+
+class _FakeProc:
+    """Emulates psutil.Process: first cpu_percent() = 0.0 (documented),
+    subsequent calls = the measured usage over the window."""
+
+    def __init__(self, pid, name, measured_cpu, memory_percent,
+                 die_after_prime=False):
+        self.pid = pid
+        self.info = {"pid": pid, "name": name}
+        self._measured = measured_cpu
+        self._mem = memory_percent
+        self._die_after_prime = die_after_prime
+        self.cpu_calls = 0
+
+    def cpu_percent(self, interval=None):
+        self.cpu_calls += 1
+        if self.cpu_calls == 1:
+            return 0.0                     # documented first-call behavior
+        if self._die_after_prime:
+            raise _FakePsutil.NoSuchProcess(pid=self.pid)
+        return self._measured
+
+    def memory_percent(self):
+        if self._die_after_prime:
+            raise _FakePsutil.NoSuchProcess(pid=self.pid)
+        return self._mem
+
+
+class _FakePsutil:
+    class NoSuchProcess(Exception):
+        def __init__(self, pid=None): super().__init__(f"no such pid {pid}")
+    class AccessDenied(Exception): pass
+    class ZombieProcess(Exception): pass
+
+    def __init__(self, procs):
+        self._procs = procs
+
+    def process_iter(self, attrs=None):
+        return list(self._procs)
+
+    @staticmethod
+    def cpu_percent(interval=None, percpu=False):
+        if percpu:
+            return [12.5, 7.5]
+        return 20.0
+
+    @staticmethod
+    def cpu_count(logical=True):
+        return 2 if logical else 1
+
+    @staticmethod
+    def virtual_memory():
+        class _M: total = 16e9; used = 8e9; percent = 50.0; available = 8e9
+        return _M()
+
+    @staticmethod
+    def swap_memory():
+        class _S: total = 8e9; used = 1e9; percent = 12.5
+        return _S()
+
+    @staticmethod
+    def boot_time():
+        import time as _t
+        return _t.time() - 3600.0
+
+    @staticmethod
+    def disk_partitions(all=False):
+        return []
+
+    @staticmethod
+    def disk_io_counters():
+        return None                       # honest-unavailable path
+
+
+def _with_fake_psutil(monkeypatch, procs):
+    import app.tools.system_diagnostics as mod
+    fake = _FakePsutil(procs)
+    monkeypatch.setattr(mod, "psutil", fake)
+    return fake
+
+
+def test_top_processes_by_cpu_ranks_measured_values(monkeypatch):
+    """The ranking must come from the SECOND (measured) reading — the
+    process actually burning CPU ranks first even though its first reading
+    is the documented 0.0."""
+    busy = _FakeProc(101, "busy_app", 88.9, 5.0)
+    idle = _FakeProc(102, "idle_app", 1.2, 3.0)
+    _with_fake_psutil(monkeypatch, [busy, idle])
+    result = SystemDiagnostics.system_metrics(interval=0.1, top=5)
+    assert result["success"] is True
+    top_cpu = result["top_processes_by_cpu"]
+    assert [p["name"] for p in top_cpu] == ["busy_app", "idle_app"], top_cpu
+    assert top_cpu[0]["cpu_percent"] == 88.9
+    assert top_cpu[1]["cpu_percent"] == 1.2
+    # Memory ranking is independent of CPU.
+    assert [p["name"] for p in result["top_processes_by_memory"]] == \
+        ["busy_app", "idle_app"]
+
+
+def test_every_process_is_primed_then_sampled(monkeypatch):
+    """Proof of the two-pass protocol: each process's cpu_percent is called
+    exactly twice (prime, then measure) — a one-pass implementation calls
+    it once and sorts first-call zeros."""
+    procs = [_FakeProc(1, "a", 10.0, 1.0), _FakeProc(2, "b", 20.0, 2.0)]
+    _with_fake_psutil(monkeypatch, procs)
+    SystemDiagnostics.system_metrics(interval=0.1, top=5)
+    for p in procs:
+        assert p.cpu_calls == 2, (p.info["name"], p.cpu_calls)
+
+
+def test_process_dying_between_passes_is_skipped_not_invented(monkeypatch):
+    """A process that disappears after priming (the window is real time)
+    is absent from both rankings — never carried with a stale or zero
+    reading."""
+    survivor = _FakeProc(1, "survivor", 5.0, 4.0)
+    gone = _FakeProc(2, "gone_app", 99.0, 99.0, die_after_prime=True)
+    _with_fake_psutil(monkeypatch, [survivor, gone])
+    result = SystemDiagnostics.system_metrics(interval=0.1, top=5)
+    names = [p["name"] for p in result["top_processes_by_cpu"]]
+    assert names == ["survivor"], names
+    assert "gone_app" not in [p["name"] for p in result["top_processes_by_memory"]]

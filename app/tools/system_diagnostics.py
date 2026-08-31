@@ -27,6 +27,7 @@ from __future__ import annotations
 import datetime
 import os
 import platform
+import time
 from typing import Any, Dict, List, Optional
 
 import psutil
@@ -61,11 +62,36 @@ class SystemDiagnostics:
         """One measured snapshot of the machine: CPU load, memory pressure,
         swap, per-partition disk usage, disk IO counters, uptime, and the
         top processes by CPU and memory — the first-stop probe for
-        performance questions."""
+        performance questions. Per-process CPU is a real two-pass
+        measurement (primed baselines -> window -> sample), never the
+        meaningless first-call 0.0."""
         interval = max(0.0, min(float(interval or 0.5), 5.0))
         top = max(1, min(int(top or 5), 20))
+        # PRIME the per-process CPU baselines FIRST (P1 review): psutil
+        # documents that a process's first non-blocking cpu_percent() is
+        # meaningless (0.0) — there is no earlier reading to diff against —
+        # so process_iter's one-shot readings are ALL first calls. Sorting
+        # those produced a "top_processes_by_cpu" that was pid order
+        # wearing a ranking's name. Priming is non-blocking; the blocking
+        # system-wide measurement below IS the measurement window (no
+        # extra wall time); the second reading is then genuinely measured.
+        primed: List[Any] = []
+        try:
+            for p in psutil.process_iter(["pid", "name"]):
+                try:
+                    p.cpu_percent(None)  # sets the baseline; returns 0.0
+                    primed.append(p)
+                except (psutil.NoSuchProcess, psutil.AccessDenied,
+                        psutil.ZombieProcess):
+                    continue  # gone or protected: skipped, not invented
+        except Exception as exc:
+            app_logger.warning(f"process table priming partial: {exc}")
         try:
             cpu_percent = psutil.cpu_percent(interval=interval)
+            if interval < 0.1:
+                # A window shorter than 0.1s measures timer noise; top the
+                # window up so the per-process deltas mean something.
+                time.sleep(0.1 - interval)
             per_core = psutil.cpu_percent(interval=0, percpu=True)
             mem = psutil.virtual_memory()
             swap = psutil.swap_memory()
@@ -105,16 +131,25 @@ class SystemDiagnostics:
 
         procs_cpu, procs_mem = [], []
         try:
-            for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
-                info = p.info
-                procs_cpu.append(info)
-                procs_mem.append(info)
+            # SAMPLE: the second reading, measured against the primed
+            # baselines over the window above. Processes that died or lost
+            # access between the two passes are skipped, not invented.
+            rows: List[Dict[str, Any]] = []
+            for p in primed:
+                try:
+                    rows.append({
+                        "pid": p.pid,
+                        "name": str((p.info or {}).get("name") or ""),
+                        "cpu_percent": round(float(p.cpu_percent(None)), 2),
+                        "memory_percent": round(float(p.memory_percent()), 2),
+                    })
+                except (psutil.NoSuchProcess, psutil.AccessDenied,
+                        psutil.ZombieProcess):
+                    continue
             procs_cpu = sorted(
-                (p for p in procs_cpu if p.get("cpu_percent") is not None),
-                key=lambda p: p["cpu_percent"], reverse=True)[:top]
+                rows, key=lambda r: r["cpu_percent"], reverse=True)[:top]
             procs_mem = sorted(
-                (p for p in procs_mem if p.get("memory_percent") is not None),
-                key=lambda p: p["memory_percent"], reverse=True)[:top]
+                rows, key=lambda r: r["memory_percent"], reverse=True)[:top]
         except Exception as exc:
             app_logger.warning(f"process table sampling partial: {exc}")
 
