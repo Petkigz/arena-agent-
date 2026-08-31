@@ -6,6 +6,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from app.cognition.goal_interpreter import SemanticGoalRepresentation
+from app.cognition.condition_language import (
+    FlagCondition,
+    ObservationEnvironment,
+    ObservedValue,
+    ResponseDelivered,
+    Verdict,
+    parse_condition,
+)
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
 from app.utils.logger import app_logger, audit_logger
 
@@ -38,6 +46,140 @@ class GoalVerificationResult:
     is_unknown: bool = False
     observed_state: Dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=_now)
+
+class _ProvenanceEnv(ObservationEnvironment):
+    """Observation queries answered from the world model, with the
+    GoalVerifier's provenance enforcement: every environmental fact must
+    carry authorized provenance — self-reported claims cannot satisfy
+    environmental conditions. Resolvers return typed ObservedValues (or
+    None when nothing was observed); the AST nodes decide the verdict.
+    """
+
+    def __init__(self, verifier, cond_type, target_entities, observations_map,
+                 verified_entity_states, verified_entity_details, reply_clean):
+        self.verifier = verifier
+        self.cond_type = cond_type
+        self.target_entities = target_entities
+        self.observations_map = observations_map or {}
+        self.verified_entity_states = verified_entity_states or {}
+        self.verified_entity_details = verified_entity_details or {}
+        self.reply_clean = reply_clean or ""
+
+    # -- response delivery: the reply is the deliverable ---------------------
+    def response_delivered(self):
+        return bool(self.reply_clean.strip())
+
+    # -- flags / named conditions, routed by condition type ------------------
+    def flag(self, name: str):
+        if self.cond_type == GoalConditionType.ENVIRONMENT:
+            return self._resolve_process_state()
+        if self.cond_type == GoalConditionType.ARTIFACT:
+            return self._resolve_artifact_state()
+        return self._resolve_named_observation(name)
+
+    def _resolve_process_state(self):
+        """Subject-bound process/window state with DIRECT provenance."""
+        candidates = self.target_entities or [""]
+        for ent in candidates:
+            for k, obs_entry in self.observations_map.items():
+                if ent and not self.verifier.matches_canonical_entity(ent, k):
+                    continue
+                is_auth, val = self.verifier.is_direct_provenance_evidence(
+                    obs_entry, allowed_types=["direct", "environmental"])
+                val_str = str(val).lower().strip()
+                # Primitive/unprovenanced values are NOT evidence — skip them
+                # and keep looking; only authorized values may decide.
+                if is_auth and val_str in ("running", "active"):
+                    return ObservedValue(val_str, "state", True, source=k)
+                if is_auth and val_str in ("crashed", "failed", "terminated", "error"):
+                    return ObservedValue(val_str, "state", True, source=k)
+            for ent_name, ent_entry in self.verified_entity_states.items():
+                if ent and not self.verifier.matches_canonical_entity(ent, ent_name):
+                    continue
+                ent_detail = self.verified_entity_details.get(ent_name) \
+                    if isinstance(self.verified_entity_details, dict) else None
+                if ent_detail is None and isinstance(ent_entry, dict):
+                    ent_detail = ent_entry
+                if ent_detail is None:
+                    # Primitive entity state without provenance — cannot verify
+                    continue
+                is_auth, st_val = self.verifier.is_direct_provenance_evidence(
+                    ent_detail, allowed_types=["direct", "environmental"])
+                st_clean = str(st_val).lower().strip()
+                if is_auth and st_clean in ("running", "active"):
+                    return ObservedValue(st_clean, "state", True, source=ent_name)
+                if is_auth and st_clean in ("crashed", "failed", "terminated"):
+                    return ObservedValue(st_clean, "state", True, source=ent_name)
+        return None
+
+    def _resolve_artifact_state(self):
+        """Subject-bound file/path/artifact state with DIRECT provenance."""
+        candidates = self.target_entities or [""]
+        for ent in candidates:
+            for k, obs_entry in self.observations_map.items():
+                if ent and not self.verifier.matches_canonical_entity(ent, k):
+                    continue
+                is_auth, val = self.verifier.is_direct_provenance_evidence(
+                    obs_entry, allowed_types=["direct", "environmental"])
+                val_str = str(val).lower().strip()
+                # Only authorized observations may decide (primitives cannot).
+                if is_auth and val_str in ("not_found", "failed", "error"):
+                    return ObservedValue(val_str, "state", True, source=k)
+                if is_auth and val_str not in ("failed", "false", "none", "not_found", "error"):
+                    return ObservedValue(val_str, "state", True, source=k)
+            fs_obs = self.observations_map.get("filesystem.file_path")
+            if fs_obs:
+                is_auth, val = self.verifier.is_direct_provenance_evidence(
+                    fs_obs, allowed_types=["direct", "environmental"])
+                val_str = str(val).lower().strip()
+                # Only authorized filesystem observations may decide; a
+                # primitive 'not_found' string is not structured evidence.
+                if is_auth and val_str == "not_found":
+                    return ObservedValue(val_str, "state", True, source="filesystem.file_path")
+                if is_auth and val_str not in ("failed", "false", "none", "error"):
+                    if not ent or self.verifier.matches_canonical_entity(ent, val_str):
+                        return ObservedValue(val_str, "state", True, source="filesystem.file_path")
+            for ent_name, ent_entry in self.verified_entity_states.items():
+                if ent and not self.verifier.matches_canonical_entity(ent, ent_name):
+                    continue
+                ent_detail = self.verified_entity_details.get(ent_name) \
+                    if isinstance(self.verified_entity_details, dict) else None
+                if ent_detail is None and isinstance(ent_entry, dict):
+                    ent_detail = ent_entry
+                if ent_detail is None:
+                    continue
+                is_auth, st_val = self.verifier.is_direct_provenance_evidence(
+                    ent_detail, allowed_types=["direct", "environmental"])
+                st_clean = str(st_val).lower().strip()
+                if is_auth and st_clean in ("not_found", "failed"):
+                    return ObservedValue(st_clean, "state", True, source=ent_name)
+                if is_auth and st_clean in ("identified", "found", "accessed"):
+                    return ObservedValue(st_clean, "state", True, source=ent_name)
+        if not self.target_entities:
+            obs_found = any(("file" in k or "path" in k or "filesystem" in k)
+                            and str(v).lower() not in ("failed", "false", "none", "not_found", "error")
+                            for k, v in self.observations_map.items())
+            if obs_found:
+                return ObservedValue("found", "state", True, source="filesystem observation")
+            for k, v in self.observations_map.items():
+                if str(v).lower() == "not_found":
+                    return ObservedValue("not_found", "state", True, source=k)
+        return None
+
+    def _resolve_named_observation(self, name: str):
+        """Fallback resolution: subject key containment over the observation
+        map (self_reported is accepted here per the historical channel mix)."""
+        cond_key = (name or "").lower().split("=")[0].strip()
+        for k, obs_entry in self.observations_map.items():
+            if cond_key and cond_key in k.lower():
+                is_auth, val = self.verifier.is_direct_provenance_evidence(
+                    obs_entry, allowed_types=["direct", "environmental", "self_reported"])
+                val_str = str(val).lower().strip()
+                if val_str in ("failed", "false", "error"):
+                    return ObservedValue(val_str, "state", is_auth, source=k)
+                if is_auth:
+                    return ObservedValue(val_str, "state", True, source=k)
+        return None
 
 class GoalVerifier:
     """
@@ -188,117 +330,52 @@ class GoalVerifier:
         if has_crash_or_err:
             return ConditionStatus.FAILED
 
+        # P0 review #9: conditions go through the typed condition language —
+        # Condition AST -> observation query -> typed value -> predicate ->
+        # PASS / FAIL / UNKNOWN. The keyword-dispatch heuristics are gone;
+        # the provenance enforcement lives in the environment's resolvers,
+        # and the acceptance logic lives in the AST nodes.
         cond_type = cls.classify_condition_type(succ_cond, goal_rep.primary_intent_type, goal_rep.target_domain)
+        cond_key = sc_lower.split("=")[0].strip() if "=" in sc_lower else sc_lower
 
-        # (a) Response Delivery Condition
-        if cond_type == GoalConditionType.RESPONSE or "response_delivered" in sc_lower:
-            return ConditionStatus.SATISFIED if len(reply_clean) > 0 else ConditionStatus.FAILED
+        node = parse_condition(succ_cond)
+        if cond_type == GoalConditionType.RESPONSE or "response_delivered" in sc_lower or "answer_provided" in sc_lower:
+            # The reply IS the deliverable; its existence is directly observable.
+            node = ResponseDelivered()
+        elif not isinstance(node, FlagCondition):
+            # Free-form goal condition: resolve it as a named flag query
+            # (subject-bound containment over the observation map).
+            node = FlagCondition(name=cond_key or sc_lower)
 
-        # (b) App Process / Window Running Condition (Subject-Bound DIRECT Provenance Verification)
-        elif cond_type == GoalConditionType.ENVIRONMENT or any(k in sc_lower for k in ["app_process_running", "process_running", "window_active"]):
-            target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
-            if target_entities:
-                for ent in target_entities:
-                    for k, obs_entry in observations_map.items():
-                        if cls.matches_canonical_entity(ent, k):
-                            is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
-                            val_str = str(val).lower().strip()
-                            if is_auth and val_str in ["running", "active"]:
-                                return ConditionStatus.SATISFIED
-                            elif is_auth and val_str in ["crashed", "failed", "terminated", "error"]:
-                                return ConditionStatus.FAILED
-
-                    for ent_name, ent_entry in verified_entity_states.items():
-                        if cls.matches_canonical_entity(ent, ent_name):
-                            # Use the detailed entity record from verified_entity_details;
-                            # do NOT fabricate provenance for primitive entity states.
-                            ent_detail = None
-                            if verified_entity_details and ent_name in verified_entity_details:
-                                ent_detail = verified_entity_details[ent_name]
-                            elif isinstance(ent_entry, dict):
-                                ent_detail = ent_entry
-                            if ent_detail is None:
-                                # Primitive entity state without provenance — cannot verify
-                                continue
-                            is_auth, st_val = cls.is_direct_provenance_evidence(ent_detail, allowed_types=["direct", "environmental"])
-                            st_clean = str(st_val).lower().strip()
-                            if is_auth and st_clean in ["running", "active"]:
-                                return ConditionStatus.SATISFIED
-                            elif is_auth and st_clean in ["crashed", "failed", "terminated"]:
-                                return ConditionStatus.FAILED
-                return ConditionStatus.UNKNOWN
+        # Type-specific acceptance sets (the predicate, typed):
+        if isinstance(node, FlagCondition):
+            if cond_type == GoalConditionType.ENVIRONMENT or any(k in sc_lower for k in ["app_process_running", "process_running", "window_active", "status = running"]):
+                node.satisfied_by = ("running", "active")
+                node.refuted_by = ("crashed", "failed", "terminated", "error")
+                node.mode = "membership"
+            elif cond_type == GoalConditionType.ARTIFACT:
+                node.refuted_by = ("failed", "false", "none", "not_found", "error")
+                node.mode = "not_refuted"
             else:
-                for k, obs_entry in observations_map.items():
-                    is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
-                    val_str = str(val).lower().strip()
-                    if is_auth and val_str in ["running", "active"]:
-                        return ConditionStatus.SATISFIED
-                    elif is_auth and val_str in ["crashed", "failed", "terminated", "error"]:
-                        return ConditionStatus.FAILED
-                return ConditionStatus.UNKNOWN
+                node.refuted_by = ("failed", "false", "error")
+                node.mode = "not_refuted"
 
-        # (c) File Path / Access Condition (Subject-Bound Verification)
-        elif cond_type == GoalConditionType.ARTIFACT or any(k in sc_lower for k in ["file_path_identified", "file_accessed", "path_found"]):
-            target_entities = [e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else []
-            if target_entities:
-                for ent in target_entities:
-                    for k, obs_entry in observations_map.items():
-                        if cls.matches_canonical_entity(ent, k):
-                            is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental"])
-                            val_str = str(val).lower().strip()
-                            if is_auth and val_str not in ["failed", "false", "none", "not_found", "error"]:
-                                return ConditionStatus.SATISFIED
-                            elif is_auth and val_str in ["not_found", "failed", "error"]:
-                                return ConditionStatus.FAILED
+        env = _ProvenanceEnv(
+            verifier=cls,
+            cond_type=cond_type,
+            target_entities=[e.lower().strip() for e in goal_rep.entities] if goal_rep.entities else [],
+            observations_map=observations_map,
+            verified_entity_states=verified_entity_states,
+            verified_entity_details=verified_entity_details,
+            reply_clean=reply_clean,
+        )
+        verdict: Verdict = node.evaluate(env)
+        if verdict.status == "pass":
+            return ConditionStatus.SATISFIED
+        if verdict.status == "fail":
+            return ConditionStatus.FAILED
+        return ConditionStatus.UNKNOWN
 
-                    fs_obs = observations_map.get("filesystem.file_path")
-                    if fs_obs:
-                        is_auth, val = cls.is_direct_provenance_evidence(fs_obs, allowed_types=["direct", "environmental"])
-                        val_str = str(val).lower().strip()
-                        if is_auth and val_str == "not_found":
-                            return ConditionStatus.FAILED
-                        elif is_auth and val_str not in ["failed", "false", "none", "error"]:
-                            if cls.matches_canonical_entity(ent, val_str) or not target_entities:
-                                return ConditionStatus.SATISFIED
-
-                    for ent_name, ent_entry in verified_entity_states.items():
-                        if cls.matches_canonical_entity(ent, ent_name):
-                            # Use detailed entity record; do NOT fabricate provenance for primitives
-                            ent_detail = None
-                            if verified_entity_details and ent_name in verified_entity_details:
-                                ent_detail = verified_entity_details[ent_name]
-                            elif isinstance(ent_entry, dict):
-                                ent_detail = ent_entry
-                            if ent_detail is None:
-                                continue
-                            is_auth, st_val = cls.is_direct_provenance_evidence(ent_detail, allowed_types=["direct", "environmental"])
-                            st_clean = str(st_val).lower().strip()
-                            if is_auth and st_clean in ["identified", "found", "accessed"]:
-                                return ConditionStatus.SATISFIED
-                            elif is_auth and st_clean in ["not_found", "failed"]:
-                                return ConditionStatus.FAILED
-                return ConditionStatus.UNKNOWN
-            else:
-                obs_found = any(("file" in k or "path" in k or "filesystem" in k) and str(v).lower() not in ["failed", "false", "none", "not_found", "error"] for k, v in observations_map.items())
-                if obs_found:
-                    return ConditionStatus.SATISFIED
-                obs_not_found = any(str(v).lower() == "not_found" for v in observations_map.values())
-                if obs_not_found:
-                    return ConditionStatus.FAILED
-                return ConditionStatus.UNKNOWN
-
-        # Other conditions (Web / Diagnostic / ADB / Screen Capture)
-        else:
-            cond_key = sc_lower.split("=")[0].strip() if "=" in sc_lower else sc_lower
-            for k, obs_entry in observations_map.items():
-                if cond_key in k.lower():
-                    is_auth, val = cls.is_direct_provenance_evidence(obs_entry, allowed_types=["direct", "environmental", "self_reported"])
-                    val_str = str(val).lower().strip()
-                    if val_str in ["failed", "false", "error"]:
-                        return ConditionStatus.FAILED
-                    elif is_auth:
-                        return ConditionStatus.SATISFIED
-            return ConditionStatus.UNKNOWN
 
     @classmethod
     def evaluate_condition_against_world_model(

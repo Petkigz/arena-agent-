@@ -30,50 +30,18 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-PASS = "pass"
-FAIL = "fail"
-UNKNOWN = "unknown"
-
-# ---------------------------------------------------------------------------
-# Stage 1: natural language criterion -> structured predicate
-# ---------------------------------------------------------------------------
-
-# Ordered: most specific patterns first.
-_RE_METRIC_DELTA = re.compile(
-    r"(?P<metric>[\w\s]+?)\s+(?P<direction>decreased|increased|reduced|dropped|rose|grew)"
-    r"\s+by\s+(?P<value>\d+(?:\.\d+)?)\s*(?:%|percent|points?)?",
-    re.IGNORECASE,
-)
-_RE_WITHIN_SECONDS = re.compile(
-    r"(?:within|faster than|less than|under)\s+(?P<n>\d+(?:\.\d+)?)\s*(?:s|sec|secs|second|seconds)\b",
-    re.IGNORECASE,
-)
-_RE_AT_LEAST = re.compile(r"at least\s+(?P<n>\d+)\s*(?P<what>[\w\s]*)", re.IGNORECASE)
-_RE_OR_MORE = re.compile(r"(?P<n>\d+)\s+or more\s*(?P<what>[\w\s]*)", re.IGNORECASE)
-_RE_ABOVE_BELOW = re.compile(
-    r"(?P<subject>[\w\s]+?)\s+(?P<op>above|below|higher than|lower than|greater than|"
-    r"less than|at least)\s+(?P<n>\d+(?:\.\d+)?)\s*(?:%|percent)?",
-    re.IGNORECASE,
-)
-_RE_CONTAINS = re.compile(r"(?P<container>[\w\s.\\/:\-]+?)\s+contains\s+(?P<what>.+)$", re.IGNORECASE)
-_RE_EXISTS = re.compile(
-    r"^(?:the\s+)?(?P<entity>.+?)\s+(?:is\s+|are\s+|was\s+|were\s+)?"
-    r"(?:created|saved|installed|present|exists?|found)$",
-    re.IGNORECASE,
-)
-_RE_IS_RUNNING = re.compile(
-    r"^(?:the\s+)?(?P<entity>.+?)\s+(?:is\s+|was\s+)?(?:running|launched|active|open)$",
-    re.IGNORECASE,
-)
-_RE_CRASHED = re.compile(
-    r"^(?:the\s+)?(?P<entity>.+?)\s+(?:is\s+|was\s+|has\s+|did\s+)?"
-    r"(?:crashed?|fail(?:ed|s|ure)?|not running|closed|stopped|killed|hung|froze|missing)$",
-    re.IGNORECASE,
-)
-_RE_NO_ERRORS = re.compile(r"^(?:no|zero|without)\s+(?:errors?|failures?|crashes?)", re.IGNORECASE)
-_RE_RESPONSE_DELIVERED = re.compile(
-    r"^(?:a\s+)?(?:response|reply|answer|message|notification)[\w\s]*(?:delivered|provided|generated|sent|shown)$",
-    re.IGNORECASE,
+# P0 review #9: the predicate grammar and the typed evaluation logic live in
+# ONE place — the condition language AST. This module keeps the observation
+# FACTS pipeline (cycle result -> ObservationFacts) and adapts it to the
+# language's environment interface. There are no second interpretations
+# here: parse_criterion serializes the AST node; evaluate_predicate runs it.
+from app.cognition.condition_language import (
+    ObservationEnvironment,
+    PASS,
+    FAIL,
+    UNKNOWN,
+    condition_from_dict,
+    parse_condition,
 )
 
 _POSITIVE_STATES = {"running", "run", "open", "opened", "active", "found", "exists",
@@ -95,63 +63,13 @@ class CriterionResult:
 
 
 def parse_criterion(criterion: str) -> Dict[str, Any]:
-    """NL criterion -> structured predicate. Unparseable -> {'type': 'opaque'}."""
-    text = (criterion or "").strip()
-    if not text:
-        return {"type": "opaque", "reason": "empty criterion"}
+    """NL criterion -> serialized AST predicate. Unparseable -> {'type': 'opaque'}.
 
-    m = _RE_METRIC_DELTA.search(text)
-    if m:
-        return {
-            "type": "metric_delta",
-            "metric": m.group("metric").strip().lower(),
-            "direction": m.group("direction").lower(),
-            "value": float(m.group("value")),
-        }
-    m = _RE_WITHIN_SECONDS.search(text)
-    if m:
-        return {"type": "duration_max", "seconds": float(m.group("n"))}
-    m = _RE_AT_LEAST.search(text)
-    if m:
-        return {"type": "count_at_least", "n": int(m.group("n")), "what": m.group("what").strip().lower()}
-    m = _RE_OR_MORE.search(text)
-    if m:
-        return {"type": "count_at_least", "n": int(m.group("n")), "what": m.group("what").strip().lower()}
-    m = _RE_ABOVE_BELOW.search(text)
-    if m:
-        return {
-            "type": "numeric_threshold",
-            "subject": m.group("subject").strip().lower(),
-            "op": m.group("op").lower(),
-            "value": float(m.group("n")),
-        }
-    m = _RE_CONTAINS.search(text)
-    if m:
-        return {
-            "type": "contains",
-            "container": m.group("container").strip().lower(),
-            "what": m.group("what").strip().lower(),
-        }
-    m = _RE_RESPONSE_DELIVERED.match(text)
-    if m:
-        return {"type": "response_delivered"}
-    m = _RE_NO_ERRORS.match(text)
-    if m:
-        return {"type": "no_errors"}
-    m = _RE_EXISTS.match(text)
-    if m:
-        return {"type": "entity_state", "entity": m.group("entity").strip().lower(),
-                "states": ("created", "saved", "installed", "present", "exists", "found")}
-    m = _RE_IS_RUNNING.match(text)
-    if m:
-        return {"type": "entity_state", "entity": m.group("entity").strip().lower(),
-                "states": ("running", "open", "active")}
-    m = _RE_CRASHED.match(text)
-    if m:
-        return {"type": "entity_state", "entity": m.group("entity").strip().lower(),
-                "states": ("crashed", "failed", "failure", "closed", "stopped",
-                           "killed", "hung", "froze", "missing", "not running")}
-    return {"type": "opaque", "reason": "no deterministic predicate grammar matches"}
+    The grammar lives in app.cognition.condition_language.parse_condition —
+    the ONE parser (P0 review #9); this is its serialization for callers
+    that speak predicate dicts.
+    """
+    return parse_condition(criterion).to_dict()
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +87,7 @@ class ObservationFacts:
     entity_states: Dict[str, str] = field(default_factory=dict)
     observation_values: Dict[str, Any] = field(default_factory=dict)
     numeric_metrics: Dict[str, float] = field(default_factory=dict)
+    metric_baselines: Dict[str, float] = field(default_factory=dict)
     counts: Dict[str, float] = field(default_factory=dict)
     duration_ms: Optional[float] = None
     process_verified: Optional[bool] = None
@@ -231,6 +150,27 @@ class ObservationFacts:
 
         # (f) Numeric leaves from the observation map: metrics + counts.
         obs.numeric_metrics, obs.counts = _extract_numeric(obs.observation_values)
+
+        # (g) Baseline (before) measurements for metric-delta criteria — from
+        #     an explicit baselines map or before.* / *_before / baseline.*
+        #     observation keys (P0 review #9: 'CPU usage dropped by 20%'
+        #     needs a typed baseline to be evaluable at all).
+        baselines_raw = cycle_result.get("metric_baselines")
+        if isinstance(baselines_raw, dict):
+            obs.metric_baselines = {
+                str(k).lower(): float(v) for k, v in baselines_raw.items()
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+            }
+        if not obs.metric_baselines:
+            for key, value in list(obs.observation_values.items()):
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    continue
+                k = key.lower()
+                if k.startswith("before.") or k.startswith("baseline."):
+                    obs.metric_baselines[k.split(".", 1)[1]] = float(value)
+                elif k.endswith("_before") or k.endswith("_pre") or k.endswith(".before"):
+                    obs.metric_baselines[k.rsplit("_", 1)[0] if "_" in k else k] = float(value)
+
         found_entities = sum(1 for s in obs.entity_states.values() if s in _POSITIVE_STATES)
         if found_entities:
             obs.counts.setdefault("__entities_observed__", float(found_entities))
@@ -291,106 +231,91 @@ def _entity_observed(entity: str, entity_states: Dict[str, str]) -> Optional[str
 # Stage 3 + 4: deterministic evaluation -> PASS / FAIL / UNKNOWN
 # ---------------------------------------------------------------------------
 
-def evaluate_predicate(predicate: Dict[str, Any], facts: ObservationFacts) -> CriterionResult:
-    ptype = predicate.get("type")
-    basis_unknown = predicate.get("reason", "")
+class FactsEnv(ObservationEnvironment):
+    """Observation queries answered from what the cycle actually observed.
 
-    if ptype == "opaque":
-        return CriterionResult(
-            criterion="", predicate=predicate, status=UNKNOWN,
-            basis=f"cannot evaluate deterministically ({basis_unknown})",
-        )
+    The typed adapter between ObservationFacts and the condition language:
+    a node asks for a metric / entity state / count / flag, and gets a
+    typed value or None (never a guess).
+    """
 
-    if ptype == "response_delivered":
-        if facts.response_delivered:
-            return CriterionResult("", predicate, PASS, "assistant reply exists — the deliverable itself")
-        return CriterionResult("", predicate, FAIL, "no assistant reply was delivered")
+    def __init__(self, facts: "ObservationFacts"):
+        self.facts = facts
 
-    if ptype == "entity_state":
-        entity = predicate.get("entity", "")
-        state = _entity_observed(entity, facts.entity_states)
-        wanted = set(predicate.get("states", ()))
-        if state is None:
-            if facts.process_verified is True and _entity_observed(entity, {facts.process_app: "running"}):
-                return CriterionResult("", predicate, PASS, f"process probe verified '{facts.process_app}' running")
-            if facts.process_verified is False:
-                return CriterionResult("", predicate, FAIL, "post-action process probe found no matching running process")
-            return CriterionResult("", predicate, UNKNOWN, f"entity '{entity}' was never observed")
-        if state in wanted or (state in _POSITIVE_STATES and (wanted & _POSITIVE_STATES)):
-            return CriterionResult("", predicate, PASS, f"entity '{entity}' observed '{state}'")
-        if state in _NEGATIVE_STATES:
-            return CriterionResult("", predicate, FAIL, f"entity '{entity}' observed '{state}'")
-        return CriterionResult("", predicate, UNKNOWN, f"entity '{entity}' observed '{state}' — not a decisive state")
+    def metric(self, name: str) -> Optional[float]:
+        return _lookup_metric(name, self.facts.numeric_metrics)
 
-    if ptype == "no_errors":
-        if facts.process_verified is False:
-            return CriterionResult("", predicate, FAIL, "post-action probe reported failure")
-        error_states = [k for k, s in facts.entity_states.items() if s in _NEGATIVE_STATES]
-        if error_states:
-            return CriterionResult("", predicate, FAIL, f"observed failure states: {', '.join(error_states[:3])}")
-        if facts.observation_values or facts.entity_states or facts.process_verified is True:
-            return CriterionResult("", predicate, PASS, "observations present, none report an error state")
-        return CriterionResult("", predicate, UNKNOWN, "nothing was observed — absence of observed errors is not evidence of no errors")
+    def baseline(self, metric: str) -> Optional[float]:
+        direct = _lookup_metric(metric, self.facts.metric_baselines)
+        if direct is not None:
+            return direct
+        # before.*/baseline.* keys may still live in the numeric metrics
+        m = _norm(metric)
+        for key, value in self.facts.numeric_metrics.items():
+            k = _norm(key)
+            for prefix in ("before ", "baseline "):
+                if k.startswith(prefix) and _norm(k[len(prefix):]) == m:
+                    return value
+            for suffix in (" before", " pre", ".before"):
+                if k.endswith(suffix) and _norm(k[: -len(suffix)]) == m:
+                    return value
+        return None
 
-    if ptype == "count_at_least":
-        n = float(predicate.get("n", 0))
-        what = predicate.get("what", "")
-        if not facts.counts:
-            return CriterionResult("", predicate, UNKNOWN, "no count-like observation available")
+    def entity_state(self, entity: str) -> Optional[str]:
+        return _entity_observed(entity, self.facts.entity_states)
+
+    def process_probe(self):
+        return (self.facts.process_verified, self.facts.process_app)
+
+    def count(self, what: str) -> Optional[float]:
+        if not self.facts.counts:
+            return None
         if what:
             words = [w for w in _norm(what).split() if len(w) > 2]
-            relevant = {k: v for k, v in facts.counts.items()
+            relevant = {k: v for k, v in self.facts.counts.items()
                         if any(w in k for w in words)}
-            relevant = relevant or facts.counts
+            relevant = relevant or self.facts.counts
         else:
-            relevant = facts.counts
-        best = max(relevant.values())
-        if best >= n:
-            return CriterionResult("", predicate, PASS, f"observed count {best:g} >= {n:g} ({'; '.join(list(relevant)[:2])})")
-        return CriterionResult("", predicate, FAIL, f"observed count {best:g} < {n:g}")
+            relevant = self.facts.counts
+        return max(relevant.values())
 
-    if ptype == "duration_max":
-        seconds = float(predicate.get("seconds", 0))
-        if facts.duration_ms is None:
-            return CriterionResult("", predicate, UNKNOWN, "no measured duration available")
-        actual = facts.duration_ms / 1000.0
-        if actual <= seconds:
-            return CriterionResult("", predicate, PASS, f"measured duration {actual:.2f}s <= {seconds:g}s")
-        return CriterionResult("", predicate, FAIL, f"measured duration {actual:.2f}s exceeds {seconds:g}s")
+    def duration_seconds(self) -> Optional[float]:
+        if self.facts.duration_ms is None:
+            return None
+        return self.facts.duration_ms / 1000.0
 
-    if ptype == "numeric_threshold":
-        subject = predicate.get("subject", "")
-        op = predicate.get("op", "")
-        value = float(predicate.get("value", 0))
-        observed = _lookup_metric(subject, facts.numeric_metrics)
-        if observed is None:
-            return CriterionResult(
-                "", predicate, UNKNOWN,
-                f"'{subject}' was not numerically observed — cannot compare against {value:g}",
-            )
-        ok = _compare(observed, op, value)
-        if ok:
-            return CriterionResult("", predicate, PASS, f"observed {subject} = {observed:g} ({op} {value:g}) holds")
-        return CriterionResult("", predicate, FAIL, f"observed {subject} = {observed:g} violates '{op} {value:g}'")
+    def response_delivered(self) -> Optional[bool]:
+        return self.facts.response_delivered
 
-    if ptype == "metric_delta":
-        metric = predicate.get("metric", "")
-        # A delta needs BOTH a before and an after measurement of the metric.
-        # No step-level observation stream carries both today — so the honest
-        # verdict is UNKNOWN, with the reason stated, instead of a fake PASS.
-        return CriterionResult(
-            "", predicate, UNKNOWN,
-            f"'{metric}' change requires before-and-after measurements; "
-            "neither baseline nor post-state was observed for this step",
-        )
+    def error_states(self) -> List[str]:
+        return [k for k, s in self.facts.entity_states.items() if s in _NEGATIVE_STATES]
 
-    if ptype == "contains":
-        return CriterionResult(
-            "", predicate, UNKNOWN,
-            "content inspection observation not available for this step",
-        )
+    def any_observations(self) -> bool:
+        return bool(self.facts.observation_values or self.facts.entity_states
+                    or self.facts.process_verified is True)
 
-    return CriterionResult("", predicate, UNKNOWN, f"unknown predicate type '{ptype}'")
+    def flag(self, name: str):
+        from app.cognition.condition_language import ObservedValue
+        target = _norm(name)
+        for key, value in self.facts.observation_values.items():
+            if _norm(key) == target:
+                if isinstance(value, bool):
+                    return ObservedValue(value, "boolean", True, source=key)
+                return ObservedValue(value, "text", True, source=key)
+        return None
+
+
+def evaluate_predicate(predicate: Dict[str, Any], facts: ObservationFacts) -> CriterionResult:
+    """Serialized predicate + observed facts -> PASS / FAIL / UNKNOWN.
+
+    The typed logic lives in the AST node (condition_from_dict); the facts
+    supply the typed observations. One interpretation, no heuristics
+    duplicated here (P0 review #9).
+    """
+    node = condition_from_dict(predicate)
+    verdict = node.evaluate(FactsEnv(facts))
+    return CriterionResult(criterion="", predicate=predicate,
+                           status=verdict.status, basis=verdict.basis)
 
 
 def _lookup_metric(subject: str, metrics: Dict[str, float]) -> Optional[float]:
