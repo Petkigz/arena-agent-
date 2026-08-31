@@ -123,3 +123,74 @@ def test_patched_manifest_fakes_still_resolve():
     with patch("app.tools.manifest.get_tool_manifest", return_value=fake):
         assert capability_entry("freshly_patched_tool") is not None
         assert capability_safety_or_none("freshly_patched_tool") == 0
+
+
+# ---------------------------------------------------------------------------
+# Three-tier resolution (follow-up review): manifest_entry / runtime_entry /
+# capability_entry — an override is INTENTIONAL, never accidental.
+# ---------------------------------------------------------------------------
+
+def test_three_tiers_are_distinguishable():
+    from app.cognition.tool_registry import manifest_entry, runtime_entry
+
+    m = manifest_entry("web_search")
+    r = runtime_entry("web_search")
+    effective = capability_entry("web_search")
+    assert m is not None and m.get("category") == "web"
+    assert r is not None and r.get("provenance") == "manifest"
+    assert effective is not None
+    assert effective["resolution"] == "manifest"
+
+
+def test_runtime_install_intentionally_overrides_the_manifest():
+    """A dynamic registration of a MANIFEST name is a deliberate patch:
+    runtime is the live truth and wins. The override is visible in the
+    entry's resolution tag — and in the safety reading."""
+    reg = ToolRegistry()
+    reg.register_tool("web_search", "web",
+                      lambda p: {"success": True, "patched": True},
+                      safety_level=2, provenance="dynamic")
+    with patch.object(tr, "get_shared_registry", lambda: reg):
+        entry = tr.capability_entry("web_search")
+        assert entry["resolution"] == "runtime_override"
+        assert entry["provenance"] == "dynamic"
+        assert entry["safety_level"] == 2
+        # the authority's safety reading follows the override…
+        assert tr.capability_safety_or_none("web_search") == 2
+        # …while the catalog view stays the pristine manifest declaration
+        assert tr.manifest_entry("web_search")["safety_level"] == 0
+
+
+def test_registry_boot_copies_never_shadow_the_fresh_catalog():
+    """The registry's manifest-tier entries are boot-time copies: a
+    rebuilt or patched catalog is visible immediately and always beats
+    them (stale copies and test-patch absorption both die here)."""
+    reg = ToolRegistry()
+    # Simulate a stale boot copy: registry knows the name, catalog doesn't.
+    reg.register_tool("patched_away_tool", "x",
+                      lambda p: {"success": True}, safety_level=0,
+                      provenance="manifest")
+    fake_catalog = {"freshly_patched_tool": {
+        "name": "freshly_patched_tool", "category": "x", "safety_level": 0,
+        "handler": lambda p: {"success": True}}}
+    with patch.object(tr, "get_shared_registry", lambda: reg), \
+         patch("app.tools.manifest.get_tool_manifest", return_value=fake_catalog):
+        # Fresh catalog entry wins over the registry's manifest-tier copy…
+        assert tr.capability_entry("freshly_patched_tool")["resolution"] == "manifest"
+        # …and the registry-only name still resolves (tier 3).
+        assert tr.capability_entry("patched_away_tool")["resolution"] == "registry_copy"
+
+
+def test_dynamic_override_does_not_leak_into_the_manifest_view():
+    """Patching a capability at runtime changes the EFFECTIVE capability,
+    never the catalog itself — manifest_entry stays the static truth."""
+    reg = ToolRegistry()
+    reg.register_tool("pdf_merge", "documents",
+                      lambda p: {"success": True}, safety_level=0,
+                      provenance="dynamic")
+    with patch.object(tr, "get_shared_registry", lambda: reg):
+        # the real catalog still declares pdf_merge at level 2 —
+        # untouched by the runtime override (which reads level 0)
+        assert tr.manifest_entry("pdf_merge")["safety_level"] == 2
+        assert tr.capability_entry("pdf_merge")["resolution"] == "runtime_override"
+        assert tr.capability_entry("pdf_merge")["safety_level"] == 0

@@ -21,10 +21,25 @@ action_proposal, plan_freshness, runtime observation execution, the
 investigation registry/executor) — slightly different versions of the
 capability universe that could not see runtime-installed tools at all.
 
-The authority contract:
-  * capability_entry(name)      -> the ONE entry lookup (runtime-registered
-                                   capabilities first — they are the live
-                                   truth — then the manifest catalog)
+The authority contract — three DISTINCT notions, never conflated:
+  * manifest_entry(name)        -> the static CATALOG entry, read fresh
+  * runtime_entry(name)         -> what the live registry carries (boot-time
+                                   manifest copies AND runtime installs)
+  * capability_entry(name)      -> the EFFECTIVE capability:
+                                     1. a runtime INSTALL (provenance
+                                        'dynamic') OVERRIDES the catalog —
+                                        patching a manifest name at runtime
+                                        is intentional, and runtime is the
+                                        live truth;
+                                     2. else the manifest catalog, read
+                                        fresh (a rebuilt/patched manifest is
+                                        visible immediately — the registry's
+                                        boot-time copies never shadow it);
+                                     3. else the registry's copy (names the
+                                        catalog no longer lists).
+                                   The returned entry is tagged with its
+                                   'resolution': runtime_override | manifest
+                                   | registry_copy.
   * capability_safety(name)     -> the ONE safety reading (unknown -> 99,
                                    gated: unvetted is not read-only)
   * ToolRegistry.capabilities() -> every known capability, manifest +
@@ -73,33 +88,67 @@ def get_shared_registry():
     return _shared_registry
 
 
+def manifest_entry(name: str) -> Optional[Dict[str, Any]]:
+    """The static CATALOG entry, read fresh on every call.
+
+    This is the manifest's own view: what is declared in the catalog right
+    now — unaffected by runtime registrations. Discovery heuristics and
+    override checks read THIS, not the effective capability.
+    """
+    try:
+        from app.tools.manifest import get_tool_manifest
+        return get_tool_manifest().get(str(name or ""))
+    except Exception:
+        return None
+
+
+def runtime_entry(name: str) -> Optional[Dict[str, Any]]:
+    """What the live REGISTRY carries for this name — a boot-time manifest
+    copy (provenance 'manifest') or a runtime install (provenance
+    'dynamic'). The registry's own view, unmerged with the catalog."""
+    try:
+        return get_shared_registry().get_capability(name)
+    except Exception:
+        return None
+
+
 def capability_entry(name: str) -> Optional[Dict[str, Any]]:
-    """THE capability lookup (P0 review #12).
+    """THE EFFECTIVE capability lookup (P0 review #12).
 
     Every layer that asks 'is this a valid capability, and what are its
     handler/safety/availability/provenance' asks HERE; no layer re-derives
     its own version of the capability universe.
 
-    Resolution order:
-      1. the manifest catalog — always read fresh (a rebuilt or patched
-         manifest is visible immediately; the registry's manifest-tier
-         entries are a boot-time copy and must never shadow the catalog);
-      2. the registry — for capabilities the catalog does not know:
-         runtime-installed tools (provenance 'dynamic') and anything
-         else the live registry carries.
+    Resolution — an override is INTENTIONAL, never accidental:
+      1. a runtime INSTALL (provenance 'dynamic') overrides the catalog:
+         registering a manifest name at runtime patches it on purpose —
+         runtime is the live truth;
+      2. else the manifest catalog, read FRESH (a rebuilt or patched
+         manifest is visible immediately; the registry's boot-time
+         manifest copies never shadow the catalog — stale copies and
+         test-patch absorption both die here);
+      3. else the registry's copy, for names the registry still knows
+         but the catalog no longer lists.
+
+    Returns a copy tagged with 'resolution':
+    runtime_override | manifest | registry_copy.
     """
     key = str(name or "")
-    try:
-        from app.tools.manifest import get_tool_manifest
-        entry = get_tool_manifest().get(key)
-        if entry is not None:
-            return entry
-    except Exception:
-        pass
-    try:
-        return get_shared_registry().get_capability(key)
-    except Exception:
-        return None
+    rt = runtime_entry(key)
+    if rt is not None and rt.get("provenance") == "dynamic":
+        entry = dict(rt)
+        entry["resolution"] = "runtime_override"
+        return entry
+    catalog = manifest_entry(key)
+    if catalog is not None:
+        entry = dict(catalog)
+        entry["resolution"] = "manifest"
+        return entry
+    if rt is not None:
+        entry = dict(rt)
+        entry["resolution"] = "registry_copy"
+        return entry
+    return None
 
 
 def capability_safety_or_none(name: str) -> Optional[int]:
