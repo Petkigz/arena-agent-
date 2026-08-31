@@ -48,6 +48,115 @@ def output_budget(kind: str, complexity: str = "fast") -> int:
     return table.get(complexity, table["main"])
 
 
+# ---------------------------------------------------------------------------
+# Reasoning token budget enforcement (P0 review #10)
+#
+# ReasoningBudget.max_tokens used to be CARRIED but never ENFORCED: a
+# component could request max_tokens=8192 under a 2048 budget and the
+# budget was not real. The budget is now enforced at the ONE choke point
+# every LLM call passes through — llm_client.generate_chat_completion:
+#   * an active reasoning_token_budget scope clamps every request to the
+#     remaining budget (a component can never exceed the cycle's ceiling)
+#   * granted tokens are reserved optimistically and settled to the REAL
+#     usage reported by the provider, so cumulative spend is tracked
+#   * when the budget is exhausted, calls run at a minimal floor with a
+#     warning — degraded, but honest and visible, never silently unlimited
+# ---------------------------------------------------------------------------
+
+import contextlib
+import contextvars
+import threading
+
+# Floor for calls made after exhaustion: enough for a short honest reply,
+# never a full generation. The alternative (0 tokens) produces garbage.
+_TOKEN_FLOOR_WHEN_EXHAUSTED = 128
+
+
+class _TokenBudgetLedger:
+    """Tracks one cycle's token budget: grants, clamps, settles real usage."""
+
+    def __init__(self, max_tokens: int):
+        self.max_tokens = int(max_tokens)
+        self.remaining = float(self.max_tokens)
+        self.granted_total = 0
+        self.used_total = 0.0
+        self.clamped_calls = 0
+        self.exhausted_calls = 0
+        self._lock = threading.Lock()
+
+    def grant(self, requested: int) -> int:
+        """Clamp a request to the remaining budget. Returns effective tokens."""
+        with self._lock:
+            if self.remaining <= 0:
+                self.exhausted_calls += 1
+                return _TOKEN_FLOOR_WHEN_EXHAUSTED
+            effective = int(min(int(requested), self.remaining))
+            if effective < requested:
+                self.clamped_calls += 1
+            self.remaining -= effective
+            self.granted_total += effective
+            return max(1, effective)
+
+    def settle(self, reserved: int, actual_usage: Optional[int]) -> None:
+        """Reconcile an optimistic reservation with the provider-reported
+        usage; refunds the difference so the ledger tracks real spend."""
+        if actual_usage is None:
+            return
+        try:
+            actual = max(0, int(actual_usage))
+        except (TypeError, ValueError):
+            return
+        with self._lock:
+            refund = max(0, reserved - actual)
+            self.remaining += refund
+            self.used_total += actual
+
+    def summary(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "budget_max_tokens": self.max_tokens,
+                "tokens_granted": self.granted_total,
+                "tokens_used": round(self.used_total, 1),
+                "remaining": max(0.0, round(self.remaining, 1)),
+                "clamped_calls": self.clamped_calls,
+                "exhausted_calls": self.exhausted_calls,
+            }
+
+
+_active_token_budget: "contextvars.ContextVar[Optional[_TokenBudgetLedger]]" = (
+    contextvars.ContextVar("arena_active_token_budget", default=None)
+)
+
+
+@contextlib.contextmanager
+def reasoning_token_budget(max_tokens: Optional[int]):
+    """Activate the per-cycle token budget for every LLM call in scope.
+
+    All generate_chat_completion / generate_text calls inside the scope are
+    clamped to the remaining budget and their real usage is tracked. Outside
+    any scope, behavior is unchanged (component-requested budgets apply).
+    """
+    if max_tokens is None:
+        yield None
+        return
+    ledger = _TokenBudgetLedger(max_tokens)
+    token = _active_token_budget.set(ledger)
+    try:
+        yield ledger
+    finally:
+        _active_token_budget.reset(token)
+        s = ledger.summary()
+        app_logger.info(
+            f"Reasoning token budget: {s['tokens_used']}/{s['budget_max_tokens']} tokens used, "
+            f"{s['clamped_calls']} call(s) clamped, {s['exhausted_calls']} at exhaustion floor")
+
+
+def active_token_budget_status() -> Optional[Dict[str, Any]]:
+    """The active budget's live status, or None outside a budget scope."""
+    ledger = _active_token_budget.get()
+    return ledger.summary() if ledger is not None else None
+
+
 class LocalLLMClient:
     def __init__(self, base_url: str = settings.LM_STUDIO_URL):
         self.base_url = base_url.rstrip('/')
@@ -90,6 +199,20 @@ class LocalLLMClient:
         Falls back to a polite mock response if local server is unreachable.
         """
         model = self.route_request(complexity)
+        # P0 review #10: the reasoning budget is REAL. Under an active
+        # reasoning_token_budget scope no component may exceed the cycle's
+        # remaining token budget — request 8192 under a 2048 budget and the
+        # wire request carries 2048.
+        ledger = _active_token_budget.get()
+        reserved = 0
+        if ledger is not None:
+            effective = ledger.grant(max_tokens)
+            if effective != max_tokens:
+                app_logger.info(
+                    f"Token budget clamp: requested max_tokens={max_tokens}, "
+                    f"granted {effective} (remaining budget)")
+            reserved = effective
+            max_tokens = effective
         payload = {
             "model": model,
             "messages": messages,
@@ -109,7 +232,11 @@ class LocalLLMClient:
                 description="local model HTTP request",
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            if ledger is not None:
+                usage = (result or {}).get("usage") or {}
+                ledger.settle(reserved, usage.get("completion_tokens"))
+            return result
         except ExecutionCancelled:
             # The cancellation interrupt closes this request's transport.
             # Replace it so later, separately authorized requests can run.

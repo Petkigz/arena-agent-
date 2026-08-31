@@ -2557,6 +2557,36 @@ class CognitiveRuntime:
         recent_user_messages: Optional[List[str]] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
+        """Public cycle entry: activates the per-cycle reasoning token budget
+        (P0 review #10) so EVERY LLM call in the cycle — loop investigations,
+        planning, reply synthesis — is clamped to ReasoningBudget.max_tokens.
+        Without this scope the budget was carried but never real: a component
+        requesting max_tokens=8192 under a 2048 budget simply got 8192."""
+        from app.llm import reasoning_token_budget
+        from app.cognition.reasoning_loop import ReasoningBudget as _RB
+        with reasoning_token_budget(_RB.for_complexity(complexity).max_tokens):
+            return self._process_cognitive_cycle_impl(
+                user_text=user_text,
+                complexity=complexity,
+                session_id=session_id,
+                image_path=image_path,
+                audio_path=audio_path,
+                attachments=attachments,
+                recent_user_messages=recent_user_messages,
+                conversation_history=conversation_history,
+            )
+
+    def _process_cognitive_cycle_impl(
+        self,
+        user_text: str,
+        complexity: str = "fast",
+        session_id: Optional[str] = None,
+        image_path: Optional[str] = None,
+        audio_path: Optional[str] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        recent_user_messages: Optional[List[str]] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Authoritative Closed-Loop Predictive Cognitive Cycle with Goal Lifecycle & Verification:
         1. Initialize Trace & Hardware Snapshot & GoalTracker (CREATED)
