@@ -46,6 +46,55 @@ class WebAgent:
         return {}
 
     @classmethod
+    def _parse_verdict(cls, text: str):
+        """Extract the OBJECTIVE verdict from the LLM's analysis.
+
+        Returns (objective_satisfied, summary, evidence, next_step) where
+        objective_satisfied is True / False / "unknown". The LLM is asked
+        for strict JSON; prose without a parseable verdict is honestly
+        "unknown" — never guessed into a success (P0 review #8).
+        """
+        import re as _re
+
+        raw = str(text or "").strip()
+
+        def _try_load(candidate: str):
+            try:
+                data = json.loads(candidate)
+                return data if isinstance(data, dict) else None
+            except Exception:
+                return None
+
+        parsed = None
+        for candidate in (raw, raw.split("```json")[-1].split("```")[0].strip() if "```" in raw else ""):
+            if candidate:
+                parsed = _try_load(candidate)
+                if parsed is None:
+                    start, end = candidate.find("{"), candidate.rfind("}")
+                    if 0 <= start < end:
+                        parsed = _try_load(candidate[start:end + 1])
+                if parsed is not None:
+                    break
+
+        if parsed is not None and "objective_satisfied" in parsed:
+            value = parsed.get("objective_satisfied")
+            if value is True or str(value).strip().lower() == "true":
+                verdict: Any = True
+            elif value is False or str(value).strip().lower() == "false":
+                verdict = False
+            else:
+                verdict = "unknown"
+            return (
+                verdict,
+                str(parsed.get("summary") or raw),
+                str(parsed.get("evidence") or ""),
+                str(parsed.get("next_step") or ""),
+            )
+        # No parseable verdict: the objective remains UNVERIFIED. The prose
+        # is still reported as the summary.
+        return ("unknown", raw, "", "")
+
+    @classmethod
     def execute_web_workflow(
         cls,
         objective: str,
@@ -109,18 +158,37 @@ class WebAgent:
             steps=normalized_steps or None,
         )
         if not browser_res.get("success"):
-            return browser_res
+            # The browser workflow failed: execution failed AND the goal is
+            # unsatisfied (not merely 'unknown') — nothing was observed.
+            return {
+                **browser_res,
+                "objective": objective,
+                "target_url": target_url,
+                "objective_satisfied": False,
+                "goal_verification": "browser_execution_failed",
+                "browser_execution_success": False,
+            }
 
         page_title = browser_res.get("title", target_url)
         page_content = browser_res.get("content_snippet", "")[:10000]
 
-        # ── Synthesize a result with the local LLM ──
+        # ── Verify the OBJECTIVE with the local LLM (P0 review #8) ──
+        # Browser execution success is NOT goal success. 'Navigation worked'
+        # must never read as 'the application was approved'. The LLM judges
+        # the extracted content against the stated objective; its verdict is
+        # authoritative for `success`. Unparseable or missing verdicts are
+        # honestly 'unknown' — never silently promoted to True.
         system_prompt = (
-            "You are a meticulous web-research assistant. Analyze the extracted "
-            "page content against the user's objective and produce a concise, "
-            "well-structured summary: (1) Did it satisfy the objective, "
-            "(2) key facts/data with no fabrication, (3) recommended next step. "
-            "If the content does not contain the answer, say so plainly."
+            "You are a meticulous web-research verifier. Judge whether the "
+            "extracted page content satisfies the user's objective. Answer "
+            "with STRICT JSON only, no other text:\n"
+            '{"objective_satisfied": true | false | "unknown", '
+            '"summary": "concise findings with no fabrication", '
+            '"evidence": "the exact quote or data from the page that decides it", '
+            '"next_step": "recommended follow-up or empty string"}\n'
+            "Rules: 'true' only when the content actually answers the "
+            "objective; 'false' when it clearly does not (wrong page, answer "
+            "absent, opposite outcome); 'unknown' when you cannot tell."
         )
         user_prompt = (
             f"Web Objective: {objective}\n"
@@ -128,6 +196,10 @@ class WebAgent:
             f"Extracted Content:\n```\n{page_content}\n```"
         )
 
+        objective_satisfied: Any = "unknown"
+        evidence = ""
+        next_step = ""
+        verification_basis = "unverified"
         try:
             llm_res = llm_client.generate_chat_completion(
                 messages=[{"role": "system", "content": system_prompt},
@@ -135,13 +207,22 @@ class WebAgent:
                 complexity=complexity,
                 max_tokens=800,
             )
-            summary = require_real_completion(llm_res)
+            text = require_real_completion(llm_res)
+            objective_satisfied, summary, evidence, next_step = cls._parse_verdict(text)
+            verification_basis = "llm_content_analysis"
         except Exception as e:
-            app_logger.warning(f"WebAgent LLM synthesis failed: {e}")
-            summary = f"Web workflow executed, but summarization failed: {e}"
+            app_logger.warning(f"WebAgent objective verification failed: {e}")
+            summary = f"Web workflow executed, but objective verification failed: {e}"
 
         result: Dict[str, Any] = {
-            "success": True,
+            # GOAL success (P0 review #8): True only when the objective was
+            # verified satisfied against the page content. Browser execution
+            # success is reported separately below — the two are never
+            # conflated.
+            "success": objective_satisfied is True,
+            "objective_satisfied": objective_satisfied,
+            "goal_verification": verification_basis,
+            "browser_execution_success": True,
             "objective": objective,
             "target_url": target_url,
             "page_title": page_title,
@@ -156,6 +237,8 @@ class WebAgent:
             "environment_verified": browser_res.get("environment_verified", None),
             "execution_success": browser_res.get("execution_success", True),
             "agent_summary": summary,
+            "objective_evidence": evidence,
+            "recommended_next_step": next_step,
             "screenshot_path": browser_res.get("screenshot_path", ""),
             "image_url": browser_res.get("image_url", ""),
         }
@@ -163,7 +246,9 @@ class WebAgent:
         if auto_save_memory and summary:
             try:
                 mem_id = KnowledgeIndexer.index_web_knowledge(
-                    {"success": True, "title": f"Web: {objective}", "url": target_url,
+                    {"success": objective_satisfied is True,
+                     "objective_satisfied": objective_satisfied,
+                     "title": f"Web: {objective}", "url": target_url,
                      "domain": target_url, "ai_summary": summary},
                     category="web_workflow",
                 )

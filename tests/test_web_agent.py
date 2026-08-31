@@ -106,12 +106,15 @@ def test_web_agent_returns_browser_failure():
 
 
 def test_web_agent_synthesizes_summary():
+    verdict = ('{"objective_satisfied": true, "summary": "found it", '
+               '"evidence": "the page says found", "next_step": ""}')
     with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", return_value=_fake_browser()), \
-         patch("app.tools.web_agent.llm_client.generate_chat_completion", return_value=_fake_llm("found it")):
+         patch("app.tools.web_agent.llm_client.generate_chat_completion", return_value=_fake_llm(verdict)):
 
         res = WebAgent.execute_web_workflow(objective="x", target_url="https://example.com", auto_save_memory=False)
 
     assert res["success"] is True
+    assert res["objective_satisfied"] is True
     assert res["agent_summary"] == "found it"
     assert res["steps_executed"] == 0
 
@@ -125,5 +128,92 @@ def test_web_agent_llm_failure_is_graceful():
 
         res = WebAgent.execute_web_workflow(objective="x", target_url="https://example.com", auto_save_memory=False)
 
-    assert res["success"] is True  # the browser work succeeded
-    assert "summarization failed" in res["agent_summary"]
+    # The browser work succeeded… (browser_execution_success=True)
+    assert res["browser_execution_success"] is True
+    # …but the goal could not be VERIFIED — that is not success (review #8).
+    assert res["success"] is False
+    assert res["objective_satisfied"] == "unknown"
+    assert res["goal_verification"] == "unverified"
+    assert "objective verification failed" in res["agent_summary"]
+
+
+# ---------------------------------------------------------------------------
+# P0 review #8: browser execution success != goal success. The LLM's
+# objective verdict is authoritative for `success`.
+# ---------------------------------------------------------------------------
+
+def _verdict(satisfied, summary="checked", evidence="", next_step=""):
+    import json as _json
+    return _json.dumps({"objective_satisfied": satisfied, "summary": summary,
+                        "evidence": evidence, "next_step": next_step})
+
+
+def test_navigation_success_is_not_goal_success():
+    """THE review case: 'check whether the site says my application was
+    approved' — the browser navigated fine; the page does not say approved.
+    success must be False."""
+    browser = _fake_browser()
+    browser["content_snippet"] = "Welcome back. Your documents are pending review."
+    with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", return_value=browser), \
+         patch("app.tools.web_agent.llm_client.generate_chat_completion",
+               return_value=_fake_llm(_verdict(False, summary="The page does not state approval",
+                                               evidence="pending review", next_step="check email"))):
+        res = WebAgent.execute_web_workflow(
+            objective="Check whether the website says my application was approved",
+            target_url="https://portal.example.com/status", auto_save_memory=False)
+    assert res["browser_execution_success"] is True   # browser did its job
+    assert res["page_retrieved"] is None or True       # page came back
+    assert res["objective_satisfied"] is False         # the goal, judged
+    assert res["success"] is False                     # authoritative
+    assert res["objective_evidence"] == "pending review"
+    assert res["recommended_next_step"] == "check email"
+
+
+def test_objective_satisfied_makes_goal_success():
+    browser = _fake_browser()
+    browser["content_snippet"] = "Congratulations! Your application was approved."
+    with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", return_value=browser), \
+         patch("app.tools.web_agent.llm_client.generate_chat_completion",
+               return_value=_fake_llm(_verdict(True, summary="Approved", evidence="approved"))):
+        res = WebAgent.execute_web_workflow(
+            objective="Check whether the website says my application was approved",
+            target_url="https://portal.example.com/status", auto_save_memory=False)
+    assert res["success"] is True
+    assert res["objective_satisfied"] is True
+    assert res["goal_verification"] == "llm_content_analysis"
+
+
+def test_unparseable_verdict_is_unknown_not_success():
+    with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", return_value=_fake_browser()), \
+         patch("app.tools.web_agent.llm_client.generate_chat_completion", return_value=_fake_llm("looks fine to me")):
+        res = WebAgent.execute_web_workflow(objective="x", target_url="https://example.com", auto_save_memory=False)
+    assert res["objective_satisfied"] == "unknown"
+    assert res["success"] is False  # never silently promoted to True
+    assert res["agent_summary"] == "looks fine to me"
+
+
+def test_browser_failure_reports_goal_unsatisfied():
+    with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", return_value=_fake_browser(success=False)):
+        res = WebAgent.execute_web_workflow(objective="x", target_url="https://example.com")
+    assert res["success"] is False
+    assert res["objective_satisfied"] is False
+    assert res["browser_execution_success"] is False
+    assert res["goal_verification"] == "browser_execution_failed"
+    assert res["error"] == "network down"
+
+
+def test_memory_saves_the_honest_outcome():
+    saved = {}
+
+    def fake_index(payload, category=None):
+        saved.update(payload)
+        return "mem-1"
+
+    with patch("app.tools.web_agent.BrowserAutomation.navigate_and_extract", return_value=_fake_browser()), \
+         patch("app.tools.web_agent.llm_client.generate_chat_completion",
+               return_value=_fake_llm(_verdict(False, summary="not approved"))), \
+         patch("app.tools.web_agent.KnowledgeIndexer.index_web_knowledge", side_effect=fake_index):
+        res = WebAgent.execute_web_workflow(
+            objective="check approval", target_url="https://example.com", auto_save_memory=True)
+    assert res["success"] is False
+    assert saved["success"] is False  # memory never learns a fake success

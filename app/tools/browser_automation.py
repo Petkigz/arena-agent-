@@ -812,6 +812,13 @@ class BrowserAutomation:
                 interaction_executed = (
                     (legacy_interaction_failures == 0) if interaction_requested else None
                 )
+            # `success` here means BROWSER EXECUTION success: the page was
+            # retrieved and the requested workflow ran to completion (P0
+            # review #8). It says nothing about whether the OWNER'S
+            # objective was achieved — goal verification lives where the
+            # objective is known (WebAgent's LLM content analysis) and is
+            # authoritative there.
+            #
             # An aborted workflow did not achieve its objective, even when
             # the steps that DID run all succeeded — success=False is the
             # honest outcome (P0 review #6). So does UNINTENTIONAL
@@ -826,6 +833,7 @@ class BrowserAutomation:
 
             return {
                 "success": execution_success,
+                "success_scope": "browser_execution",
                 "workflow_aborted": workflow_aborted,
                 "aborted_at_step": aborted_at_step,
                 "workflow_truncated": workflow_truncated,
