@@ -18,10 +18,10 @@ class PlanFreshnessStore:
   with sqlite3.connect(self.path) as c:c.execute('CREATE TABLE IF NOT EXISTS plan_assumptions (plan_id TEXT,revision INTEGER,snapshot_json TEXT,digest TEXT,captured_at TEXT,PRIMARY KEY(plan_id,revision))');c.commit()
  def build_snapshot(self,review,runtime):
   from app.cognition.owner_control import owner_control_store
-  from app.tools.manifest import get_tool_manifest
-  manifest=get_tool_manifest();steps=review.snapshot.get('steps',[]);contracts=[]
+  steps=review.snapshot.get('steps',[]);contracts=[]
   for step in steps:
-   action=str(step.get('action_type',''));entry=manifest.get(action,{})
+   action=str(step.get('action_type',''))
+   entry=(runtime.registry.get_capability(action) if hasattr(runtime.registry,'get_capability') else None) or {}
    availability=runtime.registry.get_tool_availability(action,probe=False) if action else {'status':'no_action'}
    contracts.append({'step_id':step.get('step_id'),'action_type':action,'safety_level':entry.get('safety_level'),'availability':availability.get('status')})
   interfaces=[]

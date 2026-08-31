@@ -87,11 +87,11 @@ class CounterfactualSimulator:
     # proven execution paths. They must not be classified as 'unregistered'
     # by the surprisal prior — live regression caught by the full suite:
     # open_application ranked below web_search and rerouted a replan test.
-    _NATIVE_EXECUTABLES = ("open_application", "launch_app", "search_files",
-                           "phone_command", "make_phone_call", "send_sms",
-                           "screen_capture", "opsec_audit", "daily_briefing",
-                           "investigate", "diagnostic", "formulate_answer",
-                           "answer", "workflow_execute", "observe")
+    # ONE list (P0 review #12): the master-agent-native execution paths now
+    # live in the capability registry — the planner's provenance classifier
+    # reads them from the same source. Alias kept for existing callers.
+    from app.cognition.tool_registry import NATIVE_EXECUTABLES as _NATIVE
+    _NATIVE_EXECUTABLES = _NATIVE
 
     @staticmethod
     def _snapshot_manifest_levels() -> Dict[str, int]:
@@ -104,6 +104,25 @@ class CounterfactualSimulator:
             }
         except Exception:
             levels = {}
+        # P0 review #12: the capability authority supplies the full
+        # capability universe — manifest AND runtime-installed tools — with
+        # the registry's (runtime) readings overriding the static catalog.
+        try:
+            from app.cognition.tool_registry import get_shared_registry
+            for name, entry in get_shared_registry().capabilities().items():
+                # Safety level 0 (read-only) is a REAL value — an `or`
+                # default coerces it to 99 and reclassifies read-only
+                # actions as owner-approval.
+                level = entry.get("safety_level")
+                if level is None:
+                    levels[name] = 99
+                    continue
+                try:
+                    levels[name] = int(level)
+                except (TypeError, ValueError):
+                    levels[name] = 99
+        except Exception:
+            pass
         for _native in CounterfactualSimulator._NATIVE_EXECUTABLES:
             levels.setdefault(_native, 1)
         return levels

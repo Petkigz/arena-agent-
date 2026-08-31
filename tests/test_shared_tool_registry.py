@@ -79,12 +79,16 @@ def test_no_duplicate_registry_construction_during_execution(tmp_path):
         f"executor constructed {len(constructions)} duplicate registries"
     )
 
-    # The dynamic tool WAS FOUND in the shared registry: it reached the
-    # ActionGate (which correctly blocks unknown actions by default). The
-    # old duplicate-registry bug produced 'unsupported capability' instead,
-    # because a fresh registry never saw the dynamic registration.
-    assert "Gate Blocked" in (res.assistant_reply or ""), res.assistant_reply
+    # The dynamic tool WAS FOUND by the ONE capability authority: the
+    # ActionGate reads its DECLARED level from the registry (P0 review #12 —
+    # the gate no longer falls through to the 'unknown action' policy path
+    # for a capability the registry knows). Level 0 is within the owner's
+    # autonomous limit, so it executes — end to end, through the shared
+    # registry, with no 'unsupported capability' and no duplicate registry.
     assert "unsupported" not in (res.assistant_reply or "").lower()
+    assert str(res.execution_status.value).lower() in ("success", "succeeded", "completed"), (
+        res.execution_status, res.assistant_reply
+    )
 
 
 def test_goal_interpreter_fallback_never_builds_a_fresh_registry(tmp_path):

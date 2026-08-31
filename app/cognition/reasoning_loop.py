@@ -219,9 +219,13 @@ class CognitiveReasoningLoop:
         if not tool_name:
             return 0.0
         try:
-            from app.tools.manifest import get_tool_manifest
-            entry = get_tool_manifest().get(tool_name) or {}
-            return float(entry.get("safety_level", 0) or 0)
+            # P0 review #12: safety of KNOWN capabilities is read from the
+            # ONE authority (runtime-installed tools included). Names the
+            # authority does not know are this loop's own registered
+            # probes — trusted internal Level-0, as before.
+            from app.cognition.tool_registry import capability_safety_or_none
+            level = capability_safety_or_none(tool_name)
+            return float(level) if level is not None else 0.0
         except Exception:
             return 0.0
 

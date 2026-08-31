@@ -2913,8 +2913,11 @@ class CognitiveRuntime:
                 from app.cognition.observation_router import render_observation_evidence
                 plan = observation_plan  # computed above (observation priority)
                 if plan is not None:
-                    from app.tools.manifest import get_tool_manifest
-                    entry = get_tool_manifest().get(plan.action_type)
+                    # P0 review #12: capability + safety from the ONE
+                    # authority (runtime-installed tools are executable
+                    # observations too, not just manifest ones).
+                    from app.cognition.tool_registry import capability_entry
+                    entry = capability_entry(plan.action_type)
                     if entry and int(entry.get("safety_level", 99)) == 0:
                         observation_result = entry["handler"](plan.payload)
                         observation_evidence = render_observation_evidence(observation_result, plan)

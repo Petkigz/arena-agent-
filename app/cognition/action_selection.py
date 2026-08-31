@@ -88,8 +88,12 @@ class InvestigationRegistry:
         except Exception:
             return None
         text = f"{need.question} {need.target} {need.reason}"
+        # P0 review #12: capability entries come from the ONE authority —
+        # runtime-installed investigative tools are plannable, not just
+        # manifest ones. (Discovery still ranks over the manifest catalog.)
+        from app.cognition.tool_registry import capability_entry
         for match in rank_tools(text, limit=8):
-            entry = manifest.get(match.action_type) or {}
+            entry = capability_entry(match.action_type) or manifest.get(match.action_type) or {}
             try:
                 safety = int(entry.get("safety_level", 3) or 0)
             except (TypeError, ValueError):
@@ -145,11 +149,15 @@ class InvestigationExecutor:
         return self._execute_from_manifest(plan)
 
     def _execute_from_manifest(self, plan: InvestigationPlan) -> ActionResult:
+        # P0 review #12: the capability authority decides what exists —
+        # runtime-installed tools are executable investigations too, not
+        # just manifest ones. Availability still flows through the ONE
+        # canonical interpretation (interpret_availability).
         try:
-            from app.tools.manifest import get_tool_manifest
-            entry = get_tool_manifest().get(plan.tool)
+            from app.cognition.tool_registry import capability_entry
+            entry = capability_entry(plan.tool)
         except Exception as exc:
-            return ActionResult(False, plan.tool, error=f"Tool manifest unavailable: {exc}")
+            return ActionResult(False, plan.tool, error=f"Capability registry unavailable: {exc}")
         if not entry:
             return ActionResult(False, plan.tool, error="Tool is not registered")
         try:

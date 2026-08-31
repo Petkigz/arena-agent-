@@ -1,4 +1,42 @@
-"""Unified Tool Capability Registry with Gate Verification & Event Emissions."""
+"""Unified Tool Capability Registry with Gate Verification & Event Emissions.
+
+THE capability authority (P0 review #12). One registry feeds every layer:
+
+                      Capability Registry
+                             |
+        +--------------------+-------------------+
+        v                    v                   v
+     Discovery            Planning            Execution
+   (reads the catalog    (asks the registry  (asks the registry
+    for heuristics;       for validity,       for handlers,
+    authority questions    safety, provenance) availability)
+    go to the registry)         |
+        +--------------------+-------------------+
+                             v
+                          ActionGate
+
+Before this, six layers each re-derived 'what is a valid capability' from
+the raw manifest their own way (reasoning_loop, counterfactual_simulator,
+action_proposal, plan_freshness, runtime observation execution, the
+investigation registry/executor) — slightly different versions of the
+capability universe that could not see runtime-installed tools at all.
+
+The authority contract:
+  * capability_entry(name)      -> the ONE entry lookup (runtime-registered
+                                   capabilities first — they are the live
+                                   truth — then the manifest catalog)
+  * capability_safety(name)     -> the ONE safety reading (unknown -> 99,
+                                   gated: unvetted is not read-only)
+  * ToolRegistry.capabilities() -> every known capability, manifest +
+                                   runtime, for the layers that need the map
+  * NATIVE_EXECUTABLES          -> the ONE list of master-agent-native
+                                   execution paths (moved here from the
+                                   counterfactual simulator)
+
+The static manifest remains the CATALOG (descriptions, synonyms, domain
+keywords — discovery heuristics may read it). Validity, safety,
+availability, provenance and execution are registry questions.
+"""
 
 from __future__ import annotations
 from typing import Dict, Any, List, Optional, Callable
@@ -6,6 +44,14 @@ from app.utils.logger import app_logger, audit_logger
 from app.cognition.action_proposal import ActionProposal, ActionGate, GateResult
 from app.cognition.prediction_engine import PredictionEngine
 from app.cognition.event_bus import EventBus
+
+# The master-agent-native execution paths: capabilities Arena executes
+# itself, by construction, without a tool handler. ONE list (P0 review #12)
+# — the planner's provenance classifier and the counterfactual simulator
+# both read it from here.
+NATIVE_EXECUTABLES = ("open_application", "launch_app", "search_files",
+                      "screen_capture", "list_workspace", "read_file",
+                      "formulate_answer")
 
 # ---------------------------------------------------------------------------
 # ONE runtime ToolRegistry (P0 #20)
@@ -25,6 +71,62 @@ def get_shared_registry():
     if _shared_registry is None:
         _shared_registry = ToolRegistry()
     return _shared_registry
+
+
+def capability_entry(name: str) -> Optional[Dict[str, Any]]:
+    """THE capability lookup (P0 review #12).
+
+    Every layer that asks 'is this a valid capability, and what are its
+    handler/safety/availability/provenance' asks HERE; no layer re-derives
+    its own version of the capability universe.
+
+    Resolution order:
+      1. the manifest catalog — always read fresh (a rebuilt or patched
+         manifest is visible immediately; the registry's manifest-tier
+         entries are a boot-time copy and must never shadow the catalog);
+      2. the registry — for capabilities the catalog does not know:
+         runtime-installed tools (provenance 'dynamic') and anything
+         else the live registry carries.
+    """
+    key = str(name or "")
+    try:
+        from app.tools.manifest import get_tool_manifest
+        entry = get_tool_manifest().get(key)
+        if entry is not None:
+            return entry
+    except Exception:
+        pass
+    try:
+        return get_shared_registry().get_capability(key)
+    except Exception:
+        return None
+
+
+def capability_safety_or_none(name: str) -> Optional[int]:
+    """The authoritative safety reading, or None when the capability is
+    unknown. Callers with a historical 'unknown -> free' contract (the
+    reasoning loop's internally registered probes) use this so unknown
+    INTERNAL probes stay trusted while every KNOWN capability reads the
+    one authority."""
+    entry = capability_entry(name)
+    if entry is None:
+        return None
+    level = entry.get("safety_level")
+    if level is None:
+        return 99
+    try:
+        return int(level)
+    except (TypeError, ValueError):
+        return 99
+
+
+def capability_safety(name: str) -> int:
+    """THE safety reading for a capability name (unknown -> 99, gated)."""
+    try:
+        return get_shared_registry().capability_safety(name)
+    except Exception:
+        level = capability_safety_or_none(name)
+        return 99 if level is None else level
 
 
 def set_shared_registry(registry) -> None:
@@ -94,6 +196,29 @@ class ToolRegistry:
             "availability": availability,
             "provenance": provenance,
         }
+
+    def get_capability(self, name: str) -> Optional[Dict[str, Any]]:
+        """The capability entry (manifest + runtime), or None if unknown."""
+        return self._registry.get(str(name or "").lower())
+
+    def capabilities(self) -> Dict[str, Dict[str, Any]]:
+        """Every known capability: manifest-registered plus runtime-installed."""
+        return dict(self._registry)
+
+    def capability_safety(self, name: str) -> int:
+        """Canonical safety level. Unknown capability -> 99 (gated):
+        unvetted is never treated as read-only. Safety level 0 is a REAL
+        value (read-only) — never coerced by an `or` default."""
+        entry = self.get_capability(name)
+        if entry is None:
+            return 99
+        level = entry.get("safety_level")
+        if level is None:
+            return 99
+        try:
+            return int(level)
+        except (TypeError, ValueError):
+            return 99
 
     def _register_default_tools(self) -> None:
         # Register EVERY tool from the unified manifest so the cognitive layer
@@ -193,11 +318,20 @@ class ToolRegistry:
                 )
                 return result
 
-            # Calculate prediction surprisal
+            # Calculate prediction surprisal. proposal.predicted_outcome is
+            # a plain dict (the gate stores pred.expected_changes); the
+            # engine speaks WorldPrediction — wrap it, never crash scoring.
             pe = PredictionEngine()
+            prediction = (
+                proposal.predicted_outcome
+                if hasattr(proposal, "predicted_outcome")
+                else pe.predict_action(key, payload)
+            )
+            if isinstance(prediction, dict):
+                from app.cognition.prediction_engine import WorldPrediction
+                prediction = WorldPrediction(action_type=key, expected_changes=prediction)
             surprisal = pe.evaluate_surprisal(
-                proposal.predicted_outcome if hasattr(proposal, "predicted_outcome") else pe.predict_action(key, payload),
-                result if isinstance(result, dict) else {}
+                prediction, result if isinstance(result, dict) else {}
             )
 
             result["prediction_surprisal"] = surprisal

@@ -119,10 +119,12 @@ class ActionGate:
         truth for safety levels; this is consulted before the legacy policy list.
         """
         try:
-            from app.tools.manifest import get_tool_manifest
-            entry = get_tool_manifest().get(action_type)
-            if entry:
-                return int(entry.get("safety_level", 0))
+            # P0 review #12: the ONE capability authority decides safety for
+            # KNOWN capabilities; unknown names keep the caller's default.
+            from app.cognition.tool_registry import capability_safety_or_none
+            level = capability_safety_or_none(action_type)
+            if level is not None:
+                return int(level)
         except Exception:
             pass
         return None
