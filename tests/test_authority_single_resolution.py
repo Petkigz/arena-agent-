@@ -26,6 +26,8 @@ from __future__ import annotations
 from typing import Any, Dict
 from unittest.mock import patch
 
+import pytest
+
 from app.cognition import tool_registry as tr
 from app.cognition.tool_registry import ToolRegistry
 
@@ -383,3 +385,44 @@ def test_discovery_listing_and_execution_agree_on_a_new_tool():
         result = reg.execute_registered_tool("late_tool", {})
     assert result["success"] is True
     assert ran == ["new-wiring"]
+
+
+# ── the authority trap is gone: no generic public get_capability ────────────
+# P1 review: a public get_capability() returning the wiring table is exactly
+# how the old multi-authority divergence grew — future code reaches for the
+# obvious name and silently gets the stale boot copy instead of the
+# effective capability. The raw view is private now; the wrong call fails
+# LOUDLY instead of quietly returning the wrong universe.
+
+def test_get_capability_is_not_a_public_trap_anymore():
+    reg = make_registry({
+        "wire_only": {"name": "wire_only", "category": "x",
+                      "safety_level": 0,
+                      "handler": lambda p: {"success": True}},
+    })
+    # The generic name must NOT exist: AttributeError, not a silent
+    # wiring-table answer.
+    assert not hasattr(reg, "get_capability")
+    with pytest.raises(AttributeError):
+        reg.get_capability("wire_only")  # type: ignore[attr-defined]
+
+
+def test_raw_wiring_view_still_reachable_deliberately():
+    """The registry's own wiring view still exists — for the execution
+    path that genuinely needs it — behind a name that SAYS what it is,
+    and through the module-level runtime_entry() as its public face."""
+    from app.cognition import tool_registry as tr
+    catalog = {"catalog_tool": {"name": "catalog_tool", "category": "x",
+                                "safety_level": 0,
+                                "handler": lambda p: {"success": True}}}
+    reg = make_registry(catalog)
+    # Private instance accessor: the wiring table only.
+    assert reg._runtime_execution_entry("catalog_tool") is None  # not in wiring
+    assert reg._runtime_execution_entry("wire_only") is None
+    # Module-level public face: same raw view, documented semantics.
+    with patch.object(tr, "get_shared_registry", lambda: reg), \
+         patch.object(tr, "_shared_registry", reg, create=True):
+        assert tr.runtime_entry("catalog_tool") is None
+        # ...while the AUTHORITY resolves the catalog fresh:
+        assert (tr.capability_entry("catalog_tool") or {}).get(
+            "resolution") == "manifest"

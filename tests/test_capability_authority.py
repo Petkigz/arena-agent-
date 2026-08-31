@@ -241,7 +241,9 @@ def test_capabilities_sees_manifest_rebuild_immediately():
         assert caps["web_search"] == tr.capability_entry("web_search")
         assert caps["brand_new_tool"] == tr.capability_entry("brand_new_tool")
     # the original boot table is untouched — it is wiring, not truth
-    assert reg.get_capability("web_search")["safety_level"] == 0
+    # (raw wiring view via the PRIVATE accessor; module runtime_entry is
+    # the public face of it)
+    assert reg._runtime_execution_entry("web_search")["safety_level"] == 0
 
 
 def test_capabilities_and_capability_entry_never_diverge():

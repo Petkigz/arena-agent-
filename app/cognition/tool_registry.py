@@ -125,9 +125,11 @@ def manifest_entry(name: str) -> Optional[Dict[str, Any]]:
 def runtime_entry(name: str) -> Optional[Dict[str, Any]]:
     """What the live REGISTRY carries for this name — a boot-time manifest
     copy (provenance 'manifest') or a runtime install (provenance
-    'dynamic'). The registry's own view, unmerged with the catalog."""
+    'dynamic'). The registry's own view, unmerged with the catalog. This
+    is the ONE public accessor for the raw runtime view (the instance
+    method behind it is private — see _runtime_execution_entry)."""
     try:
-        return get_shared_registry().get_capability(name)
+        return get_shared_registry()._runtime_execution_entry(name)
     except Exception:
         return None
 
@@ -456,11 +458,21 @@ class ToolRegistry:
                 f"Availability cache invalidated for '{key}' — {reason}"
             )
 
-    def get_capability(self, name: str) -> Optional[Dict[str, Any]]:
+    def _runtime_execution_entry(self, name: str) -> Optional[Dict[str, Any]]:
         """The REGISTRY'S OWN entry (execution wiring: boot-time manifest
         handlers + runtime installs), or None. This is the runtime view —
         NOT the authority. Layers asking 'what is true of this capability'
-        call effective_capability() / module capability_entry() instead."""
+        call effective_capability() / module capability_entry() instead.
+
+        PRIVATE on purpose (P1 review): a generic public get_capability()
+        that returned the wiring table was the exact footgun the old
+        multi-authority divergence grew from — future code reached for the
+        obvious name and got the stale boot copy instead of the effective
+        capability. The public faces of this distinction are
+        effective_capability() (the authority) and the module-level
+        runtime_entry() (the raw registry view); reaching for
+        registry.get_capability(...) now fails loudly instead of quietly
+        returning the wrong universe."""
         return self._registry.get(str(name or "").lower())
 
     def effective_capability(self, name: str) -> Optional[Dict[str, Any]]:
