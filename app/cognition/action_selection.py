@@ -2,7 +2,7 @@
 from __future__ import annotations
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 from .information_gain import InformationNeed
 from app.cognition.action_proposal import ActionProposal
 from app.utils.logger import app_logger
@@ -155,6 +155,45 @@ class InvestigationRegistry:
         # the safety ceiling or argument fillability — it only widens WHICH
         # tools are considered, never what is allowed.
         ranked = rank_tools(text, limit=max(1, len(manifest)))
+
+        # P2 review — DIAGNOSTIC HYPOTHESIS RANKING. The concept bridge
+        # deliberately expands a symptom into the whole diagnostic tree
+        # (right for discovery: every plannable probe must be visible),
+        # but if the planner then walks pure lexical order, the bridge has
+        # silently turned 'symptom -> tool discovery' into 'symptom -> the
+        # entire diagnostic tree' and the winner is whichever description
+        # shares the most tokens with the injected vocabulary. When the
+        # bridge fired, diagnostic candidates are reordered by how many
+        # ACTIVE HYPOTHESES each probe discriminates: a vague complaint
+        # ('my computer is slow') starts with the broad measurement, a
+        # specific one ('startup is taking forever') starts with the
+        # specific probe. Non-diagnostic candidates keep their relative
+        # order behind the diagnostic ones; when nothing fired, discovery's
+        # order is untouched.
+        hypothesis_coverage: Dict[str, Tuple[float, Tuple[str, ...]]] = {}
+        try:
+            from app.cognition.concept_bridge import expand_goal
+            expansion = expand_goal(text)
+            if expansion.fired:
+                from app.cognition.diagnostic_ranking import (
+                    rank_probes_by_discrimination,
+                )
+                hypothesis_coverage = {
+                    r.tool: (r.score, r.hypotheses)
+                    for r in rank_probes_by_discrimination(
+                        [e["cluster"] for e in expansion.evidence])
+                }
+        except Exception as exc:
+            app_logger.warning(f"hypothesis ranking unavailable, lexical order stands: {exc}")
+        if hypothesis_coverage:
+            ranked = [m for _, m in sorted(
+                enumerate(ranked),
+                key=lambda pair: (
+                    -hypothesis_coverage.get(pair[1].action_type, (0.0, ()))[0],
+                    pair[0],
+                ),
+            )]
+
         window = _investigation_breadth(need)
         start = 0
         while start < len(ranked):
@@ -185,12 +224,17 @@ class InvestigationRegistry:
                 if arguments is None:
                     continue
                 rank = start + offset + 1
+                coverage = hypothesis_coverage.get(match.action_type)
+                reason = (f"Manifest-discovered investigation ({match.action_type}, "
+                          f"rank {rank}/{len(ranked)}) for: {str(need.question)[:80]}")
+                if coverage:
+                    reason += (f" — discriminates {len(coverage[1])} active "
+                               f"hypotheses ({', '.join(coverage[1][:4])})")
                 return InvestigationPlan(
                     tool=match.action_type,
                     arguments=arguments,
                     target=need.target,
-                    reason=(f"Manifest-discovered investigation ({match.action_type}, "
-                            f"rank {rank}/{len(ranked)}) for: {str(need.question)[:80]}"),
+                    reason=reason,
                     priority=need.priority,
                 )
             start += window
