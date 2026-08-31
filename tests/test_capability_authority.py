@@ -194,3 +194,110 @@ def test_dynamic_override_does_not_leak_into_the_manifest_view():
         assert tr.manifest_entry("pdf_merge")["safety_level"] == 2
         assert tr.capability_entry("pdf_merge")["resolution"] == "runtime_override"
         assert tr.capability_entry("pdf_merge")["safety_level"] == 0
+
+
+# ---------------------------------------------------------------------------
+# One capability universe (follow-up review): ToolRegistry.capabilities() is
+# the EFFECTIVE view — identical semantics to capability_entry(), rebuilt
+# fresh — never a boot-time snapshot. Composed from a static catalog
+# provider + runtime registrations + effective_capability().
+# ---------------------------------------------------------------------------
+
+def _fake_catalog(**overrides):
+    catalog = {
+        "web_search": {"name": "web_search", "category": "web",
+                       "handler": lambda p: {"success": True},
+                       "description": "search the web", "safety_level": 0},
+        "pdf_merge": {"name": "pdf_merge", "category": "documents",
+                      "handler": lambda p: {"success": True},
+                      "description": "merge pdfs", "safety_level": 2},
+    }
+    catalog.update(overrides)
+    return catalog
+
+
+def test_capabilities_sees_manifest_rebuild_immediately():
+    """The user-visible contract: after the catalog changes, capabilities()
+    and capability_entry() agree IMMEDIATELY — no boot-time snapshot, no
+    stale copy, no divergence between the two APIs."""
+    reg = ToolRegistry()  # boots against the REAL catalog
+    rebuilt = _fake_catalog(
+        brand_new_tool={"name": "brand_new_tool", "category": "x",
+                        "handler": lambda p: {"success": True},
+                        "safety_level": 1},
+        web_search={"name": "web_search", "category": "web",
+                    "handler": lambda p: {"success": True},
+                    "description": "patched description", "safety_level": 3},
+    )
+    with patch.object(tr, "get_shared_registry", lambda: reg), \
+         patch("app.tools.manifest.get_tool_manifest", return_value=rebuilt):
+        caps = reg.capabilities()
+        # a NEW catalog capability appears without re-registration…
+        assert caps["brand_new_tool"]["resolution"] == "manifest"
+        # …and a CHANGED safety level is the fresh value, not the boot copy
+        assert caps["web_search"]["safety_level"] == 3
+        assert caps["web_search"]["description"] == "patched description"
+        # the two APIs are the same universe
+        assert caps["web_search"] == tr.capability_entry("web_search")
+        assert caps["brand_new_tool"] == tr.capability_entry("brand_new_tool")
+    # the original boot table is untouched — it is wiring, not truth
+    assert reg.get_capability("web_search")["safety_level"] == 0
+
+
+def test_capabilities_and_capability_entry_never_diverge():
+    """For EVERY name in the union of catalog + registry, the map view and
+    the per-name lookup return the same entry."""
+    reg = ToolRegistry()
+    reg.register_tool("web_search", "web",
+                      lambda p: {"success": True, "patched": True},
+                      safety_level=2, provenance="dynamic")  # override
+    reg.register_tool("standalone_probe", "probe",
+                      lambda p: {"success": True}, safety_level=0,
+                      provenance="dynamic")                  # runtime-only
+    fake = _fake_catalog()
+    # boot a second registry against the fake catalog, then make it know a
+    # name the catalog does NOT list (a boot copy of a catalog-shrunk name)
+    reg2 = ToolRegistry(catalog_provider=lambda: fake)
+    reg2.register_tool("gone_from_catalog", "x",
+                       lambda p: {"success": True}, safety_level=0,
+                       provenance="manifest")
+    with patch.object(tr, "get_shared_registry", lambda: reg2):
+        reg2._registry.update({k: v for k, v in reg._registry.items()})
+        caps = reg2.capabilities()
+        for name in list(caps) + ["unknown_capability_xyz"]:
+            if tr.capability_entry(name) is None:
+                assert name not in caps
+            else:
+                assert caps[name] == tr.capability_entry(name), name
+        # the three resolutions all show up in the one universe
+        assert caps["web_search"]["resolution"] == "runtime_override"
+        assert caps["standalone_probe"]["resolution"] == "runtime_override"
+        assert caps["pdf_merge"]["resolution"] == "manifest"
+        assert caps["gone_from_catalog"]["resolution"] == "registry_copy"
+
+
+def test_dynamic_override_visible_in_capabilities():
+    reg = ToolRegistry()
+    reg.register_tool("web_search", "web",
+                      lambda p: {"success": True, "patched": True},
+                      safety_level=2, provenance="dynamic")
+    caps = reg.capabilities()
+    assert caps["web_search"]["resolution"] == "runtime_override"
+    assert caps["web_search"]["safety_level"] == 2
+    assert caps["web_search"]["provenance"] == "dynamic"
+    # the catalog view is untouched
+    assert tr.manifest_entry("web_search")["safety_level"] == 0
+
+
+def test_catalog_provider_is_injectable():
+    """The static catalog is a PROVIDER, not a global: an alternate catalog
+    plugs in without monkeypatching the manifest module."""
+    reg = ToolRegistry(catalog_provider=lambda: _fake_catalog())
+    caps = reg.capabilities()
+    assert set(caps) >= {"web_search", "pdf_merge"}
+    assert caps["pdf_merge"]["resolution"] == "manifest"
+    assert tr_effective(reg, "pdf_merge")["safety_level"] == 2
+
+
+def tr_effective(reg, name):
+    return reg.effective_capability(name)

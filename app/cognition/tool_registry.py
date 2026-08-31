@@ -42,8 +42,11 @@ The authority contract — three DISTINCT notions, never conflated:
                                    | registry_copy.
   * capability_safety(name)     -> the ONE safety reading (unknown -> 99,
                                    gated: unvetted is not read-only)
-  * ToolRegistry.capabilities() -> every known capability, manifest +
-                                   runtime, for the layers that need the map
+  * ToolRegistry.capabilities() -> the ONE capability universe, the
+                                   EFFECTIVE view rebuilt fresh on every
+                                   call — identical semantics to
+                                   capability_entry(), never a boot-time
+                                   snapshot
   * NATIVE_EXECUTABLES          -> the ONE list of master-agent-native
                                    execution paths (moved here from the
                                    counterfactual simulator)
@@ -132,23 +135,22 @@ def capability_entry(name: str) -> Optional[Dict[str, Any]]:
 
     Returns a copy tagged with 'resolution':
     runtime_override | manifest | registry_copy.
+
+    Delegates to ToolRegistry.effective_capability — there is exactly ONE
+    implementation of the resolution; this function is the import seam.
     """
-    key = str(name or "")
-    rt = runtime_entry(key)
-    if rt is not None and rt.get("provenance") == "dynamic":
-        entry = dict(rt)
-        entry["resolution"] = "runtime_override"
-        return entry
-    catalog = manifest_entry(key)
-    if catalog is not None:
-        entry = dict(catalog)
-        entry["resolution"] = "manifest"
-        return entry
-    if rt is not None:
-        entry = dict(rt)
-        entry["resolution"] = "registry_copy"
-        return entry
-    return None
+    try:
+        return get_shared_registry().effective_capability(name)
+    except Exception:
+        # Registry unavailable (early import, headless test): the static
+        # catalog view is still better than a wrong answer.
+        catalog = manifest_entry(name)
+        if catalog is not None:
+            entry = dict(catalog)
+            entry.setdefault("provenance", "manifest")
+            entry["resolution"] = "manifest"
+            return entry
+        return None
 
 
 def capability_safety_or_none(name: str) -> Optional[int]:
@@ -217,11 +219,35 @@ class ToolRegistry:
     # cycle. NOT_CHECKED results are never cached — they carry no information.
     _AVAILABILITY_CACHE_TTL_S = 300.0
 
-    def __init__(self, event_bus: Optional[EventBus] = None) -> None:
+    def __init__(
+        self,
+        event_bus: Optional[EventBus] = None,
+        catalog_provider: Optional[Callable[[], Dict[str, Dict[str, Any]]]] = None,
+    ) -> None:
+        # Architecture (P0 review, follow-up): the registry COMPOSES
+        #   * a static catalog provider  — the manifest, read FRESH on
+        #     every lookup (injectable, so tests and alternate catalogs
+        #     plug in without monkeypatching module globals);
+        #   * runtime registrations       — the execution table (handlers
+        #     wired at boot + tools installed while running);
+        #   * effective_capability(name)  — the ONE authoritative lookup.
+        # The boot-time registration below only wires EXECUTION handlers;
+        # it is a cache, never the source of truth for the universe.
         self._registry: Dict[str, Dict[str, Any]] = {}
         self.event_bus = event_bus or EventBus()
         self._availability_cache: Dict[str, tuple] = {}
+        self._catalog_provider = catalog_provider or self._static_catalog
         self._register_default_tools()
+
+    @staticmethod
+    def _static_catalog() -> Dict[str, Dict[str, Any]]:
+        """The static catalog, read lazily so a rebuilt or patched
+        manifest is visible on the next lookup (never a boot copy)."""
+        try:
+            from app.tools.manifest import get_tool_manifest
+            return get_tool_manifest() or {}
+        except Exception:
+            return {}
 
     def register_tool(
         self,
@@ -247,12 +273,86 @@ class ToolRegistry:
         }
 
     def get_capability(self, name: str) -> Optional[Dict[str, Any]]:
-        """The capability entry (manifest + runtime), or None if unknown."""
+        """The REGISTRY'S OWN entry (execution wiring: boot-time manifest
+        handlers + runtime installs), or None. This is the runtime view —
+        NOT the authority. Layers asking 'what is true of this capability'
+        call effective_capability() / module capability_entry() instead."""
         return self._registry.get(str(name or "").lower())
 
+    def effective_capability(self, name: str) -> Optional[Dict[str, Any]]:
+        """THE authoritative capability lookup (P0 review #12).
+
+        Resolution — an override is INTENTIONAL, never accidental:
+          1. a runtime INSTALL (provenance 'dynamic') overrides the
+             catalog: registering a manifest name at runtime patches it
+             on purpose — runtime is the live truth;
+          2. else the static catalog, read FRESH through the provider (a
+             rebuilt or patched manifest is visible immediately; the
+             registry's boot-time copies never shadow it);
+          3. else the registry's own copy, for names the registry still
+             knows but the catalog no longer lists (execution wiring
+             survives a catalog shrink).
+
+        Returns a copy tagged with 'resolution':
+        runtime_override | manifest | registry_copy.
+        """
+        key = str(name or "").lower()
+        runtime = self._registry.get(key)
+        if runtime is not None and runtime.get("provenance") == "dynamic":
+            entry = dict(runtime)
+            entry["resolution"] = "runtime_override"
+            return entry
+        try:
+            catalog = self._catalog_provider() or {}
+        except Exception:
+            catalog = {}
+        catalog_entry = catalog.get(key)
+        if catalog_entry is not None:
+            entry = dict(catalog_entry)
+            entry.setdefault("provenance", "manifest")
+            entry["resolution"] = "manifest"
+            return entry
+        if runtime is not None:
+            entry = dict(runtime)
+            entry["resolution"] = "registry_copy"
+            return entry
+        return None
+
     def capabilities(self) -> Dict[str, Dict[str, Any]]:
-        """Every known capability: manifest-registered plus runtime-installed."""
-        return dict(self._registry)
+        """The ONE capability universe — the EFFECTIVE view, rebuilt fresh
+        on every call with IDENTICAL semantics to effective_capability():
+
+          * every catalog capability, read fresh through the provider
+            (a rebuilt or patched manifest is visible immediately);
+          * runtime installs layered on top — a dynamic registration of
+            a manifest name is an intentional override and WINS;
+          * registry-only names (catalog shrank or runtime-registered
+            with manifest provenance) survive as registry_copy.
+
+        The boot-time registration table alone is NOT the universe: it is
+        an execution-wiring cache that must never shadow the live catalog.
+        Each entry is a copy tagged with 'resolution'.
+        """
+        try:
+            catalog = self._catalog_provider() or {}
+        except Exception:
+            catalog = {}
+        merged: Dict[str, Dict[str, Any]] = {}
+        for name, entry in catalog.items():
+            view = dict(entry)
+            view.setdefault("provenance", "manifest")
+            view["resolution"] = "manifest"
+            merged[str(name).lower()] = view
+        for name, entry in self._registry.items():
+            if entry.get("provenance") == "dynamic":
+                view = dict(entry)
+                view["resolution"] = "runtime_override"
+                merged[name] = view
+            elif name not in merged:
+                view = dict(entry)
+                view["resolution"] = "registry_copy"
+                merged[name] = view
+        return merged
 
     def capability_safety(self, name: str) -> int:
         """Canonical safety level. Unknown capability -> 99 (gated):
