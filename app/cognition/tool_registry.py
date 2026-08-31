@@ -248,6 +248,14 @@ def set_shared_registry(registry) -> None:
     _shared_registry = registry
 
 
+# Sentinel (follow-up review #5): the catalog's EXPLICIT declaration that a
+# capability needs no availability probe — in-process, zero external
+# dependencies, available by construction (e.g. list_capabilities). Only
+# this declaration makes a checker-less capability available; absence of a
+# checker never does.
+NO_PROBE_REQUIRED = "no_probe_required"
+
+
 def interpret_availability(checker, probe: bool = False) -> Dict[str, Any]:
     """The ONE canonical availability interpretation (P0 review #1).
 
@@ -261,9 +269,29 @@ def interpret_availability(checker, probe: bool = False) -> Dict[str, Any]:
     funnel, investigation executor) routes through this function instead of
     maintaining its own interpretation. Plain-boolean and no-kwarg checkers
     keep their verbatim meaning; None is never coerced.
+
+    NO checker is NOT availability (follow-up review #5): 'no probe
+    exists' means UNKNOWN — {"available": None, "status": "not_checked"} —
+    never assumed True. Assuming available conflates 'no probe exists'
+    with 'probe succeeded', which this architecture explicitly refuses
+    (NOT_CHECKED is not AVAILABLE). The single exception is the explicit
+    NO_PROBE_REQUIRED declaration above: a capability the catalog
+    positively marks probe-free is available by construction.
     """
+    if checker == NO_PROBE_REQUIRED:
+        return {
+            "available": True,
+            "status": "no_probe_required",
+            "reason": "explicitly declared probe-free: in-process capability, "
+                      "no external dependency to probe",
+        }
     if not callable(checker):
-        return {"available": True, "status": "available"}
+        return {
+            "available": None,
+            "status": "not_checked",
+            "reason": "no availability probe declared — availability is "
+                      "UNKNOWN, not assumed",
+        }
     try:
         status = checker(probe=probe)
     except TypeError:

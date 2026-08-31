@@ -457,3 +457,84 @@ class _Need:
         self.target = target
         self.reason = reason
         self.priority = 0.5
+
+
+# ---------------------------------------------------------------------------
+# No checker is NOT availability (follow-up review #5): 'no probe exists'
+# means UNKNOWN (not_checked), never assumed True. Only an explicit
+# NO_PROBE_REQUIRED declaration makes a checker-less capability available.
+# ---------------------------------------------------------------------------
+
+def test_no_checker_is_not_checked_not_available():
+    """The old fallback returned available=True for availability=None —
+    conflating 'no probe exists' with 'probe succeeded'. NOT_CHECKED is
+    not AVAILABLE."""
+    for checker in (None, "not_the_sentinel", 42, {"available": True}):
+        status = tr.interpret_availability(checker)
+        assert status["available"] is None, checker
+        assert status["status"] == "not_checked", checker
+
+
+def test_no_probe_required_is_explicitly_available():
+    status = tr.interpret_availability(tr.NO_PROBE_REQUIRED)
+    assert status["available"] is True
+    assert status["status"] == "no_probe_required"
+
+
+def test_list_capabilities_is_the_declared_probe_free_capability():
+    """The catalog's ONE explicitly probe-free capability: in-process
+    self-introspection, zero external dependencies. The sentinel linkage
+    between manifest and the authority is pinned so it cannot drift."""
+    entry = tr.manifest_entry("list_capabilities")
+    assert entry["availability"] == tr.NO_PROBE_REQUIRED
+    status = tr.get_shared_registry().get_tool_availability("list_capabilities")
+    assert status["available"] is True
+    assert status["status"] == "no_probe_required"
+
+
+def test_checkerless_tools_are_honestly_not_checked():
+    """os_control_execute / os_control_plan have no availability probe
+    (their OS backends are probed at execution): they used to falsely
+    report available=True; now they honestly report not_checked."""
+    for name in ("os_control_execute", "os_control_plan"):
+        assert tr.manifest_entry(name)["availability"] is None, name
+        status = tr.get_shared_registry().get_tool_availability(name)
+        assert status["available"] is None, name
+        assert status["status"] == "not_checked", name
+
+
+def test_dynamic_tools_without_probe_are_not_checked():
+    """Runtime-installed tools with no availability callable are UNKNOWN,
+    not assumed available — same rule as manifest tools."""
+    reg = ToolRegistry()
+    reg.register_tool("probeless_dynamic", "x", lambda p: {"success": True})
+    status = reg.get_tool_availability("probeless_dynamic")
+    assert status["available"] is None
+    assert status["status"] == "not_checked"
+
+
+def test_not_checked_flows_but_does_not_freeze():
+    """not_checked is never cached (it carries no information); a decisive
+    no_probe_required result IS cached — knowledge vs. assumption."""
+    reg = ToolRegistry()
+    reg.register_tool("probeless_dynamic", "x", lambda p: {"success": True})
+    reg.get_tool_availability("probeless_dynamic")
+    assert "probeless_dynamic" not in reg._availability_cache
+
+    status = reg.get_tool_availability("list_capabilities")
+    assert status["status"] == "no_probe_required"
+    assert "list_capabilities" in reg._availability_cache
+
+
+def test_investigation_executor_still_runs_not_checked_tools():
+    """not_checked means 'unknown', not 'unavailable': the executor
+    attempts the handler and fails honestly if the dependency is missing —
+    it does not pre-refuse."""
+    from app.cognition.action_selection import InvestigationExecutor, InvestigationPlan
+
+    executor = InvestigationExecutor()
+    plan = InvestigationPlan(tool="list_capabilities", arguments={"payload": {}},
+                             target="capabilities", reason="test", priority=0.5)
+    result = executor.execute(plan)
+    assert result.success is True
+    assert result.output.get("tool_count", 0) >= 100

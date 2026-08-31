@@ -97,7 +97,17 @@ def test_not_checked_after_probe_is_attempted_and_caught_honestly():
 
 
 def test_interpret_availability_canonical_shapes():
-    assert interpret_availability(None) == {"available": True, "status": "available"}
+    # No checker is NOT availability (follow-up review #5): 'no probe
+    # exists' means UNKNOWN — never assumed True. Only the explicit
+    # NO_PROBE_REQUIRED declaration makes a checker-less capability
+    # available (in-process, probe-free by construction).
+    assert interpret_availability(None) == {
+        "available": None,
+        "status": "not_checked",
+        "reason": "no availability probe declared — availability is UNKNOWN, not assumed",
+    }
+    assert interpret_availability("no_probe_required")["available"] is True
+    assert interpret_availability("no_probe_required")["status"] == "no_probe_required"
     assert interpret_availability(lambda probe=False: {"available": False})["available"] is False
     assert interpret_availability(lambda: False)["available"] is False
     assert interpret_availability(lambda: True)["available"] is True

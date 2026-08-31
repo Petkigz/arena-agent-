@@ -297,8 +297,15 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         }
 
     # ── OS / system ─────────────────────────────────────────────────────────
+    _list_caps_handler = _ignore_payload(_list_capabilities)
+    # Explicitly probe-free (follow-up review #5): in-process
+    # self-introspection over the tool inventory — no external dependency
+    # to probe, available by construction. The value is the
+    # NO_PROBE_REQUIRED sentinel consumed by interpret_availability
+    # (app.cognition.tool_registry); the linkage is pinned by tests.
+    _list_caps_handler.tool_availability = "no_probe_required"
     add("list_capabilities", "self_awareness", 0, "Enumerate the agent's registered tool inventory (evidence for capability questions)",
-        _ignore_payload(_list_capabilities))
+        _list_caps_handler)
     add("launch_app", "os_control", 2, "Launch an installed application",
         _wrap(SystemAppInventory.launch_any_app, "app_query", "app_name"))
     add("list_apps", "os_control", 0, "List installed applications",
