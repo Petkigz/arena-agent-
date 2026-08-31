@@ -52,9 +52,11 @@ class _FakeClient:
         self.embeddings = embeddings or {}
         self.fail = fail
         self.embedding_calls = []
+        self.model_calls = 0
 
     def get(self, url, timeout=None):
         assert url.endswith("/models")
+        self.model_calls += 1
         return _FakeResponse({"data": [{"id": i} for i in self.model_ids]})
 
     def post(self, url, json=None, timeout=None):
@@ -111,8 +113,8 @@ def test_semantic_scores_uses_embeddings_when_model_available():
     )
     with patch("app.cognition.semantic_matcher.httpx.Client", lambda: client), \
          patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True), \
-         patch("app.cognition.semantic_matcher._status_logged",
-               {"embeddings": True, "fallback": True}):
+         patch("app.cognition.semantic_matcher._backend_state",
+               {"current": "embeddings"}):
         scores, backend = semantic_scores(goal, tool_texts)
     assert backend == "embeddings"
     assert scores["compress_files"] > 0.7
@@ -126,8 +128,8 @@ def test_tool_embeddings_are_cached_per_manifest():
     with patch("app.cognition.semantic_matcher.httpx.Client", lambda: client), \
          patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True), \
          patch.dict("app.cognition.semantic_matcher._tool_embedding_cache", clear=True), \
-         patch("app.cognition.semantic_matcher._status_logged",
-               {"embeddings": True, "fallback": True}):
+         patch("app.cognition.semantic_matcher._backend_state",
+               {"current": "embeddings"}):
         semantic_scores(goal, tools)
         semantic_scores(goal, tools)
     # One batched call for the tool corpus; the goal hit the lru cache.
@@ -205,3 +207,131 @@ def test_matches_expose_their_semantic_evidence():
     assert hits
     assert hits[0].semantic_backend in ("local", "none")
     assert hits[0].semantic_score is not None
+
+
+# --- TTL-based model discovery: no forever-stuck fallback (P1 review) --------
+# The old cache stored base_url -> model INCLUDING None, forever: a process
+# that started before an embedding model was loaded never noticed the model
+# appear — local fuzzy matching until restart. Discovery now expires: a miss
+# after ~30s, a hit after ~5min. Vector caches are also per-model: a switch
+# invalidates them (two models' vectors live in different spaces).
+
+def test_model_loaded_later_is_picked_up_without_restart():
+    """The review's exact scenario: Arena starts, no embedding model loaded
+    (None cached), the model is loaded afterwards -> discovery notices."""
+    before = _FakeClient(["qwen2.5-9b-instruct"])       # chat model only
+    after = _FakeClient(["qwen2.5-9b-instruct", "nomic-embed-text-v1.5"])
+    with patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True), \
+         patch("app.cognition.semantic_matcher._EMBED_MODEL_TTL_MISS_S", 0.0):
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: before):
+            assert _pick_embedding_model(before) is None    # miss cached...
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: after):
+            # ...and the cached miss EXPIRES: the loaded model is found.
+            assert _pick_embedding_model(after) == "nomic-embed-text-v1.5"
+
+
+def test_semantic_matching_recovers_end_to_end():
+    """End-to-end: scores come back 'local' when no model is loaded, then
+    'embeddings' after the model appears — same process, no restart."""
+    from app.cognition import semantic_matcher as sm
+    goal = "shrink the archive"
+    tools = {"compress_files": "compress files to a zip"}
+    before = _FakeClient([])                              # nothing loaded
+    after = _FakeClient(
+        ["nomic-embed"],
+        embeddings={goal: [1.0, 0.0], "compress files to a zip": [0.9, 0.1]},
+    )
+    with patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True), \
+         patch.dict("app.cognition.semantic_matcher._tool_embedding_cache", clear=True), \
+         patch("app.cognition.semantic_matcher._EMBED_MODEL_TTL_MISS_S", 0.0), \
+         patch("app.cognition.semantic_matcher._backend_state", {"current": None}):
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: before):
+            sm._embed_goal_cached.cache_clear()
+            _, backend_before = semantic_scores(goal, tools)
+            assert backend_before == "local"
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: after):
+            sm._embed_goal_cached.cache_clear()  # drop the None from the no-model era
+            scores, backend_after = semantic_scores(goal, tools)
+            assert backend_after == "embeddings"
+            assert scores["compress_files"] > 0.7
+
+
+def test_goal_cache_does_not_outlive_the_no_model_era():
+    """The subtle half of the fix: the goal lru cache stores None when no
+    model is loaded. After the model appears, resolution happens BEFORE the
+    cache read — the stale None is invalidated, not served forever."""
+    from app.cognition import semantic_matcher as sm
+    goal = "shrink the archive"
+    tools = {"compress_files": "compress files to a zip"}
+    before = _FakeClient([])                              # nothing loaded
+    after = _FakeClient(
+        ["nomic-embed"],
+        embeddings={goal: [1.0, 0.0], "compress files to a zip": [0.9, 0.1]},
+    )
+    with patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True), \
+         patch.dict("app.cognition.semantic_matcher._tool_embedding_cache", clear=True), \
+         patch("app.cognition.semantic_matcher._EMBED_MODEL_TTL_MISS_S", 0.0), \
+         patch("app.cognition.semantic_matcher._backend_state", {"current": None}):
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: before):
+            semantic_scores(goal, tools)          # caches goal=None
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: after):
+            # NO manual cache_clear here: the model resolution at the top of
+            # semantic_scores must notice the change and drop the stale None.
+            scores, backend = semantic_scores(goal, tools)
+            assert backend == "embeddings"
+            assert scores["compress_files"] > 0.7
+
+
+def test_hit_is_not_reprobed_within_ttl():
+    """A found model is stable: within the hit TTL, discovery serves from
+    the cache (no /models request)."""
+    client = _FakeClient(["nomic-embed"])
+    with patch("app.cognition.semantic_matcher.httpx.Client", lambda: client), \
+         patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True):
+        _pick_embedding_model(client)
+        _pick_embedding_model(client)
+    assert client.model_calls == 1
+
+
+def test_miss_is_not_reprobed_within_ttl():
+    """The TTL is a TTL, not always-reprobe: within the miss TTL the None
+    stands (cheap), and only after expiry does discovery look again."""
+    client = _FakeClient(["qwen2.5-9b-instruct"])
+    with patch("app.cognition.semantic_matcher.httpx.Client", lambda: client), \
+         patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True):
+        assert _pick_embedding_model(client) is None
+        assert _pick_embedding_model(client) is None
+    assert client.model_calls == 1
+
+
+def test_vector_caches_rebind_when_model_switches():
+    """Switching models mid-process must re-embed everything: vectors from
+    two models live in different spaces — mixing them produces meaningless
+    cosines. The tool corpus and goal are re-embedded with the new model."""
+    from app.cognition import semantic_matcher as sm
+    goal = "shrink the archive"
+    tools = {"compress_files": "compress files to a zip"}
+    client_a = _FakeClient(["model-a-embed"],
+                           embeddings={goal: [1.0, 0.0],
+                                       "compress files to a zip": [0.9, 0.1]})
+    # Model B's space: the tool is ORTHOGONAL to the goal.
+    client_b = _FakeClient(["model-b-embed"],
+                           embeddings={goal: [0.0, 1.0],
+                                       "compress files to a zip": [1.0, 0.0]})
+    with patch.dict("app.cognition.semantic_matcher._embed_model_cache", clear=True), \
+         patch.dict("app.cognition.semantic_matcher._tool_embedding_cache", clear=True), \
+         patch("app.cognition.semantic_matcher._EMBED_MODEL_TTL_HIT_S", 0.0), \
+         patch("app.cognition.semantic_matcher._backend_state", {"current": "embeddings"}), \
+         patch.object(sm, "_embeddings_cache_model", None):
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: client_a):
+            sm._embed_goal_cached.cache_clear()
+            scores_a, backend_a = semantic_scores(goal, tools)
+            assert backend_a == "embeddings" and scores_a["compress_files"] > 0.7
+        with patch("app.cognition.semantic_matcher.httpx.Client", lambda: client_b):
+            sm._embed_goal_cached.cache_clear()
+            scores_b, backend_b = semantic_scores(goal, tools)
+            assert backend_b == "embeddings"
+            # Model B's space says the tool is ORTHOGONAL to the goal: the
+            # cached vectors from model A were dropped, not reused.
+            assert scores_b["compress_files"] == 0.0, scores_b
+    assert len(client_b.embedding_calls) == 2   # B re-embedded goal + corpus

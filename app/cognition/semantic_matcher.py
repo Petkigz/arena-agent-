@@ -17,9 +17,15 @@ Two backends, best available, degrading NEVER breaks discovery:
   embeddings  LM Studio /v1/embeddings (env ARENA_EMBED_BASE_URL, default
               http://localhost:1234/v1; model via ARENA_EMBED_MODEL or
               auto-picked from /v1/models preferring ids containing
-              "embed" — a chat model is never fed 170 texts). Tool
-              embeddings are cached per manifest; goal embeddings are
-              cached per text. Unreachable/misconfigured -> fallback.
+              "embed" — a chat model is never fed 170 texts). Model
+              discovery is cached WITH A TTL, never forever: a miss (no
+              model loaded yet) expires in ~30s so a model loaded later in
+              LM Studio is picked up WITHOUT a process restart; a hit
+              revalidates in ~5min. Tool embeddings are cached per
+              manifest AND per model (switching models invalidates them —
+              vectors from two models live in different spaces); goal
+              embeddings are cached per text. Unreachable/misconfigured ->
+              fallback.
   local       In-process TF-IDF over tool DESCRIPTIONS: word unigrams
               plus character 4-grams, so morphological variants match
               ("compression"~"compress"). This is fuzzy LEXICAL matching —
@@ -36,6 +42,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import time
 
 import httpx
 from functools import lru_cache
@@ -64,8 +71,21 @@ def _calibrate(cosine: float) -> float:
 
 # --- embedding backend (LM Studio, local) ------------------------------------
 
-_embed_model_cache: Dict[str, Optional[str]] = {}
-_status_logged = {"embeddings": False, "fallback": False}
+# A cached MISS (no embedding model loaded) expires quickly: the owner can
+# load a model in LM Studio at any moment and semantic matching must
+# notice without a process restart (P1 review — the old forever-cache kept
+# the fallback long after a model appeared). A cached HIT is stable but
+# still revalidates occasionally (models get switched or unloaded).
+_EMBED_MODEL_TTL_MISS_S = 30.0
+_EMBED_MODEL_TTL_HIT_S = 300.0
+
+# base_url -> (model_or_None, expires_at_monotonic)
+_embed_model_cache: Dict[str, Tuple[Optional[str], float]] = {}
+
+# The model the vector caches were built with (see _invalidate_...).
+_embeddings_cache_model: Optional[str] = None
+
+_backend_state: Dict[str, Optional[str]] = {"current": None}
 
 
 def _embed_base_url() -> str:
@@ -74,17 +94,44 @@ def _embed_base_url() -> str:
     return os.environ.get("ARENA_EMBED_BASE_URL", _DEFAULT_EMBED_BASE_URL).rstrip("/")
 
 
+def _invalidate_vector_caches_if_model_changed(model: Optional[str]) -> None:
+    """The vector caches belong to ONE model: embeddings from two different
+    models live in different spaces (often different dimensions), so mixing
+    them produces meaningless cosines. When discovery notices a different
+    model, every cached vector is stale and is dropped."""
+    global _embeddings_cache_model
+    if model != _embeddings_cache_model:
+        if _embeddings_cache_model is not None:
+            app_logger.info(
+                f"Semantic matching: embedding model changed "
+                f"({_embeddings_cache_model!r} -> {model!r}); "
+                f"dropping cached vectors from the old model")
+        _tool_embedding_cache.clear()
+        _embed_goal_cached.cache_clear()
+        _embeddings_cache_model = model
+
+
 def _pick_embedding_model(client) -> Optional[str]:
     """Prefer an explicitly configured model, else the first loaded model
-    whose id looks like an embedding model. Chat models are never used."""
+    whose id looks like an embedding model. Chat models are never used.
+
+    Discovery is cached WITH A TTL, never forever: a miss expires after
+    _EMBED_MODEL_TTL_MISS_S (a model loaded later in LM Studio is picked
+    up without a restart), a hit after _EMBED_MODEL_TTL_HIT_S (a switched
+    or unloaded model is eventually noticed). Vector caches are rebound to
+    the resolved model on every call."""
     import os
 
     configured = os.environ.get("ARENA_EMBED_MODEL", "").strip()
     if configured:
+        _invalidate_vector_caches_if_model_changed(configured)
         return configured
     base = _embed_base_url()
-    if base in _embed_model_cache:
-        return _embed_model_cache[base]
+    now = time.monotonic()
+    cached = _embed_model_cache.get(base)
+    if cached is not None and cached[1] > now:
+        _invalidate_vector_caches_if_model_changed(cached[0])
+        return cached[0]
     model: Optional[str] = None
     try:
         response = client.get(f"{base}/models", timeout=_EMBED_TIMEOUT_SECONDS)
@@ -94,7 +141,9 @@ def _pick_embedding_model(client) -> Optional[str]:
         model = embedding_ids[0] if embedding_ids else None
     except Exception:
         model = None
-    _embed_model_cache[base] = model
+    ttl = _EMBED_MODEL_TTL_HIT_S if model else _EMBED_MODEL_TTL_MISS_S
+    _embed_model_cache[base] = (model, time.monotonic() + ttl)
+    _invalidate_vector_caches_if_model_changed(model)
     return model
 
 
@@ -110,7 +159,7 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
         with httpx.Client() as client:
             model = _pick_embedding_model(client)
             if not model:
-                _log_once("fallback", app_logger.info,
+                _log_backend_transition("fallback",
                           "Semantic matching: no embedding model loaded "
                           "(load one in LM Studio to enable it); using local fuzzy matching")
                 return None
@@ -124,19 +173,24 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
             vectors = [item.get("embedding") for item in data]
             if len(vectors) != len(texts) or not all(vectors):
                 return None
-            _log_once("embeddings", app_logger.info,
+            _log_backend_transition("embeddings",
                       f"Semantic matching: embedding backend active (model={model})")
             return vectors
     except Exception as exc:
-        _log_once("fallback", app_logger.info,
+        _log_backend_transition("fallback",
                   f"Semantic matching: embedding backend unavailable ({exc}); using local fuzzy matching")
         return None
 
 
-def _log_once(kind: str, logger, message: str) -> None:
-    if not _status_logged[kind]:
-        _status_logged[kind] = True
-        logger(message)
+def _log_backend_transition(state: str, message: str) -> None:
+    """Log backend state TRANSITIONS, not just the first occurrence
+    (P1 review): with TTL-based rediscovery the backend can recover
+    mid-process (a model loaded in LM Studio) or degrade (server stopped)
+    — once-only logging would hide the flip. Each transition is one line,
+    so the volume stays bounded by real state changes."""
+    if _backend_state["current"] != state:
+        _backend_state["current"] = state
+        app_logger.info(message)
 
 
 # Tool embeddings depend only on the tool text set: cache per content hash.
@@ -263,27 +317,36 @@ def semantic_scores(
     if not user_text or not tool_texts:
         return {}, "none"
     try:
-        goal = _embed_goal_cached(user_text)
-        if goal is not None:
-            cache_key = hashlib.sha1(
-                "\x00".join(f"{k}\x01{v}" for k, v in sorted(tool_texts.items())).encode("utf-8")
-            ).hexdigest()
-            tool_vectors = _tool_embedding_cache.get(cache_key)
-            if tool_vectors is None:
-                vectors = embed_texts(list(tool_texts.values()))
-                if vectors is None:
-                    tool_vectors = None
-                else:
-                    tool_vectors = dict(zip(tool_texts.keys(), vectors))
-                    _tool_embedding_cache[cache_key] = tool_vectors
-            if tool_vectors is not None:
-                return (
-                    {
-                        name: _calibrate(_cosine(goal, vec))
-                        for name, vec in tool_vectors.items()
-                    },
-                    "embeddings",
-                )
+        # Resolve the ACTIVE model BEFORE reading any vector cache (P1
+        # review): _pick's TTL discovery and model-change invalidation
+        # must run even when the goal embedding is an lru HIT — otherwise
+        # a None cached during the no-model era (or vectors from a model
+        # that was since switched away) would be served forever. The TTL
+        # makes this cheap: no HTTP unless the discovery entry expired.
+        with httpx.Client() as client:
+            current_model = _pick_embedding_model(client)
+        if current_model is not None:
+            goal = _embed_goal_cached(user_text)
+            if goal is not None:
+                cache_key = hashlib.sha1(
+                    "\x00".join(f"{k}\x01{v}" for k, v in sorted(tool_texts.items())).encode("utf-8")
+                ).hexdigest()
+                tool_vectors = _tool_embedding_cache.get(cache_key)
+                if tool_vectors is None:
+                    vectors = embed_texts(list(tool_texts.values()))
+                    if vectors is None:
+                        tool_vectors = None
+                    else:
+                        tool_vectors = dict(zip(tool_texts.keys(), vectors))
+                        _tool_embedding_cache[cache_key] = tool_vectors
+                if tool_vectors is not None:
+                    return (
+                        {
+                            name: _calibrate(_cosine(goal, vec))
+                            for name, vec in tool_vectors.items()
+                        },
+                        "embeddings",
+                    )
     except Exception as exc:
         app_logger.warning(f"Semantic embedding path failed, falling back local: {exc}")
     try:
