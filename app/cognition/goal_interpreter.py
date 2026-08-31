@@ -655,11 +655,16 @@ class SemanticGoalInterpreter:
                     except Exception:
                         cost = 0.0
                     score -= min(cost, 2.0)
-                    ranked.append((score, cap, cap_name))
+                    ranked.append((score, cap, cap_name, availability_state))
 
                 ranked.sort(key=lambda item: item[0], reverse=True)
                 existing_actions = {c.get("action_type") for c in candidates}
-                for score, cap, cap_name in ranked[:max(candidate_breadth(user_text, complexity), 8)]:
+                # availability_state is carried THROUGH the sort (P1 review):
+                # it is per-capability evidence. Reading the loop variable
+                # after sorting attached the LAST capability's state to every
+                # candidate — a not_checked capability could be labeled
+                # 'available' (and the planner would skip its probe).
+                for score, cap, cap_name, availability_state in ranked[:max(candidate_breadth(user_text, complexity), 8)]:
                     if cap_name in existing_actions:
                         continue
                     candidates.append({

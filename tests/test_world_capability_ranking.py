@@ -139,3 +139,85 @@ def test_unavailable_integration_spends_no_candidate_slot():
     assert "screen_capture" in all_actions
     # Unavailable: proposed by NO source — the slot goes to runnable tools.
     assert "diagnostic_probe" not in all_actions
+
+
+# ── availability state is PER-CAPABILITY evidence (P1 review) ──────────────
+# The state was computed inside the ranking loop but read from the leftover
+# loop variable AFTER sorting — every candidate inherited whichever state
+# the LAST-examined capability happened to leave behind. A not_checked
+# capability labeled 'available' skips the planner's probe-before-commit;
+# an available one labeled 'not_checked' flags phantom risk to the owner.
+#
+# Scenario design: the high-rank capability's MANIFEST description is bland
+# (so the earlier manifest_discovery source does not claim it — the
+# world-model block only sees capabilities no other source proposed) while
+# its ENTITY description is rich, giving it the top world-model rank.
+
+def _entry_with_state(name, manifest_description, available):
+    """A manifest entry whose availability checker reports `available`
+    (True / None=not_checked / False=offline)."""
+    return {
+        "name": name, "category": "system", "handler": lambda **kw: {"success": True},
+        "description": manifest_description, "safety_level": 0,
+        "availability": (lambda: available),
+    }
+
+
+def _synth(caps, fake_manifest, user_text):
+    import app.tools.manifest as manifest_mod
+    original = manifest_mod.get_tool_manifest
+    manifest_mod.get_tool_manifest = lambda: fake_manifest
+    try:
+        return SemanticGoalInterpreter.synthesize_candidates_from_context(
+            domain="desktop_os", user_text=user_text, world_model=_world(caps),
+        )
+    finally:
+        manifest_mod.get_tool_manifest = original
+
+
+def _wm_payload(candidates, action_type):
+    for c in candidates:
+        if c.get("source") == WM and c.get("action_type") == action_type:
+            return c["payload"]
+    raise AssertionError(f"no world-model candidate for {action_type}: "
+                         f"{[c.get('action_type') for c in candidates]}")
+
+
+def _wm_caps(candidates):
+    return [c["action_type"] for c in candidates if c.get("source") == WM]
+
+
+def test_not_checked_state_is_not_overwritten_by_later_available_cap():
+    """Dangerous direction: a NOT_CHECKED capability that ranks FIRST must
+    not inherit 'available' from an available capability examined after it
+    (the leftover loop variable) — that label tells the planner its
+    dependency was verified when nobody ever probed it."""
+    fake_manifest = {
+        "phone_command": _entry_with_state("phone_command", "helper", None),
+        "screen_capture": _entry_with_state("screen_capture", "capture the screen", True),
+    }
+    # find_entities order: the not_checked (high-rank) cap FIRST, the
+    # available cap LAST — the leftover variable held 'available'.
+    caps = [_cap("phone_command", "send a text message from the phone"),
+            _cap("screen_capture", "capture the screen")]
+    candidates = _synth(caps, fake_manifest, "send a text message")
+    wm_caps = _wm_caps(candidates)
+    # The scenario requires the not_checked cap to rank first.
+    assert wm_caps.index("phone_command") < wm_caps.index("screen_capture")
+    assert _wm_payload(candidates, "phone_command")["availability"] == "not_checked"
+    assert _wm_payload(candidates, "screen_capture")["availability"] == "available"
+
+
+def test_available_state_is_not_overwritten_by_later_not_checked_cap():
+    """Over-cautious direction: an AVAILABLE capability must not inherit
+    'not_checked' from a not_checked capability examined after it — phantom
+    risk shown to the owner, needless probing before every commit."""
+    fake_manifest = {
+        "phone_command": _entry_with_state("phone_command", "helper", True),
+        "screen_capture": _entry_with_state("screen_capture", "capture the screen", None),
+    }
+    caps = [_cap("phone_command", "send a text message from the phone"),
+            _cap("screen_capture", "capture the screen")]
+    candidates = _synth(caps, fake_manifest, "send a text message")
+    assert _wm_payload(candidates, "phone_command")["availability"] == "available"
+    assert _wm_payload(candidates, "screen_capture")["availability"] == "not_checked"
