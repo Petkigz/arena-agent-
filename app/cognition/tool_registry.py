@@ -63,6 +63,7 @@ availability, provenance and execution are registry questions.
 """
 
 from __future__ import annotations
+import threading
 from typing import Dict, Any, List, Optional, Callable
 from app.utils.logger import app_logger, audit_logger
 from app.cognition.action_proposal import ActionProposal, ActionGate, GateResult
@@ -307,6 +308,20 @@ class ToolRegistry:
     # Decisive probe results (available True/False) are cached briefly so
     # planner-time probing (P0 #21) doesn't re-import a tool module on every
     # cycle. NOT_CHECKED results are never cached — they carry no information.
+    #
+    # The TTL is a BACKSTOP, not the invalidation mechanism (P0 #6): a pure
+    # TTL lets a runtime-installed capability stay cached available=False for
+    # up to five minutes AFTER its dependency arrives — unusable for an
+    # autonomous system. Every cached entry is therefore tagged with the
+    # ENVIRONMENT REVISION observed at probe time, and the entry is served
+    # only while that revision is still current. Anything that can change
+    # what a probe would observe bumps the revision:
+    #   * a runtime (de)registration            -> register_tool()
+    #   * a dependency install/uninstall        -> PackageInstaller -> note_environment_change()
+    #   * any other environment change          -> note_environment_change()
+    #   * execution that contradicts the cache  -> invalidate_tool_availability()
+    # (a package the owner installs in a terminal without Arena seeing it
+    # still heals via the TTL backstop).
     _AVAILABILITY_CACHE_TTL_S = 300.0
 
     def __init__(
@@ -325,6 +340,12 @@ class ToolRegistry:
         # it is a cache, never the source of truth for the universe.
         self._registry: Dict[str, Dict[str, Any]] = {}
         self.event_bus = event_bus or EventBus()
+        # Environment revision epoch (P0 #6): monotonic counter bumped on
+        # every event that can change what an availability probe would
+        # observe. Cache entries record the revision they were probed at and
+        # are stale the moment the revision moves — no waiting out a TTL.
+        self._environment_revision = 0
+        self._env_lock = threading.RLock()
         self._availability_cache: Dict[str, tuple] = {}
         self._catalog_provider = catalog_provider or self._static_catalog
         self._register_default_tools()
@@ -351,8 +372,17 @@ class ToolRegistry:
     ) -> None:
         """provenance: 'manifest' (default tool set) or 'dynamic'
         (registered at runtime). Exposed through get_tool_availability so
-        capability provenance is explicit end to end (P0 review #2)."""
-        self._registry[name.lower()] = {
+        capability provenance is explicit end to end (P0 review #2).
+
+        A registration CHANGES the capability surface (P0 #6): the new entry
+        may carry a different handler AND a different availability checker,
+        so the previous registration's cached availability for this name is
+        dropped immediately and the environment revision advances — the
+        planner re-probes on its next lookup instead of reading facts about
+        a capability that no longer exists in that form.
+        """
+        key = str(name or "").lower()
+        self._registry[key] = {
             "name": name,
             "category": category,
             "handler": handler,
@@ -361,6 +391,70 @@ class ToolRegistry:
             "availability": availability,
             "provenance": provenance,
         }
+        with self._env_lock:
+            self._availability_cache.pop(key, None)
+            self._environment_revision += 1
+
+    @property
+    def environment_revision(self) -> int:
+        """Current environment revision. Availability facts carry the
+        revision they were probed at (probed_at_revision); a fact whose
+        revision differs from the current one is stale by definition."""
+        with self._env_lock:
+            return self._environment_revision
+
+    def note_environment_change(self, reason: str, source: str = "system") -> int:
+        """Declare that the dependency/environment surface changed.
+
+        Callers: package installs/uninstalls, plugin installs, device
+        topology changes, owner-declared manual changes, or any subsystem
+        that observes the environment move. Effects:
+
+          * every cached availability fact becomes stale immediately (the
+            cache is cleared — no TTL wait, no per-entry bookkeeping),
+          * the environment revision advances so results record fresh
+            provenance, and
+          * an ``environment_changed`` event is emitted on the registry's
+            event bus so other subsystems (world model, embodied boundary)
+            can react to the same fact.
+
+        Returns the new revision.
+        """
+        with self._env_lock:
+            self._environment_revision += 1
+            revision = self._environment_revision
+            self._availability_cache.clear()
+        audit_logger.info(
+            f"Environment revision {revision} — availability cache cleared "
+            f"(reason: {reason}; source: {source})"
+        )
+        try:
+            self.event_bus.emit(
+                "environment_changed",
+                {"reason": reason, "revision": revision},
+                source=source,
+            )
+        except Exception as exc:  # event plumbing must never break the notifier
+            app_logger.warning(f"environment_changed event emission failed: {exc}")
+        return revision
+
+    def invalidate_tool_availability(self, tool_name: str, reason: str = "") -> None:
+        """Drop ONE capability's cached availability (P0 #6).
+
+        Used when execution evidence contradicts a cached probe (the tool
+        reported dependency-unavailable at execution time): ground truth
+        beats the cache, so the entry is dropped and the next lookup
+        re-runs the real checker. This is per-tool evidence — it does NOT
+        bump the environment revision, because one tool's failure says
+        nothing about other capabilities' dependencies.
+        """
+        key = str(tool_name or "").lower().strip()
+        with self._env_lock:
+            dropped = self._availability_cache.pop(key, None)
+        if dropped is not None:
+            audit_logger.info(
+                f"Availability cache invalidated for '{key}' — {reason}"
+            )
 
     def get_capability(self, name: str) -> Optional[Dict[str, Any]]:
         """The REGISTRY'S OWN entry (execution wiring: boot-time manifest
@@ -483,6 +577,12 @@ class ToolRegistry:
         ``probe=True`` imports only that tool module, never the rest of the
         manifest. This makes diagnostics explicit while keeping normal startup
         isolated from optional packages and heavyweight model libraries.
+
+        Cached results are served only while BOTH hold (P0 #6):
+          * within the TTL backstop, and
+          * probed at the CURRENT environment revision.
+        Any environment change (registration, dependency install, declared
+        environment change) makes every entry stale immediately.
         """
         key = tool_name.lower().strip()
         entry = self._registry.get(key)
@@ -496,10 +596,17 @@ class ToolRegistry:
         import time as _time
         now = _time.monotonic()
         _provenance = entry.get("provenance", "manifest")
+        with self._env_lock:
+            revision = self._environment_revision
         if not refresh:
-            cached = self._availability_cache.get(key)
-            if cached and now - cached[0] < self._AVAILABILITY_CACHE_TTL_S:
-                return {"name": key, "provenance": _provenance, **cached[1]}
+            with self._env_lock:
+                cached = self._availability_cache.get(key)
+            if (
+                cached is not None
+                and now - cached[0] < self._AVAILABILITY_CACHE_TTL_S
+                and cached[1] == revision
+            ):
+                return {"name": key, "provenance": _provenance, **cached[2]}
 
         checker = entry.get("availability")
         status = interpret_availability(checker, probe=probe)
@@ -507,7 +614,15 @@ class ToolRegistry:
         # Cache DECISIVE results only. available=None (NOT_CHECKED) must keep
         # flowing through verbatim — never coerced, never frozen as knowledge.
         if isinstance(status, dict) and status.get("available") is not None:
-            self._availability_cache[key] = (now, dict(status))
+            recorded = dict(status)
+            recorded["probed_at_revision"] = revision
+            with self._env_lock:
+                # Race guard: if the environment moved while the probe ran,
+                # the fresh result is returned but NOT cached — an entry born
+                # stale would defeat the revision check entirely.
+                if self._environment_revision == revision:
+                    self._availability_cache[key] = (now, revision, recorded)
+            return {"name": key, "provenance": _provenance, **recorded}
         return {"name": key, "provenance": _provenance, **status}
 
     def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
@@ -552,6 +667,13 @@ class ToolRegistry:
             # observed action outcome. Preserve the typed result and do not run
             # prediction scoring over a capability that never executed.
             if isinstance(result, dict) and result.get("available") is False:
+                # Execution evidence CONTRADICTS any cached 'available' probe
+                # (P0 #6): ground truth wins, the cached fact is dropped, and
+                # the next lookup re-runs the real checker instead of re-freezing
+                # this failure.
+                self.invalidate_tool_availability(
+                    key, "execution reported dependency unavailable"
+                )
                 audit_logger.info(
                     f"ToolRegistry could not execute '{key}': dependency unavailable"
                 )
@@ -586,6 +708,13 @@ class ToolRegistry:
             # typed exception lazily so ToolRegistry itself remains core-only.
             from app.tools.manifest import ToolDependencyUnavailable
 
+            # Same rule as the available=False result path above: the handler
+            # could not even import its dependency, so any cached probe that
+            # said this capability was available is contradicted by ground
+            # truth and must not survive (P0 #6).
+            self.invalidate_tool_availability(
+                key, f"import error during execution: {e}"
+            )
             if isinstance(e, ToolDependencyUnavailable):
                 app_logger.warning(str(e))
                 return e.as_result()

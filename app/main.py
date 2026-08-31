@@ -130,6 +130,12 @@ class MemoryCreate(BaseModel):
 class DocUpdate(BaseModel):
     content: str
 
+class EnvironmentChangeRequest(BaseModel):
+    """Owner-declared environment change (P0 #6): e.g. a package installed
+    manually in a terminal that Arena could not observe. Clears every cached
+    availability fact immediately instead of waiting out the TTL backstop."""
+    reason: str = Field(default="owner-declared environment change")
+
 class ModelConfigUpdate(BaseModel):
     fast_model: Optional[str] = None
     main_model: Optional[str] = None
@@ -1016,6 +1022,27 @@ def tool_availability_endpoint(
         "unavailable": sum(item["available"] is False for item in records),
         "not_checked": sum(item["available"] is None for item in records),
         "tools": records,
+    }
+
+
+@router.post("/tools/availability/refresh")
+def tool_availability_refresh_endpoint(req: EnvironmentChangeRequest):
+    """Declare an environment change that Arena could not observe itself.
+
+    A pure TTL cache would keep serving stale availability facts for up to
+    _AVAILABILITY_CACHE_TTL_S after an out-of-band change (manual pip
+    install, device hotplug, model load in LM Studio). The owner declaring
+    the change advances the environment revision: every cached fact becomes
+    stale immediately and the next lookup (planner, runtime, REST) re-probes.
+    """
+    from app.cognition.runtime import CognitiveRuntime
+
+    registry = CognitiveRuntime.get_instance().registry
+    revision = registry.note_environment_change(reason=req.reason, source="owner")
+    return {
+        "success": True,
+        "environment_revision": revision,
+        "reason": req.reason,
     }
 
 

@@ -105,6 +105,27 @@ class PackageInstaller:
 
     # ── write (Level 3) ─────────────────────────────────────────────────────
     @classmethod
+    def _notify_dependency_environment_change(
+        cls, action: str, package: str, manager: str
+    ) -> None:
+        """A dependency mutation changes what every availability probe will
+        observe (P0 #6): the registry's cached available=True/False facts are
+        all stale from this moment. Notification is best-effort — a failure
+        here is logged, never propagated (the install itself succeeded)."""
+        try:
+            from app.cognition.tool_registry import get_shared_registry
+
+            get_shared_registry().note_environment_change(
+                reason=f"dependency {action}: {package} via {manager}",
+                source="package_installer",
+            )
+        except Exception as exc:
+            app_logger.warning(
+                f"Could not notify environment change after {action} of "
+                f"{package}: {exc}"
+            )
+
+    @classmethod
     def install_package(cls, package: str, manager: str = "pip", upgrade: bool = False) -> Dict[str, Any]:
         """Install a package. Level 3: requires owner approval."""
         manager = (manager or "").strip().lower()
@@ -130,6 +151,9 @@ class PackageInstaller:
             audit_logger.info(f"Installed {pkg} via {manager} (rc={out.returncode})")
             if out.returncode != 0:
                 return {"success": False, "error": (out.stderr or out.stdout or "").strip()[:500]}
+            # Newly installed dependencies can make previously unavailable
+            # tools available — every cached availability fact is now stale.
+            cls._notify_dependency_environment_change("install", pkg, manager)
             return {"success": True, "package": pkg, "manager": manager, "output": (out.stdout or "").strip()[:500]}
         except FileNotFoundError:
             return {"success": False, "error": f"{manager} is not available on this system."}
@@ -158,6 +182,10 @@ class PackageInstaller:
             audit_logger.info(f"Uninstalled {pkg} via {manager} (rc={out.returncode})")
             if out.returncode != 0:
                 return {"success": False, "error": (out.stderr or out.stdout or "").strip()[:500]}
+            # Removed dependencies can make previously available tools
+            # UNAVAILABLE — the more dangerous direction for a stale cache
+            # (a false capability claim), so this must invalidate too.
+            cls._notify_dependency_environment_change("uninstall", pkg, manager)
             return {"success": True, "package": pkg, "manager": manager}
         except FileNotFoundError:
             return {"success": False, "error": f"{manager} is not available on this system."}

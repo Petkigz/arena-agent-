@@ -67,29 +67,40 @@ class _LazyImportProxy:
         with self._lock:
             if self._resolved is not None:
                 return self._resolved
-            if self._load_error is not None:
-                raise self._load_error
             try:
                 self._resolved = getattr(importlib.import_module(self.module), self.symbol)
             except ImportError as exc:
+                # _load_error is the LAST observed error (cheap reporting for
+                # probe=False), NOT a permanent poison (P0 #6): a dependency
+                # installed after the first failure must become visible on the
+                # next load attempt, so every call re-attempts the import
+                # until it succeeds.
                 self._load_error = ToolDependencyUnavailable(
                     self.module, self.symbol, exc
                 )
                 raise self._load_error from exc
+            # A successful (re)load clears the last error: the proxy is now
+            # live and must never report a resolved capability unavailable.
+            self._load_error = None
             return self._resolved
 
     def availability(self, *, probe: bool = False) -> Dict[str, Any]:
         if self._resolved is not None:
             return {"available": True, "status": "available"}
-        if self._load_error is not None:
-            return {
-                "available": False,
-                "status": "dependency_unavailable",
-                "error": str(self._load_error),
-                "missing_dependency": self._load_error.missing_dependency,
-            }
         if not probe:
+            # Unprobed report: last observed error if any (no import attempt),
+            # otherwise honestly not_checked.
+            if self._load_error is not None:
+                return {
+                    "available": False,
+                    "status": "dependency_unavailable",
+                    "error": str(self._load_error),
+                    "missing_dependency": self._load_error.missing_dependency,
+                }
             return {"available": None, "status": "not_checked"}
+        # probe=True RE-attempts the load even past a previous failure — the
+        # dependency may have been installed since (a refresh is a re-probe,
+        # never a replay of a stale failure).
         try:
             self._load()
         except ToolDependencyUnavailable as exc:
