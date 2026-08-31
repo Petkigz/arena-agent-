@@ -459,6 +459,78 @@ def authority_probes() -> List[Tuple[str, Callable[[], Dict[str, Any]]]]:
             ("D3 unknown capabilities still honestly refused", d3_unknown_still_refused)]
 
 
+# ── section F — review #3: environment reconciliation (unnotified drift) ────
+
+def reconciliation_probes() -> List[Tuple[str, Callable[[], Dict[str, Any]]]]:
+    from app.cognition.tool_registry import ToolRegistry
+
+    def f1_unnotified_external_drift_heals_immediately():
+        """The reported failure mode, live: cached False survives a SILENT
+        dependency install only if nothing reconciles. Simulates the human
+        terminal by flipping the registry's observation of the world
+        without any note_environment_change call."""
+        installed = {"value": False}
+        probes = {"n": 0}
+
+        def provider():
+            return {"bs4": installed["value"]}
+
+        def checker():
+            probes["n"] += 1
+            if installed["value"]:
+                return {"available": True, "status": "available"}
+            return {"available": False, "status": "dependency_unavailable",
+                    "missing_dependency": "bs4"}
+
+        reg = ToolRegistry(environment_provider=provider, reconcile_interval_s=0.0)
+        reg.register_tool("web_research", "web",
+                          lambda p: {"success": True}, safety_level=0,
+                          availability=checker, provenance="dynamic")
+        first = reg.get_tool_availability("web_research")
+        if first.get("available") is not False:
+            return {"status": "fail", "detail": f"baseline probe wrong: {first}"}
+        revision_before = reg.environment_revision
+
+        installed["value"] = True  # the human's silent `pip install bs4`
+        healed = reg.get_tool_availability("web_research")  # default: no probe
+        if healed.get("available") is not True:
+            return {"status": "fail",
+                    "detail": f"silent install still served stale: {healed}"}
+        if reg.environment_revision <= revision_before:
+            return {"status": "fail", "detail": "drift did not bump the revision"}
+        if healed.get("probed_at_revision") != reg.environment_revision:
+            return {"status": "fail", "detail": "healed fact not at the new revision"}
+        return {"status": "pass",
+                "detail": f"silent install healed at revision "
+                           f"{healed.get('probed_at_revision')} (was {revision_before})"}
+
+    def f2_default_observer_reports_real_importability():
+        """Measurement honesty, live: the DEFAULT observation must match
+        importlib's view of this very interpreter for every optional
+        dependency — the reconciliation layer observes the real world,
+        not a stub."""
+        import importlib.util
+        from app.cognition.environment_state import (
+            OPTIONAL_DEPENDENCIES, observe_environment)
+        snapshot = observe_environment()
+        if set(snapshot) != set(OPTIONAL_DEPENDENCIES):
+            return {"status": "fail", "detail": "snapshot/table mismatch"}
+        wrong = [
+            f"{name}: observed={observed}"
+            for name, observed in snapshot.items()
+            if observed != (importlib.util.find_spec(name) is not None)
+        ]
+        if wrong:
+            return {"status": "fail", "detail": ", ".join(wrong)}
+        present = sum(1 for v in snapshot.values() if v)
+        return {"status": "pass",
+                "detail": f"{len(snapshot)} optional dependencies observed, "
+                           f"{present} importable — matches importlib"}
+
+    return [("F1 unnotified external drift heals on the next lookup", f1_unnotified_external_drift_heals_immediately),
+            ("F2 default observer reports real importability", f2_default_observer_reports_real_importability)]
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -468,6 +540,7 @@ def main() -> int:
         ("Fix #7 — adaptive investigation breadth", breadth_probes),
         ("Fix #8 — concept bridge + diagnostic probes", concept_probes),
         ("Fix #9 — ONE capability authority", authority_probes),
+        ("Review #3 — environment reconciliation", reconciliation_probes),
     ]
     report: Dict[str, Any] = {}
     for title, builder in sections:

@@ -338,14 +338,20 @@ class ToolRegistry:
     #   * a dependency install/uninstall        -> PackageInstaller -> note_environment_change()
     #   * any other environment change          -> note_environment_change()
     #   * execution that contradicts the cache  -> invalidate_tool_availability()
-    # (a package the owner installs in a terminal without Arena seeing it
-    # still heals via the TTL backstop).
+    #   * UNNOTIFIED external drift             -> _reconcile_environment() (review #3):
+    #                                               the observable environment surface is
+    #                                               re-read (throttled); fingerprint drift
+    #                                               re-enters through note_environment_change
+    # Drift the observation surface cannot see (services, devices) still
+    # heals via the TTL backstop below.
     _AVAILABILITY_CACHE_TTL_S = 300.0
 
     def __init__(
         self,
         event_bus: Optional[EventBus] = None,
         catalog_provider: Optional[Callable[[], Dict[str, Dict[str, Any]]]] = None,
+        environment_provider: Optional[Callable[[], Dict[str, bool]]] = None,
+        reconcile_interval_s: float = 2.0,
     ) -> None:
         # Architecture (P0 review, follow-up): the registry COMPOSES
         #   * a static catalog provider  — the manifest, read FRESH on
@@ -366,6 +372,20 @@ class ToolRegistry:
         self._env_lock = threading.RLock()
         self._availability_cache: Dict[str, tuple] = {}
         self._catalog_provider = catalog_provider or self._static_catalog
+        # Environment reconciliation (review #3): notification is only half
+        # the invalidation contract — a human `pip install` sends no event.
+        # A cheap, re-readable observation of the environment surface
+        # (app.cognition.environment_state) feeds the SAME revision epoch:
+        # observed fingerprint drift == environment change, no matter who
+        # caused it. Injectable like the catalog provider; throttled so
+        # the observation never runs at full planner cadence.
+        from app.cognition.environment_state import default_environment_provider
+        self._environment_provider = (
+            environment_provider or default_environment_provider()
+        )
+        self._reconcile_interval_s = max(0.0, float(reconcile_interval_s))
+        self._last_reconcile_monotonic: Optional[float] = None
+        self._observed_environment_fingerprint: Optional[str] = None
         self._register_default_tools()
 
     @staticmethod
@@ -468,6 +488,75 @@ class ToolRegistry:
         except Exception as exc:  # event plumbing must never break the notifier
             app_logger.warning(f"environment_changed event emission failed: {exc}")
         return revision
+
+    # ── environment reconciliation (review #3) ─────────────────────────────
+    def _reconcile_environment(self, now: float) -> bool:
+        """Detect UNNOTIFIED environment drift and feed it into the ONE
+        invalidation contract (the revision epoch).
+
+        Notifications only cover changes Arena SEES. A human running
+        ``pip install`` in a terminal changes what availability probes
+        observe without telling anyone — until now that healed only via
+        the 300s TTL backstop. This re-reads the observable environment
+        surface (importability of the optional tool dependencies — see
+        app.cognition.environment_state for the honest scope) and treats
+        fingerprint drift as an environment change:
+
+            observed state -> snapshot -> fingerprint drift -> revision
+
+        Contract:
+          * throttled — at most one observation per _reconcile_interval_s
+            (the observation is cheap but this runs on the availability
+            path, which the planner hits constantly);
+          * the FIRST observation is a BASELINE, never a change (booting
+            must not bump the revision);
+          * observation failure is swallowed (best-effort by contract —
+            a broken provider must never take availability down);
+          * drift re-enters through note_environment_change, so the cache
+            clear, the revision bump and the environment_changed event all
+            happen through the ONE existing door.
+
+        Threading: the drift bookkeeping is deliberately lock-light — two
+        racing threads may both observe and both notify; the effect is
+        idempotent (a second bump of an already-cleared cache). The
+        provider call happens OUTSIDE _env_lock (note_environment_change
+        takes that lock itself; observing while holding it could deadlock
+        against a notifier thread).
+
+        Returns True when drift was detected on THIS call (the caller
+        then forces a real re-probe — a drift-healed lookup must re-read
+        the world, never replay a stale cached failure).
+        """
+        if (
+            self._last_reconcile_monotonic is not None
+            and now - self._last_reconcile_monotonic < self._reconcile_interval_s
+        ):
+            return False
+        self._last_reconcile_monotonic = now
+        try:
+            snapshot = self._environment_provider() or {}
+        except Exception as exc:
+            from app.cognition.environment_state import log_observation_failure
+            log_observation_failure(exc)
+            return False
+        from app.cognition.environment_state import environment_fingerprint
+        fingerprint = environment_fingerprint(snapshot)
+        if self._observed_environment_fingerprint is None:
+            # Baseline: the first observation defines 'unchanged'.
+            self._observed_environment_fingerprint = fingerprint
+            return False
+        if fingerprint == self._observed_environment_fingerprint:
+            return False
+        before = self._observed_environment_fingerprint
+        self._observed_environment_fingerprint = fingerprint
+        self.note_environment_change(
+            reason=(
+                "external environment drift detected by reconciliation "
+                f"(observed surface moved: {before} -> {fingerprint})"
+            ),
+            source="reconcile",
+        )
+        return True
 
     def invalidate_tool_availability(self, tool_name: str, reason: str = "") -> None:
         """Drop ONE capability's cached availability (P0 #6).
@@ -664,7 +753,8 @@ class ToolRegistry:
           * within the TTL backstop, and
           * probed at the CURRENT environment revision.
         Any environment change (registration, dependency install, declared
-        environment change) makes every entry stale immediately.
+        environment change, or EXTERNAL drift the reconciliation observer
+        detects — review #3) makes every entry stale immediately.
 
         The entry is resolved through the ONE authority resolver (P0 #9):
         a runtime override's checker and a freshly patched catalog entry's
@@ -683,6 +773,15 @@ class ToolRegistry:
         import time as _time
         now = _time.monotonic()
         _source = entry.get("source", "static_catalog")
+        # Reconciliation runs BEFORE the cache read: unnotified external
+        # drift (a human pip install in a terminal) bumps the revision
+        # HERE, so the cached entry below is already stale and this call
+        # re-probes. Drift on THIS call additionally forces probe=True —
+        # a healed lookup must re-read the world, never replay a lazy
+        # proxy's cached load failure (the proxy only re-attempts its
+        # import when actually probed).
+        if self._reconcile_environment(now):
+            probe = True
         with self._env_lock:
             revision = self._environment_revision
         if not refresh:
