@@ -72,6 +72,11 @@ def test_machine_complaints_in_plain_language_fire():
         "the cpu fan is really loud": "overheating_thermal",
         "computer keeps freezing and crashing": "crash_instability",
         "my pc keeps restarting itself": "crash_instability",
+        "my laptop crashed twice today": "crash_instability",
+        "the app keeps freezing on startup": "crash_instability",
+        "the browser keeps freezing": "crash_instability",
+        "the server reboots randomly": "crash_instability",
+        "windows is unstable": "crash_instability",
         "no internet since this morning": "connectivity_problems",
         "disk is almost full": "storage_pressure",
         "battery drains really fast": "power_battery",
@@ -82,6 +87,50 @@ def test_machine_complaints_in_plain_language_fire():
     for text, expected_cluster in cases.items():
         clusters = [r["cluster"] for r in expand_goal(text).evidence]
         assert expected_cluster in clusters, (text, clusters)
+
+
+def test_crash_vocabulary_non_computer_meanings_do_not_fire():
+    """P1 review: crash/freeze/hang/unstable/restart are ordinary English
+    with strong non-computer meanings. This bridge sits BEFORE capability
+    discovery — an ungated fire hands every downstream candidate a machine
+    -diagnostics vocabulary, so Arena would propose computer diagnostics for
+    a financial question. Same context-gating as "slow"/"hot"."""
+    for text in (
+        "the stock market crashed today",
+        "the stock market keeps crashing this quarter",
+        "summarize the news about the market crash",
+        "the recipe is freezing — did I add too much water?",
+        "it's freezing outside today",
+        "the business is unstable this year",
+        "the region is politically unstable",
+        "let's hang out this weekend",
+        "the verdict hangs on one witness",
+        "the car crashed on the highway",
+    ):
+        expansion = expand_goal(text)
+        assert not expansion.fired, text
+        assert expansion.expanded == text, text
+
+
+def test_machine_only_symptom_words_are_their_own_context():
+    """A blue screen / BSOD is machine-only vocabulary: the complaint needs
+    no other machine word to honestly open the crash diagnostic tree."""
+    for text in ("I got a blue screen yesterday",
+                 "bsod twice this morning",
+                 "blue screen of death while printing"):
+        clusters = [r["cluster"] for r in expand_goal(text).evidence]
+        assert "crash_instability" in clusters, (text, clusters)
+
+
+def test_non_computer_meanings_do_not_pollute_discovery():
+    """End-to-end consequence (the bridge sits before capability
+    discovery): a financial question about a crash must produce NO
+    diagnostic concept evidence on any ranked tool."""
+    for text in ("the stock market crashed today",
+                 "the business is unstable"):
+        hits = rank_tools(text, limit=10)
+        polluted = [h.action_type for h in hits if h.concept_terms]
+        assert not polluted, (text, polluted)
 
 
 def test_short_text_passes_through():

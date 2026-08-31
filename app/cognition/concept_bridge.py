@@ -131,9 +131,24 @@ _CONCEPT_CLUSTERS: Tuple[ConceptCluster, ...] = (
             r"\b(?:reboot|restart)(?:s|ing)?\s+(?:itself|randomly|on\s+its\s+own)\b",
             r"\b(?:keeps?|kept)\s+(?:rebooting|restarting|freezing|crashing)\b",
         ),
+        # "crash", "freeze", "hang" and "unstable" are ordinary English with
+        # strong non-computer meanings ("the stock market crashed", "the
+        # recipe is freezing", "the business is unstable", "let's hang out")
+        # — and this bridge sits BEFORE capability discovery, so an ungated
+        # fire pollutes every downstream candidate with machine-diagnostics
+        # vocabulary. Same treatment as "slow"/"hot": the cluster fires only
+        # when the machine (or something that runs on one) is the named
+        # subject. The second pattern lists symptoms that ARE machine-only
+        # vocabulary — a blue screen is its own context evidence.
+        context_patterns=(
+            r"\b(?:computer|pc|laptop|notebook|machine|system|desktop|"
+            r"windows|mac|macbook|linux|ubuntu|everything|games?|gaming|"
+            r"programs?|apps?|software|browsers?|servers?|os)\b",
+            r"\b(?:bsod|blue\s+screen)s?\b",
+        ),
         concepts=("memory", "ram", "log", "logs", "process", "processes",
                   "temperature", "disk", "metrics"),
-        reason="Crashes/f freezes call for memory pressure, system logs "
+        reason="Crashes/freezes call for memory pressure, system logs "
                "(crash records), process state, disk health and thermals.",
     ),
     ConceptCluster(
