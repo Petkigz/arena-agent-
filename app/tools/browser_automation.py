@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -494,6 +495,107 @@ class BrowserAutomation:
     _SEQ_FAIL_POLICIES = ("abort", "continue", "recover")
     _RECOVER_RETRY_WAIT_MS = 1000
 
+    _RECOVERY_OBSERVE_TIMEOUT_MS = 3000
+
+    @staticmethod
+    def _recovery_alternatives(selector: str) -> List[str]:
+        """Deterministic alternative selectors derived from the ORIGINAL
+        selector — the re-resolution candidates for a target the page
+        re-rendered away. Fragments of the original (id / class / attribute
+        value) are re-matched under the names a re-render commonly leaves
+        behind (name, data-testid, aria-label, placeholder, visible text).
+        Every candidate is still VALIDATED by a live DOM query in
+        _recovery_resolve — this list is where to look, never a claim that
+        the target is there."""
+        s = str(selector or "").strip()
+        if not s:
+            return []
+        alts: List[str] = []
+        if s.startswith("#"):
+            frag = s[1:]
+            label = re.sub(r"[-_]+", " ", frag).strip() or frag
+            alts += [f'[name="{frag}"]', f'[data-testid="{frag}"]',
+                     f'[aria-label*="{label}" i]', f'[placeholder*="{label}" i]',
+                     f"text={label}"]
+        elif s.startswith("."):
+            frag = s[1:]
+            label = re.sub(r"[-_]+", " ", frag).strip() or frag
+            alts += [f'[class~="{frag}"]', f'[data-testid="{frag}"]',
+                     f'[aria-label*="{label}" i]', f"text={label}"]
+        else:
+            # attribute selector like [data-test=login] or [aria-label*="Go"]:
+            # capture the raw attribute value; quotes are stripped in code
+            # (the pattern stays quote-free to keep the line readable).
+            m = re.search(r"\[[^\]=]+\*?=\s*([^\]]+)", s)
+            if m:
+                frag = m.group(1).strip().strip(chr(34) + chr(39))
+                label = re.sub(r"[-_]+", " ", frag).strip() or frag
+                alts += [f'[name="{frag}"]', f'[data-testid="{frag}"]',
+                         f'[aria-label*="{label}" i]', f"text={label}"]
+        return [a for a in alts if a and a != s]
+
+    @classmethod
+    def _recovery_resolve(cls, page: Any, step: Dict[str, Any],
+                          entry: Dict[str, Any]) -> Dict[str, Any]:
+        """Observe the CURRENT DOM and re-plan the step's target (P1 review).
+
+        A blind same-selector retry is a retry, not a recovery — on a
+        dynamic page the same stale selector fails the same way twice.
+        Real recovery looks at the DOM the page has NOW:
+
+            failure -> observe DOM -> re-resolve target -> re-plan -> retry
+
+        1. OBSERVE: bounded wait for the original selector — a late DOM
+           update landing inside the window makes the original retry valid.
+        2. RE-RESOLVE: if the original target is gone, validate each
+           deterministic alternative against the live DOM; the first that
+           exists becomes the re-planned target (recorded on the entry).
+        3. RE-PLAN: return the step with the re-resolved selector (value /
+           url / wait parameters are preserved verbatim).
+
+        When nothing viable is found the ORIGINAL step is returned — the
+        retry then fails honestly and the entry keeps the observations as
+        inspectable evidence of why."""
+        selector = step.get("selector")
+        if not selector:
+            return step                      # nothing to re-resolve (navigate/wait)
+        original = str(selector)
+        observed: List[str] = []
+        # 1. OBSERVE the live DOM for the original target.
+        try:
+            wfs = getattr(page, "wait_for_selector", None)
+            if callable(wfs):
+                try:
+                    wfs(original, timeout=cls._RECOVERY_OBSERVE_TIMEOUT_MS)
+                    observed.append(
+                        f"original '{original}' appeared in DOM during recovery window")
+                    entry["recovery_observations"] = observed
+                    return step                # late update: retry as planned
+                except Exception:
+                    pass                       # the original target is gone
+            elif page.query_selector(original):
+                observed.append(f"original '{original}' present in DOM")
+                entry["recovery_observations"] = observed
+                return step
+        except Exception as exc:
+            observed.append(f"DOM observation unavailable ({type(exc).__name__})")
+        # 2. RE-RESOLVE: alternatives validated against the CURRENT DOM.
+        for alt in cls._recovery_alternatives(original):
+            try:
+                if page.query_selector(alt):
+                    observed.append(f"re-resolved '{original}' -> '{alt}'")
+                    entry["recovery_observations"] = observed
+                    entry["re_resolved_selector"] = alt
+                    re_planned = dict(step)
+                    re_planned["selector"] = alt
+                    return re_planned          # 3. RE-PLAN
+            except Exception:
+                continue
+        observed.append(f"no viable target found for '{original}'; "
+                        f"retrying the original selector")
+        entry["recovery_observations"] = observed
+        return step
+
     @classmethod
     def _execute_seq_step(cls, page: Any, i: int, verb: str, step: Dict[str, Any],
                           entry: Dict[str, Any], extracts: Dict[str, str]) -> bool:
@@ -630,10 +732,19 @@ class BrowserAutomation:
                 entry.pop("error", None)
                 entry["attempt"] = 2
                 page.wait_for_timeout(cls._RECOVER_RETRY_WAIT_MS)
+                # Recovery is not a blind retry (P1 review): observe the
+                # CURRENT DOM, re-resolve the step's target when the page
+                # re-rendered it away, re-plan, THEN retry — otherwise the
+                # same stale selector fails the same way twice.
+                step = cls._recovery_resolve(page, step, entry)
                 ok = cls._execute_seq_step(page, i, verb, step, entry, extracts)
                 entry["recovered"] = ok
                 if ok:
-                    app_logger.info(f"Sequential browser step {i} ({verb}) recovered on retry")
+                    re_resolved = entry.get("re_resolved_selector")
+                    app_logger.info(
+                        f"Sequential browser step {i} ({verb}) recovered on retry"
+                        + (f" via re-resolved selector {re_resolved!r}"
+                           if re_resolved else ""))
 
             if not ok and not optional and policy in ("abort", "recover"):
                 aborted_at = i

@@ -549,3 +549,118 @@ def test_required_interaction_failure_still_fails_the_workflow():
     assert res["optional_steps_failed"] == 0
     assert res["interaction_executed"] is False
     assert res["success"] is False
+
+
+# ── recovery observes the DOM and re-resolves; it is not a blind retry ───────
+# P1 review: failure -> wait 1s -> SAME action is a retry, not a recovery —
+# on a dynamic page the same stale selector fails the same way twice. Real
+# recovery: observe the current DOM, re-resolve the target, re-plan, retry.
+
+class DynamicPage:
+    """A page whose DOM RE-RENDERS: models query_selector / wait_for_selector
+    against a live selector set. `late` holds selectors that materialize
+    only when the recovery observation waits for them (a late DOM update)."""
+
+    def __init__(self, dom=(), late=()):
+        self.ops = []
+        self.dom = set(dom)
+        self.late = set(late)
+        self.keyboard = FakeKeyboard(self.ops)
+
+    def query_selector(self, sel):
+        return object() if sel in self.dom else None
+
+    def wait_for_selector(self, sel, timeout=None):
+        if sel in self.late:            # the DOM updates during the wait
+            self.dom.add(sel)
+        if sel in self.dom:
+            return object()
+        raise RuntimeError(f"timeout waiting for {sel}")
+
+    def click(self, sel):
+        if sel in self.dom:
+            self.ops.append(("click", sel))
+            self.wait_for_timeout(500)
+        else:
+            raise RuntimeError(f"element {sel} not found")
+
+    def fill(self, sel, value):
+        if sel in self.dom:
+            self.ops.append(("fill", sel, value))
+        else:
+            raise RuntimeError(f"element {sel} not found")
+
+    def wait_for_timeout(self, ms):
+        self.ops.append(("wait", ms))
+
+    def inner_text(self, sel):
+        return f"text@{sel}"
+
+
+def test_recovery_re_resolves_when_dom_rerendered():
+    """The review's core case: the page re-rendered and '#login' is GONE —
+    the button now exists as [name="login"]. A blind retry of '#login'
+    fails identically; recovery must observe the DOM, re-resolve and retry
+    the target that actually exists NOW."""
+    page = DynamicPage(dom={'[name="login"]', "#out"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "click", "selector": "#login"},
+        {"action": "extract", "selector": "#out"},
+    ], fail_policy="recover")
+    entry = res["step_log"][0]
+    assert entry["recovered"] is True
+    assert entry["re_resolved_selector"] == '[name="login"]'
+    assert any("re-resolved" in o for o in entry["recovery_observations"])
+    # The RETRY ran against the re-resolved target, not the stale selector.
+    assert ("click", '[name="login"]') in page.ops
+    assert ("click", "#login") not in page.ops
+    assert res["aborted"] is False
+    assert res["required_steps_failed"] == 0
+    assert res["extracts"]["#out"] == "text@#out"
+
+
+def test_recovery_uses_original_when_it_appears_late():
+    """A late DOM update: the original selector was not there at attempt
+    one but lands inside the bounded observation window — the original step
+    retries as planned (no re-resolution needed)."""
+    page = DynamicPage(dom={"#out"}, late={"#email"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#email", "value": "a@b.c"},
+        {"action": "extract", "selector": "#out"},
+    ], fail_policy="recover")
+    entry = res["step_log"][0]
+    assert entry["recovered"] is True
+    assert "re_resolved_selector" not in entry
+    assert any("appeared in DOM" in o for o in entry["recovery_observations"])
+    assert ("fill", "#email", "a@b.c") in page.ops
+    assert res["aborted"] is False
+
+
+def test_recovery_without_viable_target_fails_honestly():
+    """Nothing viable exists (original gone, no alternative matches): the
+    retry fails, the workflow aborts as designed — and the entry keeps the
+    recovery observations as evidence of WHY, never a fabricated success."""
+    page = DynamicPage(dom={"#out"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "click", "selector": "#gone"},
+        {"action": "extract", "selector": "#out"},
+    ], fail_policy="recover")
+    entry = res["step_log"][0]
+    assert entry["recovered"] is False
+    assert res["aborted"] is True
+    assert res["required_steps_failed"] == 1
+    assert any("no viable target" in o for o in entry["recovery_observations"])
+
+
+def test_recovery_preserves_step_parameters_through_re_plan():
+    """The re-planned step keeps its payload verbatim: a re-resolved fill
+    still fills the ORIGINAL value, not a blank."""
+    page = DynamicPage(dom={'[name="email"]', "#out"})
+    res = BrowserAutomation._run_sequential_steps(page, [
+        {"action": "fill", "selector": "#email", "value": "secret-value"},
+        {"action": "extract", "selector": "#out"},
+    ], fail_policy="recover")
+    entry = res["step_log"][0]
+    assert entry["recovered"] is True
+    assert entry["re_resolved_selector"] == '[name="email"]'
+    assert ("fill", '[name="email"]', "secret-value") in page.ops
