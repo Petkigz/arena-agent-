@@ -223,6 +223,11 @@ class ToolMatch:
     # and which backend produced it ("embeddings" | "local" | "none").
     semantic_score: Optional[float] = None
     semantic_backend: Optional[str] = None
+    # Concept bridge (P0 #8): which symptom clusters fired for this goal and
+    # which of the bridge's concept terms matched THIS tool — the evidence
+    # that a symptom-derived proposal rests on.
+    concept_clusters: Tuple[str, ...] = ()
+    concept_terms: Tuple[str, ...] = ()
 
 
 def _tokens(text: str) -> List[str]:
@@ -404,6 +409,31 @@ def rank_tools(
     words = set(re.findall(r"[a-z_]+", text))
     text_tokens = set(_tokens(text))
 
+    # Concept bridge (P0 #8): colloquial SYMPTOMS expand into the diagnostic
+    # concept vocabulary they imply, so "why is my computer suddenly slow"
+    # can discover process inspection, CPU/memory/disk metrics, startup
+    # inventory, network activity, logs and thermals even though none of
+    # those words appear in the request. The bridge fires ONLY on
+    # recognized symptom patterns, never rewrites the goal, and records its
+    # evidence — discovery PROPOSES with inspectable reasoning; the planner
+    # and gates still decide.
+    from app.cognition.concept_bridge import expand_goal
+    expansion = expand_goal(user_text)
+    if expansion.fired:
+        concept_tokens = set(_tokens(" ".join(expansion.concepts)))
+        words |= concept_tokens
+        text_tokens |= concept_tokens
+        # Precise attribution: which fired cluster owns each concept term, so
+        # a ToolMatch's concept_clusters are exactly the clusters that
+        # contributed ITS matched terms — not every cluster that fired.
+        concept_owners: Dict[str, set] = {}
+        for record in expansion.evidence:
+            for concept in record["concepts"]:
+                concept_owners.setdefault(concept, set()).add(record["cluster"])
+    else:
+        concept_tokens = set()
+        concept_owners = {}
+
     # Semantic layer (P0 review #4): conceptual relevance from goal/tool
     # embeddings when a local embedding model is loaded, else in-process
     # fuzzy TF-IDF. Keywords answer "which tools mention these words";
@@ -413,15 +443,17 @@ def rank_tools(
         # Description MEANING only: the name is the lexical layer's evidence
         # (verbatim hits, synonyms) — scoring it here too double-counted and
         # let name-only matches saturate the threshold on tiny corpora.
+        # The bridge's concepts ride along in the expanded text so both the
+        # embedding backend and the TF-IDF fallback see the enriched goal.
         tool_texts = {
             action_type: str(entry.get("description", "") or "").lower()
             for action_type, entry in manifest.items()
         }
-        sem_scores, sem_backend = semantic_scores(user_text, tool_texts)
+        sem_scores, sem_backend = semantic_scores(expansion.expanded, tool_texts)
     except Exception:
         sem_scores, sem_backend = {}, "none"
 
-    scored: List[Tuple[float, str, Tuple[str, ...]]] = []
+    scored: List[Tuple[float, str, Tuple[str, ...], Tuple[str, ...]]] = []
     for action_type, entry in manifest.items():
         haystack = f"{action_type.replace('_', ' ')} {entry.get('description', '')}".lower()
         tool_tokens = set(_tokens(haystack))
@@ -436,6 +468,9 @@ def rank_tools(
         # fuzziness alone made 'photo' look like 'phone' — so it never boosts.
         score = score + (2.5 * sem if sem >= 0.5 else 0.0)
         matched: List[str] = list(overlap)
+        # Which of this tool's matches came from the BRIDGE (symptom-derived
+        # evidence — carried on the ToolMatch so the proposal shows its work).
+        concept_hits = tuple(sorted(overlap & concept_tokens))
         for phrase in SYNONYMS.get(action_type, []):
             phrase_tokens = set(re.findall(r"[a-z_]+", phrase))
             # Single-word synonyms must match on word boundaries: a bare
@@ -456,15 +491,19 @@ def rank_tools(
         # semantic similarity is strong; the fused score must then clear the
         # 1.5 noise floor on semantic evidence alone.
         if score > 0 or sem >= 0.6:
-            scored.append((score, action_type, tuple(sorted(set(matched)))))
+            scored.append((score, action_type, tuple(sorted(set(matched))), concept_hits))
 
     scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
     discovered: List[ToolMatch] = []
-    for score, action_type, matched_terms in scored[: max(1, limit)]:
+    for score, action_type, matched_terms, concept_hits in scored[: max(1, limit)]:
         if score < 1.5:
             break  # weak single-token overlaps are noise the domain baseline covers
         payload = _extract_payload(user_text, action_type=action_type)
         payload.setdefault("query", user_text)
+        contributing_clusters = tuple(sorted({
+            owner for term in concept_hits
+            for owner in concept_owners.get(term, ())
+        }))
         discovered.append(ToolMatch(
             action_type=action_type,
             score=score,
@@ -472,5 +511,7 @@ def rank_tools(
             matched_terms=matched_terms,
             semantic_score=round(sem_scores.get(action_type, 0.0), 4),
             semantic_backend=sem_backend if sem_scores else None,
+            concept_clusters=contributing_clusters,
+            concept_terms=concept_hits,
         ))
     return discovered

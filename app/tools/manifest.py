@@ -412,6 +412,28 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("restart_process", "system", 3, "Restart a process (irreversible)",
         _wrap(ProcessManager.restart_process, "pid"))
 
+    # ── System diagnostics (P0 #8): the read-only probes a performance or
+    # stability complaint needs. A matcher cannot discover capabilities that
+    # do not exist — these complete the standard diagnostic tree
+    # (metrics, thermals, network activity, startup inventory, system logs)
+    # as Level-0 observations with honest per-metric platform status.
+    SystemDiagnostics = _LazyImportProxy("app.tools.system_diagnostics", "SystemDiagnostics")
+    add("system_metrics", "system", 0,
+        "System performance metrics: CPU load per core, memory and swap pressure, disk usage and disk IO, uptime, top processes",
+        _wrap(SystemDiagnostics.system_metrics, "interval", "top"))
+    add("temperature_status", "system", 0,
+        "CPU/thermal sensor temperatures (honest platform support; throttling risk flag)",
+        _wrap(SystemDiagnostics.temperature))
+    add("network_activity", "system", 0,
+        "Local network activity: throughput counters since boot, active connections, top remote endpoints",
+        _wrap(SystemDiagnostics.network_activity, "top"))
+    add("startup_programs", "system", 0,
+        "Startup programs and enabled services inventory (boot/login autostart)",
+        _wrap(SystemDiagnostics.startup_programs))
+    add("recent_logs", "system", 0,
+        "Recent system log tail (journalctl / syslog / Event Log) with per-source status",
+        _wrap(SystemDiagnostics.recent_logs, "lines", "source"))
+
     # ── Vision / media ──────────────────────────────────────────────────────
     add("screen_capture", "vision", 0, "Capture the screen",
         _ignore_payload(ScreenCaptureTool.capture_screen_delta))
