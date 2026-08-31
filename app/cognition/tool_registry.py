@@ -42,6 +42,12 @@ The authority contract — three DISTINCT notions, never conflated:
                                    | registry_copy.
   * capability_safety(name)     -> the ONE safety reading (unknown -> 99,
                                    gated: unvetted is not read-only)
+  * internal_probe_safety(name) -> trusted level of a POSITIVELY
+                                   REGISTERED internal probe, else None —
+                                   trust is registered, never inferred
+                                   from 'not found' (the loop's probes
+                                   declare themselves at their
+                                   registration seams)
   * ToolRegistry.capabilities() -> the ONE capability universe, the
                                    EFFECTIVE view rebuilt fresh on every
                                    call — identical semantics to
@@ -163,12 +169,58 @@ def capability_entry(name: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Internal probes (P0 review, follow-up #4): trust is POSITIVE, never
+# inferred from 'not found'. The cognitive loop runs probes that live
+# OUTSIDE the capability universe (registered planner/handler pairs, not
+# manifest or runtime-installed tools). A name earns Level-0 trust only
+# because a registration seam DECLARED it here — anything the authority
+# and this registry both do not know is gated (capability_safety -> 99).
+# ---------------------------------------------------------------------------
+_INTERNAL_PROBES: Dict[str, Dict[str, Any]] = {}
+
+
+def register_internal_probe(name: str, safety_level: int = 0, source: str = "") -> None:
+    """Positively declare a cognitive-loop internal probe and the safety
+    level its autonomous execution is trusted at (default 0: read-only).
+
+    The registration seams are InvestigationRegistry.register (a plan
+    from an explicitly REGISTERED probe planner) and
+    InvestigationExecutor.register (an explicitly registered handler).
+    Nothing else may declare trust."""
+    _INTERNAL_PROBES[str(name or "").lower()] = {
+        "name": str(name or ""),
+        "safety_level": int(safety_level),
+        "provenance": "internal_probe",
+        "declared_by": source or "unspecified",
+    }
+
+
+def internal_probe_safety(name: str) -> Optional[int]:
+    """The trusted safety level of a REGISTERED internal probe, or None.
+
+    This is the ONLY path by which a name outside the capability
+    universe earns trust. 'Not found anywhere' is never evidence of
+    safety — callers must fall back to capability_safety (unknown -> 99,
+    gated), never to zero."""
+    entry = _INTERNAL_PROBES.get(str(name or "").lower())
+    if entry is None:
+        return None
+    return int(entry.get("safety_level", 0))
+
+
+def reset_internal_probes() -> None:
+    """Test seam: drop all internal-probe declarations."""
+    _INTERNAL_PROBES.clear()
+
+
 def capability_safety_or_none(name: str) -> Optional[int]:
     """The authoritative safety reading, or None when the capability is
-    unknown. Callers with a historical 'unknown -> free' contract (the
-    reasoning loop's internally registered probes) use this so unknown
-    INTERNAL probes stay trusted while every KNOWN capability reads the
-    one authority."""
+    unknown TO THE AUTHORITY. None means 'not found' — it is NEVER
+    evidence of safety. A caller may treat a None as trusted ONLY for
+    names it has positively established elsewhere (see
+    internal_probe_safety); treating every not-found name as free
+    recreates the unknown-is-free hole."""
     entry = capability_entry(name)
     if entry is None:
         return None

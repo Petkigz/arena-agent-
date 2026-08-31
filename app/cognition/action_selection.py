@@ -77,7 +77,21 @@ class InvestigationRegistry:
     def plan(self, need: InformationNeed) -> Optional[InvestigationPlan]:
         planner = self._probes.get(need.target)
         if planner is not None:
-            return planner(need)
+            plan = planner(need)
+            if plan is not None:
+                # Positive trust (P0 review, follow-up #4): a plan from an
+                # explicitly REGISTERED internal-probe planner declares its
+                # tool as an internal probe. Trust is registered at the
+                # seam — never inferred from the authority not knowing the
+                # name (that was the unknown-is-free hole).
+                try:
+                    from app.cognition.tool_registry import register_internal_probe
+                    register_internal_probe(
+                        plan.tool, safety_level=0,
+                        source=f"investigation_planner:{need.target}")
+                except Exception:
+                    pass
+            return plan
         return self._plan_from_manifest(need)
 
     def _plan_from_manifest(self, need: InformationNeed) -> Optional[InvestigationPlan]:
@@ -137,6 +151,15 @@ class InvestigationExecutor:
 
     def register(self, name: str, tool: Callable[..., Any]) -> None:
         self._tools[name] = tool
+        # Positive trust (P0 review, follow-up #4): an explicitly
+        # registered internal-probe handler declares its name — trust is
+        # registered at the seam, never inferred from absence.
+        try:
+            from app.cognition.tool_registry import register_internal_probe
+            register_internal_probe(name, safety_level=0,
+                                    source="investigation_executor")
+        except Exception:
+            pass
 
     def execute(self, plan: InvestigationPlan) -> ActionResult:
         tool = self._tools.get(plan.tool)

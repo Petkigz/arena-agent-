@@ -362,3 +362,98 @@ def test_counterfactual_level_map_covers_every_native_path():
             assert levels[name] == int(manifest[name]["safety_level"]), name
         else:
             assert levels[name] == 1, name
+
+
+# ---------------------------------------------------------------------------
+# Positive internal-probe trust (follow-up review #4): never infer trust
+# from 'not found'. capability_safety -> unknown = 99 (gated);
+# internal_probe_safety -> ONLY names registered at a registration seam.
+# ---------------------------------------------------------------------------
+
+def test_unknown_names_are_never_free_probe_risk():
+    """An arbitrary unknown action must cost enough to escalate, not zero.
+    The old fallback (authority never heard of it -> Level-0 free) was the
+    unknown-is-free hole."""
+    from app.cognition.reasoning_loop import CognitiveReasoningLoop
+
+    tr.reset_internal_probes()
+    try:
+        assert tr.internal_probe_safety("arbitrary_unknown_action") is None
+        assert tr.capability_safety_or_none("arbitrary_unknown_action") is None
+        assert tr.capability_safety("arbitrary_unknown_action") == 99
+        assert CognitiveReasoningLoop._probe_risk_cost("arbitrary_unknown_action") == 99.0
+    finally:
+        tr.reset_internal_probes()
+
+
+def test_internal_probe_trust_is_registered_not_inferred():
+    """The name earns Level-0 trust only when a seam DECLARES it — and the
+    declared level is respected (a Level-1 internal probe costs 1)."""
+    from app.cognition.reasoning_loop import CognitiveReasoningLoop
+
+    tr.reset_internal_probes()
+    try:
+        tr.register_internal_probe("declared_internal_probe", safety_level=0,
+                                   source="test")
+        assert tr.internal_probe_safety("declared_internal_probe") == 0
+        assert CognitiveReasoningLoop._probe_risk_cost("declared_internal_probe") == 0.0
+
+        tr.register_internal_probe("heavier_internal_probe", safety_level=1,
+                                   source="test")
+        assert tr.internal_probe_safety("heavier_internal_probe") == 1
+        assert CognitiveReasoningLoop._probe_risk_cost("heavier_internal_probe") == 1.0
+    finally:
+        tr.reset_internal_probes()
+
+
+def test_authority_level_wins_over_internal_declaration():
+    """A name the authority knows reads its DECLARED capability level even
+    if someone also registered it as an internal probe — the authority is
+    the truth for real capabilities."""
+    from app.cognition.reasoning_loop import CognitiveReasoningLoop
+
+    tr.reset_internal_probes()
+    try:
+        tr.register_internal_probe("web_search", safety_level=0, source="test")
+        # web_search declares Level-0 in the catalog... use pdf_merge (2)
+        tr.register_internal_probe("pdf_merge", safety_level=0, source="test")
+        assert CognitiveReasoningLoop._probe_risk_cost("pdf_merge") == 2.0
+    finally:
+        tr.reset_internal_probes()
+
+
+def test_registration_seams_declare_internal_probes():
+    """Both seams: an explicitly registered probe planner declares its
+    plan's tool, and an explicitly registered executor handler declares
+    its name. Discovery-discovered manifest tools need no declaration."""
+    from app.cognition.action_selection import (
+        InvestigationExecutor, InvestigationRegistry, InvestigationPlan)
+    from app.cognition.reasoning_loop import CognitiveReasoningLoop
+
+    tr.reset_internal_probes()
+    try:
+        # planner seam
+        registry = InvestigationRegistry()
+        registry.register("chrome", lambda n: InvestigationPlan(
+            tool="probe_chrome", arguments={}, target=n.target,
+            reason=n.reason, priority=n.priority))
+        plan = registry.plan(_Need("is chrome responsive", "chrome", "r"))
+        assert plan.tool == "probe_chrome"
+        assert tr.internal_probe_safety("probe_chrome") == 0
+        assert CognitiveReasoningLoop._probe_risk_cost("probe_chrome") == 0.0
+
+        # executor seam
+        executor = InvestigationExecutor()
+        executor.register("probe_widget", lambda **kw: "ok")
+        assert tr.internal_probe_safety("probe_widget") == 0
+        assert CognitiveReasoningLoop._probe_risk_cost("probe_widget") == 0.0
+    finally:
+        tr.reset_internal_probes()
+
+
+class _Need:
+    def __init__(self, question, target, reason):
+        self.question = question
+        self.target = target
+        self.reason = reason
+        self.priority = 0.5

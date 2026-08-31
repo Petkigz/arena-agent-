@@ -219,15 +219,29 @@ class CognitiveReasoningLoop:
         if not tool_name:
             return 0.0
         try:
-            # P0 review #12: safety of KNOWN capabilities is read from the
-            # ONE authority (runtime-installed tools included). Names the
-            # authority does not know are this loop's own registered
-            # probes — trusted internal Level-0, as before.
-            from app.cognition.tool_registry import capability_safety_or_none
+            # P0 review, follow-up #4: trust is POSITIVE, never inferred
+            # from 'not found'.
+            #   * a capability the authority knows -> its declared level
+            #     (runtime-installed tools included);
+            #   * a name POSITIVELY registered as an internal probe (the
+            #     planner/executor registration seams declared it) -> the
+            #     registered probe level;
+            #   * anything else -> capability_safety: unknown -> 99,
+            #     GATED. The old 'authority never heard of it -> free'
+            #     fallback was the unknown-is-free hole: an arbitrary
+            #     unknown action must cost enough to escalate, not zero.
+            from app.cognition.tool_registry import (
+                capability_safety, capability_safety_or_none, internal_probe_safety)
             level = capability_safety_or_none(tool_name)
-            return float(level) if level is not None else 0.0
+            if level is None:
+                level = internal_probe_safety(tool_name)
+            if level is None:
+                level = capability_safety(tool_name)  # unknown -> 99
+            return float(level)
         except Exception:
-            return 0.0
+            # Fail CLOSED: if the authority cannot be consulted, the probe
+            # is unvetted — it must not be free.
+            return 99.0
 
     def _emit(self, event_type: str, data: dict[str, Any]) -> None:
         if self.event_bus is not None:
