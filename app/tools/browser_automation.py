@@ -484,6 +484,10 @@ class BrowserAutomation:
 
     _SEQ_STEP_LIMIT = 40
     _WAIT_CAP_MS = 15000
+    # P0 review #7: 40 is a runaway-workflow ceiling, not a silent crop.
+    # Hitting it (or any caller-chosen step_limit) is REPORTED — steps
+    # beyond the limit are never silently discarded.
+    _SEQ_STEP_HARD_LIMIT = 200
     # P0 review #6: execution semantics are EXPLICIT. Defaulting autonomous
     # workflows to continue-on-failure let a failed login be followed by
     # 'click dashboard' and 'delete record' — bizarre and dangerous.
@@ -548,7 +552,8 @@ class BrowserAutomation:
 
     @classmethod
     def _run_sequential_steps(cls, page: Any, steps: List[Dict[str, Any]],
-                              fail_policy: str = "abort") -> Dict[str, Any]:
+                              fail_policy: str = "abort",
+                              step_limit: Optional[int] = None) -> Dict[str, Any]:
         """Execute an ORDERED web workflow (P0 bottleneck #6, review #6).
 
         Each step runs against the page state left by the previous one —
@@ -570,6 +575,14 @@ class BrowserAutomation:
 
         Steps may declare "optional": true — under ANY policy an optional
         step failure is logged and skipped, never aborting the workflow.
+
+        step_limit — the workflow step ceiling. The default (40) is a
+        runaway guard: exceeding it is REPORTED as workflow_truncated with
+        steps_requested vs steps_executed, and (via navigate_and_extract)
+        fails the workflow — the agent must not believe it executed a
+        60-step workflow that stopped at 40. An EXPLICIT step_limit means
+        truncation is intentional best-effort execution: reported honestly,
+        not a failure. Capped by _SEQ_STEP_HARD_LIMIT (200).
         """
         policy = str(fail_policy or "").lower().strip()
         if policy not in cls._SEQ_FAIL_POLICIES:
@@ -578,10 +591,25 @@ class BrowserAutomation:
                     f"Unknown browser fail_policy '{fail_policy}'; using 'abort' (safe default)")
             policy = "abort"
 
+        steps_all = list(steps or [])
+        steps_requested = len(steps_all)
+        try:
+            requested_limit = int(step_limit) if step_limit is not None else cls._SEQ_STEP_LIMIT
+        except (TypeError, ValueError):
+            requested_limit = cls._SEQ_STEP_LIMIT
+        effective_limit = max(1, min(requested_limit, cls._SEQ_STEP_HARD_LIMIT))
+        capped = steps_all[:effective_limit]
+        truncated = steps_requested > len(capped)
+        truncation_intentional = truncated and step_limit is not None
+        if truncated:
+            app_logger.warning(
+                f"Browser workflow truncated: {steps_requested} steps requested, "
+                f"{len(capped)} will run ({steps_requested - len(capped)} discarded)"
+                f"{' intentionally' if truncation_intentional else ' by the default runaway ceiling'}")
+
         extracts: Dict[str, str] = {}
         step_log: List[Dict[str, Any]] = []
         aborted_at: Optional[int] = None
-        capped = (steps or [])[: cls._SEQ_STEP_LIMIT]
         for i, step in enumerate(capped):
             verb = str(step.get("action") or step.get("verb") or "").lower().strip()
             optional = bool(step.get("optional"))
@@ -625,6 +653,10 @@ class BrowserAutomation:
             "aborted_at": aborted_at,
             "steps_planned": len(capped),
             "steps_executed": len(step_log),
+            "workflow_truncated": truncated,
+            "truncation_intentional": truncation_intentional,
+            "steps_requested": steps_requested,
+            "step_limit": effective_limit,
         }
 
     @classmethod
@@ -637,6 +669,7 @@ class BrowserAutomation:
         use_profile: bool = False,
         steps: Optional[List[Dict[str, Any]]] = None,
         fail_policy: str = "abort",
+        step_limit: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Automates real browser navigation using Playwright with HTTP fallback.
@@ -700,12 +733,23 @@ class BrowserAutomation:
                 legacy_interaction_failures = 0
                 workflow_aborted = False
                 aborted_at_step = None
+                workflow_truncated = False
+                steps_requested = 0
+                steps_executed = 0
                 if steps:
-                    seq = cls._run_sequential_steps(page, steps, fail_policy=fail_policy)
+                    seq = cls._run_sequential_steps(page, steps, fail_policy=fail_policy,
+                                                    step_limit=step_limit)
                     extracts = seq["extracts"]
                     step_log = seq["step_log"]
                     workflow_aborted = bool(seq.get("aborted"))
                     aborted_at_step = seq.get("aborted_at")
+                    workflow_truncated = bool(seq.get("workflow_truncated"))
+                    steps_requested = seq.get("steps_requested", len(steps))
+                    steps_executed = seq.get("steps_executed", len(step_log))
+                    if workflow_truncated and not seq.get("truncation_intentional"):
+                        app_logger.warning(
+                            f"Browser workflow truncated at the default step ceiling: "
+                            f"{steps_requested} steps requested, {steps_executed} executed")
 
                 # Fill out input fields if specified
                 elif fill_inputs:
@@ -770,13 +814,23 @@ class BrowserAutomation:
                 )
             # An aborted workflow did not achieve its objective, even when
             # the steps that DID run all succeeded — success=False is the
-            # honest outcome (P0 review #6).
-            execution_success = interaction_executed is not False and not workflow_aborted
+            # honest outcome (P0 review #6). So does UNINTENTIONAL
+            # truncation: the agent must not believe a 60-step workflow
+            # ran when 40 did (P0 review #7).
+            unintentional_truncation = workflow_truncated and step_limit is None
+            execution_success = (
+                interaction_executed is not False
+                and not workflow_aborted
+                and not unintentional_truncation
+            )
 
             return {
                 "success": execution_success,
                 "workflow_aborted": workflow_aborted,
                 "aborted_at_step": aborted_at_step,
+                "workflow_truncated": workflow_truncated,
+                "steps_requested": steps_requested,
+                "steps_executed": steps_executed,
                 "fail_policy": fail_policy,
                 "url": url,
                 "title": page_title,

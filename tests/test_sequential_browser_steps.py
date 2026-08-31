@@ -261,3 +261,130 @@ def test_web_agent_passes_wait_ms_through():
             auto_save_memory=False)
 
     assert captured["steps"] == [{"action": "wait", "ms": 5000}]
+
+
+# ---------------------------------------------------------------------------
+# P0 review #7: the 40-step ceiling is a runaway guard, NOT a silent crop.
+# ---------------------------------------------------------------------------
+
+def _many_steps(n, action="wait"):
+    return [{"action": action, "ms": 1} for _ in range(n)]
+
+
+def test_truncation_at_default_limit_is_reported_not_silent():
+    """45 steps requested, default limit: 40 run, and the result SAYS so."""
+    page = FakePage()
+    res = BrowserAutomation._run_sequential_steps(page, _many_steps(45))
+    assert res["workflow_truncated"] is True
+    assert res["truncation_intentional"] is False
+    assert res["steps_requested"] == 45
+    assert res["steps_planned"] == 40
+    assert res["steps_executed"] == 40
+    assert len(res["step_log"]) == 40
+    assert res["aborted"] is False  # every step that ran, succeeded
+
+
+def test_explicit_step_limit_makes_truncation_intentional():
+    """A caller-chosen ceiling is deliberate best-effort execution."""
+    page = FakePage()
+    res = BrowserAutomation._run_sequential_steps(page, _many_steps(10), step_limit=3)
+    assert res["workflow_truncated"] is True
+    assert res["truncation_intentional"] is True
+    assert res["steps_requested"] == 10
+    assert res["steps_executed"] == 3
+
+
+def test_step_limit_can_raise_the_default_ceiling_up_to_the_hard_cap():
+    page = FakePage()
+    res = BrowserAutomation._run_sequential_steps(page, _many_steps(50), step_limit=60)
+    assert res["workflow_truncated"] is False
+    assert res["steps_executed"] == 50
+
+
+def test_step_limit_never_exceeds_the_hard_cap():
+    page = FakePage()
+    res = BrowserAutomation._run_sequential_steps(
+        page, _many_steps(300), step_limit=100000)
+    assert res["step_limit"] == BrowserAutomation._SEQ_STEP_HARD_LIMIT
+    assert res["steps_executed"] == BrowserAutomation._SEQ_STEP_HARD_LIMIT
+    assert res["workflow_truncated"] is True
+    assert res["steps_requested"] == 300
+
+
+def test_short_workflow_reports_no_truncation():
+    page = FakePage()
+    res = BrowserAutomation._run_sequential_steps(page, _many_steps(5))
+    assert res["workflow_truncated"] is False
+    assert res["steps_requested"] == res["steps_executed"] == 5
+
+
+def test_truncated_workflow_with_step_failure_reports_both():
+    """Truncation and abort are independent, orthogonal facts."""
+    page = FakePage(fail_on={"fill"})
+    steps = [{"action": "fill", "selector": "#gone", "value": "x"}] + _many_steps(44, action="click")
+    res = BrowserAutomation._run_sequential_steps(page, steps)  # default abort
+    assert res["aborted"] is True
+    assert res["aborted_at"] == 0
+    assert res["steps_executed"] == 1
+    assert res["workflow_truncated"] is True
+    assert res["steps_requested"] == 45
+
+
+def test_navigate_and_extract_fails_on_unintentional_truncation():
+    """End-to-end: a 60-step workflow that stops at the default 40 must
+    come back success=False — the agent must not believe it ran 60."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    class RichPage(FakePage):
+        def set_viewport_size(self, size):
+            pass
+
+        def goto(self, url, **kw):
+            self.ops.append(("navigate", url))
+
+        def screenshot(self, path=None, **kw):
+            pass
+
+        def title(self):
+            return "t"
+
+    class FakeBrowser:
+        def new_page(self):
+            return page
+
+        def close(self):
+            pass
+
+    page = RichPage()
+    fake_sync = types.SimpleNamespace()
+    fake_module = types.ModuleType("playwright")
+    fake_api = types.ModuleType("playwright.sync_api")
+    fake_api.sync_playwright = lambda: MagicMock(
+        __enter__=lambda s: types.SimpleNamespace(chromium=object()),
+        __exit__=lambda *a: False)
+    fake_module.sync_api = fake_api
+    sys.modules.setdefault("playwright", fake_module)
+    sys.modules.setdefault("playwright.sync_api", fake_api)
+
+    with patch.object(BrowserAutomation, "_launch", return_value=FakeBrowser()), \
+         patch.object(BrowserAutomation.GROUNDING, "observe_tab",
+                      return_value=MagicMock(to_dict=lambda: {})):
+        res = BrowserAutomation.navigate_and_extract(
+            "https://example.com", steps=_many_steps(60, action="click"))
+    assert res["workflow_truncated"] is True
+    assert res["steps_requested"] == 60
+    assert res["steps_executed"] == 40
+    assert res["success"] is False  # unintentional truncation fails honestly
+
+    # The same workflow with an EXPLICIT limit is intentional best-effort.
+    with patch.object(BrowserAutomation, "_launch", return_value=FakeBrowser()), \
+         patch.object(BrowserAutomation.GROUNDING, "observe_tab",
+                      return_value=MagicMock(to_dict=lambda: {})):
+        res2 = BrowserAutomation.navigate_and_extract(
+            "https://example.com", steps=_many_steps(60, action="click"),
+            step_limit=60)
+    assert res2["workflow_truncated"] is False
+    assert res2["steps_executed"] == 60
+    assert res2["success"] is True
