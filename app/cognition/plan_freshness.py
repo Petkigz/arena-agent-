@@ -21,7 +21,11 @@ class PlanFreshnessStore:
   steps=review.snapshot.get('steps',[]);contracts=[]
   for step in steps:
    action=str(step.get('action_type',''))
-   entry=(runtime.registry.get_capability(action) if hasattr(runtime.registry,'get_capability') else None) or {}
+   # P0 #9: contracts record the EFFECTIVE capability's safety (runtime
+   # override or fresh catalog beat the registry's boot copy), same as the
+   # gate reasons with — a plan's assumptions must not describe a different
+   # capability version than the one that would execute.
+   entry=(runtime.registry.effective_capability(action) if hasattr(runtime.registry,'effective_capability') else None) or {}
    availability=runtime.registry.get_tool_availability(action,probe=False) if action else {'status':'no_action'}
    contracts.append({'step_id':step.get('step_id'),'action_type':action,'safety_level':entry.get('safety_level'),'availability':availability.get('status')})
   interfaces=[]

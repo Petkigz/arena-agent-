@@ -538,20 +538,52 @@ class ToolRegistry:
                 merged[name] = view
         return merged
 
-    def capability_safety(self, name: str) -> int:
-        """Canonical safety level. Unknown capability -> 99 (gated):
-        unvetted is never treated as read-only. Safety level 0 is a REAL
-        value (read-only) — never coerced by an `or` default."""
-        entry = self.get_capability(name)
-        if entry is None:
-            return 99
-        level = entry.get("safety_level")
+    def _authority_entry(self, name: str) -> Optional[Dict[str, Any]]:
+        """The ONE internal resolver for every authority question (P0 #9).
+
+        Safety readings, availability probes and EXECUTION all resolve the
+        capability through effective_capability() — so the planner, the
+        gate and the executor can never disagree about WHICH VERSION of a
+        capability they are reasoning about. Before this choke point
+        existed, capability_safety() / get_tool_availability() /
+        execute_registered_tool() each read the registry's boot-time copy
+        directly: a patched catalog or a runtime override could be visible
+        to one consumer and invisible to another — the multi-authority
+        problem the registry was built to eliminate.
+
+        Resolution (identical to effective_capability, because it IS it):
+          1. runtime INSTALL (provenance 'dynamic') overrides the catalog;
+          2. else the static catalog, read FRESH (a rebuilt/patched
+             manifest is visible immediately);
+          3. else the registry's own copy (execution wiring survives a
+             catalog shrink).
+        """
+        return self.effective_capability(name)
+
+    @staticmethod
+    def _coerce_safety_level(level: Any) -> int:
+        """Robust safety coercion shared by every authority consumer:
+        missing/unparseable -> 99 (gated) — unvetted is never read-only,
+        and 0 is a REAL value never coerced by an `or` default."""
         if level is None:
             return 99
         try:
             return int(level)
         except (TypeError, ValueError):
             return 99
+
+    def capability_safety(self, name: str) -> int:
+        """Canonical safety level. Unknown capability -> 99 (gated):
+        unvetted is never treated as read-only. Safety level 0 is a REAL
+        value (read-only) — never coerced by an `or` default.
+
+        Resolved through the ONE authority resolver: a runtime override or
+        a freshly patched catalog entry changes this reading immediately
+        (P0 #9) — it never serves the registry's stale boot-time copy."""
+        entry = self._authority_entry(name)
+        if entry is None:
+            return 99
+        return self._coerce_safety_level(entry.get("safety_level"))
 
     def _register_default_tools(self) -> None:
         # Register EVERY tool from the unified manifest so the cognitive layer
@@ -583,9 +615,14 @@ class ToolRegistry:
           * probed at the CURRENT environment revision.
         Any environment change (registration, dependency install, declared
         environment change) makes every entry stale immediately.
+
+        The entry is resolved through the ONE authority resolver (P0 #9):
+        a runtime override's checker and a freshly patched catalog entry's
+        checker are what gets probed — never the registry's stale boot-time
+        copy of a previous registration.
         """
         key = tool_name.lower().strip()
-        entry = self._registry.get(key)
+        entry = self._authority_entry(key)
         if entry is None:
             return {
                 "name": key,
@@ -634,7 +671,15 @@ class ToolRegistry:
 
     def execute_registered_tool(self, tool_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         key = tool_name.lower().strip()
-        tool_entry = self._registry.get(key)
+        # Execution resolves through the ONE authority resolver (P0 #9):
+        # the handler invoked and the safety level proposed are the
+        # EFFECTIVE capability's — a runtime override's handler runs (not
+        # the boot copy it replaced), a freshly patched catalog entry's
+        # handler runs (not the stale boot copy), and a catalog shrink
+        # still leaves the registry copy executable. Before this, the
+        # planner could see one capability, the gate reason about another,
+        # and execution invoke a third version.
+        tool_entry = self._authority_entry(key)
 
         if not tool_entry:
             return {"success": False, "error": f"Tool '{tool_name}' not registered in capability registry."}
@@ -642,7 +687,7 @@ class ToolRegistry:
         proposal = ActionProposal(
             action_type=key,
             payload=payload,
-            safety_level=tool_entry["safety_level"]
+            safety_level=self._coerce_safety_level(tool_entry.get("safety_level"))
         )
 
         gate_res = ActionGate.evaluate_proposal(proposal)
