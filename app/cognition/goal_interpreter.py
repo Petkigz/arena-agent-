@@ -119,6 +119,12 @@ _BREADTH_VERBS = {
 }
 
 _COMPLEXITY_BREADTH = {"fast": 5, "main": 10, "deep": 20}
+# P2 review decision (deferred, on purpose): 24 may still be restrictive
+# for a genuinely complex mission, but the number stays until ACTUAL
+# BENCHMARK FAILURES show it matters — not raised speculatively. When a
+# benchmark attributes a miss to breadth, the fix belongs here AND the
+# clip needs to become observable (a silent cap cannot be indicted by
+# the evidence we are waiting for).
 _MAX_BREADTH = 24
 
 
