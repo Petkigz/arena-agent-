@@ -155,10 +155,12 @@ def d2_csv_analysis() -> Tuple[str, str]:
     used_data_tool = any("analyz" in str(a).lower() or "data" in str(a).lower()
                          for a in res.get("executed_actions") or [])
     status = "pass" if got else "fail"
+    # F8: the reply is the attribution evidence for a 'mean missing' fail
+    # (the action list is summarized by used_data_tool above).
     return status, (f"mean {gt_mean:.3f} verified={got} | data tool used="
-                    f"{used_data_tool} | actions="
-                    f"{[str(a)[:60] for a in (res.get('executed_actions') or [])][:2]}"
-                    f" | lifecycle={res.get('goal_lifecycle_state')}")
+                    f"{used_data_tool} | lifecycle="
+                    f"{res.get('goal_lifecycle_state')} | reply="
+                    f"{_reply(res)[:140]!r}")
 
 
 def d3_task_creation() -> Tuple[str, str]:
@@ -213,21 +215,25 @@ def d6_self_evolution() -> Tuple[str, str]:
     res = _chat("Create a new tool called reverse_words that takes a "
                 "string and returns the words in reverse order. Write it, "
                 "test it, and install it as a permanent capability.")
+    # F8: the reply is the attribution evidence ('plan document instead of
+    # an installed tool' is only visible in what the agent actually said).
+    reply_excerpt = _reply(res)[:160]
     time.sleep(0.2)
     from app.cognition import tool_registry as tr
     reg = tr.get_shared_registry()
     entry = reg.effective_capability("reverse_words")
     if entry is None:
         return "fail", (f"tool NOT installed | lifecycle="
-                        f"{res.get('goal_lifecycle_state')} | reply="
-                        f"{_reply(res)[:160]!r}")
+                        f"{res.get('goal_lifecycle_state')} | "
+                        f"reply={reply_excerpt!r}")
     out = reg.execute_registered_tool(
         "reverse_words", {"text": "one two three"}) or {}
     got = str(out.get("result", out.get("output", out))).strip()
     ok = "three two one" in got
     return ("pass" if ok else "fail"), (
         f"tool installed=True, executes correctly={ok} "
-        f"(got {got!r}) | lifecycle={res.get('goal_lifecycle_state')}")
+        f"(got {got!r}) | lifecycle={res.get('goal_lifecycle_state')} | "
+        f"reply={reply_excerpt!r}")
 
 
 def d8_code_execution() -> Tuple[str, str]:
@@ -274,15 +280,38 @@ def d9_project_setup() -> Tuple[str, str]:
 
 
 def d7_control_file_search() -> Tuple[str, str]:
-    """Offline baseline: PASS. Must not regress with the brain online."""
-    res = _chat("Find files matching goal_verifier, then tell me how "
-                "many you found.")
-    found = any("goal_verifier" in str(a) for a in res.get("executed_actions") or [])
+    """Control: local file search must FIND a file genuinely in scope.
+
+    Live incident (2026-09-01): D7 searched 'goal_verifier' — a REPO file
+    — but the repo lives on F:\\, outside the C:\\Users\\<owner> scope the
+    search walks, so the control measured the repo's LOCATION, not the
+    search capability. The searched term is now a unique marker planted
+    in the OWNER'S HOME (in scope on every platform) and deleted after
+    the check. Ground truth is the marker's FOUND PATH in the tool
+    results/reply — a query mention alone is not evidence (the query
+    name is already known to the agent)."""
+    marker_name = f"arena_diag_marker_{uuid.uuid4().hex[:8]}"
+    marker_path = Path.home() / marker_name
+    marker_path.write_text(
+        "Arena owner diagnostics marker — safe to delete.\n", encoding="utf-8")
+    try:
+        res = _chat(f"Find files matching {marker_name}, then tell me "
+                    f"how many you found.")
+    finally:
+        try:
+            marker_path.unlink()
+        except OSError:
+            pass  # best-effort cleanup; the marker file is inert
+    blob = " ".join(str(a) for a in (res.get("executed_actions") or []))
+    reply = _reply(res)
+    found = str(marker_path) in blob or str(marker_path) in reply
     no_browser = not any("browser" in str(a).lower()
-                         for a in res.get("executed_actions") or [])
+                         for a in (res.get("executed_actions") or []))
     status = "pass" if found and no_browser else "fail"
-    return status, (f"found={found}, browser_touched={not no_browser} | "
-                    f"lifecycle={res.get('goal_lifecycle_state')}")
+    return status, (f"marker in home found={found}, "
+                    f"browser_touched={not no_browser} | "
+                    f"lifecycle={res.get('goal_lifecycle_state')} | "
+                    f"reply={reply[:120]!r}")
 
 
 # ── section B: hardware-bound tool probes ────────────────────────────────────
@@ -382,7 +411,7 @@ def main() -> int:
     guard("A", "D4 compound goal conditions (1A evidence)", d4_compound_goal_conditions)
     guard("A", "D5 diagnostic interpretation (real evidence)", d5_diagnostic_interpretation)
     guard("A", "D6 self-evolution reverse_words (GT executes)", d6_self_evolution)
-    guard("A", "D7 control: local file search (offline PASS)", d7_control_file_search)
+    guard("A", "D7 control: home-marker file search (offline PASS)", d7_control_file_search)
     guard("A", "D8 code execution (GT 5050)", d8_code_execution)
     guard("A", "D9 project setup (GT project + intact description)", d9_project_setup)
 
