@@ -80,6 +80,48 @@ class GoalReplanner:
         # If action_type matches and query/engine match (or no query differentiation provided), it's the failed strategy instance
         return True
 
+    # Actions that search the PUBLIC web. They can never satisfy a
+    # LOCAL-artifact success condition (see _cannot_satisfy_goal_conditions).
+    _WEB_RESEARCH_ACTIONS = {"web_search", "open_url"}
+
+    # Local-artifact condition keys — the same vocabulary GoalVerifier's
+    # classify_condition_type routes to the ARTIFACT evidence channel
+    # (local filesystem facts with provenance).
+    _LOCAL_ARTIFACT_CONDITION_KEYS = (
+        "file_path_identified", "file_accessed", "path_found",
+    )
+
+    @classmethod
+    def _cannot_satisfy_goal_conditions(cls, action_type: str, goal_rep: Any) -> bool:
+        """True when this action STRUCTURALLY cannot verify the goal.
+
+        Honest scope (external audit 2026-09): a goal whose success
+        conditions require a LOCAL file artifact ('file_path_identified =
+        true') cannot be satisfied by searching the public web —
+        web_search/open_url can never produce a local file path. Letting
+        them into the Plan-B ladder after a local miss misroutes the
+        owner's private file request to a search engine (and cannot
+        verify even if it runs). This is the REPLAN ranking layer only:
+        first-attempt discovery breadth is untouched.
+
+        Deliberately narrow: only (web-research action) x (local-artifact
+        condition). Everything else keeps the full candidate ladder.
+        """
+        try:
+            conditions = list(getattr(goal_rep, "success_conditions", []) or [])
+        except Exception:
+            return False
+        if not conditions:
+            return False
+        wants_local_artifact = any(
+            any(k in str(c).lower() for k in cls._LOCAL_ARTIFACT_CONDITION_KEYS)
+            for c in conditions
+        )
+        return (
+            wants_local_artifact
+            and str(action_type or "").lower().strip() in cls._WEB_RESEARCH_ACTIONS
+        )
+
     @classmethod
     def execute_reassessment_and_replan(
         cls,
@@ -134,6 +176,7 @@ class GoalReplanner:
         plan_b_candidates = [
             c for c in all_candidates
             if not cls.is_failed_strategy_instance(c, failed_action_type, f_payload)
+            and not cls._cannot_satisfy_goal_conditions(c.get("action_type"), goal_rep)
         ]
 
         if not plan_b_candidates:
@@ -145,6 +188,7 @@ class GoalReplanner:
             plan_b_candidates = [
                 f for f in fallbacks
                 if not cls.is_failed_strategy_instance(f, failed_action_type, f_payload)
+                and not cls._cannot_satisfy_goal_conditions(f.get("action_type"), goal_rep)
             ]
 
         replan_proposal = ActionPlanner.plan_and_evaluate_action(
