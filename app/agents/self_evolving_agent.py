@@ -130,7 +130,12 @@ def test_execute_tool_handles_invalid():
         except Exception:
             pass
 
-        # Direct execution test — write runner file to avoid shell quoting hell
+        # Direct execution test — write runner file to avoid shell quoting
+        # hell. sys.executable (not bare 'python'): the SAME interpreter
+        # that runs Arena must run the generated code — a bare 'python'
+        # does not exist on many hosts (live: the sandboxed run would fail
+        # for a portability reason, not a code reason).
+        py = f'"{sys.executable}"' if " " in str(sys.executable) else str(sys.executable)
         runner_code = (
             f"import sys\n"
             f"sys.path.insert(0, '.')\n"
@@ -139,14 +144,15 @@ def test_execute_tool_handles_invalid():
         )
         try:
             (sandbox_path / f"runner_{safe_name}.py").write_text(runner_code, encoding="utf-8")
-            sb_run = DisposableSandbox.run_in_sandbox(sandbox_id, f"python runner_{safe_name}.py")
+            sb_run = DisposableSandbox.run_in_sandbox(sandbox_id, f"{py} runner_{safe_name}.py")
         except Exception as e:
             sb_run = {"success": False, "error": str(e)}
         
         # Pytest run
         try:
             (sandbox_path / f"test_dynamic_{safe_name}.py").write_text(test_code, encoding="utf-8")
-            pytest_res = DisposableSandbox.run_in_sandbox(sandbox_id, f"python -m pytest test_dynamic_{safe_name}.py -q")
+            pytest_res = DisposableSandbox.run_in_sandbox(
+                sandbox_id, f"{py} -m pytest test_dynamic_{safe_name}.py -q")
         except Exception as e:
             pytest_res = {"success": False, "error": str(e)}
 
@@ -157,63 +163,120 @@ def test_execute_tool_handles_invalid():
         pytest_ok = pytest_res.get("success", False) if isinstance(pytest_res, dict) else False
         verified = direct_ok or pytest_ok
 
-        # Save code to app/tools/ only if verified (or always with note)
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(code_block)
-
-        # Also save to plugins dir for PluginRegistry discovery (persistent)
-        try:
-            cls.PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
-            plugin_path = cls.PLUGINS_DIR / f"dynamic_{safe_name}.py"
-            plugin_path.write_text(code_block, encoding="utf-8")
-        except Exception as e:
-            app_logger.warning(f"Could not save to plugins dir: {e}")
-
-        # 4. Hot-reload module into memory via importlib (only if verified)
-        execution_res = {"success": False, "result": "Not verified — not hotloaded"}
+        # DIAG D6 (live 2026-09-01): 'Successfully created reverse_words'
+        # was claimed while registry.effective_capability() found nothing —
+        # the old pipeline saved an execute_tool module that PluginRegistry
+        # REJECTS (no NAME/execute), so installation never happened. The
+        # prescribed chain is now real: verified code is installed as a
+        # PluginRegistry-shaped plugin (persistent discovery), registered
+        # in the LIVE shared registry, and executed THROUGH the registry —
+        # the lookup itself is the install proof. Unverified code is
+        # installed NOWHERE (not even app/tools/).
+        installed = False
+        execution_res = {"success": False,
+                         "result": "Not verified — not installed"}
+        live_module = None
         if verified:
+            # Write the module for importlib hotload.
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(code_block)
+            # PluginRegistry-shaped install: the ONLY shape discovery
+            # accepts (NAME/DESCRIPTION/SAFETY_LEVEL/CATEGORY/execute).
+            try:
+                cls.PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+                plugin_header = (
+                    f'"""Self-evolved capability {safe_name!r} — installed '
+                    f'by SelfEvolvingAgent after sandbox verification.\n\n'
+                    f'Objective: {task_objective[:200]}\n"""\n\n'
+                    f'NAME = {safe_name!r}\n'
+                    f'DESCRIPTION = {task_objective[:200]!r}\n'
+                    f'SAFETY_LEVEL = 2  # sandbox-verified before install\n'
+                    f'CATEGORY = "plugin"\n\n\n'
+                )
+                plugin_footer = (
+                    '\n\ndef execute(payload: dict = None) -> dict:\n'
+                    '    """PluginRegistry entry point: the sandbox-verified\n'
+                    '    execute_tool contract, one payload dict in/out."""\n'
+                    '    return execute_tool(payload or {})\n'
+                )
+                (cls.PLUGINS_DIR / f"{safe_name}.py").write_text(
+                    plugin_header + code_block + plugin_footer,
+                    encoding="utf-8")
+            except Exception as e:
+                app_logger.warning(f"Could not write the plugin install: {e}")
+                verified = False
+
+        if verified:
+            # Hot-reload module into memory via importlib.
             try:
                 module_name = f"app.tools.dynamic_{safe_name}"
                 if module_name in sys.modules:
-                    mod = importlib.reload(sys.modules[module_name])
+                    live_module = importlib.reload(sys.modules[module_name])
                 else:
-                    mod = importlib.import_module(module_name)
+                    live_module = importlib.import_module(module_name)
 
-                if hasattr(mod, "execute_tool"):
-                    res = mod.execute_tool({"objective": task_objective, "n": 10, "target": task_objective})
-                    if isinstance(res, dict):
-                        execution_res = res
-                        execution_res["success"] = True
+                if not hasattr(live_module, "execute_tool"):
+                    raise ImportError("module lacks execute_tool")
 
-                    # Register in tool manifest cache (force rebuild)
-                    try:
-                        from app.tools.manifest import _TOOL_MANIFEST
-                        import app.tools.manifest as manifest_module
-                        manifest_module._TOOL_MANIFEST = None  # force rebuild on next get_tool_manifest()
-                    except Exception:
-                        pass
+                # Register in the LIVE shared registry: the capability is
+                # callable NOW (effective_capability finds it this session);
+                # the plugin file makes it survive restarts.
+                from app.cognition.tool_registry import get_shared_registry
+                module_ref = live_module
+                get_shared_registry().register_tool(
+                    safe_name, "plugin",
+                    lambda payload: module_ref.execute_tool(payload or {}),
+                    description=str(task_objective)[:200],
+                    safety_level=2,
+                    provenance="dynamic")
+                installed = True
+
+                # Registry lookup + execute the INSTALLED capability —
+                # success is claimed only from this execution.
+                execution_res = get_shared_registry().execute_registered_tool(
+                    safe_name, {"objective": task_objective})
+
+                # Force manifest rebuild so the plugin is discovered.
+                try:
+                    import app.tools.manifest as manifest_module
+                    manifest_module._TOOL_MANIFEST = None
+                except Exception:
+                    pass
 
             except Exception as e:
-                app_logger.error(f"Hot-reload module execution error: {e}")
-                execution_res = {"success": False, "result": f"Hotload failed: {str(e)}", "details": {}}
+                app_logger.error(f"Install/hotload error: {e}")
+                execution_res = {"success": False,
+                                 "result": f"Install failed: {str(e)}",
+                                 "details": {}}
         else:
-            app_logger.warning(f"Tool {module_filename} failed verification — saved but not hotloaded (direct_ok={direct_ok}, pytest_ok={pytest_ok})")
+            app_logger.warning(f"Tool {module_filename} failed verification — NOT installed anywhere (direct_ok={direct_ok}, pytest_ok={pytest_ok})")
+
+        # Claim success ONLY when verified AND installed AND the installed
+        # capability executed through the registry.
+        overall_success = bool(
+            verified and installed
+            and isinstance(execution_res, dict) and execution_res.get("success"))
 
         db.create_memory({
-            "content": f"Self-Evolved Tool [{module_filename}]: Created for objective '{task_objective}'. Verified={verified}. Output: {execution_res.get('result', '')[:200]}",
+            "content": f"Self-Evolved Tool [{module_filename}]: Created for objective '{task_objective}'. Verified={verified}. Installed={installed}. Output: {str(execution_res.get('result', ''))[:200]}",
             "category": "self_evolved_tool",
             "source": "self_evolving_agent",
-            "confidence": 1.0 if verified else 0.5
+            "confidence": 1.0 if overall_success else 0.5
         })
 
-        db.create_audit_log("synthesize_and_hotload_tool", "success" if verified else "unverified", f"Synthesized '{module_filename}' verified={verified}", level=1)
+        db.create_audit_log("synthesize_and_hotload_tool",
+                            "success" if overall_success else "unverified",
+                            f"Synthesized '{module_filename}' verified={verified} installed={installed}",
+                            level=1)
 
         return {
-            "success": verified,
+            "success": overall_success,
             "tool_module_name": f"dynamic_{safe_name}",
-            "file_path": str(file_path),
+            "capability_name": safe_name,
+            "file_path": str(file_path) if verified else None,
             "task_objective": task_objective,
             "verified": verified,
+            "installed": installed,
             "direct_test": sb_run,
             "pytest_result": pytest_res,
             "live_execution_result": execution_res

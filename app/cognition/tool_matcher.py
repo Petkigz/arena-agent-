@@ -83,6 +83,43 @@ def _match_task_creation(text: str) -> Optional[ToolMatch]:
     )
 
 
+# ── Capability creation / self-evolution (DIAG D6, live 2026-09-01):
+# 'Create a new tool called reverse_words ... install it' produced a CHAT
+# REPLY claiming success while registry.effective_capability() found
+# nothing — the synthesizer existed but was unreachable from routing.
+# Capability-creation phrasings now route deterministically to it.
+_CAP_CREATE_RE = re.compile(
+    r"\b(?:create|build|write|add|make|develop|design)\b[^.]{0,40}"
+    r"\b(?:tool|capability|skill|plugin)\b",
+    re.IGNORECASE,
+)
+_CAP_NAME_RE = re.compile(
+    r"\b(?:tool|capability|skill|plugin)\s+(?:called|named)\s+"
+    r"['\"]?([a-z_][a-z0-9_]*)",
+    re.IGNORECASE,
+)
+
+
+def _match_capability_creation(text: str) -> Optional[ToolMatch]:
+    """Deterministic self-evolution routing: '<verb> ... tool/capability
+    called <name>'. A named capability is required — an unnamed 'make me
+    a tool' stays with the LLM planner. 'create a task' can never match
+    (task is not a capability noun here)."""
+    if not _CAP_CREATE_RE.search(text):
+        return None
+    m = _CAP_NAME_RE.search(text)
+    if not m:
+        return None
+    name = m.group(1).lower()
+    return ToolMatch(
+        action_type="synthesize_tool",
+        score=3.0,
+        payload={"capability_name": name,
+                 "description": str(text).strip()[:500]},
+        matched_terms=("create capability",),
+    )
+
+
 # General OS control: unrecognized settings requests go to the planner,
 # not to chat. This is ONE routing rule replacing hundreds of per-action tools.
 OS_CONTROL_ACTION = "os_control_plan"
@@ -428,6 +465,13 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
     task_create = _match_task_creation(text)
     if task_create is not None:
         return task_create
+    # Capability creation (self-evolution) routes BEFORE the gate too, so
+    # the deterministic chain reaches the synthesizer whatever the LLM
+    # classifier says (D6: a chat reply claiming success is not an
+    # installation).
+    cap_create = _match_capability_creation(text)
+    if cap_create is not None:
+        return cap_create
     if not ((words & CONTROL_VERBS) or comm_verb_with_number):
         return None
 

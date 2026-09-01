@@ -677,6 +677,17 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("create_task", "productivity", 1,
         "Create a task in the owner's task list (title, priority)",
         _wrap(TaskTools, "title", "goal", "priority"))
+    # DIAG D6 (live 2026-09-01): self-evolution claimed success while the
+    # registry had no such capability — the synthesizer was unreachable
+    # from routing. Level 2: it writes and installs sandbox-verified code
+    # (reversible — delete the plugin), same class as run_coding_agent.
+    CapabilityFactoryProxy = _LazyImportProxy(
+        "app.cognition.capability_factory", "CapabilityFactory")
+    add("synthesize_tool", "agent", 2,
+        "Synthesize, sandbox-test, and install a new capability "
+        "(self-evolution: generate -> sandbox verify -> registry install)",
+        _wrap(CapabilityFactoryProxy.synthesize_capability,
+              "capability_name", "description", "sample_params"))
     add("content_script", "productivity", 1, "Generate a content script",
         _wrap(ContentCreatorTool.generate_content_script, "topic", "platform", "target_audience"))
     add("generate_content", "productivity", 1, "Generate content (any supported type)",

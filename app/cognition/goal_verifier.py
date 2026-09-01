@@ -1,6 +1,7 @@
 """Goal Verification Engine."""
 
 from __future__ import annotations
+import re
 from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -325,6 +326,77 @@ class GoalVerifier:
             # It cannot be verified as direct/environmental — return non-authoritative.
             return False, obs_entry
 
+    # D6: capability names come from the request's own words —
+    # 'tool called reverse_words'. Not used for anything else; a request
+    # that names no capability cannot be probed (honest UNKNOWN).
+    _CALLED_NAME_RE = re.compile(
+        r"\b(?:called|named)\s+['\"]?([a-z_][a-z0-9_]{1,60})",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _probe_capability_installation(
+        cls, succ_cond: str, goal_rep: SemanticGoalRepresentation
+    ) -> Optional[ConditionStatus]:
+        """Registry probe for capability conditions (D6 hard condition).
+
+        capability_installed: SATISFIED iff the shared registry has the
+        named capability; FAILED when the probe ran and found nothing
+        (absence is direct evidence — the registry is the authority for
+        installation).
+
+        capability_executes_correctly: FAILED when not installed;
+        SATISFIED when a SELF-EVOLVED entry (runtime install or plugin
+        category) smoke-executes with success=True; None (UNKNOWN)
+        otherwise — semantic correctness needs ground truth the runtime
+        does not have.
+
+        Returns None when no capability name is extractable (nothing to
+        probe — never guess a name).
+        """
+        cond_lower = str(succ_cond or "").lower()
+        goal_text = " ".join(
+            str(getattr(goal_rep, "goal", "") or "").split())
+        m = cls._CALLED_NAME_RE.search(goal_text)
+        if not m:
+            return None
+        name = m.group(1).lower()
+        try:
+            from app.cognition.tool_registry import get_shared_registry
+            registry = get_shared_registry()
+            entry = registry.effective_capability(name)
+        except Exception:
+            return None
+        installed = entry is not None
+        if "capability_installed" in cond_lower:
+            audit_logger.info(
+                f"Capability registry probe '{name}': "
+                f"{'installed' if installed else 'NOT installed'}")
+            return (ConditionStatus.SATISFIED if installed
+                    else ConditionStatus.FAILED)
+        if "capability_executes_correctly" in cond_lower:
+            if not installed:
+                return ConditionStatus.FAILED
+            source = str(entry.get("source") or "")
+            category = str(entry.get("category") or "")
+            # Smoke-execute ONLY self-evolved entries (runtime installs
+            # and discovered plugins) — they carry the sandbox-verified
+            # execute_tool contract and were tested before install.
+            # Built-in tools are never executed as a verification side
+            # effect.
+            if source != "runtime_install" and category != "plugin":
+                return None
+            try:
+                res = registry.execute_registered_tool(name, {}) or {}
+                ok = bool(res.get("success"))
+            except Exception:
+                ok = False
+            audit_logger.info(
+                f"Capability smoke execution '{name}': success={ok}")
+            return (ConditionStatus.SATISFIED if ok
+                    else ConditionStatus.FAILED)
+        return None
+
     @classmethod
     def evaluate_condition_status_against_world_model(
         cls,
@@ -346,6 +418,21 @@ class GoalVerifier:
         sc_lower = succ_cond.lower().strip()
         actions_str = " ".join(executed_actions).lower()
         reply_lower = reply_clean.lower()
+
+        # D6 (live 2026-09-01, owner review item 4): installation is a
+        # HARD success condition. The shared ToolRegistry is the
+        # authority: a nameable capability that is NOT registered is
+        # direct evidence of non-installation — a reply claiming
+        # 'Successfully created X' can never verify the goal, and
+        # 'waiting for evidence' is not honest once the authoritative
+        # probe ran and found nothing. No name to probe -> fall through
+        # (UNKNOWN via the normal path).
+        if ("capability_installed" in sc_lower
+                or "capability_executes_correctly" in sc_lower):
+            probed = cls._probe_capability_installation(succ_cond, goal_rep)
+            if probed is not None:
+                return probed
+
         has_crash_or_err = len(failed_conditions) > 0 or any(k in reply_lower or k in actions_str for k in ["crash", "crashed", "failed", "error", "cannot find"])
 
         if has_crash_or_err:
