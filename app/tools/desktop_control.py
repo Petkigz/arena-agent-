@@ -26,19 +26,37 @@ class DesktopControl:
     def open_url(cls, url: str) -> Dict[str, Any]:
         """
         Opens a target URL in default desktop web browser (or Firefox/Chrome).
+
+        Launch honesty (external audit 2026-09): webbrowser.open() RETURNS
+        False when no usable browser exists (headless machine, stripped
+        server) without raising — that return value IS the launch
+        measurement and must be reported. The old code discarded it and
+        self-reported success on every machine, which flowed into
+        executed_actions ("Opened default browser and searched for ...")
+        on machines with no browser at all.
         """
         import webbrowser
         try:
-            webbrowser.open(url)
+            opened = webbrowser.open(url)
+        except Exception as e:
+            app_logger.error(f"Error opening URL: {e}")
+            return {"success": False, "error": str(e)}
+        if opened:
             audit_logger.info(f"Opened URL in desktop browser: '{url}'")
             return {
                 "success": True,
                 "url": url,
                 "message": f"Successfully opened URL in browser: {url}"
             }
-        except Exception as e:
-            app_logger.error(f"Error opening URL: {e}")
-            return {"success": False, "error": str(e)}
+        app_logger.warning(
+            f"No usable web browser available — URL NOT opened: '{url}'"
+        )
+        return {
+            "success": False,
+            "url": url,
+            "error": "No usable web browser is available on this system, "
+                     "so the URL was not opened.",
+        }
 
     # ── Desktop wallpaper (Windows; verified + reversible) ────────────────────
     _SPI_GETDESKWALLPAPER = 0x0073

@@ -21,7 +21,14 @@ class TestIntelligenceBenchmarkSuite:
         contract: the request succeeds and returns an (possibly empty) actions list.
         """
         user_query = "Can you open Firefox and search for ordinary on YouTube?"
-        res = MasterAgentOrchestrator.process_user_task(user_query)
+        # Browser launch is environment-dependent (headless sandboxes have
+        # no browser — open_url reports the REAL launch outcome since the
+        # launch-honesty fix), so the launch is pinned to the deterministic
+        # success world. This benchmark measures intent classification and
+        # the structural contract, not browser availability.
+        from unittest.mock import patch
+        with patch("webbrowser.open", return_value=True):
+            res = MasterAgentOrchestrator.process_user_task(user_query)
 
         assert res["success"] is True
         assert "executed_actions" in res

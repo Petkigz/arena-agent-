@@ -15,12 +15,17 @@ def test_master_agent_orchestration():
     assert len(res["assistant_reply"]) > 0
 
 def test_master_agent_browser_intent():
-    res = MasterAgentOrchestrator.process_user_task("Can you open Firefox and search for me ordinary on YouTube?")
+    # Browser launch is environment-dependent (headless sandboxes have no
+    # browser; open_url now reports the REAL launch outcome instead of
+    # fabricating success — see tests/test_open_url_launch_honesty.py), so
+    # the launch is pinned to the deterministic success world here. What
+    # this test measures is the QUERY EXTRACTION: "ordinary on YouTube",
+    # not the whole sentence.
+    from unittest.mock import patch
+    with patch("webbrowser.open", return_value=True):
+        res = MasterAgentOrchestrator.process_user_task(
+            "Can you open Firefox and search for me ordinary on YouTube?")
     assert res["success"] is True
     assert len(res["executed_actions"]) > 0
-    # The deterministic query extractor now pulls JUST the search terms
-    # ("ordinary on YouTube"), not the whole sentence. Browser launch may be
-    # environment-dependent (Firefox may not be installed); what matters is
-    # that the extracted query is clean and appears in the action report.
     action_text = " ".join(res["executed_actions"])
     assert "ordinary on YouTube" in action_text
