@@ -250,17 +250,23 @@ class ProjectManager:
         ms = []
         if milestones:
             for item in milestones:
+                # Milestone-local text — deliberately NOT named
+                # `description`: this loop used to rebind the function's
+                # `description` parameter, silently overwriting the
+                # PROJECT's description with the last milestone's text
+                # (external audit 2026-09; regression tests in
+                # tests/test_project_description_integrity.py).
                 if isinstance(item, dict):
-                    description = str(item.get("description", "")).strip()
+                    milestone_text = str(item.get("description", "")).strip()
                     source_sub_goal_id = item.get("source_sub_goal_id") or item.get("sub_goal_id")
                 else:
-                    description = str(item).strip()
+                    milestone_text = str(item).strip()
                     source_sub_goal_id = None
-                if not description:
+                if not milestone_text:
                     continue
                 ms.append(Milestone(
                     milestone_id=uuid4().hex[:8],
-                    description=description,
+                    description=milestone_text,
                     source_sub_goal_id=str(source_sub_goal_id) if source_sub_goal_id else None,
                 ))
 
