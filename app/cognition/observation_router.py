@@ -120,6 +120,21 @@ _FILE_EXTS = (
     r"exe|msi|apk|iso|json|xml|yml|yaml|py|js|ts|html|css|java|ps1|bat|ttf"
 )
 
+# Request-verb lead noise that may precede a filename the ext-token regex
+# captures (it spans spaces, so 'find files matching report.pdf' captures
+# the whole clause). Stripped from the FRONT only, repeatedly. A name word
+# that is not in this list ('report', 'invoice') is never touched.
+_EXT_NAME_LEAD_NOISE = re.compile(
+    r"^(?:(?:can|could|do|does|did|is|are|was|were|will|would|have|has|had|"
+    r"i|you|we|my|me|the|a|an|all|any|every|some|"
+    r"where|what|which|who|whose|when|why|how|many|much|there|"
+    r"find|search|look|locate|list|show|give|get|check|see|tell|know|"
+    r"files?|documents?|docs?|photos?|pictures?|images?|songs?|tracks?|"
+    r"music|videos?|movies?|clips?|notes?|recordings?|"
+    r"matching|matches?|called|named|titled|for|about|on|in|at|of)\b\s*)+",
+    re.IGNORECASE,
+)
+
 # Questions that want the file ITSELF acted on (open/play/delete/…) are NOT
 # read-only searches — the action pipeline owns them.
 # ── Game detection for installed_games evidence ──────────────────────────
@@ -225,7 +240,17 @@ def _extract_file_question_subject(t: str) -> Optional[str]:
         return quoted.group(1).strip()
     ext_token = re.search(r"\b([\w\- ]{1,60}\.(?:" + _FILE_EXTS + r"))\b", t)
     if ext_token:
-        return ext_token.group(1).strip()
+        # Strip the request-verb lead noise the span regex swallows:
+        # 'find files matching report.pdf' must search for 'report.pdf',
+        # not the whole clause — search_files matches filename SUBSTRINGS
+        # and no filename contains the request phrase (the P0 #16 lesson,
+        # applied to this path; found while fixing DIAG F7: every 'find
+        # files matching X.ext' question answered 'no files found' while
+        # the file existed). A shorter query can only match MORE files,
+        # never miss; a leading word that is NOT request noise ('report')
+        # survives intact.
+        stripped = _EXT_NAME_LEAD_NOISE.sub("", ext_token.group(1)).strip()
+        return stripped or ext_token.group(1).strip()
     # 'do i have london on my pc' — no noun, but the 'on my pc' tail grounds
     # it as a host question.
     have_on_pc = re.search(
