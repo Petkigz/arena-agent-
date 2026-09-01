@@ -21,7 +21,16 @@ class PolicyEvaluator:
         action_type = action_type.lower()
         
         # Read/Observe actions (Level 0)
-        if action_type in ["read_file", "search_notes", "capture_screen", "browser_read", "web_search", "master_task", "user_task", "chat"]:
+        # Read-only NATIVE_EXECUTABLES (owner diagnostics F2, 2026-09): these
+        # virtual actions have no manifest entry, so the ActionGate falls
+        # through to this evaluator — and the unknown->Level-3 default was
+        # blocking the GoalReplanner's OWN re-observation probe ('investigate')
+        # on every unknown-evidence verdict. Execution handlers verified
+        # read-only: investigate/diagnostic (filesystem search + hardware
+        # stats read), formulate_answer/answer (compose a reply), observe
+        # (no side effects). Unknown actions still fail closed at Level 3.
+        if action_type in ["read_file", "search_notes", "capture_screen", "browser_read", "web_search", "master_task", "user_task", "chat",
+                           "investigate", "diagnostic", "formulate_answer", "answer", "observe"]:
             db.create_audit_log(action_type, "allowed", f"Autonomous read execution: {details}", level=0)
             return True, "Autonomous execution allowed (Level 0: Read/Observe)", 0
 
