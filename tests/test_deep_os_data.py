@@ -26,9 +26,18 @@ def test_deep_os_controller(monkeypatch):
     assert broken is not None
 
 def test_android_adb_controller():
+    """Owner review item 10: honest in BOTH environments. With adb absent
+    this used to pass VACUOUSLY (list_connected_devices returned
+    success=True unconditionally). The contract now: success=True with a
+    device list when adb runs, or success=False with the adb-missing
+    reason when it cannot run — never a vacuous success."""
     devs = AndroidADBController.list_connected_devices()
-    assert devs["success"] is True
-    assert "connected_android_devices" in devs
+    if devs.get("success") is True:
+        assert "connected_android_devices" in devs
+    else:
+        assert devs.get("success") is False
+        assert devs.get("connected_android_devices") == []
+        assert devs.get("error") or devs.get("note")
 
 def test_universal_filesystem_operations():
     with tempfile.TemporaryDirectory() as tmpdir:

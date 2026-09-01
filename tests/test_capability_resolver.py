@@ -224,8 +224,8 @@ def test_e2e_unresolved_required_capability_defers_with_honest_ask(tmp_path):
         return {"success": True, "id": "chat-real",
                 "choices": [{"message": {"content": "placeholder"}}]}
 
+    previous = CognitiveRuntime._instance
     rt = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
-    CognitiveRuntime._instance = rt  # pipeline uses the singleton
     try:
         with patch.object(SemanticGoalInterpreter, "interpret_goal", wrapper), \
              patch("app.llm.llm_client.generate_chat_completion",
@@ -233,7 +233,7 @@ def test_e2e_unresolved_required_capability_defers_with_honest_ask(tmp_path):
             res = CognitivePipeline.process_chat(
                 user_text="organize my photo collection into folders by date")
     finally:
-        CognitiveRuntime._instance = None
+        CognitiveRuntime._instance = previous
 
     assert res.get("reasoning_action") == "defer", \
         f"unresolved required capability must ask, got {res.get('reasoning_action')}"

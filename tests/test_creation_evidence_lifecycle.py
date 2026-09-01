@@ -183,11 +183,15 @@ def test_capture_scopes_creation_events_to_the_cycle(tmp_path):
     goal: the capture window starts at the current cycle."""
     from datetime import datetime, timezone, timedelta
     from app.cognition.runtime import CognitiveRuntime
-    rt = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
-    # Simulate a project created earlier (before this cycle's window).
-    future = datetime.now(timezone.utc) + timedelta(hours=1)
-    rt._cycle_started_at = future
-    obs = rt.capture_observed_world_state([], "reply", None)
+    previous = CognitiveRuntime._instance
+    try:
+        rt = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
+        # Simulate a project created earlier (before this cycle's window).
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        rt._cycle_started_at = future
+        obs = rt.capture_observed_world_state([], "reply", None)
+    finally:
+        CognitiveRuntime._instance = previous
     assert not (obs.get("creation_events") or {}).get("projects")
 
 
@@ -205,12 +209,12 @@ def test_d9_e2e_lifecycle_achieved_with_real_project(tmp_path):
     task = ("Set up a project to organize my photo collection (%s): "
             "scan the pictures folder, group photos by date, find "
             "duplicates, then report a summary." % marker)
+    previous = CognitiveRuntime._instance
     rt = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
-    CognitiveRuntime._instance = rt
     try:
         res = CognitivePipeline.process_chat(user_text=task, complexity="fast")
     finally:
-        CognitiveRuntime._instance = None
+        CognitiveRuntime._instance = previous
     # Independent ground truth: the durable project row.
     projects = list(getattr(rt.project_manager, "_projects", {}).values())
     hit = [p for p in projects if marker in str(getattr(p, "description", ""))]
@@ -229,12 +233,12 @@ def test_d3_e2e_lifecycle_achieved_with_real_task(tmp_path):
     marker = "diag-%s" % uuid.uuid4().hex[:6]
     text = ("Create a task: review the quarterly budget report "
             f"({marker}), with priority high.")
+    previous = CognitiveRuntime._instance
     rt = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
-    CognitiveRuntime._instance = rt
     try:
         res = CognitivePipeline.process_chat(user_text=text, complexity="fast")
     finally:
-        CognitiveRuntime._instance = None
+        CognitiveRuntime._instance = previous
     from app.tasks import TaskManager
     rows = TaskManager.get_all_tasks()
     created = any(marker in str(getattr(t, "title", "")) for t in rows)

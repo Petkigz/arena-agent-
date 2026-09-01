@@ -723,13 +723,15 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(DisposableSandbox.run_in_sandbox, "sandbox_id", "command", "target_guest_os"))
 
     # ── Phone (ADB) ─────────────────────────────────────────────────────────
-    add("phone_command", "phone", 2, "Control a phone via ADB",
+    # Owner review item 10: Android control is CONDITIONAL on adb being on
+    # PATH with an authorized device — the descriptions say so.
+    add("phone_command", "phone", 2, "Control a phone via ADB (requires adb on PATH + authorized device)",
         _wrap(AndroidADBController.run_adb_cmd, "args"))
-    add("phone_sms", "phone", 3, "Send an SMS",
+    add("phone_sms", "phone", 3, "Send an SMS via ADB (requires adb on PATH + authorized device)",
         _wrap(AndroidADBController.send_sms, "phone_number", "message_text", "target_device"))
-    add("phone_call", "phone", 3, "Make a phone call",
+    add("phone_call", "phone", 3, "Make a phone call via ADB (requires adb on PATH + authorized device)",
         _wrap(AndroidADBController.make_phone_call, "phone_number"))
-    add("phone_screenshot", "phone", 0, "Capture phone screenshot",
+    add("phone_screenshot", "phone", 0, "Capture phone screenshot via ADB (requires adb on PATH + authorized device)",
         _ignore_payload(AndroidADBController.capture_phone_screenshot))
 
     # ── Knowledge / skill ───────────────────────────────────────────────────

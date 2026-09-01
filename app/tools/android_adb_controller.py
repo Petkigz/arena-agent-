@@ -88,8 +88,25 @@ class AndroidADBController:
         Lists all Android phones connected over USB or local Wi-Fi.
         """
         res = cls.run_adb_cmd(["devices"])
+        # Owner review item 10 (2026-09-01): honest measurement. When the
+        # adb binary cannot run at all, success=True with an empty list
+        # would be a VACUOUS success — the /android/devices endpoint and
+        # its unit test 'passed' while measuring nothing. Failure carries
+        # the reason and the install path; adb-runs-but-no-device is a
+        # genuine success with an empty list (a different, honest answer).
+        if not res.get("success"):
+            return {
+                "success": False,
+                "connected_android_devices": [],
+                "adb_output": res.get("stdout", ""),
+                "error": str(res.get("stderr", ""))[:200],
+                "note": ("adb is not runnable on this machine — install "
+                         "Android platform-tools (adb) on PATH, connect a "
+                         "device over USB/Wi-Fi and authorize USB debugging "
+                         "to enable Android control"),
+            }
         devices = []
-        if res["success"] and res["stdout"]:
+        if res["stdout"]:
             lines = res["stdout"].split("\n")[1:]
             for line in lines:
                 parts = line.strip().split()
