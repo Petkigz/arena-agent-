@@ -264,6 +264,25 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
     if len(t) < 6:
         return None
 
+    # ── Arithmetic (DIAG F3b, live D1: the 3B chat model answered
+    # 17*24=396; ground truth 408). Exact answers come from the
+    # deterministic calculator, never the language model. The detector is
+    # the ONE shared implementation in app.tools.calculator — conservative
+    # by design, so statistic asks ('the average of the amount column')
+    # fall through to the data pipeline.
+    try:
+        from app.tools.calculator import DeterministicCalculator
+        arithmetic_expr = DeterministicCalculator.extract_expression(text)
+    except Exception:
+        arithmetic_expr = None
+    if arithmetic_expr:
+        return ObservationPlan(
+            action_type="calculate_expression",
+            payload={"expression": arithmetic_expr},
+            evidence_hint="Exact arithmetic evaluated deterministically.",
+            question_kind="arithmetic",
+        )
+
     # ── System state (memory/disk/CPU/battery/network) ─────────────────
     if re.search(r"\b(how much|how many).{0,20}\b(ram|memory|disk|storage|space|cpu|gpu|battery|charge)\b|\b(check|what).{0,15}\b(ram|memory|disk|storage|cpu|gpu|battery|charge|space)\b", t):
         return ObservationPlan(
@@ -847,6 +866,20 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
                 )
             names = ", ".join(str(a) for a in apps[:40])
             return f"OBSERVED {len(apps)} installed applications. Sample: {names}"
+        if plan.action_type == "calculate_expression":
+            if data.get("success"):
+                return (
+                    f"VERIFIED CALCULATION (deterministic tool, exact — do not "
+                    f"recompute or second-guess it): "
+                    f"{data.get('expression')} = {data.get('value_str')}\n"
+                    f"State {data.get('value_str')} as the answer to the arithmetic "
+                    f"question. Never substitute your own arithmetic."
+                )
+            return (
+                f"CALCULATION ATTEMPTED but failed: {data.get('error', 'unknown error')} "
+                f"for expression {data.get('expression', '?')!r}. Say the calculation "
+                f"could not be completed and why — do not guess a number."
+            )
         return f"OBSERVATION ATTEMPTED ({plan.action_type}) but returned no usable evidence: {str(result)[:200]}"
     except Exception:
         return f"OBSERVATION ATTEMPTED ({plan.action_type}) but could not be rendered."

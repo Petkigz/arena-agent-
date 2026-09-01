@@ -380,6 +380,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     SpreadsheetTool = _LazyImportProxy("app.tools.spreadsheet", "SpreadsheetTool")
     CodingAgent = _LazyImportProxy("app.agents.coding_agent", "CodingAgent")
     DataAnalysisAgent = _LazyImportProxy("app.agents.data_analysis_agent", "DataAnalysisAgent")
+    DeterministicCalculator = _LazyImportProxy("app.tools.calculator", "DeterministicCalculator")
     MediaStudioTool = _LazyImportProxy("app.tools.media_studio", "MediaStudioTool")
     MusicStudioTool = _LazyImportProxy("app.tools.music_studio", "MusicStudioTool")
     OCRReaderTool = _LazyImportProxy("app.tools.ocr_reader", "OCRReaderTool")
@@ -565,6 +566,14 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("recent_logs", "system", 0,
         "Recent system log tail (journalctl / syslog / Event Log) with per-source status",
         _wrap(SystemDiagnostics.recent_logs, "lines", "source"))
+
+    # ── Deterministic arithmetic (DIAG F3b, live D1: the 3B chat model
+    # answered 17*24=396; ground truth 408). Pure computation, reads
+    # nothing, writes nothing — Level 0 by construction. AST-safe: numeric
+    # literals and arithmetic operators only.
+    add("calculate_expression", "system", 0,
+        "Evaluate an arithmetic expression deterministically (exact: numbers and + - * / // % ** only; never the language model)",
+        _wrap(DeterministicCalculator.evaluate, "expression"))
 
     # ── Vision / media ──────────────────────────────────────────────────────
     add("screen_capture", "vision", 0, "Capture the screen",
