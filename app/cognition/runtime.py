@@ -3300,7 +3300,16 @@ class CognitiveRuntime:
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
-                "model_used": llm_res.get("model", "fast")
+                "model_used": llm_res.get("model", "fast"),
+                # Owner review P1 #9: 'observable, never silent' must
+                # hold at the boundary the consumer sees. When a loaded
+                # FALLBACK model answered (the requested model was not
+                # loaded), the payload names both models — no log
+                # spelunking needed to learn why the answer came from a
+                # stand-in. Absent when the requested model answered.
+                **({"model_fallback": dict(llm_res["model_fallback"])}
+                   if isinstance(llm_res.get("model_fallback"), dict)
+                   else {}),
             }
 
         # Branch B: INVESTIGATE / Bounded Probe Evidence Gathering Loop
@@ -3396,7 +3405,12 @@ class CognitiveRuntime:
                 "prediction_surprisal": 0.1,
                 "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
-                "model_used": llm_res.get("model", "fast")
+                "model_used": llm_res.get("model", "fast"),
+                # Owner review P1 #9: fallback disclosure at the boundary
+                # (same contract as the ANSWER branch above).
+                **({"model_fallback": dict(llm_res["model_fallback"])}
+                   if isinstance(llm_res.get("model_fallback"), dict)
+                   else {}),
             }
 
         # Branch C: DEFER / SAFELY ASK USER

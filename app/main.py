@@ -613,6 +613,12 @@ def chat_with_local_brain(req: ChatRequest):
         "goal_verified": pipeline_res.get("goal_verified"),
         "goal_lifecycle_state": pipeline_res.get("goal_lifecycle_state"),
         "reason": pipeline_res.get("reason"),
+        # Owner review P1 #9: when a loaded fallback model answered, the
+        # API names both models — disclosure at the boundary the client
+        # sees, not just the logs. Absent when the requested model
+        # answered.
+        **({"model_fallback": pipeline_res["model_fallback"]}
+           if isinstance(pipeline_res.get("model_fallback"), dict) else {}),
         "choices": [{
             "index": 0,
             "message": {

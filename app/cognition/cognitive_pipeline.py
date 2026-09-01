@@ -79,6 +79,12 @@ class CognitivePipeline:
             "executed_actions": res.get("executed_actions", []),
             "latency_ms": res.get("latency_ms", 0.0),
             "model_used": res.get("model_used", "fast"),
+            # Owner review P1 #9: when a loaded FALLBACK model answered
+            # (requested model not loaded), the runtime names both models
+            # — pass it through so the disclosure survives the bridge.
+            # Absent when the requested model answered.
+            **({"model_fallback": res["model_fallback"]}
+               if isinstance(res.get("model_fallback"), dict) else {}),
             # ── Approval flow (F6): when the gate holds a Level-3 action
             # for 1-click owner approval, the request itself must be
             # visible to bridge consumers (diagnostics, REST callers) —
