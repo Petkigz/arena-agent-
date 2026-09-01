@@ -4,6 +4,23 @@ from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
 
+# ── D8 code-execution contract (owner review P1 #8, 2026-09-01) ─────────
+# Level 0 for code execution is GRANTED BY VALIDATION, never by name:
+# 'evaluate_pure_code' is Level 0 only when its payload passes the AST
+# purity validation, re-derived HERE at the policy layer — the layer
+# whose job is to answer "allowed without approval?" must not answer
+# "unknown action" for a contract it owns. Anything else that runs code
+# is a DECLARED Level 3 (the owner's 1-click approval flow), never the
+# unknown-action fallback accident.
+ARBITRARY_CODE_ACTIONS = (
+    "local_execute",
+    "sandbox_run",
+    "run_code",
+    "execute_code",
+    "eval_code",
+)
+
+
 class PolicyEvaluator:
     @staticmethod
     def evaluate_action(action_type: str, details: Dict[str, Any]) -> Tuple[bool, str, int]:
@@ -50,6 +67,43 @@ class PolicyEvaluator:
         if action_type in ["open_application", "organize_files"]:
             db.create_audit_log(action_type, "allowed", f"Autonomous reversible execution: {details}", level=2)
             return True, "Autonomous reversible execution allowed (Level 2: Reversible Action)", 2
+
+        # ── D8 code-execution contract (owner review P1 #8) ─────────────
+        # Pure computation: the calculator's risk class. The Level 0
+        # grant is re-derived from the payload via the same AST
+        # validation the evaluator enforces — impure, empty, or missing
+        # code never gets it and routes to the approval flow instead.
+        if action_type == "evaluate_pure_code":
+            code = details.get("code")
+            pure = False
+            if isinstance(code, str) and code.strip():
+                try:
+                    from app.tools.pure_code import is_pure_code
+                    pure = bool(is_pure_code(code))
+                except Exception as e:
+                    app_logger.warning(
+                        f"Pure-code validation unavailable at policy gate: {e}")
+                    pure = False
+            if pure:
+                db.create_audit_log(action_type, "allowed",
+                                    f"Pure computation (AST-validated): {details}", level=0)
+                return True, ("Autonomous execution allowed (Level 0: pure "
+                              "computation — AST-validated, no imports, no "
+                              "I/O by construction)"), 0
+            db.create_audit_log(action_type, "pending_approval",
+                                f"Code failed pure-computation validation: {details}", level=3)
+            return False, ("Code failed pure-computation validation — "
+                           "arbitrary code execution requires explicit user "
+                           "approval (Level 3)"), 3
+
+        # Arbitrary code execution: a DECLARED Level 3 (D8 contract) —
+        # the reason names code execution, not 'unknown action'.
+        if action_type in ARBITRARY_CODE_ACTIONS:
+            audit_logger.warning(f"Arbitrary code execution requested: {action_type} - requires approval. Details: {details}")
+            db.create_audit_log(action_type, "pending_approval",
+                                f"Arbitrary code execution: {details}", level=3)
+            return False, ("Arbitrary code execution requires explicit user "
+                           "approval (Level 3)"), 3
 
         # Level 3 Actions (Sensitive/Irreversible)
         if action_type in ["submit_form", "send_email", "delete_file", "shell_command", "trade_action", "publish_post"]:

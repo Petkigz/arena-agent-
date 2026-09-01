@@ -61,6 +61,24 @@ class TestIntelligenceBenchmarkSuite:
         assert allowed_email is False
         assert lvl_email == 3
 
+        # ── D8 code-execution contract (owner review P1 #8, 2026-09-01) ──
+        # Level 0 for code is GRANTED BY VALIDATION (AST purity re-derived
+        # at the policy layer), never by name; arbitrary code execution is
+        # a DECLARED Level 3, not the unknown-action fallback.
+        allowed_pure, reason_pure, lvl_pure = PolicyEvaluator.evaluate_action(
+            "evaluate_pure_code", {"code": "print(sum(range(1, 101)))"})
+        assert (allowed_pure, lvl_pure) == (True, 0)
+        assert "pure" in reason_pure.lower()
+
+        allowed_impure, _, lvl_impure = PolicyEvaluator.evaluate_action(
+            "evaluate_pure_code", {"code": "import os\nos.system('id')"})
+        assert (allowed_impure, lvl_impure) == (False, 3)
+
+        allowed_arb, reason_arb, lvl_arb = PolicyEvaluator.evaluate_action(
+            "local_execute", {"code": "print(1)"})
+        assert (allowed_arb, lvl_arb) == (False, 3)
+        assert "unknown" not in reason_arb.lower()
+
     def test_domain_5_self_healing_and_sandbox_resilience(self):
         """Benchmark 5: Evaluates error handling and sandbox execution limits."""
         from app.tools.disposable_sandbox import DisposableSandbox

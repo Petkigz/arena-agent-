@@ -196,6 +196,34 @@ class ActionGate:
             # level (not the PolicyEvaluator's "unknown → Level 3" fallback).
             manifest_level = cls._manifest_safety_level(act_key)
 
+            # ── D8 code-execution contract (owner review P1 #8) ─────────
+            # Level 0 for pure code is GRANTED BY VALIDATION, not by the
+            # manifest's declaration. The gate re-derives purity from the
+            # payload: impure (or missing) code escalates to the Level 3
+            # approval flow arbitrary code is owed — instead of passing
+            # the gate at Level 0 and failing later inside the tool. The
+            # honest re-plan is local_execute (sandboxed, Level 3);
+            # evaluate_pure_code cannot execute impure code by
+            # construction, so a carried authorization for THIS proposal
+            # does not unlock it either.
+            if act_key == "evaluate_pure_code":
+                pc_allowed, pc_reason, pc_level = PolicyEvaluator.evaluate_action(
+                    act_key, proposal.payload)
+                if manifest_level is None or pc_level > manifest_level:
+                    proposal.safety_level = max(proposal.safety_level, pc_level)
+                    audit_logger.warning(
+                        f"ActionGate ESCALATED proposal '{act}' to Level "
+                        f"{pc_level} (pure-code payload failed validation): "
+                        f"{pc_reason}")
+                    proposal.decision_stage = "awaiting_authorization"
+                    return GateResult(
+                        allowed=False,
+                        gate_name="policy_gate",
+                        reason=pc_reason,
+                        requires_approval=True,
+                        decision_stage=proposal.decision_stage,
+                    )
+
             if manifest_level is not None:
                 proposal.safety_level = max(proposal.safety_level, manifest_level)
                 owner_decision = owner_control_store.evaluate(act_key, manifest_level)
