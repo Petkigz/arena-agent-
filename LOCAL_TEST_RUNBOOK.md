@@ -132,7 +132,7 @@ If C6/C7 FAIL on Windows, that is a **real finding** — those code paths
 have never executed anywhere. Report the detail line and it gets fixed
 before anything else.
 
-## 4. Only-your-machine checks (not possible in CI/sandbox)
+## 5. Only-your-machine checks (not possible in CI/sandbox)
 
 ### 4a. LM Studio embedding backend (the other half of fix #8)
 
@@ -185,7 +185,7 @@ curl "http://127.0.0.1:8000/tools/availability?tool=system_metrics&probe=true"
 sandbox saw 2 cores / 4 GB. On Linux also check `temperature_status` for
 real thermal readings.
 
-## 5. If anything fails
+## 6. If anything fails
 
 - Note the check id (e.g. `C6`) and the detail line.
 - Unit failure → full pytest output for the failing test.
