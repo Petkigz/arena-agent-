@@ -13,6 +13,8 @@ Safety levels mirror policy.py: 0=read, 1=draft, 2=reversible, 3=sensitive.
 from __future__ import annotations
 
 import importlib
+import inspect
+import types
 from threading import RLock
 from typing import Any, Callable, Dict, Optional
 
@@ -144,10 +146,128 @@ def _copy_availability(
     return handler
 
 
+# Payload-key aliases (N2 arity audit, 2026-09): parameter names that carry
+# an internal typing suffix (or a different vocabulary) also accept the
+# natural public payload key, so model-synthesized and legacy payloads keep
+# working while the wrapper declares the parameter's REAL name.
+_PAYLOAD_KEY_ALIASES = {
+    "file_path_str": "file_path",
+    "image_path_str": "image_path",
+    "source_path_str": "source_path",
+    "destination_path_str": "destination_path",
+    "output_zip_path_str": "output_zip_path",
+    "webhook_url": "url",
+    "message_text": "message",
+    "url_or_id": "video_url",
+    "target_url_or_path": "target",
+    "checkpoint_hash": "checkpoint_id",
+}
+
+
+def _resolve_for_signature(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Best-effort resolution of a (possibly lazy-proxied) callable to the
+    real function, for signature inspection ONLY. Never loads eagerly at
+    manifest-build time — resolution happens on first handler call, when
+    the dependency would be loaded anyway. ToolDependencyUnavailable
+    propagates to the caller (the handler renders it as a typed result,
+    exactly like the real call path)."""
+    if isinstance(fn, _LazyImportProxy):
+        return fn._load()
+    if isinstance(fn, types.FunctionType) and fn.__closure__:
+        proxy = None
+        name = None
+        for cell in fn.__closure__:
+            try:
+                v = cell.cell_contents
+            except ValueError:
+                continue
+            if isinstance(v, _LazyImportProxy):
+                proxy = v
+            elif isinstance(v, str):
+                name = v
+        if proxy is not None and name is not None:
+            real = getattr(proxy._load(), name, None)
+            if callable(real):
+                return real
+    return fn
+
+
 def _wrap(fn: Callable[..., Any], *key_args: str) -> Callable[[Dict[str, Any]], Any]:
-    """Adapt a keyword-arg method to a payload-dict handler."""
+    """Adapt a keyword-arg method to a payload-dict handler.
+
+    Arity contract (N2 audit, 2026-09 — external sandbox battery): 30 of 147
+    wrapped tools declared payload keys that did not match the handler's
+    parameters ('file_path' vs 'file_path_str', 'message' vs 'message_text',
+    keys that were not parameters at all), so every payload shape either
+    crashed with TypeError ('missing 1 required positional argument') or
+    silently dropped the key. Two guarantees now hold:
+
+      * key_args must be the handler's REAL parameter names (pinned by
+        tests/test_manifest_wrapper_arity.py — required parameters wired,
+        no invented keys);
+      * a payload that still fails the contract gets a typed, self-describing
+        {success: False, error, expected_keys} result — deterministic
+        degradation, never a TypeError. The error names the accepted keys so
+        model-driven callers can retry with the right payload.
+
+    Aliases from _PAYLOAD_KEY_ALIASES are accepted alongside the real names.
+    """
+    arity: Dict[str, Any] = {"sig": None, "resolved": False}
+
+    def _signature():
+        if not arity["resolved"]:
+            arity["resolved"] = True
+            real = _resolve_for_signature(fn)
+            try:
+                arity["sig"] = inspect.signature(real)
+            except (TypeError, ValueError):
+                arity["sig"] = None
+        return arity["sig"]
+
     def handler(payload: Dict[str, Any]) -> Any:
-        kwargs = {k: payload.get(k) for k in key_args if payload.get(k) is not None}
+        kwargs: Dict[str, Any] = {}
+        for k in key_args:
+            v = payload.get(k)
+            if v is None:
+                alias = _PAYLOAD_KEY_ALIASES.get(k)
+                if alias is not None:
+                    v = payload.get(alias)
+            if v is not None:
+                kwargs[k] = v
+        try:
+            sig = _signature()
+        except ToolDependencyUnavailable as exc:
+            return exc.as_result()
+        if sig is not None:
+            params = sig.parameters
+            if not any(p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+                       for p in params.values()):
+                missing = [
+                    n for n, p in params.items()
+                    if p.default is p.empty and n not in kwargs
+                    and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+                ]
+                unknown = [k for k in kwargs if k not in params]
+                if missing or unknown:
+                    hints = list(key_args)
+                    for k in key_args:
+                        alias = _PAYLOAD_KEY_ALIASES.get(k)
+                        if alias is not None and alias not in hints:
+                            hints.append(alias)
+                    problems = []
+                    if missing:
+                        problems.append("missing required parameter(s): "
+                                        + ", ".join(missing))
+                    if unknown:
+                        problems.append("unexpected payload key(s): "
+                                        + ", ".join(unknown))
+                    return {
+                        "success": False,
+                        "error": ("; ".join(problems)
+                                  + " — accepted payload keys: "
+                                  + ", ".join(hints)),
+                        "expected_keys": hints,
+                    }
         try:
             return fn(**kwargs)
         except ToolDependencyUnavailable as exc:
@@ -330,7 +450,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("list_capabilities", "self_awareness", 0, "Enumerate the agent's registered tool inventory (evidence for capability questions)",
         _list_caps_handler)
     add("launch_app", "os_control", 2, "Launch an installed application",
-        _wrap(SystemAppInventory.launch_any_app, "app_query", "app_name"))
+        _wrap(SystemAppInventory.launch_any_app, "app_query"))
     add("list_apps", "os_control", 0, "List installed applications",
         _ignore_payload(SystemAppInventory.scan_installed_applications))
     add("mouse_click", "os_control", 3, "Grounded raw-coordinate click: requires window/process grounding ID, fresh display-topology digest and immediate re-observation",
@@ -376,21 +496,21 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         "when the user names a location)",
         _wrap(UniversalFilesystem.search_filesystem, "query", "root_dir", "scope", "max_results"))
     add("move_file", "filesystem", 2, "Rename/move a file",
-        _wrap(UniversalFilesystem.rename_or_move, "source_path", "destination_path"))
+        _wrap(UniversalFilesystem.rename_or_move, "source_path_str", "destination_path_str"))
     add("copy_file_verified", "filesystem", 2, "Copy a file without overwrite and verify its hash",
         _wrap(UniversalFilesystem.copy_file_verified, "source_path", "destination_path"))
     add("remove_verified_copy", "filesystem", 3, "Remove an exact unchanged copied artifact",
         _wrap(UniversalFilesystem.remove_verified_copy, "file_path", "expected_sha256"))
     add("delete_files", "filesystem", 3, "Reversible delete: send named files to a recoverable trash area under the home directory (owner approval required)",
-        _wrap(UniversalFilesystem.trash_files, "file_paths", "paths", "trash_root"))
+        _wrap(UniversalFilesystem.trash_files, "file_paths", "trash_root"))
     add("compress_files", "filesystem", 2, "Compress files to a zip",
-        _wrap(UniversalFilesystem.compress_zip, "source_paths", "output_zip_path"))
+        _wrap(UniversalFilesystem.compress_zip, "source_paths", "output_zip_path_str"))
     add("resize_image", "filesystem", 2, "Resize an image",
-        _wrap(UniversalFilesystem.resize_image, "image_path", "target_width", "target_height"))
+        _wrap(UniversalFilesystem.resize_image, "image_path_str", "target_width", "target_height"))
     add("read_document", "filesystem", 0, "Read a document",
-        _wrap(DocumentManager.read_document, "file_path"))
+        _wrap(DocumentManager.read_document, "file_path_str"))
     add("create_document", "filesystem", 1, "Create a document",
-        _wrap(DocumentManager.create_document, "file_path", "content"))
+        _wrap(DocumentManager.create_document, "file_path_str", "content", "overwrite"))
     add("list_workspace", "filesystem", 0, "List workspace files",
         _ignore_payload(DocumentManager.list_workspace_files))
 
@@ -452,19 +572,19 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("camera_photo", "vision", 0, "Capture a webcam photo",
         _ignore_payload(CameraCaptureTool.capture_photo))
     add("vision_analyze", "vision", 0, "Analyze an image",
-        _wrap(VisionAnalyzerTool.analyze_screen_image, "image_path"))
+        _wrap(VisionAnalyzerTool.analyze_screen_image, "image_path_str", "prompt_focus", "complexity"))
     add("ocr_read", "vision", 0, "Extract text from an image",
-        _wrap(OCRReaderTool.extract_text_from_image, "image_path"))
+        _wrap(OCRReaderTool.extract_text_from_image, "image_path_str"))
     add("detect_objects", "vision", 0, "Detect objects in an image (YOLO/SSD/face fallback) + auto-grounding",
-        _wrap(ObjectDetectorTool.detect_objects, "image_path", "conf_threshold"))
+        _wrap(ObjectDetectorTool.detect_objects, "image_path_str", "conf_threshold"))
     add("detect_faces", "vision", 0, "Detect faces in an image (Haar cascade)",
-        _wrap(ObjectDetectorTool.detect_faces, "image_path"))
+        _wrap(ObjectDetectorTool.detect_faces, "image_path_str"))
     add("analyze_image_grounded", "vision", 0, "Detect objects + create language groundings (perception→grounding loop)",
-        _wrap(ObjectDetectorTool.analyze_image_grounded, "image_path", "auto_create_groundings"))
+        _wrap(ObjectDetectorTool.analyze_image_grounded, "image_path_str", "auto_create_groundings"))
     add("analyze_prosody", "audio", 0, "Analyze voice prosody (pitch, energy, rate) → emotion from real signals",
         _wrap(ProsodyAnalyzerTool.analyze_file, "file_path", "sample_rate"))
     add("vlm_analyze", "vision", 0, "True VLM analysis (Moondream2/Llava) with OCR+LLM fallback — true visual understanding",
-        _wrap(VlmAnalyzerTool.analyze_image, "image_path", "prompt", "max_tokens"))
+        _wrap(VlmAnalyzerTool.analyze_image, "image_path_str", "prompt", "max_tokens"))
     add("vlm_status", "vision", 0, "Check VLM availability (Moondream2/Llava) — honest status",
         _ignore_payload(VlmAnalyzerTool.get_status))
     # LoRA continual learning (P2 AGI)
@@ -503,23 +623,23 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("browser_delete_upload", "web", 3, "Owner-adapter service-specific deletion of an uploaded receipt, confirmed by observation",
         _wrap(BrowserAutomation.delete_uploaded_file, "service_id", "receipt_id"))
     add("youtube_learn", "web", 0, "Learn from a YouTube video",
-        _wrap(YouTubeLearner.learn_from_video, "video_url"))
+        _wrap(YouTubeLearner.learn_from_video, "url_or_id", "prompt_focus", "complexity"))
     add("media_learn", "web", 0, "Analyze a media target",
-        _wrap(UniversalMediaLearner.analyze_media_target, "target"))
+        _wrap(UniversalMediaLearner.analyze_media_target, "target_url_or_path", "prompt_focus"))
 
     # ── Data / code ─────────────────────────────────────────────────────────
     add("analyze_data", "data", 0, "Analyze a dataset",
-        _wrap(DataAnalysisEngine.analyze_dataset, "file_path"))
+        _wrap(DataAnalysisEngine.analyze_dataset, "file_path_str"))
     add("code_audit", "code", 1, "Audit and refactor code",
-        _wrap(ASTJanitor.audit_and_refactor_code, "code", "language"))
+        _wrap(ASTJanitor.audit_and_refactor_code, "file_path_str"))
     add("generate_tests", "code", 1, "Generate pytest contracts",
-        _wrap(ASTJanitor.generate_pytest_contract, "code", "language"))
+        _wrap(ASTJanitor.generate_pytest_contract, "module_name_query"))
     add("code_explain", "code", 0, "Explain/debug code",
-        _wrap(CoderBrainTool.explain_and_debug_code, "code", "issue"))
+        _wrap(CoderBrainTool.explain_and_debug_code, "code_snippet", "language"))
     add("git_checkpoint", "code", 2, "Create a git checkpoint",
         _wrap(GitManagerTool.create_checkpoint, "message"))
     add("git_rollback", "code", 3, "Roll back a git checkpoint",
-        _wrap(GitManagerTool.rollback_checkpoint, "checkpoint_id"))
+        _wrap(GitManagerTool.rollback_checkpoint, "checkpoint_hash"))
 
     # ── Security ────────────────────────────────────────────────────────────
     add("clipboard_inspect", "security", 0, "Inspect clipboard entropy without changing content",
@@ -531,11 +651,11 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("opsec_audit", "security", 1, "Audit digital footprint",
         _ignore_payload(OpSecManagerTool.audit_digital_footprint))
     add("yara_rule", "security", 1, "Generate a YARA rule",
-        _wrap(CybersecurityBrainTool.generate_yara_rule, "description"))
+        _wrap(CybersecurityBrainTool.generate_yara_rule, "rule_name", "strings_list", "meta_description"))
     add("sigma_rule", "security", 1, "Generate a Sigma rule",
-        _wrap(CybersecurityBrainTool.generate_sigma_rule, "description"))
+        _wrap(CybersecurityBrainTool.generate_sigma_rule, "title", "detection_selection", "logsource_category"))
     add("pentest_report", "security", 1, "Generate a pentest report",
-        _wrap(PentestCompanyAssistant.generate_pentest_report, "target", "findings"))
+        _wrap(PentestCompanyAssistant.generate_pentest_report, "client_company_name", "assessment_type", "target_scope", "vulnerabilities_found"))
 
     # ── Productivity / content ──────────────────────────────────────────────
     add("daily_briefing", "productivity", 0, "Generate a daily briefing",
@@ -549,9 +669,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("workflow_execute", "productivity", 2, "Execute a multi-step workflow",
         _wrap(WorkflowEngine.execute_workflow, "workflow_name", "steps"))
     add("finance_calc", "productivity", 0, "Financial calculations",
-        _wrap(KnowledgeDomainsTool.accounting_finance_calc, "query"))
+        _wrap(KnowledgeDomainsTool.accounting_finance_calc, "revenue", "operating_expenses", "tax_rate_percent"))
     add("subscription_audit", "productivity", 0, "Audit subscriptions/trials",
-        _wrap(FinancialLegalWellnessSuite.audit_subscriptions_and_trials, "context"))
+        _wrap(FinancialLegalWellnessSuite.audit_subscriptions_and_trials, "subscriptions_list"))
 
     # ── Sandbox ─────────────────────────────────────────────────────────────
     add("sandbox_run", "sandbox", 2, "Run code in a disposable sandbox",
@@ -561,7 +681,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("phone_command", "phone", 2, "Control a phone via ADB",
         _wrap(AndroidADBController.run_adb_cmd, "args"))
     add("phone_sms", "phone", 3, "Send an SMS",
-        _wrap(AndroidADBController.send_sms, "phone_number", "message"))
+        _wrap(AndroidADBController.send_sms, "phone_number", "message_text", "target_device"))
     add("phone_call", "phone", 3, "Make a phone call",
         _wrap(AndroidADBController.make_phone_call, "phone_number"))
     add("phone_screenshot", "phone", 0, "Capture phone screenshot",
@@ -569,17 +689,17 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
 
     # ── Knowledge / skill ───────────────────────────────────────────────────
     add("index_knowledge", "knowledge", 0, "Index knowledge from a source",
-        _wrap(KnowledgeIndexer.index_doc_knowledge, "source", "content"))
+        _wrap(KnowledgeIndexer.index_doc_knowledge, "doc_result", "ai_summary", "category", "confidence"))
     add("teach_skill", "knowledge", 1, "Teach the agent a skill",
-        _wrap(SkillTeachingEngine.teach_skill, "skill_name", "steps"))
+        _wrap(SkillTeachingEngine.teach_skill, "skill_name", "instructions", "category", "safety_rules", "sample_commands", "trigger_keywords"))
     add("execute_skill", "knowledge", 2, "Execute a taught skill",
-        _wrap(SkillTeachingEngine.execute_taught_skill, "skill_name", "params"))
+        _wrap(SkillTeachingEngine.execute_taught_skill, "skill_name", "target_parameter", "run_in_sandbox"))
 
     # ── Ghost operator / notifications ──────────────────────────────────────
     add("list_windows", "os_control", 0, "List open windows",
         _ignore_payload(Win32GhostOperator.list_open_windows))
     add("trigger_webhook", "integration", 3, "Trigger a webhook",
-        _wrap(ConnectorsTool.trigger_webhook, "url", "payload"))
+        _wrap(ConnectorsTool.trigger_webhook, "webhook_url", "payload"))
 
     # ── Coworker essentials (notes / weather / translation / email / SQL /
     #    calendar / documents) ───────────────────────────────────────────────
