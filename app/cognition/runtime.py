@@ -2964,6 +2964,19 @@ class CognitiveRuntime:
                                     "value": stat["value"],
                                     "value_str": stat["value_str"],
                                 })
+                        # D8 (owner review item 6): a pure-code evaluation
+                        # is ground truth for the output the reply must
+                        # state — same contract as arithmetic.
+                        if (plan.question_kind == "pure_code"
+                                and isinstance(observation_result, dict)
+                                and observation_result.get("success")
+                                and observation_result.get("value") is not None):
+                            deterministic_answers.append({
+                                "expression": str(
+                                    observation_result.get("code", ""))[:120],
+                                "value": observation_result.get("value"),
+                                "value_str": observation_result.get("value_str"),
+                            })
             except Exception as exc:
                 app_logger.warning(f"Observation routing failed (answer proceeds without it): {exc}")
             # AGI Phase 1: Enrich with common sense knowledge
@@ -3011,11 +3024,11 @@ class CognitiveRuntime:
             # value with an explicit instruction — phrasing it is trivial
             # and stays on the fast route (the verifier backstops any
             # model that substitutes its own arithmetic). Data-statistic
-            # evidence (live D2) is the same shape: one exact value with
-            # an explicit instruction.
+            # evidence (live D2) and pure-code output (live D8) are the
+            # same shape: one exact value with an explicit instruction.
             if observation_evidence and not (
                 observation_plan and observation_plan.question_kind
-                in ("arithmetic", "data_statistic")
+                in ("arithmetic", "data_statistic", "pure_code")
             ):
                 complexity = "main"
                 app_logger.info("Evidence-grounded answer routed to the main model.")

@@ -574,6 +574,19 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     add("calculate_expression", "system", 0,
         "Evaluate an arithmetic expression deterministically (exact: numbers and + - * / // % ** only; never the language model)",
         _wrap(DeterministicCalculator.evaluate, "expression"))
+    # DIAG D8 (live 2026-09-01, owner review item 6): a PURE computation
+    # ('print(sum(range(1, 101)))') demanded the authority level of an
+    # arbitrary OS command. The pure-code evaluator is the calculator's
+    # risk class — Level 0 by construction: the AST admits only literals,
+    # operators, and whitelisted pure builtins, so it CANNOT touch the
+    # file system, network, or process table. Arbitrary code still routes
+    # to local_execute at Level 3 — the gate is NOT weakened.
+    PureCodeTool = _LazyImportProxy("app.tools.pure_code", "PureCode")
+    add("evaluate_pure_code", "system", 0,
+        "Deterministically evaluate a pure computation snippet "
+        "(AST-validated: no imports, no I/O, no attribute access — "
+        "the calculator's class of risk, not arbitrary execution)",
+        _wrap(PureCodeTool.evaluate, "code"))
 
     # ── Vision / media ──────────────────────────────────────────────────────
     add("screen_capture", "vision", 0, "Capture the screen",

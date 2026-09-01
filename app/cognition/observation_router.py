@@ -402,6 +402,30 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             question_kind="arithmetic",
         )
 
+    # ── Pure code execution (DIAG D8, live 2026-09-01, owner review
+    # item 6): 'run this code: print(sum(range(1, 101)))' demanded Level-3
+    # authority for a PURE computation. A snippet that passes pure-code
+    # validation (literals, operators, whitelisted builtins only — no I/O
+    # by construction) evaluates deterministically at Level 0. Anything
+    # else (open(), os.*, imports) plans NOTHING here and keeps the
+    # matcher's local_execute -> approval gate.
+    try:
+        from app.cognition.tool_matcher import _extract_code_snippet
+        from app.tools.pure_code import is_pure_code
+        snippet = _extract_code_snippet(text)
+    except Exception:
+        snippet = None
+    if snippet and re.search(
+            r"\b(?:run|execute|eval(?:uate)?|what.{0,10}s?the output)\b",
+            t, re.IGNORECASE) and is_pure_code(snippet):
+        return ObservationPlan(
+            action_type="evaluate_pure_code",
+            payload={"code": snippet},
+            evidence_hint="Pure computation evaluated deterministically "
+                          "(no I/O possible by construction).",
+            question_kind="pure_code",
+        )
+
     # ── Data-statistic asks (live D2, 2026-09-01): '<statistic> of
     # <column> column' over a named data file. The arithmetic comment
     # above promised these "fall through to the data pipeline" — this IS
@@ -1012,6 +1036,20 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
                 f"CALCULATION ATTEMPTED but failed: {data.get('error', 'unknown error')} "
                 f"for expression {data.get('expression', '?')!r}. Say the calculation "
                 f"could not be completed and why — do not guess a number."
+            )
+        if plan.action_type == "evaluate_pure_code":
+            if data.get("success"):
+                return (
+                    f"VERIFIED COMPUTATION (deterministic pure-code "
+                    f"evaluator, exact — do not recompute or second-guess "
+                    f"it): {data.get('code')} -> {data.get('output')}\n"
+                    f"State {data.get('output')} as the output of the code. "
+                    f"Never substitute your own arithmetic."
+                )
+            return (
+                f"COMPUTATION ATTEMPTED but failed: "
+                f"{data.get('error', 'unknown error')}. Say the code could "
+                f"not be evaluated and why — do not guess an output."
             )
         if plan.action_type == "analyze_data":
             stat = extract_statistic_from_analysis(result, plan)

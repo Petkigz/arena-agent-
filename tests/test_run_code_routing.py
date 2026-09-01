@@ -28,8 +28,11 @@ Contract under test:
     in the message means no fabricated code;
   * explain-phrasings still route to code_explain (guard);
   * LocalExecutor actually runs the snippet (post-approval path);
-  * end to end: the exact live D8 question produces an approval request
-    for local_execute — never code_explain.
+  * end to end, the exact live D8 question: SUPERSEDED by owner review
+    item 6 (Option B, 2026-09-01) — a PURE computation is evaluated
+    deterministically at Level 0 (the calculator's risk class) and never
+    demands approval; IMPURE snippets keep the local_execute + Level-3
+    approval contract unchanged (the gate is not weakened).
 """
 
 from unittest.mock import patch
@@ -135,8 +138,66 @@ def test_local_executor_runs_the_d8_snippet():
 # ── end to end: the exact live D8 question ──────────────────────────────
 
 def test_d8_e2e_asks_to_run_code_never_explains_it():
-    """The agent must propose EXECUTION (local_execute, approval-gated at
-    Level 3) — never substitute code_explain and pretend to have run it."""
+    """Owner review item 6 (2026-09-01, Option B): a PURE computation
+    ('print(sum(range(1, 101)))' — no I/O by AST construction) is the
+    calculator's class of risk, NOT arbitrary execution. The old contract
+    (Level-3 approval for this exact text) is superseded: the observation
+    router evaluates it deterministically at Level 0 and the answer must
+    come from that verified evidence — never code_explain, never a
+    fabricated guess, and never an approval demand for arithmetic.
+    (Impure snippets keep the local_execute + approval contract — pinned
+    by test_impure_code_e2e_still_demands_approval below.)"""
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+
+    def _fake_llm(**kwargs):
+        # Obedient brain: echoes the verified computation it was given.
+        content = ("The output is 5050."
+                   if "VERIFIED COMPUTATION" in str(kwargs.get("messages", ""))
+                   else "placeholder")
+        return {"success": True, "id": "chat-real",
+                "choices": [{"message": {"content": content}}]}
+
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=_fake_llm):
+        res = CognitivePipeline.process_chat(user_text=D8_TEXT)
+
+    # The pure computation was ANSWERED from verified evidence — no
+    # Level-3 approval flow for arithmetic.
+    assert res.get("reasoning_action") == "answer"
+    assert res.get("requires_approval") is not True
+    assert res.get("approval_request") is None
+    assert res.get("goal_lifecycle_state") == "achieved"
+    assert "5050" in str(res.get("assistant_reply", ""))
+    # And the misroute is dead:
+    assert "code_explain" not in [
+        str(a) for a in (res.get("executed_actions") or [])]
+    assert "code_explain" not in str(res.get("assistant_reply", ""))
+
+
+def test_d8_e2e_stubborn_model_fails_verification():
+    """F3c enforcement: the deterministic evaluation is ground truth. A
+    brain that explains instead of stating the output FAILS the goal —
+    the pipeline must not mark a non-answer as achieved."""
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+
+    def _stubborn_llm(**kwargs):
+        return {"success": True, "id": "chat-real",
+                "choices": [{"message": {
+                    "content": "This code prints a sum of numbers."}}]}
+
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=_stubborn_llm):
+        res = CognitivePipeline.process_chat(user_text=D8_TEXT)
+
+    assert res.get("goal_lifecycle_state") == "failed", \
+        "a reply that never states the verified output must not pass"
+    assert res.get("goal_verified") is False
+
+
+def test_impure_code_e2e_still_demands_approval():
+    """The gate is NOT weakened (item 6 constraint): a snippet that can
+    touch the file system (open().read()) keeps the F6 contract —
+    local_execute proposal, Level 3, one-click owner approval."""
     from app.cognition.cognitive_pipeline import CognitivePipeline
 
     def _fake_llm(**kwargs):
@@ -145,18 +206,11 @@ def test_d8_e2e_asks_to_run_code_never_explains_it():
 
     with patch("app.llm.llm_client.generate_chat_completion",
                side_effect=_fake_llm):
-        res = CognitivePipeline.process_chat(user_text=D8_TEXT)
+        res = CognitivePipeline.process_chat(
+            user_text="Run this Python code and tell me the output: "
+                      "print(open('/tmp/x.txt').read())")
 
-    assert res.get("recommendation", {}).get("action_type") == "local_execute", \
-        f"the proposal must be the code runner, got {res.get('recommendation')}"
-    # Level 3: the designed path is a 1-click approval request.
+    assert res.get("recommendation", {}).get("action_type") == "local_execute"
     assert res.get("requires_approval") is True
     assert res.get("goal_lifecycle_state") == "waiting_for_user"
     assert res.get("approval_request") is not None
-    # The pending approval carries the snippet so approval actually runs it.
-    payload = res["approval_request"].get("payload") or {}
-    assert payload.get("code") == "print(sum(range(1, 101)))"
-    # And the misroute is dead:
-    assert "code_explain" not in [
-        str(a) for a in (res.get("executed_actions") or [])]
-    assert "code_explain" not in str(res.get("assistant_reply", ""))
