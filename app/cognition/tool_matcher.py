@@ -117,6 +117,24 @@ SYNONYMS: Dict[str, List[str]] = {
     "list_processes": ["running apps", "running programs", "running processes"],
     "terminate_process_verified": ["kill process", "terminate process", "end process"],
     "clipboard_inspect": ["clipboard", "what did i copy"],
+    # F6 (DIAG D8, live 2026-09-01): 'run this Python code and tell me
+    # the output' reached a code-RUNNING tool with an EMPTY payload, the
+    # run failed, and Plan-B fell to code_explain — the agent explained
+    # the code instead of running it. Run-code phrasings now pin
+    # deterministically to local_execute (the tool that takes a CODE
+    # SNIPPET and wraps the create-sandbox + run dance itself). It is
+    # Level 3: the gate routes it to the owner's 1-click approval flow —
+    # the agent asks to run code, never pretends an explanation was the
+    # execution.
+    "local_execute": [
+        "run code", "run this code", "run the code",
+        "execute code", "execute this code", "execute the code",
+        "run python", "run this python", "run the python",
+        "execute python", "run python code", "run this python code",
+        "execute this python code", "execute python code",
+        "run script", "run this script", "execute script",
+        "execute this script", "run the script",
+    ],
 }
 
 _PATH_RE = re.compile(r"[A-Za-z]:\\[^\s\"']+\.\w{2,6}")
@@ -241,6 +259,44 @@ _SEARCH_AFTER_RE = re.compile(
     re.I,
 )
 
+# F6 (DIAG D8): code fences, and python-ish statements.
+_CODE_FENCE_RE = re.compile(r"```[a-zA-Z0-9_]*\s*\n(.*?)```", re.S)
+_CODE_KEYWORD_RE = re.compile(
+    r"\b(?:print|def|import|from|for|while|return|class|lambda|with|assert)\b")
+_MAX_SNIPPET_CHARS = 2000
+
+
+def _looks_like_code(s: str) -> bool:
+    """Cheap shape test: code has call/index punctuation or a keyword.
+    Conversational tails ('and tell me the output') must NOT qualify."""
+    s = s.strip()
+    if not s or len(s) > _MAX_SNIPPET_CHARS:
+        return False
+    if any(ch in s for ch in "()[]{}="):
+        return True
+    return bool(_CODE_KEYWORD_RE.search(s))
+
+
+def _extract_code_snippet(text: str) -> Optional[str]:
+    """The code snippet inside a run-code request, or None.
+
+    Priority: fenced block, then the tail after the last colon, then a
+    bare python-ish statement. No snippet in the message means None —
+    the payload never carries fabricated code.
+    """
+    m = _CODE_FENCE_RE.search(text)
+    if m and m.group(1).strip() and _looks_like_code(m.group(1)):
+        return m.group(1).strip()
+    idx = text.rfind(":")
+    if idx != -1:
+        tail = text[idx + 1:].strip().strip("\"'`").strip()
+        if _looks_like_code(tail):
+            return tail
+    m = re.search(r"\b(?:print|sum|len|range|sorted|abs)\s*\([^()]*\)", text)
+    if m and _looks_like_code(m.group(0)):
+        return m.group(0)
+    return None
+
 def _extract_payload(text: str, action_type: str = "") -> Dict[str, Any]:
     payload: Dict[str, Any] = {}
     path = _PATH_RE.search(text)
@@ -281,6 +337,19 @@ def _extract_payload(text: str, action_type: str = "") -> Dict[str, Any]:
             query = re.sub(r"^\s*(?:for\s+)?(?:me\s+|my\s+)", "", query, flags=re.I).strip()
             if query:
                 payload["query"] = query
+    elif action_type in ("local_execute", "sandbox_run"):
+        # F6 (DIAG D8): the code snippet IS the operand — without it the
+        # runner gets an empty payload and the request degrades into an
+        # explanation (the live misroute). No snippet means no fabricated
+        # code; the runner reports the missing operand honestly.
+        snippet = _extract_code_snippet(text)
+        if snippet:
+            payload["code"] = snippet
+            if action_type == "local_execute":
+                payload["action"] = "python"
+            else:
+                import json as _json
+                payload["command"] = f"python -c {_json.dumps(snippet)}"
     return payload
 
 

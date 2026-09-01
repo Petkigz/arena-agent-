@@ -79,4 +79,11 @@ class CognitivePipeline:
             "executed_actions": res.get("executed_actions", []),
             "latency_ms": res.get("latency_ms", 0.0),
             "model_used": res.get("model_used", "fast"),
+            # ── Approval flow (F6): when the gate holds a Level-3 action
+            # for 1-click owner approval, the request itself must be
+            # visible to bridge consumers (diagnostics, REST callers) —
+            # a bare 'blocked' hides that the agent asked to run code.
+            "requires_approval": res.get("requires_approval", False),
+            "approval_request": res.get("approval_request"),
+            "recommendation": res.get("recommendation"),
         }
