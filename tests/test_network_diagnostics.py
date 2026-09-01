@@ -52,11 +52,25 @@ def test_ping_requires_host():
 
 
 def test_ping_returns_typed_dict():
-    # Loopback ping usually works even offline; if the utility is missing or
-    # blocked it must still return a typed dict (never raise).
+    # The CONTRACT, in both worlds (external audit 2026-09 ran this suite in
+    # a sandbox with no `ping` binary at all and hit the failure):
+    #   * utility present  -> the full parsed shape (success flag, stats)
+    #   * utility MISSING  -> the honest typed degradation — success False +
+    #     a typed error, never a raise, and no fabricated stats
+    # The old assertion demanded "stats" unconditionally, i.e. it only
+    # passed where the success path was possible — it asserted the wrong
+    # thing about a correct degradation.
+    import shutil
+
     res = NetworkDiagnostics.ping("127.0.0.1", count=1, timeout=2)
     assert isinstance(res, dict)
-    assert "success" in res and "stats" in res
+    assert "success" in res
+    if shutil.which("ping"):
+        assert "stats" in res
+    else:
+        assert res["success"] is False
+        assert res.get("error") == "The system 'ping' utility is not available."
+        assert "stats" not in res
 
 
 def test_traceroute_requires_host():
