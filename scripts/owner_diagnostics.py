@@ -308,10 +308,17 @@ def d7_control_file_search() -> Tuple[str, str]:
     no_browser = not any("browser" in str(a).lower()
                          for a in (res.get("executed_actions") or []))
     status = "pass" if found and no_browser else "fail"
+    # The executed actions are the primary attribution evidence for a miss
+    # (the 2026-09-01 live run truncated the reply excerpt at
+    # '[NATIVE OS ACTIONS E' — exactly where the evidence was). They are
+    # placed BEFORE the reply excerpt so record()'s 300-char cap eats only
+    # the reply tail.
+    actions = [str(a)[:60] for a in (res.get("executed_actions") or [])][:2]
     return status, (f"marker in home found={found}, "
                     f"browser_touched={not no_browser} | "
                     f"lifecycle={res.get('goal_lifecycle_state')} | "
-                    f"reply={reply[:120]!r}")
+                    f"actions={actions} | "
+                    f"reply={reply[:70]!r}")
 
 
 # ── section B: hardware-bound tool probes ────────────────────────────────────

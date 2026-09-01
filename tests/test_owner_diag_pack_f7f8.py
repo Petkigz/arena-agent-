@@ -95,6 +95,22 @@ def test_d7_passes_only_on_a_real_found_path():
     assert status == "pass", detail
 
 
+def test_d7_detail_carries_the_executed_actions():
+    """A live miss is only attributable if the paste-back shows WHICH
+    actions executed (the 2026-09-01 run truncated the reply excerpt at
+    '[NATIVE OS ACTIONS E' — exactly where the evidence was)."""
+    with patch.object(od, "_chat", return_value=_fake_chat_result(
+        actions=["Searched local filesystem for 'x' (no matching files found)."],
+        reply="I'll look for that file now." * 20)):
+        status, detail = od.d7_control_file_search()
+    assert status == "fail"
+    assert "actions=" in detail
+    assert "Searched local filesystem" in detail
+    # The actions must survive record()'s 300-char detail cap — they are
+    # positioned before the reply excerpt so truncation eats only the tail.
+    assert detail.index("actions=") < 300
+
+
 # ── F8: reply excerpts for D2/D6 ────────────────────────────────────────
 
 def test_d2_detail_carries_a_reply_excerpt():
