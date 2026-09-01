@@ -2942,6 +2942,28 @@ class CognitiveRuntime:
                                 "value": observation_result.get("value"),
                                 "value_str": observation_result.get("value_str"),
                             })
+                        # F3c (live D2, 2026-09-01): a data-statistic ask
+                        # has the same contract — analyze_data's describe()
+                        # computed the exact value, so it is ground truth
+                        # the reply must state (never a chat-model guess).
+                        if (plan.question_kind == "data_statistic"
+                                and isinstance(observation_result, dict)
+                                and observation_result.get("success")):
+                            try:
+                                from app.cognition.observation_router import (
+                                    extract_statistic_from_analysis as _extract_stat,
+                                )
+                                stat = _extract_stat(observation_result, plan)
+                            except Exception:
+                                stat = None
+                            if stat:
+                                deterministic_answers.append({
+                                    "expression": (
+                                        f"{stat['statistic']} of '{stat['column']}' "
+                                        f"in {observation_result.get('file_name', 'dataset')}"),
+                                    "value": stat["value"],
+                                    "value_str": stat["value_str"],
+                                })
             except Exception as exc:
                 app_logger.warning(f"Observation routing failed (answer proceeds without it): {exc}")
             # AGI Phase 1: Enrich with common sense knowledge
@@ -2988,8 +3010,13 @@ class CognitiveRuntime:
             # EXCEPTION (F3c, D1): arithmetic evidence is a single exact
             # value with an explicit instruction — phrasing it is trivial
             # and stays on the fast route (the verifier backstops any
-            # model that substitutes its own arithmetic).
-            if observation_evidence and not (observation_plan and observation_plan.question_kind == "arithmetic"):
+            # model that substitutes its own arithmetic). Data-statistic
+            # evidence (live D2) is the same shape: one exact value with
+            # an explicit instruction.
+            if observation_evidence and not (
+                observation_plan and observation_plan.question_kind
+                in ("arithmetic", "data_statistic")
+            ):
                 complexity = "main"
                 app_logger.info("Evidence-grounded answer routed to the main model.")
             # Task-dependent output budget (P0 #19): plain chat vs reading

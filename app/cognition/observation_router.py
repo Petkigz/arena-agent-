@@ -278,6 +278,100 @@ def _extract_pronoun_subject(recent_user_messages: List[str]) -> Optional[str]:
     return None
 
 
+# ── Data-statistic asks (DIAG F3 follow-up, live D2, 2026-09-01): the
+# arithmetic branch's comment says statistic asks "fall through to the
+# data pipeline" — but no such branch existed, so 'tell me the average of
+# the amount column' ran the chat pipeline, the mean (computed by
+# analyze_data's own describe()) never became evidence, and the goal
+# stalled in waiting_for_evidence. The SAME chain as arithmetic (D1)
+# applies: plan the deterministic tool, render the value as VERIFIED
+# evidence, record it as ground truth for the verifier.
+#
+# Detector scope is CONSERVATIVE (like the calculator): the request must
+# name BOTH '<statistic> of <column> column' AND an explicit data file
+# (.csv/.xlsx/.xls). Statistics are limited to what pandas describe()
+# reports directly (mean/average, median, min, max) — no derived math
+# (a sum reconstructed as mean*count would fabricate precision).
+_DATA_STATISTIC_WORDS = {
+    "average": "mean", "mean": "mean", "median": "median",
+    "minimum": "min", "min": "min", "maximum": "max", "max": "max",
+}
+_DATA_FILE_RE = re.compile(
+    r"(?:[A-Za-z]:)?(?:[\\/][^\s,]+)+\.(?:csv|xlsx|xls)\b"
+    r"|\b[\w\-.]+\.(?:csv|xlsx|xls)\b",
+    re.IGNORECASE,
+)
+_STAT_COL_RE = re.compile(
+    r"\b(average|mean|median|minimum|maximum|min|max)\s+(?:of\s+)?(?:the\s+)?"
+    r"['\"]?(?!(?:of|the|a|an|in|for|from|column)\b)(\w+)['\"]?\s+column\b"
+    r"|\b(average|mean|median|minimum|maximum|min|max)\s+(?:of\s+)?(?:the\s+)?"
+    r"column\s+['\"]?(\w+)['\"]?",
+    re.IGNORECASE,
+)
+
+
+def _extract_data_statistic_request(text: str) -> Optional[Dict[str, str]]:
+    """'<statistic> of <column> column' + an explicit data file, or None."""
+    t = str(text or "").strip()
+    file_match = _DATA_FILE_RE.search(t)
+    if not file_match:
+        return None
+    stat_match = _STAT_COL_RE.search(t)
+    if not stat_match:
+        return None
+    word, column = stat_match.group(1), stat_match.group(2)
+    if not word:  # 'column <name>' spelling
+        word, column = stat_match.group(3), stat_match.group(4)
+    return {
+        "file_path_str": file_match.group(0),
+        "statistic": _DATA_STATISTIC_WORDS[word.lower()],
+        "column": column,
+    }
+
+
+# describe() key for each supported statistic word.
+_DESCRIBE_KEY = {"mean": "mean", "median": "50%", "min": "min", "max": "max"}
+
+
+def extract_statistic_from_analysis(
+    result: Any, plan: ObservationPlan
+) -> Optional[Dict[str, Any]]:
+    """Pull the requested statistic out of an analyze_data result.
+
+    Returns {'statistic', 'column', 'value', 'value_str'} or None — None
+    is HONEST: a failed analysis, a missing column, or a non-numeric
+    column means no number exists, and none may be invented. The value
+    comes from pandas describe() via the tool's own summary_stats."""
+    if not isinstance(result, dict) or not result.get("success"):
+        return None
+    stats = result.get("summary_stats") or {}
+    column = str(plan.payload.get("column", "")).strip()
+    key = _DESCRIBE_KEY.get(str(plan.payload.get("statistic", "")))
+    if not column or key is None:
+        return None
+    col_stats = stats.get(column)
+    if not isinstance(col_stats, dict) or key not in col_stats:
+        return None
+    try:
+        value = float(col_stats[key])
+    except (TypeError, ValueError):
+        return None
+    return {
+        "statistic": plan.payload["statistic"],
+        "column": column,
+        "value": value,
+        "value_str": _num_str(value),
+    }
+
+
+def _num_str(value: float) -> str:
+    """Honest rendering, same rule as the calculator: ints stay ints,
+    floats keep their exact repr."""
+    if float(value).is_integer():
+        return str(int(value))
+    return repr(float(value))
+
+
 def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None) -> Optional[ObservationPlan]:
     """Map a host-state question to a read-only observation plan, or None.
 
@@ -306,6 +400,20 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
             payload={"expression": arithmetic_expr},
             evidence_hint="Exact arithmetic evaluated deterministically.",
             question_kind="arithmetic",
+        )
+
+    # ── Data-statistic asks (live D2, 2026-09-01): '<statistic> of
+    # <column> column' over a named data file. The arithmetic comment
+    # above promised these "fall through to the data pipeline" — this IS
+    # that pipeline: analyze_data's describe() holds the exact value, so
+    # the ask is answered from deterministic evidence, never chat.
+    data_stat_req = _extract_data_statistic_request(text)
+    if data_stat_req:
+        return ObservationPlan(
+            action_type="analyze_data",
+            payload=data_stat_req,
+            evidence_hint="Exact statistic from deterministic dataset analysis.",
+            question_kind="data_statistic",
         )
 
     # ── System state (memory/disk/CPU/battery/network) ─────────────────
@@ -904,6 +1012,29 @@ def render_observation_evidence(result: Any, plan: ObservationPlan) -> str:
                 f"CALCULATION ATTEMPTED but failed: {data.get('error', 'unknown error')} "
                 f"for expression {data.get('expression', '?')!r}. Say the calculation "
                 f"could not be completed and why — do not guess a number."
+            )
+        if plan.action_type == "analyze_data":
+            stat = extract_statistic_from_analysis(result, plan)
+            if stat:
+                return (
+                    f"VERIFIED DATA ANALYSIS (deterministic tool, exact — do not "
+                    f"recompute or second-guess it): {stat['statistic']} of "
+                    f"'{stat['column']}' in {data.get('file_name', 'the dataset')} "
+                    f"= {stat['value_str']}\n"
+                    f"State {stat['value_str']} as the answer to the question. "
+                    f"Never substitute your own arithmetic."
+                )
+            if not data.get("success"):
+                return (
+                    f"DATA ANALYSIS ATTEMPTED but failed: "
+                    f"{data.get('error', 'unknown error')}. Say the analysis "
+                    f"could not be completed and why — do not guess a number."
+                )
+            columns = ", ".join(str(c) for c in (data.get("columns") or [])[:10])
+            return (
+                f"DATA ANALYSIS RAN but the requested statistic/column was not "
+                f"found in the dataset (available columns: {columns or 'unknown'}). "
+                f"Say what was found and what is missing — do not guess a number."
             )
         return f"OBSERVATION ATTEMPTED ({plan.action_type}) but returned no usable evidence: {str(result)[:200]}"
     except Exception:
