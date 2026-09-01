@@ -84,43 +84,71 @@ class GoalReplanner:
     # LOCAL-artifact success condition (see _cannot_satisfy_goal_conditions).
     _WEB_RESEARCH_ACTIONS = {"web_search", "open_url"}
 
-    # Local-artifact condition keys — the same vocabulary GoalVerifier's
-    # classify_condition_type routes to the ARTIFACT evidence channel
-    # (local filesystem facts with provenance).
-    _LOCAL_ARTIFACT_CONDITION_KEYS = (
-        "file_path_identified", "file_accessed", "path_found",
+    # F5 (D9): the web allowlist — domains whose goals a public web search
+    # can legitimately serve in Plan-B.
+    _WEB_FALLBACK_ALLOWED_DOMAINS = {"web_research"}
+
+    # Condition stems that demand LOCAL-VERIFIABLE content (artifacts,
+    # environment, capabilities, or values computed from local data). A
+    # public web search can produce none of them. Word-initial matching
+    # (not preceded by a letter) so it also works inside snake_case
+    # condition names without 'latest' matching the test stem.
+    _LOCAL_CONTENT_CONDITION_STEMS = (
+        "file_path", "path_found", "file_accessed", "file_content",
+        "artifact", "capability", "app_process", "process_running",
+        "test_results", "computed_answer", "answer_value",
+        "summary_included", "screen_capture", "adb_command",
+        "diagnostic_evidence",
     )
 
     @classmethod
     def _cannot_satisfy_goal_conditions(cls, action_type: str, goal_rep: Any) -> bool:
         """True when this action STRUCTURALLY cannot verify the goal.
 
-        Honest scope (external audit 2026-09): a goal whose success
-        conditions require a LOCAL file artifact ('file_path_identified =
-        true') cannot be satisfied by searching the public web —
-        web_search/open_url can never produce a local file path. Letting
-        them into the Plan-B ladder after a local miss misroutes the
-        owner's private file request to a search engine (and cannot
-        verify even if it runs). This is the REPLAN ranking layer only:
-        first-attempt discovery breadth is untouched.
+        F5 inversion (live D9, 2026-09-01): a project-setup goal's Plan-B
+        leaked the whole request to google.com (429). The pre-fix filter
+        was a DENYLIST — web actions were excluded only when the goal's
+        conditions contained local-ARTIFACT keys — and the live goal's
+        conditions came from the LLM v2 path ('project_created = true')
+        with no artifact key, so the denylist missed. A denylist keyed on
+        condition VOCABULARY loses every time the model words conditions
+        differently.
 
-        Deliberately narrow: only (web-research action) x (local-artifact
-        condition). Everything else keeps the full candidate ladder.
+        Web-research actions now need to EARN their place (allowlist): a
+        public web search may enter the Plan-B ladder only for INFORMATION
+        goals — the domain is web research, or the goal is a knowledge
+        query whose conditions are reply-shaped. Action goals (create /
+        set up / organize / install / compute) can never be satisfied by
+        searching the public web, and routing them there leaks the
+        request. Non-web actions are untouched, and first-attempt
+        discovery breadth stays as it was — this is the replan ranking
+        layer only.
         """
+        if str(action_type or "").lower().strip() not in cls._WEB_RESEARCH_ACTIONS:
+            return False
+        domain = str(getattr(goal_rep, "target_domain", "") or "").lower().strip()
+        intent = str(getattr(goal_rep, "primary_intent_type", "") or "").lower().strip()
+        if domain in cls._WEB_FALLBACK_ALLOWED_DOMAINS:
+            return False
+        # Action goals (and information_NEED goals, which demand local
+        # diagnostic evidence) are never web-satisfiable.
+        if intent and intent != "knowledge_query":
+            return True
+        # Knowledge query (or a metadata-less goal view): web can serve it
+        # only if no condition demands local-verifiable content.
         try:
             conditions = list(getattr(goal_rep, "success_conditions", []) or [])
         except Exception:
             return False
         if not conditions:
             return False
-        wants_local_artifact = any(
-            any(k in str(c).lower() for k in cls._LOCAL_ARTIFACT_CONDITION_KEYS)
-            for c in conditions
-        )
-        return (
-            wants_local_artifact
-            and str(action_type or "").lower().strip() in cls._WEB_RESEARCH_ACTIONS
-        )
+        import re as _re
+        for c in conditions:
+            c_lower = str(c).lower()
+            for stem in cls._LOCAL_CONTENT_CONDITION_STEMS:
+                if _re.search(rf"(?<![a-z]){_re.escape(stem)}", c_lower):
+                    return True
+        return False
 
     @classmethod
     def execute_reassessment_and_replan(
