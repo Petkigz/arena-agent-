@@ -362,6 +362,49 @@ class SemanticGoalInterpreter:
             return []
         return steps[:8]
 
+    # F3c (DIAG D1/D2/D6): request shapes whose success is a matter of
+    # VERIFIABLE CONTENT. 'make' is absent from the capability verbs on
+    # purpose ('make sure the tests pass' is not tool creation); the
+    # statistic ask requires '<statistic> of' so 'tell me about the
+    # average person' stays conversational.
+    _CAPABILITY_CREATION = re.compile(
+        r"\b(?:create|build|write|add)\b[^.]{0,60}\b(?:tool|capability|skill|plugin)\b",
+        re.IGNORECASE,
+    )
+    _STATISTIC_ASK = re.compile(
+        r"\b(?:tell|show|what(?:'s| is)?|how many|how much)\b[^.]{0,40}"
+        r"\b(?:average|mean|median|sum|total|count|maximum|minimum|max|min|"
+        r"percentage|ratio)\s+of\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _honest_success_conditions(cls, text: str):
+        """Content-honest success conditions for verifiable-content
+        requests, or None for ordinary conversational requests.
+
+        The arithmetic shape uses the ONE shared detector
+        (DeterministicCalculator.extract_expression) — no duplicated
+        keyword heuristics between the interpreter and the observation
+        router.
+        """
+        # Capability creation (D6): the deliverable is an INSTALLED,
+        # WORKING capability — not a reply about one.
+        if cls._CAPABILITY_CREATION.search(text or ""):
+            return ["capability_installed = true",
+                    "capability_executes_correctly = true"]
+        # Pure arithmetic (D1): the deliverable is the computed value.
+        try:
+            from app.tools.calculator import DeterministicCalculator
+            if DeterministicCalculator.extract_expression(text or ""):
+                return ["computed_answer_in_reply = true"]
+        except Exception:
+            pass
+        # Statistic ask (D2): the deliverable is the statistic's value.
+        if cls._STATISTIC_ASK.search(text or ""):
+            return ["answer_value_in_reply = true"]
+        return None
+
     @classmethod
     def validate_schema(cls, parsed_json: Any) -> SemanticGoalSchemaValidationResult:
         """
@@ -1031,6 +1074,29 @@ class SemanticGoalInterpreter:
             success_conditions = ["response_delivered = true"]
             failure_conditions = ["response_empty = true"]
             risks = ["low"]
+
+        # F3c (DIAG D1/D2/D6): delivery is not correctness. For request
+        # shapes whose success is a MATTER OF VERIFIABLE CONTENT, the
+        # success condition must say so — 'response_delivered' verified a
+        # wrong arithmetic answer (396 for 17*24), a reply missing the
+        # requested mean, and a plan document instead of an installed
+        # capability, all as 'achieved'. Shapes, in priority order:
+        #   * capability creation -> artifact conditions (the tool must
+        #     exist and execute correctly — a plan document is not that);
+        #   * pure arithmetic     -> the computed value must be in the
+        #     reply (ground truth from the deterministic calculator);
+        #   * statistic asks ('tell me the average of ...') -> the value
+        #     must be in the reply.
+        # Ordinary conversational/knowledge questions keep
+        # 'response_delivered' — this must not make every chat answer
+        # unverifiable.
+        honest_conditions = cls._honest_success_conditions(user_text)
+        if honest_conditions:
+            success_conditions = honest_conditions
+            app_logger.info(
+                f"Verifiable-content request: success conditions now require "
+                f"the deliverable itself: {honest_conditions}"
+            )
 
         # Deeper Semantic Interpretation Path:
         # Triggered when explicitly requested (complexity in ["main", "deep"]) OR when fast heuristics detect ambiguity/collisions (is_ambiguous)

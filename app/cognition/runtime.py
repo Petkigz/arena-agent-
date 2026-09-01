@@ -2909,6 +2909,10 @@ class CognitiveRuntime:
             # evidence. Anything that mutates state still needs the full
             # proposal -> gate -> approval path.
             observation_evidence = ""
+            # F3c (D1): deterministic computations executed for this
+            # request are GROUND TRUTH — recorded and handed to the
+            # GoalVerifier, which requires the reply to state them.
+            deterministic_answers: List[Dict[str, Any]] = []
             try:
                 from app.cognition.observation_router import render_observation_evidence
                 plan = observation_plan  # computed above (observation priority)
@@ -2928,6 +2932,16 @@ class CognitiveRuntime:
                         self.blackboard.set(
                             "last_observation_evidence", observation_evidence,
                             source=f"observation:{plan.action_type}", confidence=1.0)
+                        # F3c: a successful deterministic calculation is
+                        # recorded as the ground truth the reply must state.
+                        if (plan.question_kind == "arithmetic"
+                                and isinstance(observation_result, dict)
+                                and observation_result.get("success")):
+                            deterministic_answers.append({
+                                "expression": observation_result.get("expression"),
+                                "value": observation_result.get("value"),
+                                "value_str": observation_result.get("value_str"),
+                            })
             except Exception as exc:
                 app_logger.warning(f"Observation routing failed (answer proceeds without it): {exc}")
             # AGI Phase 1: Enrich with common sense knowledge
@@ -2971,7 +2985,11 @@ class CognitiveRuntime:
             # here is just 'read this data and answer', and the small model
             # demonstrably fumbles it — the owner kept getting 'I can't access
             # your computer' replies WITH evidence in the context.
-            if observation_evidence:
+            # EXCEPTION (F3c, D1): arithmetic evidence is a single exact
+            # value with an explicit instruction — phrasing it is trivial
+            # and stays on the fast route (the verifier backstops any
+            # model that substitutes its own arithmetic).
+            if observation_evidence and not (observation_plan and observation_plan.question_kind == "arithmetic"):
                 complexity = "main"
                 app_logger.info("Evidence-grounded answer routed to the main model.")
             # Task-dependent output budget (P0 #19): plain chat vs reading
@@ -3021,6 +3039,11 @@ class CognitiveRuntime:
                 }
 
             obs_state = self.capture_observed_world_state([], assistant_reply, goal_rep)
+            # F3c (D1): deterministic ground truth computed this turn rides
+            # along with the observed state — the verifier requires the
+            # reply to state it, whatever the goal conditions say.
+            if deterministic_answers:
+                obs_state["deterministic_answers"] = deterministic_answers
             verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)
             trace.goal_verified = verify_res.verified_success
             try:

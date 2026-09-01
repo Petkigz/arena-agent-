@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from app.cognition.goal_interpreter import SemanticGoalRepresentation
 from app.cognition.condition_language import (
+    AnswerContainsVerifiedValue,
     FlagCondition,
     ObservationEnvironment,
     ObservedValue,
@@ -31,6 +32,7 @@ class GoalConditionType(str, Enum):
     STATE = "state"             # Entity state / attribute condition
     ARTIFACT = "artifact"       # Created file, image, or output artifact
     EXTERNAL = "external"       # External system / ADB / network confirmation
+    ANSWER_CONTENT = "answer_content"  # The reply's CONTENT must state a computed/derivable answer value
 
 @dataclass
 class GoalVerificationResult:
@@ -56,7 +58,8 @@ class _ProvenanceEnv(ObservationEnvironment):
     """
 
     def __init__(self, verifier, cond_type, target_entities, observations_map,
-                 verified_entity_states, verified_entity_details, reply_clean):
+                 verified_entity_states, verified_entity_details, reply_clean,
+                 deterministic_answers=None):
         self.verifier = verifier
         self.cond_type = cond_type
         self.target_entities = target_entities
@@ -64,10 +67,22 @@ class _ProvenanceEnv(ObservationEnvironment):
         self.verified_entity_states = verified_entity_states or {}
         self.verified_entity_details = verified_entity_details or {}
         self.reply_clean = reply_clean or ""
+        self.deterministic_answers = list(deterministic_answers or [])
 
     # -- response delivery: the reply is the deliverable ---------------------
     def response_delivered(self):
         return bool(self.reply_clean.strip())
+
+    # -- answer content: values the system computed deterministically -------
+    def verified_answer_values(self):
+        return [
+            a.get("value")
+            for a in self.deterministic_answers
+            if isinstance(a, dict) and a.get("value") is not None
+        ]
+
+    def response_text(self):
+        return self.reply_clean
 
     # -- flags / named conditions, routed by condition type ------------------
     def flag(self, name: str):
@@ -247,6 +262,11 @@ class GoalVerifier:
         """
         sc_lower = succ_cond.lower().strip()
 
+        # F3c (D1/D2/D6): answer-content conditions are about WHAT the
+        # reply states, not that a reply exists.
+        if "computed_answer_in_reply" in sc_lower or "answer_value_in_reply" in sc_lower:
+            return GoalConditionType.ANSWER_CONTENT
+
         if "response_delivered" in sc_lower or "answer_provided" in sc_lower:
             if primary_intent_type == "knowledge_query" or target_domain == "conversation":
                 return GoalConditionType.RESPONSE
@@ -315,7 +335,8 @@ class GoalVerifier:
         executed_actions: List[str],
         reply_clean: str,
         failed_conditions: List[str],
-        verified_entity_details: Optional[Dict[str, Any]] = None
+        verified_entity_details: Optional[Dict[str, Any]] = None,
+        deterministic_answers: Optional[List[Dict[str, Any]]] = None
     ) -> ConditionStatus:
         """
         Phase E Tri-State Condition Evaluator:
@@ -339,7 +360,9 @@ class GoalVerifier:
         cond_key = sc_lower.split("=")[0].strip() if "=" in sc_lower else sc_lower
 
         node = parse_condition(succ_cond)
-        if cond_type == GoalConditionType.RESPONSE or "response_delivered" in sc_lower or "answer_provided" in sc_lower:
+        if cond_type == GoalConditionType.ANSWER_CONTENT:
+            node = AnswerContainsVerifiedValue()
+        elif cond_type == GoalConditionType.RESPONSE or "response_delivered" in sc_lower or "answer_provided" in sc_lower:
             # The reply IS the deliverable; its existence is directly observable.
             node = ResponseDelivered()
         elif not isinstance(node, FlagCondition):
@@ -368,6 +391,7 @@ class GoalVerifier:
             verified_entity_states=verified_entity_states,
             verified_entity_details=verified_entity_details,
             reply_clean=reply_clean,
+            deterministic_answers=deterministic_answers,
         )
         verdict: Verdict = node.evaluate(env)
         if verdict.status == "pass":
@@ -507,6 +531,13 @@ class GoalVerifier:
         # 2. Evaluate Success Conditions against Tri-State Evaluator (SATISFIED, FAILED, UNKNOWN)
         target_conditions = goal_rep.success_conditions or ["response_delivered = true"]
 
+        # F3c (D1/D2/D6): deterministic computations recorded by the
+        # runtime are GROUND TRUTH for what the reply must state.
+        deterministic_answers = [
+            a for a in (obs_dict.get("deterministic_answers") or [])
+            if isinstance(a, dict)
+        ]
+
         for succ_cond in target_conditions:
             cond_st = cls.evaluate_condition_status_against_world_model(
                 succ_cond,
@@ -516,7 +547,8 @@ class GoalVerifier:
                 executed_actions,
                 reply_clean,
                 failed_conditions,
-                verified_entity_details=verified_entity_details
+                verified_entity_details=verified_entity_details,
+                deterministic_answers=deterministic_answers,
             )
             if cond_st == ConditionStatus.SATISFIED:
                 met_conditions.append(succ_cond)
@@ -524,6 +556,30 @@ class GoalVerifier:
                 failed_conditions.append(f"failed_condition: {succ_cond}")
             else:
                 unknown_conditions.append(f"unverifiable_condition: {succ_cond}")
+
+        # F3c unconditional ground-truth check: this runs REGARDLESS of
+        # what the goal representation's conditions say. Live incident D1:
+        # the runtime computed 17*24=408 deterministically, the model
+        # replied 396, and 'response_delivered' verified the goal as
+        # achieved. A recorded deterministic answer that the reply does
+        # not state means the answer was NOT delivered — a failed
+        # condition in its own right, with the ground truth named.
+        if deterministic_answers:
+            # Lazy import: keep the verifier's import graph free of the
+            # tools layer at module load; the calculator owns the
+            # numeric-match semantics (thousands separators, tolerance).
+            from app.tools.calculator import DeterministicCalculator
+            for ans in deterministic_answers:
+                if ans.get("value") is None:
+                    continue
+                if not DeterministicCalculator.reply_mentions_value(
+                        reply_clean, ans.get("value")):
+                    failed_conditions.append(
+                        f"Deterministic answer missing from reply: "
+                        f"{ans.get('expression', '?')} = "
+                        f"{ans.get('value_str', ans.get('value'))} "
+                        f"(computed deterministically; the reply must state this value)"
+                    )
 
         # STRICT TRI-STATE SUCCESS EVALUATION:
         # 1. SATISFIED: Zero failed/unknown conditions AND all required conditions satisfied -> ACHIEVED

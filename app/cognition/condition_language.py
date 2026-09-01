@@ -95,6 +95,15 @@ class ObservationEnvironment:
     def response_delivered(self) -> Optional[bool]:
         return None
 
+    def verified_answer_values(self) -> List[Any]:
+        """Values computed deterministically for this request (ground
+        truth for answer-content conditions). Empty by default."""
+        return []
+
+    def response_text(self) -> str:
+        """The assistant reply text (the deliverable to inspect)."""
+        return ""
+
     def error_states(self) -> List[str]:
         return []
 
@@ -155,6 +164,53 @@ class ResponseDelivered(Condition):
         if delivered is False:
             return Verdict(FAIL, "no assistant reply was delivered")
         return Verdict(UNKNOWN, "response delivery was not observed")
+
+
+@dataclass
+class AnswerContainsVerifiedValue(Condition):
+    """The reply must STATE a value the system computed deterministically.
+
+    F3c (DIAG D1/D2/D6): a reply existing is not an answer being verified.
+    For answer-content conditions the predicate is the reply's content
+    against deterministic ground truth:
+      * no ground truth was computed  -> UNKNOWN (delivery alone cannot
+        verify correctness — the goal waits for evidence, never achieves);
+      * ground truth stated in reply   -> PASS;
+      * ground truth computed but the reply states something else -> FAIL.
+    """
+
+    def __post_init__(self):
+        self.kind = "answer_contains_value"
+
+    def queries(self):
+        return [ObservationQuery("verified_answer", "deterministic_answers")]
+
+    def to_dict(self):
+        return {"type": "answer_contains_value"}
+
+    def evaluate(self, env):
+        values = env.verified_answer_values()
+        if not values:
+            return Verdict(
+                UNKNOWN,
+                "no deterministic ground truth was computed for the answer "
+                "value — a delivered reply cannot be verified for content",
+            )
+        reply = env.response_text()
+        # Lazy import: condition_language stays dependency-free; the
+        # calculator module owns the numeric-match semantics (thousands
+        # separators, float tolerance) in ONE place.
+        from app.tools.calculator import DeterministicCalculator
+        mentioned = [v for v in values
+                     if DeterministicCalculator.reply_mentions_value(reply, v)]
+        if mentioned:
+            return Verdict(
+                PASS, f"reply states the computed answer value(s): {mentioned}")
+        return Verdict(
+            FAIL,
+            f"reply does not state the computed answer value(s): {values} — "
+            f"the deterministic result is ground truth, so the answer is wrong"
+        )
 
 
 @dataclass
@@ -572,6 +628,8 @@ def condition_from_dict(data: Dict[str, Any]) -> Condition:
         return Contains(container=data.get("container", ""), what=data.get("what", ""))
     if ctype == "response_delivered":
         return ResponseDelivered()
+    if ctype == "answer_contains_value":
+        return AnswerContainsVerifiedValue()
     if ctype == "no_errors":
         return NoErrors()
     if ctype == "entity_state":
