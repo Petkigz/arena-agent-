@@ -290,6 +290,19 @@ class UniversalFilesystem:
                     "escalating to all_user_files before reporting absence.")
                 results = cls._search_roots(query_raw, esc_roots, max_results, timeout_s)
                 return _tag(results, escalated=True)
+        # Same rule for an EXPLICIT root_dir (D7 live 2026-09-01): the
+        # agent searched the Documents folder while the marker sat in the
+        # home root — one wrong root must not hide a file that exists in
+        # the user's scope. Escalate once before reporting nothing.
+        if not results and root_dir is not None:
+            esc_roots = cls.resolve_scope_roots("all_user_files")
+            if {str(r) for r in esc_roots} - {str(r) for r in roots}:
+                app_logger.info(
+                    f"Explicit root {roots} found no matches for "
+                    f"'{query_raw}'; escalating to all_user_files before "
+                    "reporting absence.")
+                results = cls._search_roots(query_raw, esc_roots, max_results, timeout_s)
+                return _tag(results, escalated=True)
         return _tag(results)
 
     @classmethod

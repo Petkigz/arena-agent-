@@ -20,8 +20,11 @@ def test_execute_proposal_uses_payload_search_query_authoritatively():
 
         assert res["success"] is True
         # Search query executed MUST be 'project_backup' from proposal payload, NOT 'Find my documents and music'
-        # max_results=6 (limit 5 + 1 for truncation detection)
-        mock_search.assert_called_once_with("project_backup", max_results=6)
+        # max_results=6 (limit 5 + 1 for truncation detection). root_dir/scope
+        # pass through from the payload (D7 live 2026-09-01: they used to be
+        # silently dropped — a planner-chosen scope was ignored).
+        mock_search.assert_called_once_with(
+            "project_backup", root_dir=None, scope=None, max_results=6)
         assert "project_backup.zip" in res["executed_actions"][0]
 
 

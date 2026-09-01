@@ -160,7 +160,16 @@ class MasterAgentOrchestrator:
             elif all_matches or "all" in str(search_query).lower().split():
                 search_limit = 1000
 
-            matched = UniversalFilesystem.search_filesystem(search_query, max_results=search_limit + 1)
+            # D7 (live 2026-09-01): the payload's scope/root_dir used to be
+            # DROPPED here — a planner that picked a scope had it silently
+            # ignored (payload contract leak). They are honored now; the
+            # tool's narrow-miss escalation keeps a wrong scope from
+            # fabricating absence.
+            matched = UniversalFilesystem.search_filesystem(
+                search_query,
+                root_dir=payload.get("root_dir"),
+                scope=payload.get("scope"),
+                max_results=search_limit + 1)
             truncated = len(matched) > search_limit
             if truncated:
                 matched = matched[:search_limit]
