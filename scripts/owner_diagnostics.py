@@ -1,0 +1,379 @@
+"""Owner-machine diagnostics (run where LM Studio / hardware live).
+
+The sandbox can exercise the deterministic layer only. This pack runs on
+the OWNER's machine — where the local LLM, the real browser, the phone
+and the GPU are — and measures the things that cannot be measured
+anywhere else, with GROUND TRUTH checked programmatically (never trust
+the agent's own claim of success: arithmetic answers, created files,
+installed tools and DB rows are verified independently).
+
+Sections:
+  0  Environment      — LM Studio reachability, loaded models, latency
+  A  Brain online     — the chat battery whose OFFLINE baseline is known,
+                        now with the model driving intent + reasoning
+  B  Hardware probes  — screen, VLM, LoRA/GPU, ADB phone, audio, browser
+
+Every check is independent: one failure never stops the pack. Output is
+a human summary PLUS a compact paste-back block (also saved under
+data/owner_diagnostics_<timestamp>.json) — paste that block back to the
+agent session so failures map to exact fixes.
+
+Usage (PowerShell, from the repo root, LM Studio running):
+    .\.venv\Scripts\python.exe scripts\owner_diagnostics.py
+
+Notes:
+  * chat tasks create real goals/projects in data/assistant.db (that is
+    what a real session does; keep it in mind);
+  * if self-evolution succeeds it installs a real 'reverse_words' tool;
+  * nothing destructive runs: all probes are read-only or reversible,
+    and Level 2/3 write actions are never bypassed.
+"""
+
+from __future__ import annotations
+
+import json
+import platform
+import re
+import statistics
+import sys
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import logging
+logging.disable(logging.INFO)  # keep the paste-back output readable
+
+RESULTS: List[Dict[str, Any]] = []
+
+
+def record(section: str, name: str, status: str, detail: str = "",
+           **extra: Any) -> None:
+    RESULTS.append({"section": section, "name": name, "status": status,
+                    "detail": str(detail)[:300], **extra})
+    mark = {"pass": "[PASS]", "fail": "[FAIL]", "skip": "[SKIP]",
+            "offline": "[OFFLINE]"}.get(status, "[????]")
+    print(f"  {mark} {name}")
+    if detail:
+        print(f"         {str(detail)[:240]}")
+
+
+def guard(section: str, name: str, fn: Callable[[], Tuple[str, str]]) -> None:
+    """One broken check must never stop the pack."""
+    try:
+        status, detail = fn()
+        record(section, name, status, detail)
+    except Exception as exc:
+        record(section, name, "fail", f"harness error: {exc!r}")
+
+
+# ── section 0: environment ───────────────────────────────────────────────────
+
+def lm_studio_reachability() -> Tuple[str, str]:
+    import httpx
+    from app.config import settings
+    base = str(settings.LM_STUDIO_URL).rstrip("/")
+    try:
+        t0 = time.monotonic()
+        res = httpx.get(f"{base}/models", timeout=5.0)
+        elapsed = (time.monotonic() - t0) * 1000
+        if res.status_code != 200:
+            return "fail", f"HTTP {res.status_code} from {base}/models"
+        models = [m.get("id") for m in res.json().get("data", [])]
+        record("env", "loaded models", "pass",
+               f"{len(models)}: {', '.join(str(m) for m in models[:6])}")
+        want = {settings.FAST_MODEL: "fast route",
+                settings.MAIN_MODEL: "main route"}
+        for model_id, role in want.items():
+            hit = any(str(model_id) in str(m) for m in models)
+            record("env", f"model for {role}: {model_id}",
+                   "pass" if hit else "fail",
+                   "loaded" if hit else "NOT loaded — routing will fall back")
+        return "pass", f"reachable at {base} ({elapsed:.0f} ms)"
+    except Exception as exc:
+        return "fail", f"LM Studio unreachable at {base}: {exc}"
+
+
+def llm_latency_probe() -> Tuple[str, str]:
+    from app.llm import llm_client
+    t0 = time.monotonic()
+    res = llm_client.generate_chat_completion(
+        [{"role": "user", "content": "Reply with exactly: ok"}],
+        complexity="fast", max_tokens=8)
+    elapsed = time.monotonic() - t0
+    content = (((res or {}).get("choices") or [{}])[0]
+               .get("message", {}).get("content", ""))
+    if "simulated" in str(content).lower() or not str(content).strip():
+        return "offline", f"provider offline (reply: {str(content)[:60]!r})"
+    return "pass", f"{elapsed:.1f}s — first tokens: {str(content)[:40]!r}"
+
+
+# ── section A: brain-online chat battery ─────────────────────────────────────
+
+def _chat(task: str, complexity: str = "fast") -> Dict[str, Any]:
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+    return CognitivePipeline.process_chat(user_text=task, complexity=complexity)
+
+
+def _reply(res: Dict[str, Any]) -> str:
+    return str(res.get("assistant_reply", ""))
+
+
+def _extract_numbers(text: str) -> List[float]:
+    return [float(m.replace(",", "")) for m in
+            re.findall(r"\d+(?:[.,]\d+)?", text)]
+
+
+SCRATCH = Path("data").resolve() / "diagnostics_scratch"
+
+
+def d1_arithmetic() -> Tuple[str, str]:
+    res = _chat("What is 17 * 24?")
+    numbers = _extract_numbers(_reply(res))
+    gt = 408 in numbers or any(abs(n - 408) < 0.01 for n in numbers)
+    status = "pass" if gt and res.get("success") else "fail"
+    return status, (f"verified answer 408={gt} | lifecycle="
+                    f"{res.get('goal_lifecycle_state')} | reply="
+                    f"{_reply(res)[:120]!r}")
+
+
+def d2_csv_analysis() -> Tuple[str, str]:
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    csv = SCRATCH / "sales.csv"
+    amounts = [120.50, 89.99, 230.00, 45.25, 310.75]
+    csv.write_text("date,product,amount\n"
+                   "2026-08-01,widget,120.50\n2026-08-02,gadget,89.99\n"
+                   "2026-08-03,widget,230.00\n2026-08-04,gizmo,45.25\n"
+                   "2026-08-05,gadget,310.75\n")
+    gt_mean = statistics.mean(amounts)  # 159.298
+    res = _chat(f"Analyze the CSV file at {csv} and tell me the average "
+                f"of the amount column.")
+    numbers = _extract_numbers(_reply(res))
+    got = any(abs(n - gt_mean) < 0.01 for n in numbers)
+    used_data_tool = any("analyz" in str(a).lower() or "data" in str(a).lower()
+                         for a in res.get("executed_actions") or [])
+    status = "pass" if got else "fail"
+    return status, (f"mean {gt_mean:.3f} verified={got} | data tool used="
+                    f"{used_data_tool} | actions="
+                    f"{[str(a)[:60] for a in (res.get('executed_actions') or [])][:2]}"
+                    f" | lifecycle={res.get('goal_lifecycle_state')}")
+
+
+def d3_task_creation() -> Tuple[str, str]:
+    marker = f"diag-{uuid.uuid4().hex[:6]}"
+    res = _chat(f"Create a task: review the quarterly budget report "
+                f"({marker}), with priority high.")
+    time.sleep(0.2)
+    from app.tasks import TaskManager
+    rows = TaskManager.get_all_tasks()
+    created = any(marker in str(getattr(t, "title", "")) for t in rows)
+    status = "pass" if created else "fail"
+    return status, (f"task row with marker exists={created} | lifecycle="
+                    f"{res.get('goal_lifecycle_state')} | actions="
+                    f"{[str(a)[:60] for a in (res.get('executed_actions') or [])][:2]}")
+
+
+def d4_compound_goal_conditions() -> Tuple[str, str]:
+    """1A evidence: with the model ONLINE, does the semantic interpreter
+    enumerate success conditions for EVERY step of a compound request,
+    or still just step 1?"""
+    task = ("Find files matching requirements, read the first one, "
+            "summarize it, then check the tests still pass.")
+    res = _chat(task)
+    from app.cognition.goal_interpreter import SemanticGoalInterpreter
+    rep = SemanticGoalInterpreter.interpret_goal(task)
+    conditions = [str(c) for c in rep.success_conditions]
+    steps_covered = sum(1 for kw in ["path", "read", "summar", "test"]
+                        if any(kw in c.lower() for c in conditions))
+    status = "pass" if steps_covered >= 3 else "fail"
+    return status, (f"{steps_covered}/4 step-keywords appear in conditions "
+                    f"{conditions} | lifecycle="
+                    f"{res.get('goal_lifecycle_state')} | actions="
+                    f"{[str(a)[:60] for a in (res.get('executed_actions') or [])][:3]}")
+
+
+def d5_diagnostic_interpretation() -> Tuple[str, str]:
+    res = _chat("Why is my computer so slow lately?")
+    reply = _reply(res)
+    offline = "simulated response" in reply.lower()
+    mentions_evidence = any(k in reply.lower() for k in
+                            ["cpu", "memory", "disk", "process", "load",
+                             "temperature", "startup"])
+    status = "skip" if offline else ("pass" if mentions_evidence else "fail")
+    return status, (f"interpreted real evidence={mentions_evidence} | "
+                    f"lifecycle={res.get('goal_lifecycle_state')} | "
+                    f"reply={reply[:160]!r}")
+
+
+def d6_self_evolution() -> Tuple[str, str]:
+    """The system's hardest capability. Ground truth: after the cycle, a
+    reverse_words capability exists AND actually reverses words."""
+    res = _chat("Create a new tool called reverse_words that takes a "
+                "string and returns the words in reverse order. Write it, "
+                "test it, and install it as a permanent capability.")
+    time.sleep(0.2)
+    from app.cognition import tool_registry as tr
+    reg = tr.get_shared_registry()
+    entry = reg.effective_capability("reverse_words")
+    if entry is None:
+        return "fail", (f"tool NOT installed | lifecycle="
+                        f"{res.get('goal_lifecycle_state')} | reply="
+                        f"{_reply(res)[:160]!r}")
+    out = reg.execute_registered_tool(
+        "reverse_words", {"text": "one two three"}) or {}
+    got = str(out.get("result", out.get("output", out))).strip()
+    ok = "three two one" in got
+    return ("pass" if ok else "fail"), (
+        f"tool installed=True, executes correctly={ok} "
+        f"(got {got!r}) | lifecycle={res.get('goal_lifecycle_state')}")
+
+
+def d7_control_file_search() -> Tuple[str, str]:
+    """Offline baseline: PASS. Must not regress with the brain online."""
+    res = _chat("Find files matching goal_verifier, then tell me how "
+                "many you found.")
+    found = any("goal_verifier" in str(a) for a in res.get("executed_actions") or [])
+    no_browser = not any("browser" in str(a).lower()
+                         for a in res.get("executed_actions") or [])
+    status = "pass" if found and no_browser else "fail"
+    return status, (f"found={found}, browser_touched={not no_browser} | "
+                    f"lifecycle={res.get('goal_lifecycle_state')}")
+
+
+# ── section B: hardware-bound tool probes ────────────────────────────────────
+
+def h_screen_capture() -> Tuple[str, str]:
+    """PASS: capture saved a real file. FAIL: claimed success with no
+    file (dishonest). SKIP: honest typed unavailability (no display in
+    this environment) - an environment fact, not a tool bug."""
+    from app.tools.screen_capture import ScreenCaptureTool
+    res = ScreenCaptureTool.capture_screen() or {}
+    path = str(res.get("file_path") or res.get("path") or "")
+    exists = bool(path) and Path(path).exists()
+    if res.get("success") and exists:
+        return "pass", "captured %s (%d bytes)" % (path[:90], Path(path).stat().st_size)
+    if res.get("success"):
+        return "fail", "claimed success but no file at %r" % path[:90]
+    return "skip", "unavailable: %s" % str(res.get("error", ""))[:140]
+
+
+def h_vlm_status() -> Tuple[str, str]:
+    """The tool's CONTRACT is an honest status report - 'VLM not
+    installed' is a PASS of the contract (the ping-test lesson: judge
+    the measurement, not the environment)."""
+    from app.cognition import tool_registry as tr
+    out = tr.get_shared_registry().execute_registered_tool("vlm_status", {}) or {}
+    honest = "available" in out and ("note" in out or "engine" in out)
+    return ("pass" if honest else "fail"), (
+        "available=%s | %s" % (out.get("available"),
+                               str(out.get("note", ""))[:120]))
+
+
+def h_lora_status() -> Tuple[str, str]:
+    from app.cognition import tool_registry as tr
+    out = tr.get_shared_registry().execute_registered_tool("lora_status", {})
+    return "pass" if (out or {}).get("success") else "fail", str(out)[:180]
+
+
+def h_adb_phone() -> Tuple[str, str]:
+    from app.tools.android_adb_controller import AndroidADBController
+    if not AndroidADBController.is_adb_available():
+        return "skip", "adb binary not on PATH"
+    res = AndroidADBController.list_connected_devices() or {}
+    devices = res.get("devices") or res.get("result") or res
+    n = len(devices) if isinstance(devices, list) else "?"
+    return "pass", f"connected devices: {str(devices)[:160]}"
+
+
+def h_audio() -> Tuple[str, str]:
+    try:
+        import pyaudio  # noqa: F401
+    except Exception as exc:
+        return "skip", f"pyaudio unavailable: {exc}"
+    try:
+        pa = pyaudio.PyAudio()
+        count = pa.get_device_count()
+        pa.terminate()
+        return "pass", f"{count} audio devices"
+    except Exception as exc:
+        return "fail", f"pyaudio present but device listing failed: {exc}"
+
+
+def h_browser_extract() -> Tuple[str, str]:
+    from app.cognition import tool_registry as tr
+    out = tr.get_shared_registry().execute_registered_tool(
+        "browser_extract", {"url": "https://example.com"}) or {}
+    blob = json.dumps(out, default=str)[:400]
+    ok = (out.get("success") and
+          any(k in blob.lower() for k in ["example", "domain", "title"]))
+    return ("pass" if ok else "fail"), blob[:220]
+
+
+def h_list_apps() -> Tuple[str, str]:
+    from app.tools.app_inventory import SystemAppInventory
+    res = SystemAppInventory.scan_installed_applications() or {}
+    n = res.get("total_apps_count")
+    return ("pass" if isinstance(n, int) and n > 0 else "fail"), \
+        f"{n} applications discovered"
+
+
+# ── main ─────────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    print("═" * 72)
+    print("ARENA OWNER DIAGNOSTICS — run on the machine with LM Studio/hardware")
+    print(f"python {sys.version.split()[0]} | {platform.system()} "
+          f"{platform.release()} | {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("═" * 72)
+
+    print("\n── Section 0: environment " + "─" * 44)
+    guard("env", "LM Studio reachability", lm_studio_reachability)
+    guard("env", "LLM latency probe (fast route)", llm_latency_probe)
+
+    print("\n── Section A: brain-online chat battery " + "─" * 32)
+    guard("A", "D1 arithmetic 17*24 (GT 408)", d1_arithmetic)
+    guard("A", "D2 CSV mean (GT 159.298)", d2_csv_analysis)
+    guard("A", "D3 task creation (GT DB row)", d3_task_creation)
+    guard("A", "D4 compound goal conditions (1A evidence)", d4_compound_goal_conditions)
+    guard("A", "D5 diagnostic interpretation (real evidence)", d5_diagnostic_interpretation)
+    guard("A", "D6 self-evolution reverse_words (GT executes)", d6_self_evolution)
+    guard("A", "D7 control: local file search (offline PASS)", d7_control_file_search)
+
+    print("\n── Section B: hardware-bound probes " + "─" * 36)
+    guard("B", "screen capture (GT file exists)", h_screen_capture)
+    guard("B", "VLM status", h_vlm_status)
+    guard("B", "LoRA/GPU status", h_lora_status)
+    guard("B", "ADB phone devices", h_adb_phone)
+    guard("B", "audio devices", h_audio)
+    guard("B", "browser extract example.com (GT content)", h_browser_extract)
+    guard("B", "installed apps scan", h_list_apps)
+
+    # ── paste-back block ─────────────────────────────────────────────────
+    counts: Dict[str, int] = {}
+    for r in RESULTS:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    print("\n" + "═" * 72)
+    print(f"TOTAL: {counts.get('pass', 0)} passed, {counts.get('fail', 0)} "
+          f"failed, {counts.get('skip', 0)} skipped, "
+          f"{counts.get('offline', 0)} offline-only")
+
+    compact = [{"s": r["section"], "n": r["name"], "st": r["status"],
+                "d": r["detail"][:200]} for r in RESULTS]
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out_path = Path("data") / f"owner_diagnostics_{ts}.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(compact, indent=1, ensure_ascii=False),
+                        encoding="utf-8")
+
+    print("\n────────────── PASTE THIS BLOCK BACK ──────────────")
+    print("<<<DIAG")
+    print(json.dumps(compact, ensure_ascii=False))
+    print("DIAG>>>")
+    print(f"(also saved to {out_path})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
