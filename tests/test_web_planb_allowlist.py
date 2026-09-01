@@ -186,4 +186,18 @@ def test_d9_full_chat_never_opens_a_browser():
 
     assert opened == [], \
         f"a project-setup goal must never be routed to the public web: {opened}"
-    assert res.get("success") is not True or res.get("goal_verified") is not True
+    # Owner review item 8 (2026-09-01): a project-setup goal MAY now be
+    # legitimately verified — the durable ProjectManager store is the
+    # evidence. The old blanket 'never verified' guard pinned the era when
+    # the creation was invisible to the verifier; the false-claim guard
+    # survives in evidence form: verified=True is allowed ONLY when the
+    # project row actually exists (independent store check, not the
+    # agent's own claim).
+    if res.get("goal_verified") is True:
+        from app.cognition.runtime import CognitiveRuntime
+        projects = list(getattr(
+            CognitiveRuntime.get_instance().project_manager,
+            "_projects", {}).values())
+        assert any("diag-abc123" in str(getattr(p, "description", ""))
+                   for p in projects), \
+            "goal_verified=True without a real project row — false success"

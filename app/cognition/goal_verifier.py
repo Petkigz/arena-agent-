@@ -335,6 +335,55 @@ class GoalVerifier:
     )
 
     @classmethod
+    def _probe_creation_events(
+        cls, succ_cond: str, creation_events: Optional[Dict[str, Any]]
+    ) -> Optional[ConditionStatus]:
+        """Owner review item 8 (D9/D3 family, 2026-09-01): creation goals
+        are verified against the DURABLE STORES (ProjectManager /
+        TaskManager), re-read fresh by the runtime's capture layer —
+        never the reply text, never the create-call's own claim.
+
+        project_created: SATISFIED iff a project row was created this
+        cycle. project_milestones_recorded: SATISFIED iff any such
+        project carries >= 1 milestone. task_created: SATISFIED iff a
+        task row was created this cycle.
+
+        Returns None when there is no creation evidence of the matching
+        KIND (nothing was created, or the evidence is for another kind —
+        a task creation never satisfies a project condition): honest
+        UNKNOWN, never a fabricated verdict either way.
+        """
+        cond_lower = str(succ_cond or "").lower()
+        events = creation_events or {}
+        projects = [p for p in (events.get("projects") or [])
+                    if isinstance(p, dict)]
+        tasks = [t for t in (events.get("tasks") or [])
+                 if isinstance(t, dict)]
+        if "project_created" in cond_lower:
+            if not projects:
+                return None
+            audit_logger.info(
+                f"Creation evidence probe: {len(projects)} project row(s) "
+                f"created this cycle (durable store)")
+            return ConditionStatus.SATISFIED
+        if "project_milestones_recorded" in cond_lower:
+            if not projects:
+                return None
+            ok = any(int(p.get("milestones") or 0) >= 1 for p in projects)
+            audit_logger.info(
+                f"Creation evidence probe: project milestones recorded={ok}")
+            return (ConditionStatus.SATISFIED if ok
+                    else ConditionStatus.FAILED)
+        if "task_created" in cond_lower:
+            if not tasks:
+                return None
+            audit_logger.info(
+                f"Creation evidence probe: {len(tasks)} task row(s) created "
+                f"this cycle (durable store)")
+            return ConditionStatus.SATISFIED
+        return None
+
+    @classmethod
     def _probe_capability_installation(
         cls, succ_cond: str, goal_rep: SemanticGoalRepresentation
     ) -> Optional[ConditionStatus]:
@@ -408,7 +457,8 @@ class GoalVerifier:
         reply_clean: str,
         failed_conditions: List[str],
         verified_entity_details: Optional[Dict[str, Any]] = None,
-        deterministic_answers: Optional[List[Dict[str, Any]]] = None
+        deterministic_answers: Optional[List[Dict[str, Any]]] = None,
+        creation_events: Optional[Dict[str, Any]] = None
     ) -> ConditionStatus:
         """
         Phase E Tri-State Condition Evaluator:
@@ -430,6 +480,17 @@ class GoalVerifier:
         if ("capability_installed" in sc_lower
                 or "capability_executes_correctly" in sc_lower):
             probed = cls._probe_capability_installation(succ_cond, goal_rep)
+            if probed is not None:
+                return probed
+
+        # Owner review item 8 (D9/D3 family): creation goals follow the
+        # DURABLE STORE, not the reply. Probe precedence (like D6) so a
+        # failed-looking or off-topic conversational reply can never
+        # mask a real creation — and no evidence stays honest UNKNOWN.
+        if ("project_created" in sc_lower
+                or "project_milestones_recorded" in sc_lower
+                or "task_created" in sc_lower):
+            probed = cls._probe_creation_events(succ_cond, creation_events)
             if probed is not None:
                 return probed
 
@@ -624,6 +685,9 @@ class GoalVerifier:
             a for a in (obs_dict.get("deterministic_answers") or [])
             if isinstance(a, dict)
         ]
+        # Owner review item 8: creation evidence re-read from the durable
+        # stores (cycle-scoped) — the authority for creation goals.
+        creation_events = obs_dict.get("creation_events")
 
         for succ_cond in target_conditions:
             cond_st = cls.evaluate_condition_status_against_world_model(
@@ -636,6 +700,7 @@ class GoalVerifier:
                 failed_conditions,
                 verified_entity_details=verified_entity_details,
                 deterministic_answers=deterministic_answers,
+                creation_events=creation_events,
             )
             if cond_st == ConditionStatus.SATISFIED:
                 met_conditions.append(succ_cond)

@@ -385,6 +385,17 @@ class SemanticGoalInterpreter:
         r"|\b(?:task|to-?do)\s*:",
         re.IGNORECASE,
     )
+    # Owner review item 8 (DIAG D9, live 2026-09-01): 'Set up a project
+    # to organize my photo collection' inherited a FILE-SEARCH success
+    # condition ('file_path_identified = true') while the real
+    # deliverable — the project row with milestones — was created by the
+    # decomposition side-effect and verified against the ProjectManager
+    # store by the diagnostic. Creation verb + 'project' noun = the
+    # deliverable is a durable PROJECT.
+    _PROJECT_SETUP_RE = re.compile(
+        r"\b(?:set\s+up|create|start|make|begin)\b[^.]{0,60}\bproject\b",
+        re.IGNORECASE,
+    )
 
     @classmethod
     def _honest_success_conditions(cls, text: str):
@@ -401,6 +412,12 @@ class SemanticGoalInterpreter:
         if cls._CAPABILITY_CREATION.search(text or ""):
             return ["capability_installed = true",
                     "capability_executes_correctly = true"]
+        # Project setup (D9, owner review item 8): the deliverable is a
+        # durable PROJECT with milestones — verified against the
+        # ProjectManager store, never the reply text.
+        if cls._PROJECT_SETUP_RE.search(text or ""):
+            return ["project_created = true",
+                    "project_milestones_recorded = true"]
         # Task creation (D3): the deliverable is a task ROW in the
         # persistent list — a reply about creating a task is not one.
         if cls._TASK_CREATE_INTENT_RE.search(text or ""):

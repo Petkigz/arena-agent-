@@ -1834,6 +1834,7 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Could not read WorldModel observations: {e}")
 
+        creation_events = self._capture_creation_events()
         return {
             "world_state": {
                 "entities": entities_data,
@@ -1851,7 +1852,78 @@ class CognitiveRuntime:
             "entities": entities_data,
             "observations": obs_data,
             "executed_actions": executed_actions,
-            "assistant_reply": assistant_reply
+            "assistant_reply": assistant_reply,
+            # Owner review item 8 (D9/D3 family): creation evidence,
+            # cycle-scoped. The durable stores are the authority — re-read
+            # FRESH here (never the create-call's own object), filtered to
+            # rows created during THIS cycle so an earlier cycle's artifact
+            # can never verify a later goal. Provenance: direct observation
+            # of durable state. Absent when nothing was created this cycle
+            # (the verifier stays honestly UNKNOWN).
+            **({"creation_events": creation_events} if creation_events else {})
+        }
+
+    def _capture_creation_events(self) -> Optional[Dict[str, Any]]:
+        """Rows created in the durable stores during this cycle.
+
+        Returns None when nothing was created this cycle (absence of
+        evidence — the verifier stays honestly UNKNOWN) or when the
+        cycle window is unknown."""
+        from datetime import datetime as _dt
+        started = getattr(self, "_cycle_started_at", None)
+        if started is None:
+            return None
+
+        def _created_at(obj) -> Optional[_dt]:
+            try:
+                parsed = _dt.fromisoformat(str(getattr(obj, "created_at", "")))
+            except (ValueError, TypeError):
+                return None
+            # The stores mix naive UTC (TaskManager: utcnow().isoformat())
+            # and timezone-aware (ProjectManager: now(timezone.utc)) —
+            # normalize to aware UTC before comparing.
+            if parsed.tzinfo is None:
+                from datetime import timezone as _tzmod
+                parsed = parsed.replace(tzinfo=_tzmod.utc)
+            return parsed
+
+        projects_created: List[Dict[str, Any]] = []
+        tasks_created: List[Dict[str, Any]] = []
+        try:
+            for proj in list(getattr(self.project_manager, "_projects", {}).values()):
+                created = _created_at(proj)
+                if created is not None and created >= started:
+                    projects_created.append({
+                        "project_id": str(getattr(proj, "project_id", "")),
+                        "name": str(getattr(proj, "name", ""))[:80],
+                        "description": str(getattr(proj, "description", ""))[:200],
+                        "milestones": len(getattr(proj, "milestones", []) or []),
+                    })
+        except Exception as e:
+            app_logger.warning(f"Project creation evidence unavailable: {e}")
+        try:
+            from app.tasks import TaskManager
+            for t in TaskManager.get_all_tasks():
+                created = _created_at(t)
+                if created is not None and created >= started:
+                    tasks_created.append({
+                        "task_id": str(getattr(t, "id", "")),
+                        "title": str(getattr(t, "title", ""))[:120],
+                    })
+        except Exception as e:
+            app_logger.warning(f"Task creation evidence unavailable: {e}")
+        if not projects_created and not tasks_created:
+            return None
+        app_logger.info(
+            f"Creation evidence (durable stores, this cycle): "
+            f"{len(projects_created)} project(s), {len(tasks_created)} task(s)")
+        return {
+            "projects": projects_created,
+            "tasks": tasks_created,
+            "cycle_started_at": started.isoformat(),
+            "source": "durable_store",
+            "observation_type": "direct",
+            "confidence": 1.0,
         }
 
     def _integrate_phase_modules(
@@ -2655,6 +2727,11 @@ class CognitiveRuntime:
         """
         start_time = time.time()
         session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
+        # Owner review item 8 (D9): creation goals are verified against
+        # the durable stores (ProjectManager / TaskManager) for rows
+        # created during THIS cycle — the window starts here.
+        from datetime import datetime as _dt, timezone as _tz
+        self._cycle_started_at = _dt.now(_tz.utc)
 
         # Phase 3: adapt model route to live hardware load.
         complexity = self._select_effective_complexity(complexity)
