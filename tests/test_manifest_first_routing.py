@@ -81,13 +81,20 @@ def test_runtime_routes_wallpaper_request_to_act_branch(tmp_path, monkeypatch):
         assert executed[0].get("image_path") == "C:/pics/w.jpg"
 
 
-def test_invented_capability_phrases_cannot_veto():
-    """'ability to express emotions verbally' matches nothing — ignore it."""
+def test_invented_capability_phrases_ask_not_proceed():
+    """Owner review item 7 (2026-09-01, P0): 'ability to express emotions
+    verbally' matches nothing real — it is honestly UNRESOLVED (False in
+    the map) so the cycle asks/replans. The earlier contract (ignore the
+    phrase entirely → action unconstrained) let the planner proceed
+    WITHOUT the requested capability; that silent fallback is dead.
+    The old veto concern stays addressed: the phrase fails on its own
+    line — it cannot flip another capability's True to False."""
     from app.cognition.runtime import CognitiveRuntime as CR
     runtime = CR.get_instance()
     cap_map = runtime.check_capability_availability(
         ["ability to express emotions verbally"], target_domain="conversation")
-    assert cap_map == {}  # unresolvable → ignored, not False
+    assert cap_map == {"ability to express emotions verbally": False}
+    assert all(cap_map.values()) is False  # ask/replan, not unconstrained
 
 
 def test_resolvable_capabilities_still_gate():

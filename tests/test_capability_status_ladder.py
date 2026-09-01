@@ -104,7 +104,16 @@ def test_availability_map_stays_bool_backward_compatible(tmp_path):
     assert all(isinstance(v, bool) for v in caps.values())
 
 
-def test_invented_phrases_still_cannot_veto(tmp_path):
+def test_invented_phrases_are_honestly_unresolved(tmp_path):
+    """Owner review item 7 (2026-09-01, P0): an invented phrase is no
+    longer silently dropped (the old contract — dropping it let the
+    action proceed 'unconstrained'). It resolves to UNRESOLVED: present
+    in the ladder, unsupported, so the cycle asks/replans. It still
+    cannot flip ANOTHER capability's line — it fails on its own."""
     status = _rt(tmp_path).check_capability_status(
         ["ability to express emotions verbally"], "conversation")
-    assert "ability to express emotions verbally" not in status
+    entry = status["ability to express emotions verbally"]
+    assert entry["status"] == "unresolved"
+    assert entry["supported"] is False
+    assert entry["available"] is False
+    assert entry["ready"] is False

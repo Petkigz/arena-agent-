@@ -1465,13 +1465,18 @@ class CognitiveRuntime:
         Values are READY flags (supported and not probed-absent); the
         three-concept breakdown lives in check_capability_status().
         """
-        cap_map, status_map, ignored = self._resolve_capability_status(
+        cap_map, status_map, unresolved = self._resolve_capability_status(
             required_capabilities, target_domain)
         if status_map:
             ladder = {c: s["status"] for c, s in status_map.items()}
             app_logger.info(f"Capability ladder: {ladder}")
-        if ignored:
-            app_logger.info(f"Unresolvable capability phrases ignored (cannot veto): {ignored}")
+        if unresolved:
+            # Owner review item 7: unresolved REQUIRED capabilities are
+            # in the map as False (they gate to ask/replan) — logged so
+            # the basis is visible, never silently dropped.
+            app_logger.warning(
+                f"Unresolved capability phrases (no registered implementation; "
+                f"the planner must ask/replan, not proceed unconstrained): {unresolved}")
         return cap_map
 
     def _resolve_capability_status(
@@ -1481,25 +1486,32 @@ class CognitiveRuntime:
     ) -> tuple:
         cap_map: Dict[str, bool] = {}
         status_map: Dict[str, Dict[str, Any]] = {}
-        # Live fix: the LLM invents free-text capability phrases ('ability to
-        # express emotions verbally'). A phrase that resolves to NO registered
-        # tool or native capability cannot veto execution — it is recorded as
-        # unresolvable and ignored, and only RESOLVABLE capabilities are gated.
-        ignored_phrases: List[str] = []
+        # Owner review item 7 (2026-09-01, P0): unresolved capability
+        # phrases are a FIRST-CLASS outcome, not a silent drop. The old
+        # chain ignored them, and when every phrase was ignored the
+        # caller treated the action as unconstrained — the planner
+        # proceeded WITHOUT the requested capability. Resolution now
+        # cascades: chain (exact) → CapabilityResolver (exact/alias/
+        # semantic on normalized stems) → unresolved → recorded False
+        # (supported/available unknown-but-gating) so the cycle asks or
+        # replans instead of acting as if nothing was required.
+        unresolved_phrases: List[str] = []
 
-        def _record(cap: str, supported: bool, available: Optional[bool], evidence: str) -> None:
+        def _record(cap: str, supported: bool, available: Optional[bool], evidence: str,
+                    status: Optional[str] = None) -> None:
             ready = supported and available is not False
             status_map[cap] = {
                 "supported": supported,
                 "available": available,
                 "ready": ready,
                 "status": (
-                    "unsupported" if not supported
+                    status if status is not None
+                    else "unsupported" if not supported
                     else "unavailable" if available is False
                     else "ready" if available is True
                     else "supported_unverified"
                 ),
-                "evidence": evidence,
+                "evidence": (current_prefix + evidence) if current_prefix else evidence,
             }
             cap_map[cap] = ready
 
@@ -1527,8 +1539,32 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Could not read WorldModel capabilities: {e}")
 
-        for cap in required_capabilities:
-            cap_clean = cap.lower().strip()
+        # Owner review item 7 (P0): the resolver vocabulary is the SAME
+        # reality the chain matches against — native backing,
+        # known-unimplemented, registered tools, world-model caps. Every
+        # canonical the resolver returns is validated against it.
+        from app.cognition.capability_resolver import CapabilityResolver
+        resolver_vocab = CapabilityResolver.build_vocabulary(
+            list(self.NATIVE_CAPABILITY_BACKING.keys())
+            + list(self.KNOWN_UNIMPLEMENTED_CAPABILITIES)
+            + list(registered_tools)
+            + list(wm_caps)
+        )
+
+        # Resolution cascade: (key phrase, match string, evidence prefix,
+        # depth). The KEY stays the LLM's original phrase — the ladder is
+        # reported in the owner's vocabulary — while the MATCH string may
+        # be a resolver-produced canonical re-dispatched through the
+        # chain exactly once.
+        from collections import deque
+        work = deque(
+            (cap, cap.lower().strip(), "", 0)
+            for cap in required_capabilities if str(cap or "").strip()
+        )
+        current_prefix = ""
+
+        while work:
+            cap, cap_clean, current_prefix, depth = work.popleft()
 
             # 0. Known-unimplemented hardware capability (P0 #11): the name is
             #    real ('microphone.capture') but NO implementation exists.
@@ -1623,21 +1659,38 @@ class CognitiveRuntime:
                 _record(cap, supported=True, available=None,
                         evidence="WorldModel capability entity (device presence unverified)")
 
-            # 5. Unresolvable phrase (invented by the LLM, matches nothing):
-            #    record and IGNORE — it cannot veto real, registered tools.
+            # 5. The chain found no direct match: try the capability
+            #    RESOLVER (exact/alias/semantic on normalized stems) —
+            #    'file searching capability' → search_files, 'text
+            #    summarization capability' → llm.generate. A canonical it
+            #    produces is re-dispatched through this SAME chain (once)
+            #    so availability is checked by the one authority.
             else:
-                ignored_phrases.append(cap)
-                app_logger.info(
-                    f"Capability phrase '{cap}' resolves to no registered tool; ignoring it as a veto."
-                )
+                if depth == 0:
+                    try:
+                        resolution = CapabilityResolver.resolve(cap_clean, resolver_vocab)
+                    except Exception as exc:
+                        app_logger.warning(f"Capability resolver failed for '{cap}': {exc}")
+                        resolution = None
+                    if resolution is not None and resolution.canonical \
+                            and resolution.canonical != cap_clean:
+                        work.append((cap, resolution.canonical,
+                                     f"{resolution.tier} match '{cap}' → "
+                                     f"'{resolution.canonical}' | ", 1))
+                        continue
+                # 6. UNRESOLVED (owner review item 7): no registered
+                #    capability, alias, or stem match. This is a
+                #    first-class outcome — recorded False so the cycle
+                #    asks/replans — NEVER silently dropped to leave the
+                #    action 'unconstrained'.
+                unresolved_phrases.append(cap)
+                _record(cap, supported=False, available=False,
+                        evidence="unresolved: no registered capability matches this "
+                                 "phrase — the planner must ask/replan, not proceed "
+                                 "unconstrained",
+                        status="unresolved")
 
-        # Only resolvable capabilities gate execution; an LLM-invented phrase
-        # list can never block an otherwise-registered action.
-        if ignored_phrases and not cap_map:
-            app_logger.warning(
-                f"All required capabilities were unresolvable phrases: {ignored_phrases}; "                "treating as unconstrained rather than blocked."
-            )
-        return cap_map, status_map, ignored_phrases
+        return cap_map, status_map, unresolved_phrases
 
     @staticmethod
     def _find_tool_capability(cap_clean: str, registered_tools) -> Optional[str]:
@@ -2788,12 +2841,22 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"WorldModel/Belief ingestion warning: {e}")
 
-        # Resolve dynamic capability availability for required task capabilities
-        capability_map = self.check_capability_availability(
+        # Resolve dynamic capability availability for required task capabilities.
+        # Owner review item 7: unresolved phrases come back as False in the
+        # map (ask/replan), and the status map is kept so the DEFER reply can
+        # distinguish UNRECOGNIZED capabilities from offline ones.
+        capability_map, capability_status_map, unresolved_caps = self._resolve_capability_status(
             required_capabilities=goal_rep.required_capabilities,
             target_domain=goal_rep.target_domain
         )
         action_available = all(capability_map.values()) if capability_map else True
+        if capability_status_map:
+            ladder = {c: s["status"] for c, s in capability_status_map.items()}
+            app_logger.info(f"Capability ladder: {ladder}")
+        if unresolved_caps:
+            app_logger.warning(
+                f"Unresolved capability phrases (no registered implementation; "
+                f"asking instead of proceeding unconstrained): {unresolved_caps}")
 
         app_logger.info(f"Capability Awareness: Required={goal_rep.required_capabilities} -> Status={capability_map} (ActionAvailable={action_available})")
 
@@ -3250,10 +3313,36 @@ class CognitiveRuntime:
             # "Deferred task: …" reads like the assistant ignoring them (live
             # complaint: 'I can't chat in the other chats' — misrouted queries
             # landed here with a terse non-answer).
-            unavailable = [cap for cap, ok in (capability_map or {}).items() if not ok]
-            missing_txt = (
-                f" Missing capabilities: {', '.join(unavailable)}." if unavailable else ""
-            )
+            # Owner review item 7: UNRECOGNIZED capabilities (no registered
+            # implementation) are distinguished from recognized-but-offline
+            # ones — 'unresolved' must never read as 'temporarily offline',
+            # and never silently downgrade to 'unconstrained'.
+            not_ready = [cap for cap, ok in (capability_map or {}).items() if not ok]
+            unrecognized = [
+                cap for cap in not_ready
+                if (capability_status_map or {}).get(cap, {}).get("status") == "unresolved"
+            ]
+            offline = [cap for cap in not_ready if cap not in unrecognized]
+            missing_txt = ""
+            if unrecognized:
+                plural = "y" if len(unrecognized) == 1 else "ies"
+                verb = "is" if len(unrecognized) == 1 else "are"
+                missing_txt += (
+                    f" Unrecognized capabilit{plural} — {verb} no registered "
+                    f"implementation for {', '.join(repr(c) for c in unrecognized)}; "
+                    "I will not pretend to have them. Rephrase, or ask me to "
+                    "replan with the capabilities I do have.")
+            if offline:
+                missing_txt += (
+                    f" Missing capabilities (recognized but not available "
+                    f"right now): {', '.join(offline)}.")
+            if unrecognized:
+                reason = (
+                    f"required capabilit{'y' if len(unrecognized) == 1 else 'ies'} "
+                    f"{', '.join(repr(c) for c in unrecognized)} "
+                    f"{'is' if len(unrecognized) == 1 else 'are'} not recognized — "
+                    "no registered tool, native capability, or alias matches."
+                )
             defer_msg = (
                 f"Deferred: {reason}\n\n"
                 f"I classified this as a {goal_rep.primary_intent_type} in the "
