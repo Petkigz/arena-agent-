@@ -30,12 +30,39 @@ _QUERY_COMMAND_WORDS = {
     "get", "give", "list", "open", "up", "of", "and", "with", "there", "is",
     "are", "was", "were", "have", "has", "do", "does", "some", "where",
     "file", "files", "folder", "folders", "directory", "directories",
+    # Instruction/discourse vocabulary (external audit 2026-09): tokens that
+    # are how the owner PHRASES a request, never content that identifies a
+    # file. Token-exact only — 'check' is stripped but 'checklist' and
+    # 'foundation' are not, so real filename content is never lost.
+    "matching", "then", "tell", "how", "many", "found", "one", "it", "still",
+    "read", "summarize", "summarise", "check", "verify", "ensure", "describe",
+    "explain", "count", "pass", "first", "second", "finally", "next",
+    "afterwards", "everything", "anything", "nothing",
 }
+
+# Sequencing boundary in compound requests: search_files serves the SEARCH
+# STEP — later steps ("then tell me how many you found", "then check the
+# tests") belong to other tools and the planner. The search query is
+# extracted from the FIRST clause only; feeding the whole compound sentence
+# produced queries like 'matching goal_verifier then tell how many found'
+# which can never match a filename (external audit 2026-09 — the search
+# 'found nothing' on a file that existed, and the failure cascaded into a
+# web_search misroute).
+_SEQUENCING_BOUNDARY = re.compile(
+    r"[,;.!?]?\s*\b(?:then|after that|afterwards|next)\b", re.IGNORECASE
+)
 
 
 def extract_search_query(user_text: str) -> str:
-    """Content terms of a search request, suitable for filename-substring match."""
-    text = _LOCATION_PHRASE.sub(" ", user_text or "")
+    """Content terms of a search request, suitable for filename-substring match.
+
+    Compound requests are cut at the first sequencing boundary (', then ...'):
+    the query serves the SEARCH step only — trailing instruction steps never
+    belong in a filename query."""
+    first_clause = _SEQUENCING_BOUNDARY.split(user_text or "", maxsplit=1)[0]
+    if not first_clause.strip():
+        first_clause = user_text or ""
+    text = _LOCATION_PHRASE.sub(" ", first_clause)
     tokens = [t for t in re.findall(r"[\w.\-]+", text)
               if t.lower() not in _QUERY_COMMAND_WORDS]
     return " ".join(tokens) if tokens else (user_text or "").strip()
