@@ -292,6 +292,76 @@ class SemanticGoalInterpreter:
             pass
         return ["llm.generate"]
 
+    # F3a (DIAG D4): per-step typed conditions for compound requests.
+    #
+    # Live bug (owner machine, 2026-09-01): 'Find files matching requirements,
+    # read the first one, summarize it, then check the tests still pass.'
+    # produced ONE success condition ('file_path_identified = true') — step 1
+    # only. Steps 2-4 were invisible to verification, so finishing step 1 and
+    # replying anything verified as 'achieved'.
+    #
+    # Each entry: (verb pattern on a step fragment, typed condition, coverage
+    # stem). The coverage stem is how the completeness backstop decides
+    # whether an EXISTING condition already covers that step (word-initial
+    # match, so 'latest' does not cover the test step and 'already' does not
+    # cover the read step).
+    _STEP_CONDITIONS = [
+        # Test/verify steps FIRST: 'run the tests' must not fall through to
+        # the open/launch/run -> app_process_running row.
+        (r"\b(?:test|check|verify)\b[^.;]{0,40}\b(?:tests?|suite|pytest|unittest)\b|\brun\s+tests?\b",
+         "test_results_verified = true", "test"),
+        (r"\b(?:find|search|locate|list)\b",
+         "file_path_identified = true", "path"),
+        (r"\b(?:read|view)\b",
+         "file_content_read = true", "read"),
+        (r"\b(?:summari[sz]e)\b",
+         "summary_included_in_reply = true", "summar"),
+        # 'make' is deliberately absent: 'make sure the tests pass' is not
+        # artifact creation. Conservative patterns only.
+        (r"\b(?:write|create|save|build|generate)\b",
+         "artifact_created = true", "artifact"),
+        (r"\b(?:open|launch|start|run)\b",
+         "app_process_running = true", "process_running"),
+    ]
+
+    # Sequential step separators. Connector words are NOT separators (they
+    # appear mid-step: 'read the FIRST one') — they are stripped from
+    # fragment starts instead.
+    _STEP_SPLIT = re.compile(r"[;,.]|\bthen\b|\bafter that\b")
+    _STEP_LEAD = re.compile(
+        r"^(?:\s*(?:first|then|next|finally|after that|and|also|please)\b\s*)+",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _compound_step_conditions(cls, text: str):
+        """Typed per-step conditions for a sequential compound request.
+
+        Splits the request into step fragments, classifies each fragment's
+        verb, and returns [(condition, coverage_stem), ...] in step order
+        (deduplicated by condition). Fewer than 2 DISTINCT conditions means
+        the request is not compound-shaped and [] is returned — single-step
+        and conversational requests are untouched.
+        """
+        fragments = [
+            cls._STEP_LEAD.sub("", f).strip(" .!?;:")
+            for f in cls._STEP_SPLIT.split(text or "")
+        ]
+        steps = []
+        seen = set()
+        for frag in fragments:
+            if not frag:
+                continue
+            for verb_pattern, condition, stem in cls._STEP_CONDITIONS:
+                if re.search(verb_pattern, frag, re.IGNORECASE):
+                    if condition not in seen:
+                        seen.add(condition)
+                        steps.append((condition, stem))
+                    break  # one condition per step fragment
+        if len(steps) < 2:
+            return []
+        return steps[:8]
+
     @classmethod
     def validate_schema(cls, parsed_json: Any) -> SemanticGoalSchemaValidationResult:
         """
@@ -1079,6 +1149,34 @@ class SemanticGoalInterpreter:
             domain, user_text, memory_store=memory_store, world_model=world_model,
             tool_registry=tool_registry, complexity=complexity
         )
+
+        # F3a (DIAG D4) completeness backstop: for a compound request with
+        # >= 2 recognized steps, EVERY step must carry a success condition —
+        # no matter which path produced the representation (fast heuristic,
+        # clean LLM v2, or salvaged LLM). Steps the representation already
+        # covers are left alone; only uncovered steps gain their typed
+        # condition, so the backstop widens coverage without clobbering
+        # richer LLM-authored conditions.
+        compound_steps = cls._compound_step_conditions(user_text)
+        if len(compound_steps) >= 2:
+            existing_joined = " || ".join(str(c) for c in success_conditions).lower()
+            missing = [
+                condition
+                for condition, stem in compound_steps
+                # Word-initial stem match that ALSO works inside snake_case
+                # condition names: '\bpath' would miss 'file_path_identified'
+                # (underscore is a word char), while a bare substring would
+                # let 'latest' cover the test step. Not preceded by a letter.
+                if not re.search(rf"(?<![a-z]){re.escape(stem)}", existing_joined)
+            ]
+            if missing:
+                success_conditions = list(success_conditions) + missing
+                app_logger.info(
+                    f"Compound request with {len(compound_steps)} recognized steps: "
+                    f"appended per-step success conditions the representation did not "
+                    f"cover: {missing}"
+                )
+
         summary = f"Goal [{domain.upper()}]: '{goal}' | Target Outcome: '{outcome}' | Strategies: {len(candidates)}"
 
         app_logger.info(f"SemanticGoalInterpreter v2: Intent='{intent_type}', Domain='{domain}', Confidence={confidence:.2f}, Candidates={len(candidates)}")

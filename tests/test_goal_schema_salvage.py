@@ -106,8 +106,14 @@ def test_truly_unusable_payload_is_still_rejected_wholesale():
         rep = SemanticGoalInterpreter.interpret_goal(FOUR_STEP_TEXT,
                                                      complexity="main")
     assert rep.provenance_source == "rejected_malformed_llm_schema"
-    # heuristic conditions stand (the pre-salvage behavior)
-    assert rep.success_conditions == ["file_path_identified = true"]
+    # heuristic conditions stand (the pre-salvage behavior): the garbage
+    # payload contributed NOTHING. The conditions after it are the
+    # deterministic per-step backstop (F3a) for this compound request —
+    # the heuristic filesystem condition comes first, untouched.
+    assert rep.success_conditions[0] == "file_path_identified = true"
+    assert "not-a-list" not in " ".join(rep.success_conditions)
+    # F3a: the other three steps are covered by the compound backstop.
+    assert len(rep.success_conditions) == 4
 
 
 def test_fully_valid_representation_takes_the_clean_path():
