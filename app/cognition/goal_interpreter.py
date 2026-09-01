@@ -372,6 +372,65 @@ class SemanticGoalInterpreter:
         return SemanticGoalSchemaValidationResult(is_valid=True, data=clean_data)
 
     @classmethod
+    def salvage_schema(cls, parsed_json: Any) -> Dict[str, Any]:
+        """Field-level salvage of a MALFORMED LLM representation (owner
+        diagnostics F1, 2026-09).
+
+        The live run rejected the model's ENTIRE representation four times
+        over one field ('target_domain': 'code/data' — a compound the model
+        emits for compound requests), binning its intent, entities, success
+        conditions and capabilities, and silently degrading to the weak
+        rule-based fallback. Salvage keeps every field that passes its own
+        check; a compound domain resolves to its FIRST valid component; a
+        domain with no valid component is omitted (the caller keeps its
+        heuristic). Returns {} when nothing is usable — the caller then
+        rejects wholesale, exactly like before.
+        """
+        if not isinstance(parsed_json, dict):
+            return {}
+        salvaged: Dict[str, Any] = {}
+
+        raw_intent = parsed_json.get("primary_intent_type")
+        if isinstance(raw_intent, str):
+            clean = raw_intent.lower().strip()
+            if clean in cls.VALID_INTENTS:
+                salvaged["primary_intent_type"] = clean
+
+        raw_domain = parsed_json.get("target_domain")
+        if isinstance(raw_domain, str) and raw_domain.strip():
+            clean = raw_domain.lower().strip()
+            valid = cls._valid_domains()
+            if clean in valid:
+                salvaged["target_domain"] = clean
+            else:
+                # Compound ('code/data', 'code+data', 'code, data'): take
+                # the model's FIRST valid component — its primary framing.
+                components = [c for c in re.split(r"[^a-z0-9_]+", clean) if c]
+                for component in components:
+                    if component in valid:
+                        salvaged["target_domain"] = component
+                        app_logger.info(
+                            "Salvaged compound target_domain "
+                            f"'{raw_domain}' -> '{component}'")
+                        break
+
+        for str_field in ("goal", "desired_outcome"):
+            value = parsed_json.get(str_field)
+            if isinstance(value, str) and value.strip():
+                salvaged[str_field] = value.strip()
+
+        for list_field in ("entities", "constraints", "assumptions", "unknowns",
+                           "preconditions", "success_conditions",
+                           "failure_conditions", "required_capabilities",
+                           "risk_factors"):
+            value = parsed_json.get(list_field)
+            if (isinstance(value, list) and value
+                    and all(isinstance(item, str) for item in value)):
+                salvaged[list_field] = value
+
+        return salvaged
+
+    @classmethod
     def extract_json_object(cls, text: str) -> Optional[Dict[str, Any]]:
         """
         Robust JSON object extractor that handles markdown codeblocks, nested JSON objects,
@@ -965,11 +1024,54 @@ class SemanticGoalInterpreter:
                                 confidence = 0.85 if is_ambiguous else 0.60
                                 provenance = "llm_semantic_disambiguation" if is_ambiguous else "llm_heuristic_conflict"
                         else:
-                            app_logger.warning(
-                                f"Rejected malformed LLM semantic goal representation: {val_res.validation_error}"
-                            )
-                            confidence = 0.50
-                            provenance = "rejected_malformed_llm_schema"
+                            # Field-level salvage (owner diagnostics F1):
+                            # one malformed field (a compound 'code/data'
+                            # domain) must not bin the model's whole
+                            # representation — conditions, capabilities and
+                            # intent are kept when they pass their own
+                            # checks; only truly unusable payloads are
+                            # rejected wholesale.
+                            salvaged = cls.salvage_schema(parsed_json)
+                            if salvaged:
+                                app_logger.warning(
+                                    f"Salvaged malformed LLM semantic goal representation "
+                                    f"(rejected: {val_res.validation_error}); "
+                                    f"kept fields: {sorted(salvaged)}"
+                                )
+                                if salvaged.get("primary_intent_type"):
+                                    intent_type = salvaged["primary_intent_type"]
+                                if salvaged.get("target_domain"):
+                                    domain = salvaged["target_domain"]
+                                if salvaged.get("goal"):
+                                    goal = salvaged["goal"]
+                                if salvaged.get("desired_outcome"):
+                                    outcome = salvaged["desired_outcome"]
+                                if salvaged.get("entities"):
+                                    entities = salvaged["entities"]
+                                if salvaged.get("constraints"):
+                                    constraints = salvaged["constraints"]
+                                if salvaged.get("assumptions"):
+                                    assumptions = salvaged["assumptions"]
+                                if salvaged.get("unknowns"):
+                                    unknowns = salvaged["unknowns"]
+                                if salvaged.get("preconditions"):
+                                    preconditions = salvaged["preconditions"]
+                                if salvaged.get("success_conditions"):
+                                    success_conditions = salvaged["success_conditions"]
+                                if salvaged.get("failure_conditions"):
+                                    failure_conditions = salvaged["failure_conditions"]
+                                if salvaged.get("required_capabilities"):
+                                    req_caps = salvaged["required_capabilities"]
+                                if salvaged.get("risk_factors"):
+                                    risks = salvaged["risk_factors"]
+                                confidence = 0.60
+                                provenance = "llm_schema_salvaged"
+                            else:
+                                app_logger.warning(
+                                    f"Rejected malformed LLM semantic goal representation: {val_res.validation_error}"
+                                )
+                                confidence = 0.50
+                                provenance = "rejected_malformed_llm_schema"
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 

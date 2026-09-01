@@ -77,8 +77,16 @@ def test_validate_schema_rejects_non_list_array_fields():
 
 def test_interpret_goal_rejects_malformed_llm_representation_and_falls_back():
     """
-    Verify interpret_goal rejects malformed LLM responses that fail schema validation
-    and falls back to heuristic baseline with provenance 'rejected_malformed_llm_schema'.
+    Verify interpret_goal handles malformed LLM responses that fail schema
+    validation without letting them corrupt the interpretation.
+
+    Contract since the F1 salvage fix (owner diagnostics 2026-09): fields
+    that pass their own checks are SALVAGED (with honest
+    'llm_schema_salvaged' provenance); the invalid ones — here the
+    unsupported intent type and the non-list 'entities' — are NOT used.
+    Only a payload with nothing usable is rejected wholesale
+    ('rejected_malformed_llm_schema' — pinned in
+    tests/test_goal_schema_salvage.py).
     """
     mock_malformed_llm_reply = {
         "choices": [{
@@ -90,5 +98,12 @@ def test_interpret_goal_rejects_malformed_llm_representation_and_falls_back():
 
     with patch("app.llm.llm_client.generate_chat_completion", return_value=mock_malformed_llm_reply):
         goal_rep = SemanticGoalInterpreter.interpret_goal("Open Photoshop", complexity="main")
-        assert goal_rep.provenance_source == "rejected_malformed_llm_schema"
-        assert goal_rep.confidence == 0.50
+        assert goal_rep.provenance_source == "llm_schema_salvaged"
+        # the INVALID fields never reach the representation:
+        # 'unsupported_type' is not an intent, "Photoshop" (a string, not a
+        # list) is not the entities array.
+        assert goal_rep.primary_intent_type != "unsupported_type"
+        assert goal_rep.entities != "Photoshop"
+        # the VALID fields are salvaged, not binned:
+        assert goal_rep.target_domain == "desktop_os"
+        assert goal_rep.goal == "Open"
