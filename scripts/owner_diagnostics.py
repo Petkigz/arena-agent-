@@ -230,6 +230,49 @@ def d6_self_evolution() -> Tuple[str, str]:
         f"(got {got!r}) | lifecycle={res.get('goal_lifecycle_state')}")
 
 
+def d8_code_execution() -> Tuple[str, str]:
+    """Offline baseline: arity crash on code_explain. With the brain on,
+    does code execution complete with the right output? (GT 5050)"""
+    res = _chat("Run this Python code and tell me the output: "
+                "print(sum(range(1, 101)))")
+    numbers = _extract_numbers(_reply(res))
+    ok = any(abs(n - 5050) < 0.01 for n in numbers)
+    return ("pass" if ok else "fail"), (
+        "verified 5050=%s | lifecycle=%s | actions=%s | reply=%r"
+        % (ok, res.get("goal_lifecycle_state"),
+           [str(a)[:60] for a in (res.get("executed_actions") or [])][:2],
+           _reply(res)[:140]))
+
+
+def d9_project_setup() -> Tuple[str, str]:
+    """Offline baseline: misrouted to read_document (arity crash) while the
+    decomposition side-effect still created the project. GT: a project row
+    exists whose DESCRIPTION is the original request (not clobbered by a
+    milestone) and which carries milestones."""
+    marker = "diag-%s" % uuid.uuid4().hex[:6]
+    task = ("Set up a project to organize my photo collection (%s): "
+            "scan the pictures folder, group photos by date, find "
+            "duplicates, then report a summary." % marker)
+    res = _chat(task)
+    time.sleep(0.2)
+    from app.cognition.runtime import CognitiveRuntime
+    projects = list(getattr(CognitiveRuntime.get_instance(),
+                            "project_manager")._projects.values())
+    hit = next((p for p in projects
+                if marker in str(getattr(p, "description", ""))), None)
+    if hit is None:
+        any_marker = any(marker in str(getattr(p, "name", "")) for p in projects)
+        return "fail", ("no project with intact description (name-only hit=%s) "
+                        "| lifecycle=%s | actions=%s"
+                        % (any_marker, res.get("goal_lifecycle_state"),
+                           [str(a)[:60] for a in (res.get("executed_actions") or [])][:2]))
+    milestones = list(getattr(hit, "milestones", []) or [])
+    return "pass", ("project created, description intact, %d milestones | "
+                    "lifecycle=%s | actions=%s"
+                    % (len(milestones), res.get("goal_lifecycle_state"),
+                       [str(a)[:60] for a in (res.get("executed_actions") or [])][:2]))
+
+
 def d7_control_file_search() -> Tuple[str, str]:
     """Offline baseline: PASS. Must not regress with the brain online."""
     res = _chat("Find files matching goal_verifier, then tell me how "
@@ -340,6 +383,8 @@ def main() -> int:
     guard("A", "D5 diagnostic interpretation (real evidence)", d5_diagnostic_interpretation)
     guard("A", "D6 self-evolution reverse_words (GT executes)", d6_self_evolution)
     guard("A", "D7 control: local file search (offline PASS)", d7_control_file_search)
+    guard("A", "D8 code execution (GT 5050)", d8_code_execution)
+    guard("A", "D9 project setup (GT project + intact description)", d9_project_setup)
 
     print("\n── Section B: hardware-bound probes " + "─" * 36)
     guard("B", "screen capture (GT file exists)", h_screen_capture)
