@@ -669,6 +669,14 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
     # ── Productivity / content ──────────────────────────────────────────────
     add("daily_briefing", "productivity", 0, "Generate a daily briefing",
         _ignore_payload(DailyBriefingEngine.generate_briefing))
+    # DIAG D3 (live 2026-09-01): 'Create a task: review the quarterly
+    # budget report' executed budget_summary because no task-creation
+    # capability existed. Level 1 — a reversible local write, same class
+    # as create_document. The DB row is the ground truth.
+    TaskTools = _LazyImportProxy("app.tools.task_tools", "create_task")
+    add("create_task", "productivity", 1,
+        "Create a task in the owner's task list (title, priority)",
+        _wrap(TaskTools, "title", "goal", "priority"))
     add("content_script", "productivity", 1, "Generate a content script",
         _wrap(ContentCreatorTool.generate_content_script, "topic", "platform", "target_audience"))
     add("generate_content", "productivity", 1, "Generate content (any supported type)",

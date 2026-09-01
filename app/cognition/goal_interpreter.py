@@ -377,6 +377,14 @@ class SemanticGoalInterpreter:
         r"percentage|ratio)\s+of\b",
         re.IGNORECASE,
     )
+    # DIAG D3 (live 2026-09-01): 'Create a task: ... budget report' was
+    # classified finance and budget_summary executed. Plural 'tasks'
+    # (a list request) does not match the singular noun boundary.
+    _TASK_CREATE_INTENT_RE = re.compile(
+        r"\b(?:create|add|make|new|set\s+up)\s+(?:a\s+|an\s+)?(?:task|to-?do)\b"
+        r"|\b(?:task|to-?do)\s*:",
+        re.IGNORECASE,
+    )
 
     @classmethod
     def _honest_success_conditions(cls, text: str):
@@ -393,6 +401,10 @@ class SemanticGoalInterpreter:
         if cls._CAPABILITY_CREATION.search(text or ""):
             return ["capability_installed = true",
                     "capability_executes_correctly = true"]
+        # Task creation (D3): the deliverable is a task ROW in the
+        # persistent list — a reply about creating a task is not one.
+        if cls._TASK_CREATE_INTENT_RE.search(text or ""):
+            return ["task_created = true"]
         # Pure arithmetic (D1): the deliverable is the computed value.
         try:
             from app.tools.calculator import DeterministicCalculator
@@ -937,11 +949,29 @@ class SemanticGoalInterpreter:
             unknowns = ["underlying error cause", "evidence availability"]
             req_caps = ["filesystem.search", "system.probe"]
 
+        # 1.4 Task creation (DIAG D3, live 2026-09-01): 'Create a task:
+        # review the quarterly budget report' classified as FINANCE — the
+        # word 'budget' in the task's DESCRIPTION dragged the domain, and
+        # the required capabilities became finance tools (budget_summary
+        # then executed; no task row existed). Task-creation phrasings are
+        # their own intent: the real create_task capability, and an
+        # artifact condition the DB row must satisfy.
+        task_create_intent = bool(
+            cls._TASK_CREATE_INTENT_RE.search(text_lower))
+        if task_create_intent:
+            intent_type = "action_intent"
+            domain = "productivity"
+            goal = f"Create a task in the owner's task list: '{user_text[:60]}'"
+            outcome = "Task row created in the persistent task list"
+            req_caps = ["create_task"]
+            success_conditions = ["task_created = true"]
+
         # 1.5 Manifest-category domains: route to the manifest's own
         # vocabulary (coding/data/pdf/finance/git/...). Runs BEFORE the
         # legacy action branches so 'write a python script to organize my
         # files' is a CODE task, not a filesystem/desktop_os task.
-        manifest_hit = cls._detect_manifest_domain(text_lower)
+        manifest_hit = (None if task_create_intent
+                        else cls._detect_manifest_domain(text_lower))
         if manifest_hit is not None:
             manifest_domain, manifest_caps = manifest_hit
             domain = manifest_domain

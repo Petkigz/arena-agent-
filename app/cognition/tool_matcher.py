@@ -31,6 +31,58 @@ from app.cognition.semantic_matcher import semantic_scores
 _PHONE_RE = re.compile(
     r"\+?\d[\d\s\-()]{6,}\d")
 
+# ── Task creation (DIAG D3, live 2026-09-01): 'Create a task: review the
+# quarterly budget report (diag-xxxxxx), with priority high.' executed
+# budget_summary — a finance lookalike — because no task-creation
+# capability existed for anything correct to match. The capability exists
+# now (app/tools/task_tools.py); task-creation phrasings route to it
+# deterministically, carrying the title and priority.
+_TASK_CREATE_RE = re.compile(
+    r"\b(?:create|add|make|new|set\s+up)\s+(?:a\s+|an\s+)?(?:task|to-?do)\b"
+    r"|\b(?:task|to-?do)\s*:",
+    re.IGNORECASE,
+)
+_TASK_PRIORITY_RE = re.compile(
+    r",?\s*(?:with\s+)?priority[:\s]+(high|medium|low|urgent)\b",
+    re.IGNORECASE,
+)
+_TASK_LEAD_FILLER = re.compile(
+    r"^(?:to\s+|for\s+|that\s+|titled\s+|called\s+|named\s+|:\s*)+",
+    re.IGNORECASE,
+)
+
+
+def _match_task_creation(text: str) -> Optional[ToolMatch]:
+    """Deterministic task-creation routing with title/priority extraction.
+
+    Fires only on explicit create/add/make/new/set-up + task/todo
+    phrasings (or a 'task:'/'todo:' prefix). 'Summarize my budget' has no
+    such phrasing and can never route here; plural 'tasks' (a list
+    request) does not match the singular noun boundary.
+    """
+    m = _TASK_CREATE_RE.search(text)
+    if not m:
+        return None
+    tail = text[m.end():]
+    if not tail.strip():
+        return None  # 'create a task' with nothing to title — no routing
+    priority = "medium"
+    pm = _TASK_PRIORITY_RE.search(tail)
+    if pm:
+        priority = pm.group(1).lower()
+        tail = tail[:pm.start()]
+    title = _TASK_LEAD_FILLER.sub("", tail.strip()).strip(" .,;:!")
+    title = re.sub(r"\s+", " ", title)[:200].strip()
+    if not title:
+        return None
+    return ToolMatch(
+        action_type="create_task",
+        score=3.0,
+        payload={"title": title, "priority": priority},
+        matched_terms=("create task",),
+    )
+
+
 # General OS control: unrecognized settings requests go to the planner,
 # not to chat. This is ONE routing rule replacing hundreds of per-action tools.
 OS_CONTROL_ACTION = "os_control_plan"
@@ -370,6 +422,12 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
     # lookup the OS planner or owner should resolve, not a blind dial.
     comm_verb_with_number = (
         has_phone_number and bool(words & {"call", "dial", "text", "sms"}))
+    # Task creation routes BEFORE the control-verb gate: 'new task:' and
+    # 'task:' prefix forms carry no control verb, and the finance
+    # lookalike ('budget' inside the task's description) must never win.
+    task_create = _match_task_creation(text)
+    if task_create is not None:
+        return task_create
     if not ((words & CONTROL_VERBS) or comm_verb_with_number):
         return None
 
