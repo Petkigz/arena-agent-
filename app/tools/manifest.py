@@ -605,7 +605,11 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(ObjectDetectorTool.analyze_image_grounded, "image_path_str", "auto_create_groundings"))
     add("analyze_prosody", "audio", 0, "Analyze voice prosody (pitch, energy, rate) → emotion from real signals",
         _wrap(ProsodyAnalyzerTool.analyze_file, "file_path", "sample_rate"))
-    add("vlm_analyze", "vision", 0, "True VLM analysis (Moondream2/Llava) with OCR+LLM fallback — true visual understanding",
+    # Owner review item 9 (2026-09-01): the live engine is CONDITIONAL —
+    # OCR+LLM fallback unless a VLM is installed (check vlm_status). The
+    # description claims the conditional chain, not unconditional visual
+    # reasoning.
+    add("vlm_analyze", "vision", 0, "Analyze an image: VLM (Moondream2/Llava) when installed, else OCR+LLM fallback — engine named per call, check vlm_status for the live engine",
         _wrap(VlmAnalyzerTool.analyze_image, "image_path_str", "prompt", "max_tokens"))
     add("vlm_status", "vision", 0, "Check VLM availability (Moondream2/Llava) — honest status",
         _ignore_payload(VlmAnalyzerTool.get_status))

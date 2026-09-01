@@ -1328,7 +1328,10 @@ class CognitiveRuntime:
         except Exception as e:
             _add("project_management", False, f"project management probe failed: {e}", "integration")
 
-        # 26. VLM integration (P3): true visual understanding with fallback
+        # 26. VLM integration (P3): visual analysis — VLM when installed,
+        # OCR+LLM fallback otherwise (owner review item 9: the fallback is
+        # the live engine until the VLM is installed; claims stay
+        # conditional).
         try:
             from app.tools.vlm_analyzer import VlmAnalyzerTool
             _add("vlm_integration",
@@ -1402,7 +1405,9 @@ class CognitiveRuntime:
             "evidence": "web_search tool (network-dependent; reachability not probed per cycle)"},
         "screen.capture": {"evidence": "screen_capture tool (host-native)"},
         "vision.analyze": {
-            "evidence": "VLM vision tools (model-dependent; not probed per cycle)"},
+            "evidence": "vision tools — VLM (Moondream2/Llava) if installed, "
+                        "else OCR+LLM fallback (engine named per call; "
+                        "not probed per cycle)"},
         "system.probe": {"evidence": "system diagnostics tools (host-native)"},
         "camera.capture": {
             "probe": "camera", "evidence": "camera_photo tool — OpenCV webcam device probe"},
