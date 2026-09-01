@@ -38,6 +38,7 @@ from app.cognition.prompt_slicer import PromptSlicerEngine
 from app.cognition.trace import CognitiveTrace
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
 from app.cognition.goal_verifier import GoalVerifier, GoalVerificationResult
+from app.cognition.execution_truth import ExecutionTruth
 from app.cognition.goal_replanner import GoalReplanner
 from app.cognition.resource_allocator import ResourceAllocator
 from app.cognition.confidence_calibrator import ConfidenceCalibrator
@@ -1839,7 +1840,33 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Could not read WorldModel observations: {e}")
 
-        creation_events = self._capture_creation_events()
+        # Owner review item 12 / P0 #2: the Execution Truth Layer. The
+        # durable stores and the FILESYSTEM are re-read fresh right here
+        # — never the create-call's own object, never the model's
+        # account — and scoped to THIS cycle's window. The legacy
+        # ``creation_events`` alias keeps its item-8 shape; the full
+        # record (RESULT / STATE CHANGE / ARTIFACT) rides under
+        # ``execution_truth`` for the verifier.
+        state_changes = ExecutionTruth.collect_state_changes(self)
+        artifacts = ExecutionTruth.collect_artifacts(
+            getattr(self, "_cycle_artifact_candidates", None),
+            getattr(self, "_cycle_started_at", None),
+        )
+        execution_truth = ExecutionTruth.build_observed_payload(
+            state_changes=state_changes, artifacts=artifacts)
+        creation_events = (
+            {
+                **state_changes,
+                "cycle_started_at": (
+                    self._cycle_started_at.isoformat()
+                    if getattr(self, "_cycle_started_at", None) is not None
+                    else ""),
+                "source": "durable_store",
+                "observation_type": "direct",
+                "confidence": 1.0,
+            }
+            if state_changes["projects"] or state_changes["tasks"] else None
+        )
         return {
             "world_state": {
                 "entities": entities_data,
@@ -1865,71 +1892,35 @@ class CognitiveRuntime:
             # can never verify a later goal. Provenance: direct observation
             # of durable state. Absent when nothing was created this cycle
             # (the verifier stays honestly UNKNOWN).
-            **({"creation_events": creation_events} if creation_events else {})
+            **({"creation_events": creation_events} if creation_events else {}),
+            # Owner review item 12 / P0 #2: the Execution Truth Layer
+            # record (RESULT / STATE CHANGE / ARTIFACT, cycle-scoped,
+            # re-read from the authoritative sources at capture time).
+            # The verifier consumes this; ``creation_events`` above and
+            # ``deterministic_answers`` (attached by the ANSWER branch)
+            # remain as backward-compatible aliases.
+            "execution_truth": execution_truth,
         }
 
-    def _capture_creation_events(self) -> Optional[Dict[str, Any]]:
-        """Rows created in the durable stores during this cycle.
-
-        Returns None when nothing was created this cycle (absence of
-        evidence — the verifier stays honestly UNKNOWN) or when the
-        cycle window is unknown."""
-        from datetime import datetime as _dt
-        started = getattr(self, "_cycle_started_at", None)
-        if started is None:
-            return None
-
-        def _created_at(obj) -> Optional[_dt]:
-            try:
-                parsed = _dt.fromisoformat(str(getattr(obj, "created_at", "")))
-            except (ValueError, TypeError):
-                return None
-            # The stores mix naive UTC (TaskManager: utcnow().isoformat())
-            # and timezone-aware (ProjectManager: now(timezone.utc)) —
-            # normalize to aware UTC before comparing.
-            if parsed.tzinfo is None:
-                from datetime import timezone as _tzmod
-                parsed = parsed.replace(tzinfo=_tzmod.utc)
-            return parsed
-
-        projects_created: List[Dict[str, Any]] = []
-        tasks_created: List[Dict[str, Any]] = []
+    def _note_artifact_candidates(self, payload: Any) -> None:
+        """Owner review item 12 / P0 #2 (Execution Truth Layer): note
+        file paths reported by an execution result as ARTIFACT
+        candidates for this cycle. Called at the execution choke points
+        (observation router results, capability execution results).
+        Candidates carry no truth until capture re-stats them on disk —
+        a path that doesn't exist never becomes evidence."""
         try:
-            for proj in list(getattr(self.project_manager, "_projects", {}).values()):
-                created = _created_at(proj)
-                if created is not None and created >= started:
-                    projects_created.append({
-                        "project_id": str(getattr(proj, "project_id", "")),
-                        "name": str(getattr(proj, "name", ""))[:80],
-                        "description": str(getattr(proj, "description", ""))[:200],
-                        "milestones": len(getattr(proj, "milestones", []) or []),
-                    })
+            candidates = ExecutionTruth.extract_artifact_candidates(payload)
+            if not candidates:
+                return
+            existing = getattr(self, "_cycle_artifact_candidates", None)
+            if existing is None:
+                existing = self._cycle_artifact_candidates = []
+            for c in candidates:
+                if c not in existing:
+                    existing.append(c)
         except Exception as e:
-            app_logger.warning(f"Project creation evidence unavailable: {e}")
-        try:
-            from app.tasks import TaskManager
-            for t in TaskManager.get_all_tasks():
-                created = _created_at(t)
-                if created is not None and created >= started:
-                    tasks_created.append({
-                        "task_id": str(getattr(t, "id", "")),
-                        "title": str(getattr(t, "title", ""))[:120],
-                    })
-        except Exception as e:
-            app_logger.warning(f"Task creation evidence unavailable: {e}")
-        if not projects_created and not tasks_created:
-            return None
-        app_logger.info(
-            f"Creation evidence (durable stores, this cycle): "
-            f"{len(projects_created)} project(s), {len(tasks_created)} task(s)")
-        return {
-            "projects": projects_created,
-            "tasks": tasks_created,
-            "cycle_started_at": started.isoformat(),
-            "source": "durable_store",
-            "observation_type": "direct",
-            "confidence": 1.0,
-        }
+            app_logger.warning(f"Could not note artifact candidates: {e}")
 
     def _integrate_phase_modules(
         self,
@@ -2038,6 +2029,13 @@ class CognitiveRuntime:
                     "error": str(exc),
                     "execution_status": "failed",
                 }
+
+        # Owner review item 12 / P0 #2 (Execution Truth Layer): the
+        # execution choke point — file paths reported by this result
+        # (e.g. a generated document or screenshot) become ARTIFACT
+        # candidates for this cycle. Truth is decided later by the disk
+        # re-stat at capture, never by this claim.
+        self._note_artifact_candidates(result)
 
         cancel_requested = control.is_cancel_requested(record.execution_id)
         receipt = control.create_rollback_receipt(
@@ -2737,6 +2735,11 @@ class CognitiveRuntime:
         # created during THIS cycle — the window starts here.
         from datetime import datetime as _dt, timezone as _tz
         self._cycle_started_at = _dt.now(_tz.utc)
+        # Owner review item 12 / P0 #2: the Execution Truth Layer's
+        # artifact candidates — file paths reported by THIS cycle's tool
+        # results (noted at the execution choke points below, re-stat'ed
+        # on disk at capture time). Fresh window per cycle.
+        self._cycle_artifact_candidates: List[str] = []
 
         # Phase 3: adapt model route to live hardware load.
         complexity = self._select_effective_complexity(complexity)
@@ -3069,6 +3072,12 @@ class CognitiveRuntime:
                     entry = capability_entry(plan.action_type)
                     if entry and int(entry.get("safety_level", 99)) == 0:
                         observation_result = entry["handler"](plan.payload)
+                        # Owner review item 12 / P0 #2: execution choke
+                        # point for observations — a tool result that
+                        # reports a produced file becomes an ARTIFACT
+                        # candidate (truth decided by the disk re-stat
+                        # at capture, not by this claim).
+                        self._note_artifact_candidates(observation_result)
                         observation_evidence = render_observation_evidence(observation_result, plan)
                         app_logger.info(
                             f"Observation router executed {plan.action_type} for host-state question "
@@ -3229,6 +3238,13 @@ class CognitiveRuntime:
             # reply to state it, whatever the goal conditions say.
             if deterministic_answers:
                 obs_state["deterministic_answers"] = deterministic_answers
+                # Owner review item 12 / P0 #2: the RESULT class of the
+                # Execution Truth Layer mirrors the deterministic
+                # computations (the ``execution_truth`` record was built
+                # before these were known).
+                truth = obs_state.get("execution_truth")
+                if isinstance(truth, dict):
+                    truth["results"] = deterministic_answers
             verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)
             trace.goal_verified = verify_res.verified_success
             try:

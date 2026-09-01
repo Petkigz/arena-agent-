@@ -384,6 +384,45 @@ class GoalVerifier:
         return None
 
     @classmethod
+    def _probe_artifact_truth(
+        cls, succ_cond: str,
+        artifacts: Optional[List[Dict[str, Any]]]
+    ) -> Optional[ConditionStatus]:
+        """Owner review item 12 / P0 #2 (Execution Truth Layer): FILE
+        creation conditions are verified against the FILESYSTEM — the
+        runtime's capture layer re-stat'ed this cycle's artifact
+        candidates on disk (exists + mtime inside the cycle window), so
+        every entry handed to this probe is a real file. Never the
+        reply text, never the tool call's own claim.
+
+        file_created / document_created / document_generated /
+        report_generated / screenshot_captured / backup_created / ...:
+        SATISFIED iff at least one disk-verified artifact was recorded
+        this cycle.
+
+        Returns None when no artifact was recorded (nothing was created
+        on disk, or nothing was created at all): honest UNKNOWN, never
+        a fabricated verdict either way. Evidence classes never
+        cross-satisfy — a file is not a project row (item 8 probe) and
+        not a deterministic answer (F3c).
+
+        Cycle granularity (like item 8): any artifact of this cycle
+        satisfies a file-creation condition of this cycle's goal; the
+        architecture runs one goal per cycle.
+        """
+        cond_lower = str(succ_cond or "").lower()
+        _ = cond_lower  # the caller already matched the keyword set
+        verified = [a for a in (artifacts or [])
+                    if isinstance(a, dict) and a.get("exists")]
+        if not verified:
+            return None
+        audit_logger.info(
+            f"Execution truth probe (artifacts): {len(verified)} "
+            f"disk-verified file(s) this cycle — "
+            f"{[a.get('path') for a in verified][:3]}")
+        return ConditionStatus.SATISFIED
+
+    @classmethod
     def _probe_capability_installation(
         cls, succ_cond: str, goal_rep: SemanticGoalRepresentation
     ) -> Optional[ConditionStatus]:
@@ -458,7 +497,8 @@ class GoalVerifier:
         failed_conditions: List[str],
         verified_entity_details: Optional[Dict[str, Any]] = None,
         deterministic_answers: Optional[List[Dict[str, Any]]] = None,
-        creation_events: Optional[Dict[str, Any]] = None
+        creation_events: Optional[Dict[str, Any]] = None,
+        artifacts: Optional[List[Dict[str, Any]]] = None
     ) -> ConditionStatus:
         """
         Phase E Tri-State Condition Evaluator:
@@ -491,6 +531,24 @@ class GoalVerifier:
                 or "project_milestones_recorded" in sc_lower
                 or "task_created" in sc_lower):
             probed = cls._probe_creation_events(succ_cond, creation_events)
+            if probed is not None:
+                return probed
+
+        # Owner review item 12 / P0 #2 (Execution Truth Layer): FILE
+        # creation conditions resolve against the FILESYSTEM, not the
+        # reply. The runtime re-stat'ed this cycle's artifact candidates
+        # on disk at capture time — a disk-verified file satisfies the
+        # creation condition whatever the reply says, and no recorded
+        # artifact stays honest UNKNOWN (waiting_for_evidence). Probe
+        # precedence like D6/item-8: a failed-looking reply can never
+        # mask a real file, and the reply alone can never create one.
+        if any(kw in sc_lower for kw in (
+                "file_created", "document_created", "document_generated",
+                "file_generated", "file_written", "file_saved",
+                "report_generated", "report_created", "report_written",
+                "screenshot_captured", "backup_created", "artifact_created",
+                "file_exported", "document_exported")):
+            probed = cls._probe_artifact_truth(succ_cond, artifacts)
             if probed is not None:
                 return probed
 
@@ -688,6 +746,15 @@ class GoalVerifier:
         # Owner review item 8: creation evidence re-read from the durable
         # stores (cycle-scoped) — the authority for creation goals.
         creation_events = obs_dict.get("creation_events")
+        # Owner review item 12 / P0 #2: the Execution Truth Layer —
+        # disk-verified artifacts of this cycle are the authority for
+        # FILE creation conditions.
+        execution_truth = obs_dict.get("execution_truth")
+        artifacts = (
+            [a for a in (execution_truth.get("artifacts") or [])
+             if isinstance(a, dict)]
+            if isinstance(execution_truth, dict) else None
+        )
 
         for succ_cond in target_conditions:
             cond_st = cls.evaluate_condition_status_against_world_model(
@@ -701,6 +768,7 @@ class GoalVerifier:
                 verified_entity_details=verified_entity_details,
                 deterministic_answers=deterministic_answers,
                 creation_events=creation_events,
+                artifacts=artifacts,
             )
             if cond_st == ConditionStatus.SATISFIED:
                 met_conditions.append(succ_cond)
