@@ -150,3 +150,81 @@ def test_d6_detail_carries_a_reply_excerpt_when_tool_misbehaves():
     assert status == "fail"
     assert "reply=" in detail
     assert "created and tested" in detail
+
+
+# ── env rows: model routing visibility (P1 model-fallback fix) ─────────
+
+class _FakeModelsResp:
+    def __init__(self, payload):
+        self.status_code = 200
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+def test_env_row_names_the_runtime_fallback_when_model_not_loaded(monkeypatch):
+    """The paste-back must show WHICH loaded model the runtime will use
+    when the configured one is missing (live 2026-09-01: qwen2.5-9b-instruct
+    NOT loaded while qwen3.5-9b was)."""
+    import httpx as _httpx
+    from app.config import settings
+    loaded = ["qwen2.5-3b-instruct", "qwen3.5-9b", "qwen/qwen3-14b",
+              "qwen2.5-vl-3b-instruct", "qwen2.5-coder-7b-instruct",
+              "omnicoder-qwen3.5-9b-claude-4.6-opus-uncensored-v2"]
+    monkeypatch.setattr(settings, "MAIN_MODEL", "qwen2.5-9b-instruct")
+    monkeypatch.setattr(settings, "FAST_MODEL", "qwen2.5-3b-instruct")
+
+    def _fake_get(url, timeout=None):
+        return _FakeModelsResp({"data": [{"id": m} for m in loaded]})
+
+    monkeypatch.setattr(_httpx, "get", _fake_get)
+    od.RESULTS.clear()
+    status, _ = od.lm_studio_reachability()
+    assert status == "pass"
+    rows = {r["name"]: r for r in od.RESULTS}
+    main_row = rows["model for main route: qwen2.5-9b-instruct"]
+    assert main_row["status"] == "fail"  # the config is still wrong
+    assert "qwen3.5-9b" in main_row["detail"]
+    assert "runtime will use" in main_row["detail"]
+    fast_row = rows["model for fast route: qwen2.5-3b-instruct"]
+    assert fast_row["status"] == "pass"
+
+
+def test_env_row_exact_match_no_substring_false_positive(monkeypatch):
+    """'qwen3.5-9b' must NOT count as loaded when only the
+    'omnicoder-qwen3.5-9b-…' merge is loaded — a different model."""
+    import httpx as _httpx
+    from app.config import settings
+    loaded = ["qwen2.5-3b-instruct",
+              "omnicoder-qwen3.5-9b-claude-4.6-opus-uncensored-v2"]
+    monkeypatch.setattr(settings, "MAIN_MODEL", "qwen3.5-9b")
+    monkeypatch.setattr(settings, "FAST_MODEL", "qwen2.5-3b-instruct")
+
+    def _fake_get(url, timeout=None):
+        return _FakeModelsResp({"data": [{"id": m} for m in loaded]})
+
+    monkeypatch.setattr(_httpx, "get", _fake_get)
+    od.RESULTS.clear()
+    od.lm_studio_reachability()
+    rows = {r["name"]: r for r in od.RESULTS}
+    assert rows["model for main route: qwen3.5-9b"]["status"] == "fail"
+
+
+def test_env_row_vendor_prefix_still_counts_as_loaded(monkeypatch):
+    """'qwen/qwen3-14b' is 'qwen3-14b' — the vendor prefix is not part of
+    the model identity for the loaded check."""
+    import httpx as _httpx
+    from app.config import settings
+    loaded = ["qwen/qwen3-14b"]
+    monkeypatch.setattr(settings, "MAIN_MODEL", "qwen3-14b")
+    monkeypatch.setattr(settings, "FAST_MODEL", "qwen2.5-3b-instruct")
+
+    def _fake_get(url, timeout=None):
+        return _FakeModelsResp({"data": [{"id": m} for m in loaded]})
+
+    monkeypatch.setattr(_httpx, "get", _fake_get)
+    od.RESULTS.clear()
+    od.lm_studio_reachability()
+    rows = {r["name"]: r for r in od.RESULTS}
+    assert rows["model for main route: qwen3-14b"]["status"] == "pass"

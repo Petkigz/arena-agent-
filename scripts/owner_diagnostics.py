@@ -86,11 +86,30 @@ def lm_studio_reachability() -> Tuple[str, str]:
                f"{len(models)}: {', '.join(str(m) for m in models[:6])}")
         want = {settings.FAST_MODEL: "fast route",
                 settings.MAIN_MODEL: "main route"}
+        # Exact id match only (a leading '<vendor>/' prefix is stripped —
+        # 'qwen/qwen3-14b' is 'qwen3-14b'). A substring test would report
+        # 'qwen3.5-9b' as loaded when only the 'omnicoder-qwen3.5-9b-…'
+        # merge is — a different model.
+        def _loaded(model_id):
+            ids = {str(m) for m in models}
+            stripped = {str(m).split("/", 1)[-1] for m in models
+                        if "/" in str(m)}
+            return str(model_id) in ids or str(model_id) in stripped
+        from app.llm import llm_client
         for model_id, role in want.items():
-            hit = any(str(model_id) in str(m) for m in models)
-            record("env", f"model for {role}: {model_id}",
-                   "pass" if hit else "fail",
-                   "loaded" if hit else "NOT loaded — routing will fall back")
+            if _loaded(model_id):
+                record("env", f"model for {role}: {model_id}", "pass",
+                       "loaded")
+            else:
+                # The runtime now routes to the closest loaded model
+                # (llm.py, P1 2026-09-01) — name that decision in the
+                # paste-back so the mitigation is visible, while the row
+                # itself stays FAIL: the config is still wrong.
+                chosen = llm_client.select_loaded_fallback(model_id, models)
+                detail = (f"NOT loaded — runtime will use '{chosen}'"
+                          if chosen else
+                          "NOT loaded — no other models loaded; simulation")
+                record("env", f"model for {role}: {model_id}", "fail", detail)
         return "pass", f"reachable at {base} ({elapsed:.0f} ms)"
     except Exception as exc:
         return "fail", f"LM Studio unreachable at {base}: {exc}"

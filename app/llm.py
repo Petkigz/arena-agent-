@@ -65,7 +65,9 @@ def output_budget(kind: str, complexity: str = "fast") -> int:
 
 import contextlib
 import contextvars
+import re
 import threading
+import time
 
 # Floor for calls made after exhaustion: enough for a short honest reply,
 # never a full generation. The alternative (0 tokens) produces garbage.
@@ -158,6 +160,30 @@ def active_token_budget_status() -> Optional[Dict[str, Any]]:
 
 
 class LocalLLMClient:
+    # Model-availability routing (P1, live 2026-09-01): a request for a
+    # model that is not loaded used to go straight to HTTP 400 and then to
+    # a SIMULATED reply — while perfectly good models sat loaded on the
+    # same server. The ladder is now:
+    #   requested model -> actually loaded? -> use it
+    #                                      -> closest LOADED fallback (loud)
+    #                                      -> simulation (last resort:
+    #                                         server unreachable / nothing
+    #                                         loaded — honest, and visible)
+    # The fallback is intentional and observable: a WARNING naming both
+    # models, a `model_fallback` tag on the response dict, and an entry in
+    # `fallback_events` for inspection.
+    _MODELS_CACHE_TTL_S = 15.0
+    # Provider error texts that mean 'that model is not available here'
+    # (LM Studio/Ollama phrasings). A 400 that is NOT about the model
+    # (e.g. context overflow) must not trigger the model retry. NOTE: the
+    # gap must allow periods INSIDE model ids ('qwen2.5-9b-instruct').
+    _MODEL_NOT_FOUND_RE = re.compile(
+        r"model.{0,160}?(?:not\s+(?:be\s+)?(?:found|loaded)|"
+        r"no\s+longer\s+loaded|does\s+not\s+exist|is\s+unavailable)|"
+        r"no\s+model\s+found|model\s+not\s+found",
+        re.IGNORECASE | re.DOTALL,
+    )
+
     def __init__(self, base_url: str = settings.LM_STUDIO_URL):
         self.base_url = base_url.rstrip('/')
         self.provider = "lm_studio"  # "lm_studio", "ollama", "openai"
@@ -165,6 +191,121 @@ class LocalLLMClient:
         # In-memory only. It is set exclusively after held-out evaluation and a
         # fresh provider identity probe; restart intentionally clears it.
         self.model_override: Optional[str] = None
+        self._models_cache: Optional[List[str]] = None
+        self._models_cache_ts: float = 0.0
+        self._models_cache_lock = threading.Lock()
+        # Bounded ring of observable fallback decisions (last 50).
+        self.fallback_events: List[Dict[str, Any]] = []
+
+    # ------------------------------------------------------------------
+    # Model availability
+    # ------------------------------------------------------------------
+    def list_loaded_models(self, force: bool = False) -> Optional[List[str]]:
+        """Model ids currently loaded on the provider (GET /models).
+
+        Returns None when the server is unreachable — the caller keeps the
+        requested model and lets the request path decide (that is the
+        honest simulation case, not a selection). Cached for
+        _MODELS_CACHE_TTL_S so steady-state completions pay no extra
+        round-trip; `force=True` re-probes (used after a provider rejects
+        a model, when the cache may be stale).
+        """
+        now = time.monotonic()
+        with self._models_cache_lock:
+            if (not force and self._models_cache is not None
+                    and now - self._models_cache_ts < self._MODELS_CACHE_TTL_S):
+                return self._models_cache
+        try:
+            response = self.client.get(
+                f"{self.base_url}/models", timeout=5.0)
+            response.raise_for_status()
+            data = (response.json() or {}).get("data") or []
+            models = sorted({str(m.get("id")) for m in data if m.get("id")})
+        except Exception as exc:
+            app_logger.info(
+                f"Loaded-models probe failed ({exc}); keeping the requested "
+                f"model and letting the request path decide.")
+            return None
+        with self._models_cache_lock:
+            self._models_cache = models
+            self._models_cache_ts = time.monotonic()
+        return models
+
+    @staticmethod
+    def _fallback_score(requested: str, candidate: str) -> float:
+        """Closeness heuristic between an unavailable requested model id
+        and a loaded candidate: same letter-prefix family (qwen vs llama),
+        explicit chat tuning ('instruct'/'chat'), similar parameter count,
+        general-purpose rather than vision- or code-specialized. This is a
+        PREFERENCE RANKING for picking the least-surprising stand-in — it
+        is not a capability claim about either model."""
+        def _tokens(s: str) -> List[str]:
+            return re.split(r"[^a-z0-9.]+", str(s or "").lower()) or [""]
+        def _family(s: str) -> str:
+            m = re.match(r"[a-z]+", str(s or "").lower().strip())
+            return m.group(0) if m else ""
+        def _params(tokens: List[str]) -> Optional[float]:
+            for t in tokens:
+                m = re.fullmatch(r"(\d+(?:\.\d+)?)b", t)
+                if m:
+                    return float(m.group(1))
+            return None
+        score = 0.0
+        if _family(requested) and _family(requested) == _family(candidate):
+            score += 2.0
+        cand_lower = str(candidate).lower()
+        if "instruct" in cand_lower or "chat" in cand_lower:
+            score += 2.0
+        if "coder" in cand_lower or "-code" in cand_lower:
+            score -= 1.0
+        if "-vl" in cand_lower or "vision" in cand_lower:
+            score -= 2.0
+        req_params = _params(_tokens(requested))
+        cand_params = _params(_tokens(candidate))
+        if req_params is not None and cand_params is not None:
+            score += max(0.0, 3.0 - abs(req_params - cand_params))
+            if req_params == cand_params:
+                score += 1.0
+        return score
+
+    def select_loaded_fallback(
+        self, requested: str, loaded: Optional[List[str]],
+        exclude=frozenset(),
+    ) -> Optional[str]:
+        """Pick the closest LOADED model for an unavailable `requested`
+        id, or None when there is nothing else to pick (the requested id
+        itself is never its own fallback). Deterministic: highest
+        closeness score, ties broken by lexicographic id."""
+        candidates = [m for m in (loaded or [])
+                      if m != requested and m not in exclude]
+        if not candidates:
+            return None
+        return min(
+            candidates,
+            key=lambda c: (-self._fallback_score(requested, c), c),
+        )
+
+    def _resolve_model(self, requested: str) -> "Tuple[str, Optional[Dict[str, Any]]]":
+        """The routing decision: is the requested model actually loaded?
+        YES -> use it. NO -> closest loaded fallback (or the requested
+        model itself when the probe is unavailable/empty, so the request
+        path can fail honestly rather than invent a selection)."""
+        loaded = self.list_loaded_models()
+        if loaded is None or requested in loaded:
+            return requested, None
+        fallback = self.select_loaded_fallback(requested, loaded)
+        if fallback is None:
+            return requested, None
+        return fallback, {
+            "requested": requested,
+            "used": fallback,
+            "reason": "requested model not loaded; selected the closest "
+                      "loaded model (family/chat-tuning/size heuristic)",
+        }
+
+    def _record_fallback(self, info: Dict[str, Any]) -> None:
+        self.fallback_events.append(dict(info))
+        del self.fallback_events[:-50]  # bounded history
 
     def route_request(self, request_complexity: str) -> str:
         """
@@ -185,6 +326,21 @@ class LocalLLMClient:
         """Set a verified provider model for default routes, or clear it."""
         self.model_override = (model or "").strip() or None
 
+    def _post_completion(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /chat/completions and return the parsed JSON. Raises
+        httpx errors (and re-raises cancellation) — error POLICY lives in
+        generate_chat_completion."""
+        url = f"{self.base_url}/chat/completions"
+        response = run_cancellable_blocking_call(
+            lambda: self.client.post(
+                url, json=payload, timeout=settings.DEFAULT_TIMEOUT
+            ),
+            cancel=self.client.close,
+            description="local model HTTP request",
+        )
+        response.raise_for_status()
+        return response.json()
+
     def generate_chat_completion(
         self, 
         messages: List[Dict[str, str]], 
@@ -195,10 +351,20 @@ class LocalLLMClient:
     ) -> Dict[str, Any]:
         """
         Generates a chat completion from local LM Studio, Ollama, or OpenAI provider.
-        Requests local server to auto-load target model if needed.
-        Falls back to a polite mock response if local server is unreachable.
+        Routes to the requested model only if it is actually loaded; otherwise
+        selects the closest loaded fallback LOUDLY (see _resolve_model).
+        Falls back to a polite mock response only if the local server is
+        unreachable or nothing usable is loaded.
         """
-        model = self.route_request(complexity)
+        requested_model = self.route_request(complexity)
+        model, fallback_info = self._resolve_model(requested_model)
+        if fallback_info:
+            self._record_fallback(fallback_info)
+            app_logger.warning(
+                f"LLM model '{fallback_info['requested']}' is not loaded; "
+                f"using loaded model '{fallback_info['used']}' instead. "
+                f"Load '{fallback_info['requested']}' in LM Studio or update "
+                f"MAIN_MODEL/FAST_MODEL to remove this fallback.")
         # P0 review #10: the reasoning budget is REAL. Under an active
         # reasoning_token_budget scope no component may exceed the cycle's
         # remaining token budget — request 8192 under a 2048 budget and the
@@ -222,21 +388,8 @@ class LocalLLMClient:
         }
         
         try:
-            url = f"{self.base_url}/chat/completions"
-            app_logger.info(f"Sending request to Provider '{self.provider}' for model '{model}': {url}")
-            response = run_cancellable_blocking_call(
-                lambda: self.client.post(
-                    url, json=payload, timeout=settings.DEFAULT_TIMEOUT
-                ),
-                cancel=self.client.close,
-                description="local model HTTP request",
-            )
-            response.raise_for_status()
-            result = response.json()
-            if ledger is not None:
-                usage = (result or {}).get("usage") or {}
-                ledger.settle(reserved, usage.get("completion_tokens"))
-            return result
+            app_logger.info(f"Sending request to Provider '{self.provider}' for model '{model}': {self.base_url}/chat/completions")
+            result = self._post_completion(payload)
         except ExecutionCancelled:
             # The cancellation interrupt closes this request's transport.
             # Replace it so later, separately authorized requests can run.
@@ -244,6 +397,49 @@ class LocalLLMClient:
                 self.client = httpx.Client(timeout=settings.DEFAULT_TIMEOUT)
             raise
         except httpx.HTTPError as e:
+            # The loaded-models cache can be stale (a model unloaded seconds
+            # ago): when the provider explicitly rejects the MODEL, re-probe
+            # once and retry ONCE with a loaded fallback — observably, never
+            # looping. Any other error goes straight to the honest path.
+            retry_model = None
+            if (isinstance(e, httpx.HTTPStatusError)
+                    and e.response is not None
+                    and e.response.status_code in (400, 404)
+                    and self._MODEL_NOT_FOUND_RE.search(
+                        str(getattr(e.response, "text", "") or ""))):
+                loaded = self.list_loaded_models(force=True)
+                if loaded is not None:
+                    if requested_model in loaded and requested_model != model:
+                        retry_model = requested_model
+                    else:
+                        retry_model = self.select_loaded_fallback(
+                            requested_model, loaded, exclude={model})
+            if retry_model:
+                app_logger.warning(
+                    f"Provider rejected model '{model}'; retrying once with "
+                    f"loaded model '{retry_model}'.")
+                payload = {**payload, "model": retry_model}
+                try:
+                    result = self._post_completion(payload)
+                except ExecutionCancelled:
+                    if self.client.is_closed:
+                        self.client = httpx.Client(timeout=settings.DEFAULT_TIMEOUT)
+                    raise
+                except httpx.HTTPError as retry_error:
+                    e = retry_error  # fall through to simulation, honestly
+                else:
+                    if ledger is not None:
+                        usage = (result or {}).get("usage") or {}
+                        ledger.settle(reserved, usage.get("completion_tokens"))
+                    info = {
+                        "requested": requested_model,
+                        "used": retry_model,
+                        "reason": "provider rejected the requested model; "
+                                  "retried once with the closest loaded model",
+                    }
+                    self._record_fallback(info)
+                    result["model_fallback"] = info
+                    return result
             app_logger.warning(f"Local LLM provider '{self.provider}' returned error or timed out with model '{model}': {e}. Falling back to simulation.")
             last_user_msg = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
             return {
@@ -265,6 +461,12 @@ class LocalLLMClient:
                     "finish_reason": "stop"
                 }]
             }
+        if ledger is not None:
+            usage = (result or {}).get("usage") or {}
+            ledger.settle(reserved, usage.get("completion_tokens"))
+        if fallback_info:
+            result["model_fallback"] = fallback_info
+        return result
 
     def set_provider(self, provider_name: str, url: str):
         self.provider = provider_name.lower().strip()
