@@ -54,7 +54,7 @@ record; the legacy ``creation_events`` / ``deterministic_answers`` keys
 remain as backward-compatible aliases.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -63,7 +63,18 @@ from app.utils.logger import app_logger
 __all__ = [
     "ExecutionTruth",
     "ARTIFACT_CANDIDATE_KEYS",
+    "ARTIFACT_CLOCK_SKEW_TOLERANCE_SECONDS",
 ]
+
+# Filesystem timestamps can lag the system clock that stamps
+# ``_cycle_started_at`` by milliseconds (observed live: a file written
+# after ``datetime.now()`` carried an mtime 3ms earlier), and some
+# volumes are coarser still (FAT: ~2s granularity; network shares can
+# drift more). A small lower-bound tolerance keeps this cycle's OWN
+# artifact inside the window. It does not meaningfully widen the window:
+# cycles run seconds to minutes, so evidence from an earlier cycle is
+# minutes old, not 2 seconds old.
+ARTIFACT_CLOCK_SKEW_TOLERANCE_SECONDS = 2.0
 
 # Result-payload keys whose values are treated as candidate artifact
 # paths. Deliberately narrow: only keys that mean "a file was produced
@@ -226,7 +237,8 @@ class ExecutionTruth:
 
         An artifact is truth iff (a) the path exists on disk at capture
         time and (b) its modification time falls inside this cycle's
-        window — a file created before the cycle began is not this
+        window (lower bound relaxed by the filesystem timestamp-skew
+        tolerance) — a file created before the cycle began is not this
         cycle's evidence, and a path that vanished (created then
         deleted, or never created) is not evidence either.
         """
@@ -235,6 +247,8 @@ class ExecutionTruth:
         started = cycle_started_at
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
+        window_floor = started - timedelta(
+            seconds=ARTIFACT_CLOCK_SKEW_TOLERANCE_SECONDS)
 
         artifacts: List[Dict[str, Any]] = []
         for raw in candidate_paths:
@@ -244,7 +258,7 @@ class ExecutionTruth:
                     continue
                 stat = p.stat()
                 mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-                if mtime < started:
+                if mtime < window_floor:
                     continue
                 artifacts.append({
                     "path": str(p),

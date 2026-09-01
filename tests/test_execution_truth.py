@@ -105,6 +105,25 @@ def test_artifacts_verified_against_disk_and_cycle_window(tmp_path):
     assert arts == []
 
 
+def test_artifact_window_tolerates_filesystem_clock_skew(tmp_path):
+    """Observed live in the sandbox: a file written AFTER the window
+    opened can carry an mtime a few milliseconds BEFORE it (filesystem
+    timestamps lag the system clock; FAT volumes are ~2s coarse). The
+    cycle's own artifact must still be accepted — a zero-tolerance
+    window intermittently rejects exactly the evidence it exists to
+    collect."""
+    f = tmp_path / "report.pdf"
+    f.write_bytes(b"%PDF-1.4")
+    # Simulate the skew: window starts 50ms AFTER the file's mtime.
+    skewed_start = datetime.now(timezone.utc) + timedelta(milliseconds=50)
+    arts = ExecutionTruth.collect_artifacts([str(f)], cycle_started_at=skewed_start)
+    assert len(arts) == 1 and arts[0]["path"] == str(f)
+    # Well outside the window (30s before the file) stays rejected —
+    # the tolerance must not become a leak.
+    far = datetime.now(timezone.utc) + timedelta(seconds=30)
+    assert ExecutionTruth.collect_artifacts([str(f)], cycle_started_at=far) == []
+
+
 # ── STATE CHANGE: the durable-store class (consolidated from item 8) ────
 
 def test_state_changes_read_from_durable_stores(tmp_path):
