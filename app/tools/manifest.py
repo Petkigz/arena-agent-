@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import importlib
 from threading import RLock
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.utils.logger import app_logger
 
@@ -48,6 +48,10 @@ class ToolDependencyUnavailable(ImportError):
         }
 
 
+# Every lazy proxy ever created (see _LazyImportProxy.__init__).
+_ALL_LAZY_PROXIES: List["_LazyImportProxy"] = []
+
+
 class _LazyImportProxy:
     """Resolve a tool class only when one of its actions is actually invoked.
 
@@ -62,6 +66,11 @@ class _LazyImportProxy:
         self._resolved: Optional[Any] = None
         self._load_error: Optional[ToolDependencyUnavailable] = None
         self._lock = RLock()
+        # Tracked so an environment change (dependency installed while
+        # running) can clear cached load errors and retry — without this,
+        # the FIRST ImportError freezes the capability unavailable for the
+        # whole process, no matter what the registry cache does.
+        _ALL_LAZY_PROXIES.append(self)
 
     def _load(self) -> Any:
         with self._lock:
@@ -110,6 +119,20 @@ class _LazyImportProxy:
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._load()(*args, **kwargs)
+
+
+def reset_lazy_load_errors() -> int:
+    """Clear cached load errors on every lazy proxy (successful resolutions
+    are kept). Called when the environment changes — e.g. a dependency was
+    installed while running — so previously-failed modules get retried.
+    Returns how many proxies were reset."""
+    reset = 0
+    for proxy in _ALL_LAZY_PROXIES:
+        with proxy._lock:
+            if proxy._load_error is not None:
+                proxy._load_error = None
+                reset += 1
+    return reset
 
 
 def _copy_availability(

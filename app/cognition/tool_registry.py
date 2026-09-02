@@ -48,6 +48,11 @@ The authority contract — three DISTINCT notions, never conflated:
                                    from 'not found' (the loop's probes
                                    declare themselves at their
                                    registration seams)
+  * note_environment_change()  -> availability caches are gated by an
+                                   environment REVISION, not just a TTL:
+                                   registration, dependency installation
+                                   and observed availability failures all
+                                   invalidate immediately
   * ToolRegistry.capabilities() -> the ONE capability universe, the
                                    EFFECTIVE view rebuilt fresh on every
                                    call — identical semantics to
@@ -214,6 +219,26 @@ def reset_internal_probes() -> None:
     _INTERNAL_PROBES.clear()
 
 
+def note_environment_change(reason: str = "") -> None:
+    """Module seam: the environment changed (dependency installed, config
+    reloaded, platform changed). Routes to the shared registry so every
+    cached availability reading goes stale and failed lazy imports retry
+    (follow-up review #6)."""
+    try:
+        get_shared_registry().note_environment_change(reason)
+    except Exception:
+        pass
+
+
+def note_availability_failure(tool_name: str, reason: str = "") -> None:
+    """Module seam: execution observed an availability reading lying.
+    Routes to the shared registry (follow-up review #6)."""
+    try:
+        get_shared_registry().note_availability_failure(tool_name, reason)
+    except Exception:
+        pass
+
+
 def capability_safety_or_none(name: str) -> Optional[int]:
     """The authoritative safety reading, or None when the capability is
     unknown TO THE AUTHORITY. None means 'not found' — it is NEVER
@@ -326,6 +351,13 @@ class ToolRegistry:
         self._registry: Dict[str, Dict[str, Any]] = {}
         self.event_bus = event_bus or EventBus()
         self._availability_cache: Dict[str, tuple] = {}
+        # Environment revision (follow-up review #6): bumped by every event
+        # that can change availability — runtime registration, dependency
+        # installation, environment change, an execution observing the
+        # cache lying. A cached availability is valid only if it was
+        # computed at the CURRENT revision; a TTL alone lets a stale
+        # available=False ride for 300s after the dependency arrived.
+        self._environment_revision = 1
         self._catalog_provider = catalog_provider or self._static_catalog
         self._register_default_tools()
 
@@ -361,6 +393,9 @@ class ToolRegistry:
             "availability": availability,
             "provenance": provenance,
         }
+        # Registration changed the capability picture: every cached
+        # availability reading is now stale (follow-up review #6).
+        self._environment_revision += 1
 
     def get_capability(self, name: str) -> Optional[Dict[str, Any]]:
         """The REGISTRY'S OWN entry (execution wiring: boot-time manifest
@@ -498,8 +533,15 @@ class ToolRegistry:
         _provenance = entry.get("provenance", "manifest")
         if not refresh:
             cached = self._availability_cache.get(key)
-            if cached and now - cached[0] < self._AVAILABILITY_CACHE_TTL_S:
-                return {"name": key, "provenance": _provenance, **cached[1]}
+            if (
+                cached
+                # Valid only at the CURRENT environment revision — a
+                # registration/install/environment change invalidates
+                # every cached reading, TTL notwithstanding.
+                and cached[0] == self._environment_revision
+                and now - cached[1] < self._AVAILABILITY_CACHE_TTL_S
+            ):
+                return {"name": key, "provenance": _provenance, **cached[2]}
 
         checker = entry.get("availability")
         status = interpret_availability(checker, probe=probe)
@@ -507,8 +549,38 @@ class ToolRegistry:
         # Cache DECISIVE results only. available=None (NOT_CHECKED) must keep
         # flowing through verbatim — never coerced, never frozen as knowledge.
         if isinstance(status, dict) and status.get("available") is not None:
-            self._availability_cache[key] = (now, dict(status))
+            self._availability_cache[key] = (
+                self._environment_revision, now, dict(status))
         return {"name": key, "provenance": _provenance, **status}
+
+    def note_environment_change(self, reason: str = "") -> None:
+        """The environment changed (dependency installed/removed, config
+        reload, platform change): every cached availability reading is
+        stale, and lazily-imported tool modules that previously failed to
+        load get their load errors cleared so they are retried (follow-up
+        review #6 — a TTL alone would keep serving the old answer)."""
+        self._environment_revision += 1
+        self._availability_cache.clear()
+        try:
+            from app.tools.manifest import reset_lazy_load_errors
+            reset = reset_lazy_load_errors()
+        except Exception:
+            reset = 0
+        app_logger.info(
+            f"Environment change noted (revision {self._environment_revision}): "
+            f"{reason or 'unspecified'}; {reset} lazy module(s) will retry")
+
+    def note_availability_failure(self, tool_name: str, reason: str = "") -> None:
+        """Execution OBSERVED the availability picture lying (a handler
+        failed on a missing dependency the cache said was fine). Drop that
+        tool's cached reading and bump the revision — treat it as
+        environment drift until re-probed (follow-up review #6)."""
+        key = str(tool_name or "").lower().strip()
+        self._availability_cache.pop(key, None)
+        self._environment_revision += 1
+        app_logger.warning(
+            f"Availability failure noted for '{key}' (revision "
+            f"{self._environment_revision}): {reason or 'execution-time dependency failure'}")
 
     def list_tool_availability(self, *, probe: bool = False) -> List[Dict[str, Any]]:
         """Return deterministic per-tool availability records."""
@@ -555,6 +627,9 @@ class ToolRegistry:
                 audit_logger.info(
                     f"ToolRegistry could not execute '{key}': dependency unavailable"
                 )
+                # Execution observed an availability lie (follow-up review
+                # #6): the cached reading must not survive this.
+                self.note_availability_failure(key, "handler reported dependency unavailable")
                 return result
 
             # Calculate prediction surprisal. proposal.predicted_outcome is
@@ -588,6 +663,9 @@ class ToolRegistry:
 
             if isinstance(e, ToolDependencyUnavailable):
                 app_logger.warning(str(e))
+                # Execution observed an availability lie (follow-up review
+                # #6): drop the cached reading, bump the revision.
+                self.note_availability_failure(key, str(e))
                 return e.as_result()
             app_logger.error(f"Import error executing registered tool '{key}': {e}")
             return {

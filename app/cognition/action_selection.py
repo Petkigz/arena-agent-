@@ -167,6 +167,17 @@ class InvestigationExecutor:
             try:
                 output = tool(**plan.arguments)
                 return ActionResult(True, plan.tool, output=output)
+            except ImportError as exc:
+                # Execution observed an availability lie (follow-up review
+                # #6): the cached reading must not survive this. Route
+                # through the authority seam so the shared registry
+                # invalidates and re-probes.
+                try:
+                    from app.cognition.tool_registry import note_availability_failure
+                    note_availability_failure(plan.tool, str(exc))
+                except Exception:
+                    pass
+                return ActionResult(False, plan.tool, error=f"{type(exc).__name__}: {exc}")
             except Exception as exc:
                 return ActionResult(False, plan.tool, error=f"{type(exc).__name__}: {exc}")
         return self._execute_from_manifest(plan)
@@ -218,6 +229,14 @@ class InvestigationExecutor:
         try:
             output = handler(**plan.arguments)
             return ActionResult(True, plan.tool, output=output)
+        except ImportError as exc:
+            # Execution observed an availability lie (follow-up review #6).
+            try:
+                from app.cognition.tool_registry import note_availability_failure
+                note_availability_failure(plan.tool, str(exc))
+            except Exception:
+                pass
+            return ActionResult(False, plan.tool, error=f"{type(exc).__name__}: {exc}")
         except Exception as exc:
             return ActionResult(False, plan.tool, error=f"{type(exc).__name__}: {exc}")
 

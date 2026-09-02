@@ -538,3 +538,188 @@ def test_investigation_executor_still_runs_not_checked_tools():
     result = executor.execute(plan)
     assert result.success is True
     assert result.output.get("tool_count", 0) >= 100
+
+
+# ---------------------------------------------------------------------------
+# Environment revision gates the availability cache (follow-up review #6):
+# a TTL alone lets a stale available=False ride for 300s after the
+# dependency arrived. Registration changes, dependency installation,
+# environment changes and OBSERVED availability failures all invalidate
+# immediately.
+# ---------------------------------------------------------------------------
+
+def test_registration_change_invalidates_cached_availability():
+    calls = []
+
+    def checker(probe=False):
+        calls.append(probe)
+        return {"available": False, "status": "dependency_unavailable"}
+
+    reg = ToolRegistry()
+    reg.register_tool("flaky_tool", "x", lambda p: {"success": True},
+                      availability=checker)
+    assert reg.get_tool_availability("flaky_tool", probe=True)["available"] is False
+    assert len(calls) == 1
+    # decisive False is cached within the same revision…
+    assert reg.get_tool_availability("flaky_tool", probe=True)["available"] is False
+    assert len(calls) == 1
+    # …but ANY registration change bumps the revision and invalidates it
+    reg.register_tool("unrelated_tool", "x", lambda p: {"success": True})
+    assert reg.get_tool_availability("flaky_tool", probe=True)["available"] is False
+    assert len(calls) == 2
+
+
+def test_dependency_installation_recovers_availability():
+    """The reviewed scenario: available=False is cached, then the
+    dependency is installed — the next reading must be FRESH (the old
+    TTL would keep serving the stale False for up to 300s)."""
+    state = {"ok": False}
+
+    def checker(probe=False):
+        if state["ok"]:
+            return {"available": True, "status": "available"}
+        return {"available": False, "status": "dependency_unavailable"}
+
+    reg = ToolRegistry()
+    reg.register_tool("recovering_tool", "x", lambda p: {"success": True},
+                      availability=checker)
+    assert reg.get_tool_availability("recovering_tool", probe=True)["available"] is False
+
+    state["ok"] = True  # the dependency was installed
+    reg.note_environment_change("dependency_installed:recovering_tool")
+    assert reg.get_tool_availability("recovering_tool", probe=True)["available"] is True
+
+
+def test_stale_revision_entry_ignored_even_within_ttl():
+    """A cache entry from an OLDER revision is ignored even when its
+    timestamp is fresh — revision, not just TTL, decides validity."""
+    import time as _time
+
+    calls = []
+
+    def checker(probe=False):
+        calls.append(1)
+        return {"available": True, "status": "available"}
+
+    reg = ToolRegistry()
+    reg.register_tool("revisioned_tool", "x", lambda p: {"success": True},
+                      availability=checker)
+    # Forge a stale entry: old revision, brand-new timestamp.
+    reg._availability_cache["revisioned_tool"] = (
+        reg._environment_revision - 1, _time.monotonic(),
+        {"available": False, "status": "dependency_unavailable"})
+    assert reg.get_tool_availability("revisioned_tool")["available"] is True
+    assert len(calls) == 1  # the stale entry was ignored, checker consulted
+
+
+def test_environment_change_resets_lazy_load_errors():
+    """A failed lazy import is cached for the process — without a reset,
+    even refresh=True cannot recover after the dependency is installed.
+    note_environment_change clears the load errors so modules retry."""
+    from app.tools.manifest import _LazyImportProxy, reset_lazy_load_errors
+
+    proxy = _LazyImportProxy("app.tools.definitely_missing_module_zz", "Nothing")
+    status = proxy.availability(probe=True)
+    assert status["available"] is False
+    assert proxy._load_error is not None
+
+    reset_lazy_load_errors()
+    assert proxy._load_error is None  # it will retry next time
+
+    reg = ToolRegistry()
+    with patch("app.tools.manifest.reset_lazy_load_errors", return_value=1) as m:
+        reg.note_environment_change("dependency_installed:zz")
+    m.assert_called_once()
+    assert reg._availability_cache == {}
+
+
+def test_availability_failure_invalidates_that_tool():
+    """Execution OBSERVED the cache lying — that tool's reading must not
+    survive."""
+    calls = []
+
+    def checker(probe=False):
+        calls.append(1)
+        return {"available": True, "status": "available"}
+
+    reg = ToolRegistry()
+    reg.register_tool("lying_tool", "x", lambda p: {"success": True},
+                      availability=checker)
+    assert reg.get_tool_availability("lying_tool")["available"] is True
+    assert len(calls) == 1
+
+    reg.note_availability_failure("lying_tool", "handler import failed at execution")
+    assert reg.get_tool_availability("lying_tool")["available"] is True
+    assert len(calls) == 2  # re-probed after the observed failure
+
+
+def test_executor_notes_availability_failure_on_dependency_error():
+    """The investigation executor's handler raised ImportError: the
+    failure is routed to the authority seam, not silently swallowed."""
+    from app.cognition.action_selection import InvestigationExecutor, InvestigationPlan
+
+    executor = InvestigationExecutor()
+
+    def broken(**kw):
+        raise ImportError("No module named 'missing_dependency'")
+
+    executor.register("dep_probe", broken)
+    plan = InvestigationPlan(tool="dep_probe", arguments={}, target="t",
+                             reason="r", priority=0.5)
+    with patch.object(tr, "note_availability_failure") as noted:
+        result = executor.execute(plan)
+    assert result.success is False
+    noted.assert_called_once()
+    assert noted.call_args[0][0] == "dep_probe"
+
+
+def test_install_package_notes_environment_change():
+    """A successful install_package is the 'dependency installation
+    occurred' event: the authority is told the environment changed."""
+    from types import SimpleNamespace
+
+    from app.tools import package_installer as pi
+
+    fake = SimpleNamespace(returncode=0, stdout="installed", stderr="")
+    with patch.object(pi, "run_cancellable_subprocess", return_value=fake), \
+         patch.object(tr, "note_environment_change") as noted:
+        result = pi.PackageInstaller.install_package("requests", "pip")
+    assert result["success"] is True
+    noted.assert_called_once()
+    assert "dependency_installed" in noted.call_args[0][0]
+
+
+def test_planner_refreshes_availability_after_environment_change():
+    """The planner's capability classification reads through the same
+    revision gate: after an environment change the next classification is
+    a FRESH probe, not the cached reading."""
+
+    class _Branch:
+        def __init__(self, action):
+            self.hypothetical_action = action
+            self.candidate_payload = {}
+
+    from app.cognition.action_planner import ActionPlanner
+
+    state = {"ok": False}
+
+    def checker(probe=False):
+        if state["ok"]:
+            return {"available": True, "status": "available"}
+        return {"available": False, "status": "dependency_unavailable"}
+
+    reg = ToolRegistry()
+    reg.register_tool("planner_tool", "x", lambda p: {"success": True},
+                      availability=checker)
+    branch = _Branch("planner_tool")
+
+    _, s1 = ActionPlanner._classify_capability(branch, reg)
+    assert s1["available"] is False
+
+    state["ok"] = True  # dependency installed…
+    _, s2 = ActionPlanner._classify_capability(branch, reg)
+    assert s2["available"] is False  # …but the cache still says False (within TTL)
+
+    reg.note_environment_change("dependency_installed:planner_tool")
+    _, s3 = ActionPlanner._classify_capability(branch, reg)
+    assert s3["available"] is True  # fresh probe after the invalidation

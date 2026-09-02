@@ -130,6 +130,14 @@ class PackageInstaller:
             audit_logger.info(f"Installed {pkg} via {manager} (rc={out.returncode})")
             if out.returncode != 0:
                 return {"success": False, "error": (out.stderr or out.stdout or "").strip()[:500]}
+            # The environment changed (follow-up review #6): every cached
+            # availability reading is now stale, and tool modules that
+            # failed to import get retried.
+            try:
+                from app.cognition.tool_registry import note_environment_change
+                note_environment_change(f"dependency_installed:{pkg}")
+            except Exception:
+                pass
             return {"success": True, "package": pkg, "manager": manager, "output": (out.stdout or "").strip()[:500]}
         except FileNotFoundError:
             return {"success": False, "error": f"{manager} is not available on this system."}
@@ -158,6 +166,14 @@ class PackageInstaller:
             audit_logger.info(f"Uninstalled {pkg} via {manager} (rc={out.returncode})")
             if out.returncode != 0:
                 return {"success": False, "error": (out.stderr or out.stdout or "").strip()[:500]}
+            # The environment changed (follow-up review #6): cached
+            # availability readings are stale; capabilities backed by this
+            # package are gone.
+            try:
+                from app.cognition.tool_registry import note_environment_change
+                note_environment_change(f"dependency_uninstalled:{pkg}")
+            except Exception:
+                pass
             return {"success": True, "package": pkg, "manager": manager}
         except FileNotFoundError:
             return {"success": False, "error": f"{manager} is not available on this system."}
