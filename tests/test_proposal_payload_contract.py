@@ -23,8 +23,12 @@ def test_execute_proposal_uses_payload_search_query_authoritatively():
         # max_results=6 (limit 5 + 1 for truncation detection). root_dir/scope
         # pass through from the payload (D7 live 2026-09-01: they used to be
         # silently dropped — a planner-chosen scope was ignored).
+        # allow_escalation defaults constrained (owner report #5, 2026-09-02):
+        # an explicit root is a constraint; recovery is an explicit payload
+        # decision, never a silent scope expansion.
         mock_search.assert_called_once_with(
-            "project_backup", root_dir=None, scope=None, max_results=6)
+            "project_backup", root_dir=None, scope=None, max_results=6,
+            allow_escalation=False)
         assert "project_backup.zip" in res["executed_actions"][0]
 
 

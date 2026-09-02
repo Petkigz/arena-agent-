@@ -495,7 +495,7 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         "Search the filesystem (default: ALL user files across drives; narrow with an explicit "
         "scope — workspace/home/desktop/documents/downloads/music/pictures/videos/all_user_files — "
         "when the user names a location)",
-        _wrap(UniversalFilesystem.search_filesystem, "query", "root_dir", "scope", "max_results"))
+        _wrap(UniversalFilesystem.search_filesystem, "query", "root_dir", "scope", "max_results", "allow_escalation"))
     add("move_file", "filesystem", 2, "Rename/move a file",
         _wrap(UniversalFilesystem.rename_or_move, "source_path_str", "destination_path_str"))
     add("copy_file_verified", "filesystem", 2, "Copy a file without overwrite and verify its hash",

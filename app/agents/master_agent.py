@@ -162,14 +162,18 @@ class MasterAgentOrchestrator:
 
             # D7 (live 2026-09-01): the payload's scope/root_dir used to be
             # DROPPED here — a planner that picked a scope had it silently
-            # ignored (payload contract leak). They are honored now; the
-            # tool's narrow-miss escalation keeps a wrong scope from
-            # fabricating absence.
+            # ignored (payload contract leak). They are honored now.
+            # Owner report #5 (2026-09-02): an explicit root_dir is a
+            # CONSTRAINT — no silent escalation to other drives. A planner
+            # that wants the D7 wrong-root recovery must request it in the
+            # payload (allow_escalation=true); a constrained miss is honest
+            # evidence the replan layer acts on.
             matched = UniversalFilesystem.search_filesystem(
                 search_query,
                 root_dir=payload.get("root_dir"),
                 scope=payload.get("scope"),
-                max_results=search_limit + 1)
+                max_results=search_limit + 1,
+                allow_escalation=bool(payload.get("allow_escalation", False)))
             truncated = len(matched) > search_limit
             if truncated:
                 matched = matched[:search_limit]

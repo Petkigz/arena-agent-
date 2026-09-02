@@ -243,7 +243,14 @@ def test_persistent_index_accelerates_without_lying(tmp_path):
     assert any(fresh_name in h["file_name"] for h in fresh)
 
     # Deleted after indexing -> never reported (existence-verified out).
+    # Owner report #5 (2026-09-02): this also pins the explicit-root
+    # CONSTRAINT — the search must not escalate past the caller's root,
+    # so a same-named file on any other drive can never leak in. (The
+    # original failure: escalation to all_user_files returned the
+    # owner's REAL same-named video from another indexed drive.)
     (tmp_path / "home" / "Music" / f"{_TOKEN} - Official Video.mp3").unlink()
     gone = UniversalFilesystem.search_filesystem(
         _TOKEN, root_dir=[str(tmp_path / "home")])
-    assert not any(_TOKEN in h["file_name"].lower() for h in gone)
+    assert gone == [], (
+        "deleted file must never be reported, and the explicit root must "
+        f"constrain the search (got {[h.get('file_path') for h in gone]})")

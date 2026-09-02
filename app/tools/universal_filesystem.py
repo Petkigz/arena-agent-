@@ -338,6 +338,7 @@ class UniversalFilesystem:
         max_results: int = 20,
         timeout_s: float = 15.0,
         scope: Optional[str] = None,
+        allow_escalation: bool = False,
     ) -> List[Dict[str, Any]]:
         """Scoped filename search for a personal desktop assistant (P0 #12).
 
@@ -354,10 +355,20 @@ class UniversalFilesystem:
              own install directory (the old root_dir=None default searched
              Arena's BASE_DIR).
 
-        A narrow scope that finds NOTHING escalates once to all_user_files:
-        a miss in ~/Music is not proof the song doesn't exist elsewhere, and
-        this search must never fabricate absence. Escalated entries carry
-        ``scope_escalated``; every scoped result carries ``scope``.
+        A narrow NAMED scope that finds NOTHING escalates once to
+        all_user_files: a miss in ~/Music is not proof the song doesn't
+        exist elsewhere, and this search must never fabricate absence.
+        Escalated entries carry ``scope_escalated``; every scoped result
+        carries ``scope``.
+
+        An EXPLICIT ``root_dir`` is a CONSTRAINT, not a hint (owner report
+        #5, 2026-09-02): a search of one folder must never silently return
+        results from other drives — that is a correctness and trust
+        problem. A constrained miss is reported as the honest answer for
+        that scope; the caller may explicitly request recovery with
+        ``allow_escalation=True`` (one escalation to all_user_files, the
+        D7 wrong-root recovery, now a DECISION the caller makes instead
+        of a silent scope expansion).
 
         Everything (voidtools) reads the NTFS master file table and sees every
         file on every drive instantly; this tool WALKS the tree — but keeps a
@@ -415,19 +426,32 @@ class UniversalFilesystem:
                     "escalating to all_user_files before reporting absence.")
                 results = cls._search_roots(query_raw, esc_roots, max_results, timeout_s)
                 return _tag(results, escalated=True)
-        # Same rule for an EXPLICIT root_dir (D7 live 2026-09-01): the
-        # agent searched the Documents folder while the marker sat in the
-        # home root — one wrong root must not hide a file that exists in
-        # the user's scope. Escalate once before reporting nothing.
+        # Owner report #5 (2026-09-02): an explicitly supplied root_dir is
+        # a CONSTRAINT — the caller said "search HERE", and a search of
+        # C:\...\home mysteriously returning something from D:\, E:\ or
+        # F:\ is a correctness and trust problem (live: the persistent-
+        # index test deleted a file, searched its root, and got a hit from
+        # another indexed drive). Escalation past an explicit root now
+        # requires the caller's EXPLICIT request (allow_escalation=True —
+        # the D7 wrong-root recovery, kept as a decision, not a silent
+        # scope expansion). Recovery from a wrong PLANNER root belongs to
+        # the replan layer, which sees the honest constrained miss and
+        # re-plans; the tool layer must not paper over it.
         if not results and root_dir is not None:
-            esc_roots = cls.resolve_scope_roots("all_user_files")
-            if {str(r) for r in esc_roots} - {str(r) for r in roots}:
+            if allow_escalation:
+                esc_roots = cls.resolve_scope_roots("all_user_files")
+                if {str(r) for r in esc_roots} - {str(r) for r in roots}:
+                    app_logger.info(
+                        f"Explicit root {roots} found no matches for "
+                        f"'{query_raw}'; caller requested escalation — "
+                        "escalating to all_user_files before reporting absence.")
+                    results = cls._search_roots(query_raw, esc_roots, max_results, timeout_s)
+                    return _tag(results, escalated=True)
+            else:
                 app_logger.info(
-                    f"Explicit root {roots} found no matches for "
-                    f"'{query_raw}'; escalating to all_user_files before "
-                    "reporting absence.")
-                results = cls._search_roots(query_raw, esc_roots, max_results, timeout_s)
-                return _tag(results, escalated=True)
+                    f"Explicit root(s) {roots} constrained for '{query_raw}': "
+                    "no matches in the caller's scope (allow_escalation not "
+                    "requested — no silent expansion to other drives).")
         return _tag(results)
 
     @classmethod
