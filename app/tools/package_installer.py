@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from typing import Any, Dict, Optional
 
 from app.cognition.execution_control import run_cancellable_subprocess
@@ -40,7 +41,7 @@ class PackageInstaller:
         if manager == "pip":
             try:
                 out = run_cancellable_subprocess(
-                    ["pip", "list", "--format=json"], timeout=60,
+                    [sys.executable, "-m", "pip", "list", "--format=json"], timeout=60,
                 )
                 if out.returncode != 0:
                     return {"success": False, "error": f"pip list failed: {(out.stderr or '').strip()[:300]}"}
@@ -80,7 +81,7 @@ class PackageInstaller:
         if manager == "pip":
             try:
                 out = run_cancellable_subprocess(
-                    ["pip", "show", pkg], timeout=30,
+                    [sys.executable, "-m", "pip", "show", pkg], timeout=30,
                 )
             except FileNotFoundError:
                 return {"success": False, "error": "pip is not available on this system."}
@@ -136,7 +137,11 @@ class PackageInstaller:
             return {"success": False, "error": err}
 
         if manager == "pip":
-            cmd = ["pip", "install"]
+            # sys.executable -m pip, not bare "pip": on Windows PATH often holds
+            # the Store shim or misses Scripts\ — the RUNNING interpreter
+            # always has pip (owner run 2026-09-02: list_packages failed
+            # on a system-Python run for exactly this class of reason).
+            cmd = [sys.executable, "-m", "pip", "install"]
             if upgrade:
                 cmd.append("--upgrade")
             cmd.append(pkg)
@@ -173,7 +178,7 @@ class PackageInstaller:
             return {"success": False, "error": err}
 
         if manager == "pip":
-            cmd = ["pip", "uninstall", "-y", pkg]
+            cmd = [sys.executable, "-m", "pip", "uninstall", "-y", pkg]
         else:
             cmd = ["npm", "uninstall", pkg]
 

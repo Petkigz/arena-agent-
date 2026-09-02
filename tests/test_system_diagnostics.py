@@ -364,6 +364,7 @@ def test_throttling_observed_is_platform_evidence_never_the_heuristic(monkeypatc
 
 
 def test_kernel_log_throttling_record_is_observed(monkeypatch):
+    import sys as _sys
     import app.tools.system_diagnostics as mod
     _fake_sensors(monkeypatch, 85.0)
     monkeypatch.setattr(mod, "run_cancellable_subprocess", lambda cmd, timeout: _ProcResult(
@@ -372,7 +373,12 @@ def test_kernel_log_throttling_record_is_observed(monkeypatch):
     evidence = result["thermal_throttling_observed"]
     assert evidence["available"] is True
     assert evidence["observed"] is True
-    assert evidence["source"].startswith("kernel log")
+    # The platform's OWN observation source: journalctl on Linux, the
+    # Kernel-Processor-Power event log on Windows (owner run 2026-09-02:
+    # the Windows branch reported its honest 'System log (...)' source and
+    # the Linux-only assertion failed). Both are real throttle records.
+    expected_source = "kernel log" if _sys.platform != "win32" else "System log"
+    assert evidence["source"].startswith(expected_source)
 
 
 def test_clean_kernel_log_is_negative_evidence(monkeypatch):

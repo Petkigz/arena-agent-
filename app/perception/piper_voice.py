@@ -256,7 +256,18 @@ def _synthesize_raw(voice: object, text: str, length_scale: float) -> Optional[T
 
     # 3) Raw fallback: synthesize(text) -> int16 samples (list) or AudioChunk iterator.
     try:
-        result = voice.synthesize(text, length_scale=length_scale)  # type: ignore[attr-defined]
+        try:
+            result = voice.synthesize(text, length_scale=length_scale)  # type: ignore[attr-defined]
+        except TypeError:
+            # Compat (owner run 2026-09-02): some piper builds accept no
+            # length_scale kwarg ('PiperVoice.synthesize() got an
+            # unexpected keyword argument'). Synthesize at the voice's
+            # default rate instead of failing into the pyttsx3 fallback —
+            # the owner heard the wrong voice for exactly this reason.
+            app_logger.debug(
+                "Piper synthesize() rejects length_scale; synthesizing at "
+                "the voice default rate")
+            result = voice.synthesize(text)  # type: ignore[attr-defined]
         sr = 22050
         if isinstance(result, (list, tuple, np.ndarray)):
             samples = np.asarray(result, dtype=np.int16)

@@ -24,12 +24,17 @@ from app.cognition.semantic_matcher import (
 from app.cognition.tool_matcher import rank_tools
 
 
-@pytest.fixture(autouse=True)
-def _real_llm_transport(monkeypatch):
-    """These tests exercise the REAL transport/embedding internals
-    (fallback ladder, retry, embedding backends) — remove the suite's
-    hermeticity guard (tests/conftest.py sets ARENA_LLM_DISABLED) so the
-    mocked transports are actually reached."""
+@pytest.fixture()
+def real_llm_transport(monkeypatch):
+    """Opt-IN removal of the suite's hermeticity guard
+    (tests/conftest.py sets ARENA_LLM_DISABLED) for tests that exercise
+    the REAL embedding transport against their own mocks.
+
+    NOT autouse (owner run 2026-09-02, c4aaa68): the local-fallback
+    tests in this file assert backend == 'local' — with a blanket
+    opt-out they lost the guard and hit the owner's LIVE embedding
+    server ('embeddings' instead of 'local'). Only tests that mock the
+    transport themselves opt in."""
     monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
 
 CONCEPTUAL_GOAL = "make the photo take less disk space"
@@ -109,6 +114,7 @@ def test_model_pick_never_uses_a_chat_model():
         assert _pick_embedding_model(client) is None
 
 
+@pytest.mark.usefixtures("real_llm_transport")
 def test_semantic_scores_uses_embeddings_when_model_available():
     goal = "shrink the archive"
     tool_texts = {"compress_files": "compress files to a zip", "phone_call": "make a phone call"}
@@ -130,6 +136,7 @@ def test_semantic_scores_uses_embeddings_when_model_available():
     assert scores["phone_call"] == 0.0
 
 
+@pytest.mark.usefixtures("real_llm_transport")
 def test_tool_embeddings_are_cached_per_manifest():
     goal = "shrink the archive"
     tools = {"a": "alpha tool", "b": "beta tool"}
@@ -239,6 +246,7 @@ def test_model_loaded_later_is_picked_up_without_restart():
             assert _pick_embedding_model(after) == "nomic-embed-text-v1.5"
 
 
+@pytest.mark.usefixtures("real_llm_transport")
 def test_semantic_matching_recovers_end_to_end():
     """End-to-end: scores come back 'local' when no model is loaded, then
     'embeddings' after the model appears — same process, no restart."""
@@ -265,6 +273,7 @@ def test_semantic_matching_recovers_end_to_end():
             assert scores["compress_files"] > 0.7
 
 
+@pytest.mark.usefixtures("real_llm_transport")
 def test_goal_cache_does_not_outlive_the_no_model_era():
     """The subtle half of the fix: the goal lru cache stores None when no
     model is loaded. After the model appears, resolution happens BEFORE the
@@ -313,6 +322,7 @@ def test_miss_is_not_reprobed_within_ttl():
     assert client.model_calls == 1
 
 
+@pytest.mark.usefixtures("real_llm_transport")
 def test_vector_caches_rebind_when_model_switches():
     """Switching models mid-process must re-embed everything: vectors from
     two models live in different spaces — mixing them produces meaningless

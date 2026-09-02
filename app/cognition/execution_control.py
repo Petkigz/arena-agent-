@@ -409,6 +409,61 @@ def run_cancellable_blocking_call(
     return outcome["value"]
 
 
+def _kill_process_tree_windows(process: subprocess.Popen) -> None:
+    """Terminate the FULL process tree on Windows (owner run 2026-09-02:
+    cancellation was requested, the thread stayed alive 5+ seconds).
+
+    With shell=True the direct child is cmd.exe and the real workload is
+    a GRANDCHILD: process.terminate() killed only cmd.exe, and the
+    grandchild's inherited stdout pipe kept communicate() blocked until
+    the workload's own timeout. Kill children first, then the parent,
+    escalate to kill; fall back to taskkill /T /F when psutil is
+    unavailable."""
+    try:
+        import psutil
+        parent = psutil.Process(process.pid)
+        children = parent.children(recursive=True)
+        for child in children:
+            try:
+                child.terminate()
+            except psutil.Error:
+                pass
+        try:
+            process.terminate()
+        except Exception:
+            pass
+        _gone, alive = psutil.wait_procs(children + [parent], timeout=2)
+        for proc in alive:
+            try:
+                proc.kill()
+            except psutil.Error:
+                pass
+        return
+    except Exception:
+        pass
+    try:
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)],
+                       capture_output=True, timeout=5)
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+
+def _drain_after_kill(process: subprocess.Popen):
+    """communicate() with a bound: even after a tree-kill a stray handle
+    can hold the pipe open — never hang the cancelling thread."""
+    try:
+        return process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            _kill_process_tree_windows(process) if os.name == "nt" else process.kill()
+        except Exception:
+            pass
+        return process.communicate()
+
+
 def run_cancellable_subprocess(
     args: Any,
     *,
@@ -436,19 +491,19 @@ def run_cancellable_subprocess(
         if execution_control_registry.is_cancel_requested():
             try:
                 if os.name == "nt":
-                    process.terminate()
+                    _kill_process_tree_windows(process)  # grandchild too, not just cmd.exe
                 else:
                     os.killpg(process.pid, signal.SIGTERM)
                 process.wait(timeout=2)
             except Exception:
                 try:
                     if os.name == "nt":
-                        process.kill()
+                        _kill_process_tree_windows(process)
                     else:
                         os.killpg(process.pid, signal.SIGKILL)
                 except Exception:
                     pass
-            stdout, stderr = process.communicate()
+            stdout, stderr = _drain_after_kill(process)
             try:
                 execution_control_registry.checkpoint("subprocess_terminated")
             except ExecutionCancelled:
@@ -459,12 +514,12 @@ def run_cancellable_subprocess(
         if time.monotonic() >= deadline:
             try:
                 if os.name == "nt":
-                    process.kill()
+                    _kill_process_tree_windows(process)
                 else:
                     os.killpg(process.pid, signal.SIGKILL)
             except Exception:
                 process.kill()
-            stdout, stderr = process.communicate()
+            stdout, stderr = _drain_after_kill(process)
             raise subprocess.TimeoutExpired(args, timeout, output=stdout, stderr=stderr)
         time.sleep(0.05)
     stdout, stderr = process.communicate()

@@ -20,7 +20,12 @@ import numpy as np
 
 def test_runtime_accepts_image_path():
     """process_cognitive_cycle now accepts image_path (multimodal chat)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: CognitiveRuntime's engines hold SQLite
+    # connections until GC; on Windows an open handle blocks rmtree
+    # (WinError 32) and fails the TEST after its assertions passed
+    # (owner run 2026-09-02). These tests verify runtime behavior,
+    # not temp-file hygiene.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         rt = CognitiveRuntime(db_path=str(Path(tmpdir) / "test.db"))
         # Check signature has image_path param (structural)
         import inspect
@@ -88,7 +93,12 @@ def test_lora_manager_continual_learning():
     assert hasattr(LoraManagerTool, "prepare_dataset")
     assert hasattr(LoraManagerTool, "train")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: CognitiveRuntime's engines hold SQLite
+    # connections until GC; on Windows an open handle blocks rmtree
+    # (WinError 32) and fails the TEST after its assertions passed
+    # (owner run 2026-09-02). These tests verify runtime behavior,
+    # not temp-file hygiene.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         # Use temp dir for loras to avoid polluting real data
         import app.tools.lora_manager as lora_module
         original_dir = lora_module.LORAS_DIR
@@ -124,7 +134,12 @@ def test_lora_manager_continual_learning():
 
 def test_causal_learning_from_execution():
     """CausalInferenceEngine now learns from execution + surprisal (P1-2), not just storage."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: CognitiveRuntime's engines hold SQLite
+    # connections until GC; on Windows an open handle blocks rmtree
+    # (WinError 32) and fails the TEST after its assertions passed
+    # (owner run 2026-09-02). These tests verify runtime behavior,
+    # not temp-file hygiene.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         rt = CognitiveRuntime(db_path=str(Path(tmpdir) / "test.db"))
         ci = rt.causal_inference
 
@@ -149,7 +164,12 @@ def test_causal_learning_from_execution():
 
 def test_memory_association_and_causal_consolidation():
     """consolidate_memory() now creates associations + causal stats (P1-3)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: CognitiveRuntime's engines hold SQLite
+    # connections until GC; on Windows an open handle blocks rmtree
+    # (WinError 32) and fails the TEST after its assertions passed
+    # (owner run 2026-09-02). These tests verify runtime behavior,
+    # not temp-file hygiene.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         rt = CognitiveRuntime(db_path=str(Path(tmpdir) / "test.db"))
         summary = rt.consolidate_memory()
         assert isinstance(summary, dict)
@@ -159,7 +179,12 @@ def test_memory_association_and_causal_consolidation():
 
 def test_curiosity_info_gain():
     """AutonomousGoalGenerator has information-gain curiosity (P1-4)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: CognitiveRuntime's engines hold SQLite
+    # connections until GC; on Windows an open handle blocks rmtree
+    # (WinError 32) and fails the TEST after its assertions passed
+    # (owner run 2026-09-02). These tests verify runtime behavior,
+    # not temp-file hygiene.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         rt = CognitiveRuntime(db_path=str(Path(tmpdir) / "test.db"))
         gen = rt.goal_generator
 
@@ -224,7 +249,12 @@ def test_resource_aware_planning():
 
 def test_project_management_long_horizon():
     """ProjectManager + GoalDecomposer wired for long-horizon multi-session tracking (P2)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: CognitiveRuntime's engines hold SQLite
+    # connections until GC; on Windows an open handle blocks rmtree
+    # (WinError 32) and fails the TEST after its assertions passed
+    # (owner run 2026-09-02). These tests verify runtime behavior,
+    # not temp-file hygiene.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         rt = CognitiveRuntime(db_path=str(Path(tmpdir) / "test.db"))
 
         assert hasattr(rt, "project_manager")

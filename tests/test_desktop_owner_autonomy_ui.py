@@ -87,9 +87,19 @@ class FakeClient:
     def autonomous_goals(self): self.calls.append(("autonomous_goals", (), {})); return {"goals": self.goals_list}
     def autonomy_run_events(self, limit=200): self.calls.append(("autonomy_run_events", (limit,), {})); return {"events": self.run_events}
     def autonomy_envelope(self): return {"envelope": {"cycles_enabled": True, "limits_enabled": False}}
-    def preemptions(self): return {"preemptions": self.preemption_list}
+    # Recording matters: the widget tests assert the refresh call ORDER
+    # after actions like _execute_next_goal — a fake method that returns
+    # data without recording makes those calls invisible to named_calls
+    # and the assertion unsatisfiable (owner run 2026-09-02: the test
+    # failed demanding 'preemptions'/'owner_decisions' refreshes that
+    # HAD happened — page.preemptions.count() == 1 passed above).
+    def preemptions(self):
+        self.calls.append(("preemptions", (), {}))
+        return {"preemptions": self.preemption_list}
     def concurrency_budget(self): return {"budget": {"workers_granted": 6, "configured_budget": 6, "physical_thread_cap": 32, "reasons": []}}
-    def owner_decisions(self, limit=200): return {"decisions": self.decision_list}
+    def owner_decisions(self, limit=200):
+        self.calls.append(("owner_decisions", (limit,), {}))
+        return {"decisions": self.decision_list}
     def decide_autonomous_goal(self, goal_id, approved): return self._record("decide_autonomous_goal", goal_id, approved)
     def defer_autonomous_goal(self, goal_id): return self._record("defer_autonomous_goal", goal_id)
     def execute_next_autonomous_goal(self): return self._record("execute_next_autonomous_goal")

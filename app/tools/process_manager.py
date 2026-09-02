@@ -164,10 +164,21 @@ class ProcessManager:
 
         name = (proc.name() or "?") if proc.is_running() else "?"
         try:
-            process_owner=proc.username()
+            process_owner = proc.username()
             from app.cognition.privilege_model import PrivilegeModel
-            privilege=PrivilegeModel.probe()
-            if process_owner and process_owner != getpass.getuser() and not privilege.is_elevated:
+            privilege = PrivilegeModel.probe()
+            # Owner-match must be FORMAT-INSENSITIVE: on Windows psutil
+            # reports 'MACHINE\\user' (domain-qualified) while getpass
+            # reports 'user', so the raw comparison refused to kill the
+            # owner's OWN process (owner run 2026-09-02: kill of a
+            # just-started python.exe failed with 'belongs to ...' on a
+            # non-elevated session). Compare the bare account names,
+            # case-insensitively.
+            def _bare_account(name: str) -> str:
+                return name.split("\\")[-1].split("@")[0].strip().lower()
+            if (process_owner
+                    and _bare_account(process_owner) != _bare_account(getpass.getuser())
+                    and not privilege.is_elevated):
                 return {"success":False,"error":f"Process {pid} belongs to '{process_owner}'; current session is not elevated.","pid":pid,"process_owner":process_owner,"privilege":privilege.to_dict()}
         except (psutil.AccessDenied,psutil.NoSuchProcess) as exc:
             return {"success":False,"error":f"Could not verify process ownership: {exc}","pid":pid}

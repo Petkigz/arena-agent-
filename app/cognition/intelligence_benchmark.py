@@ -137,7 +137,16 @@ class IntelligenceBenchmarkSuite:
     def run(self) -> BenchmarkRun:
         previous = self.history_store.latest()
         checks: List[BenchmarkCheck] = []
-        with tempfile.TemporaryDirectory(prefix="arena_intelligence_benchmark_") as directory:
+        # ignore_cleanup_errors (owner run 2026-09-02): the behavioral
+        # checks construct CognitiveRuntime, whose engines hold SQLite
+        # connections until GC. On Windows an open handle blocks rmtree
+        # (WinError 32) and the cleanup exception would fail the whole
+        # RUN after the measurements succeeded. The benchmark's purpose
+        # is measurement, not temp-file hygiene; leftover dirs in the OS
+        # temp location are acceptable and age out with it.
+        with tempfile.TemporaryDirectory(
+                prefix="arena_intelligence_benchmark_",
+                ignore_cleanup_errors=True) as directory:
             root = Path(directory)
 
             def memory_retrieval():

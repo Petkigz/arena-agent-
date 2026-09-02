@@ -251,7 +251,16 @@ class TestVoiceService:
         with patch('backend.voice.service.get_settings') as mock_get, \
              patch('backend.voice.service.ws_manager') as mock_ws, \
              patch('backend.voice.service.asyncio.sleep', new=fake_sleep), \
-             patch('backend.voice.service.synthesize_piper', return_value=None):
+             patch('backend.voice.service.synthesize_piper', return_value=None), \
+             patch.object(VoiceService, '_synthesize_wav_to_pcm16k',
+                          return_value=None):
+            # _synthesize_wav_to_pcm16k is the piper→OS-TTS fallback
+            # chain. WITHOUT neutralizing it, the test depends on the
+            # MACHINE: on a machine with a working system TTS driver
+            # (owner run 2026-09-02: pyttsx3/SAPI5 synthesized ~1.3s of
+            # audio) the audio-hold sleep adds a second entry to `sleeps`
+            # and the assertion fails. This test asserts the DELAY
+            # contract only; the fallback chain has its own tests.
             mock_get.return_value = {"response_delay": 800}
             mock_ws.broadcast_to_conversation = AsyncMock()
             mock_ws.send_audio_to_conversation = AsyncMock()
