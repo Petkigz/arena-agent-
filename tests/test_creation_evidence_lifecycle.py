@@ -245,3 +245,99 @@ def test_d3_e2e_lifecycle_achieved_with_real_task(tmp_path):
     assert created, "task row must exist (independent GT)"
     assert res.get("goal_lifecycle_state") == "achieved", \
         f"real task exists but lifecycle={res.get('goal_lifecycle_state')}"
+
+
+# ── owner report #3: canonical conditions survive a live LLM ──────────────
+
+def test_live_llm_rephrasing_cannot_override_authority_conditions():
+    """Owner report #3 (D9 live, 2026-09-02): with LM Studio up, the deeper
+    interpretation path replaced the canonical project conditions with the
+    live model's own phrasing — and the GoalVerifier's durable-store probe
+    keys on the canonical vocabulary, so the REAL project row (independent
+    ground truth) never reached verification: waiting_for_evidence instead
+    of achieved. The canonical verifiable-content conditions are
+    AUTHORITATIVE: a live model rephrasing must not disconnect the
+    verifier from the durable evidence."""
+    import json as _json
+    from unittest.mock import patch
+
+    marker = "diag-%s" % uuid.uuid4().hex[:6]
+    task = ("Set up a project to organize my photo collection (%s): "
+            "scan the pictures folder, group photos by date, find "
+            "duplicates, then report a summary." % marker)
+
+    # A VALID schema payload whose success_conditions are the live
+    # model's conversational rephrasing (the shape that actually came
+    # back on the owner's machine).
+    live_payload = {
+        "primary_intent_type": "action_intent",
+        "target_domain": "project_management",
+        "goal": "organize the photo collection into a project",
+        "desired_outcome": "photos are organized and a summary reported",
+        "entities": ["photo collection", "pictures folder"],
+        "constraints": [], "assumptions": [], "unknowns": [],
+        "preconditions": [],
+        "success_conditions": [
+            "photos are grouped by date",
+            "duplicates are found",
+            "a summary is reported",
+        ],
+        "failure_conditions": [],
+        "required_capabilities": [], "risk_factors": [],
+    }
+
+    def fake_llm(messages, complexity="fast", **kwargs):
+        return {"choices": [{"message": {"content": _json.dumps(live_payload)}}],
+                "model": "live", "success": True}
+
+    # complexity="main" forces the deeper interpretation path
+    # deterministically (no ambiguity heuristic needed).
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=fake_llm):
+        rep = SemanticGoalInterpreter.interpret_goal(task, complexity="main")
+
+    # The deeper path RAN: the live payload's goal text was consumed.
+    assert rep.goal == "organize the photo collection into a project", \
+        f"deeper path did not run (goal={rep.goal!r})"
+    # ...and the authority-keyed contract is what verification consumes.
+    assert rep.success_conditions[:2] == [
+        "project_created = true",
+        "project_milestones_recorded = true"], \
+        f"canonical conditions must be authoritative, got {rep.success_conditions}"
+
+
+def test_live_llm_rephrasing_cannot_override_task_conditions():
+    """Same coupling for the D3 family: the task row's authority contract
+    (task_created) survives a live rephrasing."""
+    import json as _json
+    from unittest.mock import patch
+
+    marker = "diag-%s" % uuid.uuid4().hex[:6]
+    text = f"Create a task: review the quarterly budget report ({marker})."
+
+    live_payload = {
+        "primary_intent_type": "action_intent",
+        "target_domain": "project_management",
+        "goal": "note down the budget review",
+        "desired_outcome": "the review is remembered",
+        "entities": ["quarterly budget report"],
+        "constraints": [], "assumptions": [], "unknowns": [],
+        "preconditions": [],
+        "success_conditions": ["the task is noted and acknowledged"],
+        "failure_conditions": [],
+        "required_capabilities": [], "risk_factors": [],
+    }
+
+    def fake_llm(messages, complexity="fast", **kwargs):
+        return {"choices": [{"message": {"content": _json.dumps(live_payload)}}],
+                "model": "live", "success": True}
+
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=fake_llm):
+        rep = SemanticGoalInterpreter.interpret_goal(text, complexity="main")
+
+    # Deeper path ran (live goal text consumed) AND the contract won.
+    assert rep.goal == "note down the budget review", \
+        f"deeper path did not run (goal={rep.goal!r})"
+    assert rep.success_conditions[0] == "task_created = true", \
+        f"canonical task contract must be authoritative, got {rep.success_conditions}"

@@ -1258,6 +1258,27 @@ class SemanticGoalInterpreter:
             except Exception as e:
                 app_logger.warning(f"LLM-assisted Goal v2 decomposition fallback: {e}")
 
+        # Owner report #3 (D9, 2026-09-02): the canonical verifiable-content
+        # conditions are AUTHORITATIVE, not a pre-LLM default. The deeper
+        # interpretation path above replaces success_conditions with the
+        # model's own phrasing — but the GoalVerifier's authority probes
+        # (durable ProjectManager/TaskManager stores, tool registry,
+        # deterministic calculator) key on THIS vocabulary. A live model
+        # rephrasing ('project is created and organized') disconnected
+        # verification from the durable evidence: the project row existed
+        # (independent ground truth) yet the lifecycle stalled at
+        # waiting_for_evidence. Re-assert after every path — clean LLM v2
+        # and salvaged alike; the LLM's phrasing governs only shapes with
+        # no deterministic authority, where honest_conditions is None.
+        if honest_conditions:
+            if list(success_conditions) != list(honest_conditions):
+                app_logger.info(
+                    "Verifiable-content request: LLM-authored success conditions "
+                    f"{success_conditions} superseded by the authority-keyed "
+                    f"contract {honest_conditions}"
+                )
+            success_conditions = list(honest_conditions)
+
         candidates = cls.synthesize_candidates_from_context(
             domain, user_text, memory_store=memory_store, world_model=world_model,
             tool_registry=tool_registry, complexity=complexity
