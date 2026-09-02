@@ -163,8 +163,13 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
     def mock_execute_proposal(proposal, user_text, complexity="fast", **kwargs):
         executed_proposals.append(proposal)
         if proposal.action_type == "search_files":
+            # Realistic orchestrator output: the failure text lives in the
+            # executed ACTIONS, not just the reply (live-class bug: Plan A's
+            # stale error keywords poisoned Plan B's re-verification).
             return {
-                "executed_actions": ["Searched filesystem"],
+                "executed_actions": [
+                    "search_files failed: no file matching 'report.pdf' "
+                    "found in workspace roots"],
                 "assistant_reply": "Error: File report.pdf not found in workspace.",
                 "model_used": "fast"
             }

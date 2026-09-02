@@ -3740,11 +3740,24 @@ class CognitiveRuntime:
                     ObservationCollector.collect_and_ingest_observations(
                         replan_proposal, replan_agent_res, world_model=self.world, event_bus=self.events
                     )
-                    executed_actions.extend(replan_agent_res.get("executed_actions", []))
+                    replan_actions = replan_agent_res.get("executed_actions", [])
+                    executed_actions.extend(replan_actions)
                     assistant_reply = replan_agent_res.get("assistant_reply", assistant_reply)
                     obs_state = self.capture_observed_world_state(executed_actions, assistant_reply, goal_rep)
+                    # Re-verification judges the REPLAN ATTEMPT. The full
+                    # executed_actions sequence stays in the response (and in
+                    # obs_state's execution trace), but the verifier's
+                    # error scan must not see the superseded Plan A's
+                    # failure text: that failure was already detected,
+                    # replanned around, and replaced by a successful Plan B
+                    # (live-class bug found tracing owner report #2: Plan A's
+                    # realistic "search_files failed: ..." action text made
+                    # every success condition FAILED even after Plan B
+                    # delivered the goal). Plan A's environmental evidence
+                    # survives via the world model in obs_state; only the
+                    # stale error keywords are scoped out.
                     verify_res = GoalVerifier.verify_goal_achievement(
-                        goal_rep, executed_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker, observed_state=obs_state
+                        goal_rep, replan_actions, assistant_reply, failed_action_type=replan_proposal.action_type, tracker=tracker, observed_state=obs_state
                     )
                     trace.goal_verified = verify_res.verified_success
                 else:
