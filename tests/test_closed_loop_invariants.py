@@ -5,7 +5,7 @@ from app.cognition.action_proposal import ActionProposal, GateResult
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
 from app.cognition.goal_verifier import GoalVerificationResult, GoalVerifier
 from app.cognition.goal_replanner import GoalReplanner
-from app.cognition.goal_interpreter import SemanticGoalInterpreter
+from app.cognition.goal_interpreter import SemanticGoalInterpreter, SemanticGoalRepresentation
 from app.cognition.counterfactual_simulator import CounterfactualSimulator
 from app.agents.master_agent import MasterAgentOrchestrator
 from app.cognition.reasoning_cycle import ReasoningDecision, ReasoningAction
@@ -19,14 +19,21 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
 
     The reasoning decision is forced to ACT with an explicit proposal so the test
     deterministically exercises the ACT branch (independent of live-LLM routing).
+
+    Owner-machine run (2026-09-02, dbe71c2, LM Studio up): the live
+    interpreter's goal rep left verification at waiting_for_evidence, the
+    GoalReplanner ran an `investigate` re-observation, and the single
+    capture variable recorded the LAST execution — the test failed even
+    though the forced proposal HAD executed first. Robust capture: a list,
+    asserting on the FIRST execution. The goal interpretation is pinned
+    too, so the test is hermetic (LM Studio up or down).
     """
     runtime = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
 
-    executed_proposal = None
+    executed_proposals = []
 
     def mock_execute_proposal(proposal, user_text, complexity="fast", **kwargs):
-        nonlocal executed_proposal
-        executed_proposal = proposal
+        executed_proposals.append(proposal)
         from app.cognition.world_model import Observation
         import os
         runtime.world.upsert_entity(name="report.pdf", entity_type="file", attributes={"status": "identified"})
@@ -44,13 +51,105 @@ def test_invariant_a_counterfactual_winner_is_executed_proposal(tmp_path):
 
     with patch.object(runtime.loop, "run", return_value=mock_trace), \
          patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal), \
-         patch("app.cognition.observation_router.plan_observation", return_value=None):
+         patch("app.cognition.observation_router.plan_observation", return_value=None), \
+         patch("app.cognition.goal_interpreter.SemanticGoalInterpreter.interpret_goal",
+               return_value=SemanticGoalRepresentation(
+                   user_query="Find document report.pdf",
+                   primary_intent_type="action_intent",
+                   target_domain="filesystem",
+                   goal="locate report.pdf",
+                   desired_outcome="report.pdf path identified",
+                   entities=["report.pdf"], constraints=[], assumptions=[],
+                   unknowns=[], preconditions=[],
+                   success_conditions=["file_path_identified = true"],
+                   failure_conditions=[], required_capabilities=[],
+                   risk_factors=[])):
         res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         assert res["success"] is True
-        assert executed_proposal is not None
-        assert executed_proposal.action_type == "search_files"
-        assert executed_proposal.action_type == res["action_type"]
+        assert executed_proposals, "the forced proposal must have executed"
+        # The FIRST execution is exactly the counterfactual winner — a
+        # later re-observation may append, never replace it.
+        assert executed_proposals[0].action_type == "search_files"
+        # And the cycle's identity is that winner, not the last action.
+        assert res["action_type"] == "search_files"
+
+
+def test_invariant_a2_reobservation_does_not_overwrite_cycle_identity(tmp_path):
+    """Owner Priority 1 (owner-machine run 2026-09-02): when verification
+    returns waiting_for_evidence and the replanner runs a re-observation
+    (`investigate`), the re-observation is ALLOWED — but the cycle's
+    identity stays the originally selected proposal. The re-observation
+    is disclosed separately (replan_action_type + executed sequence),
+    never as the cycle's action_type. Reproduces the owner's exact
+    sequence: search_files executes -> UNKNOWN -> replanner ->
+    investigate executes."""
+    runtime = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
+
+    executed_proposals = []
+
+    def mock_execute_proposal(proposal, user_text, complexity="fast", **kwargs):
+        executed_proposals.append(proposal)
+        return {
+            "executed_actions": [f"Executed {proposal.action_type}"],
+            "assistant_reply": "Gathering evidence.",
+            "model_used": "fast"
+        }
+
+    mock_trace = CycleTrace(decisions=[ReasoningDecision(
+        action=ReasoningAction.ACT, confidence=0.9, reason="Action required",
+        proposed_action=ActionProposal(action_type="search_files", payload={"query": "report.pdf"}),
+    )])
+
+    # NOTE: the REAL GoalReplanner runs here (not a mock) — the UNKNOWN
+    # verification result drives its diagnostic re-observation probe
+    # path, exactly the owner's live sequence.
+    unknown_verify = GoalVerificationResult(
+        goal_id="g_a2",
+        verified_success=False,
+        final_state=GoalLifecycleState.WAITING_FOR_EVIDENCE,
+        verification_reason="evidence incomplete",
+        unknown_conditions=["unverifiable_condition: file_path_identified = true"],
+        is_unknown=True,
+    )
+
+    def mock_verify(*args, **kwargs):
+        # Mirror the real verifier's entry transition (EXECUTING ->
+        # VERIFYING); the UNKNOWN outcome rides on the result's
+        # final_state, exactly as the real verifier reports it.
+        tracker = kwargs.get("tracker")
+        if tracker is None and len(args) >= 2:
+            tracker = args[1] if hasattr(args[1], "transition") else None
+        if tracker is not None and tracker.current_state != GoalLifecycleState.VERIFYING:
+            tracker.transition(GoalLifecycleState.VERIFYING,
+                               "evaluating (mock)")
+        return unknown_verify
+
+    with patch.object(runtime.loop, "run", return_value=mock_trace), \
+         patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal), \
+         patch("app.cognition.goal_verifier.GoalVerifier.verify_goal_achievement", side_effect=mock_verify), \
+         patch("app.cognition.observation_router.plan_observation", return_value=None), \
+         patch("app.cognition.goal_interpreter.SemanticGoalInterpreter.interpret_goal",
+               return_value=SemanticGoalRepresentation(
+                   user_query="Find document report.pdf",
+                   primary_intent_type="action_intent",
+                   target_domain="filesystem",
+                   goal="locate report.pdf",
+                   desired_outcome="report.pdf path identified",
+                   entities=["report.pdf"], constraints=[], assumptions=[],
+                   unknowns=[], preconditions=[],
+                   success_conditions=["file_path_identified = true"],
+                   failure_conditions=[], required_capabilities=[],
+                   risk_factors=[])):
+        res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
+
+        # The owner's exact sequence: winner first, re-observation second.
+        assert [p.action_type for p in executed_proposals] == ["search_files", "investigate"]
+        # The cycle's identity is the ORIGINALLY selected proposal.
+        assert res["action_type"] == "search_files"
+        # The re-observation is disclosed — explicitly, not as identity.
+        assert res.get("replan_action_type") == "investigate"
+        assert "Executed investigate" in [str(a) for a in res["executed_actions"]]
 
 
 def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_executed_plan_b(tmp_path):
@@ -97,7 +196,19 @@ def test_invariant_b_plan_a_fails_triggers_differentiating_simulated_and_execute
     with patch.object(runtime.loop, "run", return_value=mock_trace), \
          patch("app.agents.master_agent.MasterAgentOrchestrator.execute_proposal", side_effect=mock_execute_proposal), \
          patch("app.cognition.goal_replanner.GoalReplanner.execute_reassessment_and_replan", side_effect=mock_replan), \
-         patch("app.cognition.observation_router.plan_observation", return_value=None):
+         patch("app.cognition.observation_router.plan_observation", return_value=None), \
+         patch("app.cognition.goal_interpreter.SemanticGoalInterpreter.interpret_goal",
+               return_value=SemanticGoalRepresentation(
+                   user_query="Find document report.pdf",
+                   primary_intent_type="action_intent",
+                   target_domain="filesystem",
+                   goal="locate report.pdf",
+                   desired_outcome="report.pdf path identified",
+                   entities=["report.pdf"], constraints=[], assumptions=[],
+                   unknowns=[], preconditions=[],
+                   success_conditions=["file_path_identified = true"],
+                   failure_conditions=[], required_capabilities=[],
+                   risk_factors=[])):
         res = runtime.process_cognitive_cycle(user_text="Find document report.pdf", complexity="fast")
 
         # Plan A executed, failed, Plan B executed

@@ -3972,7 +3972,17 @@ class CognitiveRuntime:
             "user_text": user_text,
             "assistant_reply": assistant_reply,
             "executed_actions": executed_actions,
-            "action_type": final_action_type,
+            # Closed-loop invariant A (owner-machine run 2026-09-02,
+            # Priority 1): the cycle's identity is the ORIGINALLY selected
+            # proposal — the counterfactual winner that executed FIRST. A
+            # verification-failure re-observation (Plan B) may run afterward,
+            # but it must not overwrite that identity. The re-observation is
+            # disclosed explicitly instead: `replan_action_type` (present
+            # only when a Plan B actually executed) plus the full
+            # `executed_actions` sequence above.
+            "action_type": proposal.action_type,
+            **({"replan_action_type": final_action_type}
+               if final_action_type != proposal.action_type else {}),
             "reasoning_action": reasoning_action.value if hasattr(reasoning_action, "value") else str(reasoning_action),
             "decision_stage": "execution_completed",
             "recommendation": {
