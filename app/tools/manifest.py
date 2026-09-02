@@ -506,6 +506,10 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(UniversalFilesystem.trash_files, "file_paths", "trash_root"))
     add("compress_files", "filesystem", 2, "Compress files to a zip",
         _wrap(UniversalFilesystem.compress_zip, "source_paths", "output_zip_path_str"))
+    add("detect_duplicate_files", "filesystem", 0, "Content-addressed duplicate detection: hash the files under a root and return groups of identical bytes with wasted-space totals (read-only)",
+        _wrap(UniversalFilesystem.detect_duplicate_files, "root_dir", "max_files"))
+    add("group_files_by_date", "filesystem", 2, "Group files under a root by modification date (YYYY-MM-DD): dry-run preview of the grouping plan by default; execute=true moves files into date folders (never overwriting)",
+        _wrap(UniversalFilesystem.group_files_by_date, "root_dir", "execute"))
     add("resize_image", "filesystem", 2, "Resize an image",
         _wrap(UniversalFilesystem.resize_image, "image_path_str", "target_width", "target_height"))
     add("read_document", "filesystem", 0, "Read a document",

@@ -21,6 +21,131 @@ class UniversalFilesystem:
         return digest.hexdigest()
 
     @classmethod
+    def detect_duplicate_files(cls, root_dir: str, max_files: int = 5000) -> Dict[str, Any]:
+        """Owner report #4 (D9 live, 2026-09-02): content-addressed
+        duplicate detection. Walks a root, groups files by (size, sha256),
+        and reports TRUE duplicate groups — files whose bytes are
+        identical — never name-similar files. Read-only: it moves and
+        deletes nothing; what the owner does with the groups is a
+        separate, explicit decision."""
+        import datetime as _dt
+        root = Path(root_dir).expanduser()
+        if not root.is_dir():
+            return {"success": False, "error": f"Root directory not found: '{root}'"}
+        if max_files < 1:
+            return {"success": False, "error": "max_files must be >= 1"}
+        # Size prefilter: files with a unique size cannot be duplicates,
+        # so hashing is only paid within shared-size buckets.
+        by_size: Dict[int, List[Path]] = {}
+        scanned = 0
+        for path in root.rglob("*"):
+            if scanned >= max_files:
+                break
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                stat = path.stat()
+            except OSError:
+                continue
+            scanned += 1
+            by_size.setdefault(stat.st_size, []).append(path)
+        duplicate_groups = []
+        wasted = 0
+        for size, paths in by_size.items():
+            if len(paths) < 2 or size == 0:
+                # Zero-byte files are not meaningful duplicates.
+                continue
+            by_hash: Dict[str, List[Path]] = {}
+            for p in paths:
+                try:
+                    by_hash.setdefault(cls._sha256(p), []).append(p)
+                except OSError:
+                    continue
+            for digest, hpaths in by_hash.items():
+                if len(hpaths) >= 2:
+                    duplicate_groups.append({
+                        "sha256": digest,
+                        "size_bytes": size,
+                        "paths": [str(p) for p in sorted(hpaths)],
+                    })
+                    wasted += size * (len(hpaths) - 1)
+        duplicate_groups.sort(key=lambda g: (-g["size_bytes"] * len(g["paths"]), g["paths"][0]))
+        return {
+            "success": True,
+            "root": str(root),
+            "scanned_files": scanned,
+            "truncated": scanned >= max_files,
+            "duplicate_group_count": len(duplicate_groups),
+            "duplicate_groups": duplicate_groups[:200],
+            "wasted_bytes": wasted,
+            "evidence_date": _dt.datetime.now().isoformat(timespec="seconds"),
+        }
+
+    @classmethod
+    def group_files_by_date(cls, root_dir: str, execute: bool = False) -> Dict[str, Any]:
+        """Owner report #4 (D9 live, 2026-09-02): date-based
+        categorization. Groups files under a root by modification date
+        (YYYY-MM-DD). Default is a DRY-RUN report — the grouping plan
+        with counts and paths, nothing moved — so the capability is
+        inspectable before it acts. execute=True performs the
+        categorization: each file moves into root/YYYY-MM-DD/, never
+        overwriting (collisions gain a ' (n)' suffix)."""
+        import datetime as _dt
+        import shutil as _shutil
+        root = Path(root_dir).expanduser()
+        if not root.is_dir():
+            return {"success": False, "error": f"Root directory not found: '{root}'"}
+        groups: Dict[str, List[Path]] = {}
+        for path in root.rglob("*"):
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            key = _dt.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+            groups.setdefault(key, []).append(path)
+        report = {
+            "success": True,
+            "root": str(root),
+            "execute": bool(execute),
+            "date_group_count": len(groups),
+            "groups": {
+                key: [str(p) for p in sorted(paths)]
+                for key, paths in sorted(groups.items())
+            },
+        }
+        if not execute:
+            report["planned_moves"] = sum(len(v) for v in groups.values())
+            report["note"] = ("dry-run report: nothing has been moved; "
+                              "call with execute=true to move files into "
+                              "date folders under the root")
+            return report
+        moved, failures = 0, []
+        for key, paths in sorted(groups.items()):
+            target_dir = root / key
+            for src in sorted(paths):
+                try:
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    dest = target_dir / src.name
+                    if dest == src:
+                        # Already in its date folder (e.g. a re-run):
+                        # a no-op, never a rename.
+                        continue
+                    n = 1
+                    while dest.exists():
+                        dest = target_dir / f"{src.stem} ({n}){src.suffix}"
+                        n += 1
+                    _shutil.move(str(src), str(dest))
+                    moved += 1
+                except Exception as exc:
+                    failures.append({"file": str(src), "error": str(exc)})
+        report["moved_files"] = moved
+        if failures:
+            report["failures"] = failures
+        return report
+
+    @classmethod
     def copy_file_verified(cls, source_path: str, destination_path: str) -> Dict[str, Any]:
         src,dst=Path(source_path),Path(destination_path)
         if not src.is_file():return {"success":False,"error":"Source file not found"}

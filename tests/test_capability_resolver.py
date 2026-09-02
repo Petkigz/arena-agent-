@@ -241,3 +241,63 @@ def test_e2e_unresolved_required_capability_defers_with_honest_ask(tmp_path):
     assert "Photo organizing algorithms" in reply
     assert "unrecogn" in reply.lower() or "no registered" in reply.lower()
     assert res.get("executed_actions") == []
+
+
+# ── owner report #4 (D9 live, 2026-09-02): milestone capability phrases ────
+
+def test_d9_milestone_phrases_resolve_to_real_implementations():
+    """The D9 photo-organization project's milestone capabilities —
+    'file scanning capability', 'date-based categorization', 'duplicate
+    detection' — resolved as UNRESOLVED on the owner's machine although
+    real implementations exist, gating legitimate work to ask/replan.
+    Each now maps to a registered implementation."""
+    vocab = CapabilityResolver.build_vocabulary([
+        "filesystem.search", "filesystem.read",          # native backing
+        "detect_duplicate_files", "group_files_by_date",   # registry tools
+        "generate_document", "binary_analyze",
+    ])
+    cases = {
+        "file scanning capability": "filesystem.search",
+        "filesystem scanning": "filesystem.search",
+        "date-based categorization": "group_files_by_date",
+        "duplicate detection": "detect_duplicate_files",
+        "duplicate finding": "detect_duplicate_files",
+        "file analysis capability": "binary_analyze",
+    }
+    for phrase, expected in cases.items():
+        res = CapabilityResolver.resolve(phrase, vocab)
+        assert res.resolved, f"{phrase!r} must resolve (got {res.detail})"
+        assert res.canonical == expected, \
+            f"{phrase!r} -> {res.canonical!r}, expected {expected!r}"
+        assert res.tier == "alias"
+
+
+def test_alias_targets_missing_from_vocabulary_stay_unresolved():
+    """The validation property (owner report #4's 'don't simply mark
+    unknown capabilities as available'): an alias whose target is NOT in
+    the caller's real vocabulary does not resolve — the curated table
+    can never invent a capability the runtime does not have."""
+    vocab = CapabilityResolver.build_vocabulary(["generate_document"])
+    for phrase in ("file scanning capability", "date-based categorization",
+                   "duplicate detection"):
+        res = CapabilityResolver.resolve(phrase, vocab)
+        assert not res.resolved, \
+            f"{phrase!r} must stay unresolved when its target is unregistered"
+
+
+def test_d9_milestone_phrases_resolve_ready_in_the_runtime(tmp_path):
+    """End-to-end through the real capability chain: the exact four
+    phrases from the owner's D9 capability table (three unresolved, one
+    ready) must all resolve ready, with the alias visible in the
+    evidence ladder."""
+    from app.cognition.runtime import CognitiveRuntime
+    rt = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
+    phrases = ["file scanning capability", "date-based categorization",
+               "duplicate detection", "report generation"]
+    cap_map, status_map, unresolved = rt._resolve_capability_status(
+        phrases, "filesystem")
+    assert unresolved == [], f"unresolved: {unresolved}"
+    for p in phrases:
+        assert status_map[p]["ready"] is True, (p, status_map[p])
+        assert "alias match" in status_map[p]["evidence"], \
+            (p, status_map[p]["evidence"])

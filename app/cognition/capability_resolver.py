@@ -53,6 +53,9 @@ NOISE_WORDS = frozenset({
 STOPWORDS = frozenset({
     "and", "or", "the", "a", "an", "to", "of", "for", "with", "in",
     "on", "at", "my", "your", "our", "their", "this", "that",
+    # 'X-based Y' is grammar, not content: 'date-based categorization'
+    # carries the same content stems as 'categorization by date'.
+    "based",
 })
 
 # Multi-word compounds that exist as single tokens in the real
@@ -154,6 +157,25 @@ class CapabilityResolver:
         frozenset({"report", "gener"}): "generate_document",
         frozenset({"document", "gener"}): "generate_document",
         frozenset({"report", "creat"}): "generate_document",
+        # Owner report #4 (D9 live, 2026-09-02): the milestone
+        # capabilities of a photo-organization project resolved as
+        # UNRESOLVED even though real implementations exist.
+        # 'file scanning capability' — scanning files for matches and
+        # inventory is exactly what search_files does.
+        frozenset({"file", "scan"}): "filesystem.search",
+        frozenset({"filesystem", "scan"}): "filesystem.search",
+        # 'duplicate detection' — the registered content-addressed
+        # duplicate finder (sha256 over size buckets, read-only). Named
+        # detect_duplicate_files, NOT find_...: 'find' in a tool name is a
+        # query magnet that made the deterministic matcher force the
+        # duplicate finder for generic 'find a document' requests.
+        frozenset({"duplic", "detect"}): "detect_duplicate_files",
+        frozenset({"duplic", "find"}): "detect_duplicate_files",
+        # 'date-based categorization' — the registered date grouper
+        # (dry-run report by default, execute moves into date folders).
+        frozenset({"date", "categor"}): "group_files_by_date",
+        # 'file analysis' — identify/hash binary files.
+        frozenset({"file", "analy"}): "binary_analyze",
     }
 
     # Semantic tier strictness: a candidate must cover at least this
