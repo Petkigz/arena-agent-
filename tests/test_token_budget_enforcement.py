@@ -9,11 +9,21 @@ spend settled against the provider-reported real usage.
 
 from unittest.mock import patch
 
+import pytest
+
 from app.llm import (
     active_token_budget_status,
     llm_client,
     reasoning_token_budget,
 )
+
+
+@pytest.fixture(autouse=True)
+def _real_llm_transport(monkeypatch):
+    """These tests mock the raw HTTP client (llm_client.client.post) —
+    remove the suite's hermeticity guard (tests/conftest.py sets
+    ARENA_LLM_DISABLED) so the mocked transport is actually reached."""
+    monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
 
 
 class _FakeResp:

@@ -16,6 +16,16 @@ import pytest
 from app.config import settings
 from app.llm import LocalLLMClient
 
+
+@pytest.fixture(autouse=True)
+def _real_llm_transport(monkeypatch):
+    """These tests exercise the REAL transport/embedding internals
+    (fallback ladder, retry, embedding backends) — remove the suite's
+    hermeticity guard (tests/conftest.py sets ARENA_LLM_DISABLED) so the
+    mocked transports are actually reached."""
+    monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
+
+
 # The owner's real loaded-model list from the 2026-09-01 live run.
 OWNER_LOADED = [
     "qwen2.5-3b-instruct", "qwen3.5-9b", "qwen/qwen3-14b",

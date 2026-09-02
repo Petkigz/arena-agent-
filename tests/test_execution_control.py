@@ -9,6 +9,16 @@ from unittest.mock import Mock, patch
 import pytest
 
 from app.cognition.action_proposal import ActionProposal
+
+
+@pytest.fixture(autouse=True)
+def _real_llm_transport(monkeypatch):
+    """These tests exercise the REAL HTTP/cancellation path (blocking
+    clients, interrupted transports) — remove the suite's hermeticity
+    guard (tests/conftest.py sets ARENA_LLM_DISABLED) so the mocked
+    transports are actually reached."""
+    monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
+
 from app.cognition.execution_control import (
     ExecutionCancelled,
     ExecutionControlRegistry,

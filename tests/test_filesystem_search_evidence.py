@@ -17,7 +17,19 @@ from app.cognition.observation_router import (
     render_observation_evidence,
 )
 from app.tools.manifest import get_tool_manifest
+import uuid
+
 from app.tools.universal_filesystem import UniversalFilesystem
+
+
+# Per-run unique token: searches escalate to ALL roots when the explicit
+# root has no hits (D7), and the owner's real drives hold their ACTUAL
+# "Kaba - Official Video.mp3" — the 2026-09-02 owner run failed the
+# "deleted file is never reported" assertion on that doppelganger. A
+# uuid-based token exists only inside tmp_path, so escalation can only
+# ever find (or verified-out miss) OUR files.
+_TOKEN = f"kaba{uuid.uuid4().hex[:8]}"
+_ORDINARY = f"ordinary{uuid.uuid4().hex[:8]}"
 
 
 def _make_tree(tmp: Path) -> Path:
@@ -26,33 +38,33 @@ def _make_tree(tmp: Path) -> Path:
     media.mkdir(parents=True)
     other = tmp / "driveF" / "Media"
     other.mkdir(parents=True)
-    (media / "Kaba - Official Video.mp3").write_text("x")
-    (other / "KABA").mkdir()  # album folder on another 'drive'
-    (other / "Alex Warren - Ordinary.mp3").write_text("x")
+    (media / f"{_TOKEN} - Official Video.mp3").write_text("x")
+    (other / _TOKEN.upper()).mkdir()  # album folder on another 'drive'
+    (other / f"Alex Warren - {_ORDINARY.capitalize()}.mp3").write_text("x")
     # Junk that must be pruned, not matched.
     junk = home / "AppData" / "Local" / "Junk"
     junk.mkdir(parents=True)
-    (junk / "kaba.dll").write_text("x")
-    (home / "node_modules" / "kaba").mkdir(parents=True)
+    (junk / f"{_TOKEN}.dll").write_text("x")
+    (home / "node_modules" / _TOKEN).mkdir(parents=True)
     return home
 
 
 def test_search_matches_directories_not_just_files(tmp_path):
     home = _make_tree(tmp_path)
     hits = UniversalFilesystem.search_filesystem(
-        "kaba", root_dir=[str(home), str(tmp_path / "driveF")]
+        _TOKEN, root_dir=[str(home), str(tmp_path / "driveF")]
     )
     kinds = {h["file_name"]: h["type"] for h in hits}
-    assert "Kaba - Official Video.mp3" in kinds and kinds["Kaba - Official Video.mp3"] == "file"
-    assert "KABA" in kinds and kinds["KABA"] == "directory"
+    assert f"{_TOKEN} - Official Video.mp3" in kinds and kinds[f"{_TOKEN} - Official Video.mp3"] == "file"
+    assert _TOKEN.upper() in kinds and kinds[_TOKEN.upper()] == "directory"
 
 
 def test_search_prunes_system_and_junk_dirs(tmp_path):
     home = _make_tree(tmp_path)
-    hits = UniversalFilesystem.search_filesystem("kaba", root_dir=str(home))
+    hits = UniversalFilesystem.search_filesystem(_TOKEN, root_dir=str(home))
     names = [h["file_name"] for h in hits]
-    assert "kaba.dll" not in names  # inside AppData
-    assert "kaba" not in names      # inside node_modules
+    assert f"{_TOKEN}.dll" not in names  # inside AppData
+    assert _TOKEN not in names           # inside node_modules
 
 
 def test_search_fuzzy_fallback_recovers_typos(tmp_path):
@@ -60,11 +72,11 @@ def test_search_fuzzy_fallback_recovers_typos(tmp_path):
     'Alex Warren - Ordinary.mp3' via per-token fuzzy matching."""
     home = _make_tree(tmp_path)
     hits = UniversalFilesystem.search_filesystem(
-        "ordinaryr", root_dir=[str(home), str(tmp_path / "driveF")]
+        _ORDINARY[:2] + _ORDINARY[3:], root_dir=[str(home), str(tmp_path / "driveF")]
     )
     assert hits, "typo'd query must return fuzzy matches, not nothing"
     top = hits[0]
-    assert "Ordinary" in top["file_name"]
+    assert _ORDINARY.capitalize() in top["file_name"]
     assert top.get("fuzzy_match") is True
     assert top.get("fuzzy_score", 0) >= 0.78
 
@@ -72,21 +84,21 @@ def test_search_fuzzy_fallback_recovers_typos(tmp_path):
 def test_exact_match_beats_fuzzy(tmp_path):
     home = _make_tree(tmp_path)
     hits = UniversalFilesystem.search_filesystem(
-        "ordinary", root_dir=[str(tmp_path / "driveF")]
+        _ORDINARY, root_dir=[str(tmp_path / "driveF")]
     )
     assert all(h.get("match") == "exact" for h in hits)
-    assert any("Ordinary" in h["file_name"] for h in hits)
+    assert any(_ORDINARY.capitalize() in h["file_name"] for h in hits)
 
 
 def test_multi_root_search_covers_other_drives(tmp_path):
     home = _make_tree(tmp_path)
     # Home alone misses the album folder; both roots find it.
-    home_only = UniversalFilesystem.search_filesystem("kaba", root_dir=str(home))
-    assert not any(h["file_name"] == "KABA" for h in home_only)
+    home_only = UniversalFilesystem.search_filesystem(_TOKEN, root_dir=str(home))
+    assert not any(h["file_name"] == _TOKEN.upper() for h in home_only)
     both = UniversalFilesystem.search_filesystem(
-        "kaba", root_dir=[str(home), str(tmp_path / "driveF")]
+        _TOKEN, root_dir=[str(home), str(tmp_path / "driveF")]
     )
-    assert any(h["file_name"] == "KABA" for h in both)
+    assert any(h["file_name"] == _TOKEN.upper() for h in both)
 
 
 def _render_for(query_results, question_kind="file_search", payload=None):
@@ -145,9 +157,9 @@ def test_manifest_handler_accepts_list_root(tmp_path):
     manifest = get_tool_manifest()
     entry = manifest["search_files"]
     result = entry["handler"](
-        {"query": "kaba", "root_dir": [str(home), str(tmp_path / "driveF")], "max_results": 20}
+        {"query": _TOKEN, "root_dir": [str(home), str(tmp_path / "driveF")], "max_results": 20}
     )
-    assert any(h["file_name"] == "KABA" for h in result)
+    assert any(h["file_name"] == _TOKEN.upper() for h in result)
 
 
 def test_fuzzy_survives_typos_in_first_chars(tmp_path):
@@ -155,8 +167,9 @@ def test_fuzzy_survives_typos_in_first_chars(tmp_path):
     positional prefilter — its first three chars 'ori' never appear in the
     filename. The prefilter must be character-based, not positional."""
     home = _make_tree(tmp_path)
-    hits = UniversalFilesystem.search_filesystem("orinary", root_dir=str(tmp_path / "driveF"))
-    assert hits and "Ordinary" in hits[0]["file_name"]
+    hits = UniversalFilesystem.search_filesystem(
+        _ORDINARY[:2] + _ORDINARY[3:], root_dir=str(tmp_path / "driveF"))
+    assert hits and _ORDINARY.capitalize() in hits[0]["file_name"]
     assert hits[0].get("fuzzy_match") is True
 
 
@@ -164,8 +177,9 @@ def test_fuzzy_catches_adjacent_transpositions(tmp_path):
     """'kbaa' for 'kaba': edit distance punishes the swap a human never
     notices (0.75 < 0.78) — the anagram boost must carry it."""
     home = _make_tree(tmp_path)
-    hits = UniversalFilesystem.search_filesystem("kbaa", root_dir=str(home))
-    assert hits and "Kaba" in hits[0]["file_name"]
+    transposed = _TOKEN[0] + _TOKEN[2] + _TOKEN[1] + _TOKEN[3:]
+    hits = UniversalFilesystem.search_filesystem(transposed, root_dir=str(home))
+    assert hits and _TOKEN in hits[0]["file_name"].lower()
     assert hits[0].get("fuzzy_match") is True
 
 
@@ -197,9 +211,9 @@ def test_word_order_independent_fuzzy_match(tmp_path):
     'ordinary by alex warren' to 'Alex Warren - Ordinary.mp3'."""
     home = _make_tree(tmp_path)
     hits = UniversalFilesystem.search_filesystem(
-        "ordinary by alex warren", root_dir=str(tmp_path / "driveF")
+        f"{_ORDINARY} by alex warren", root_dir=str(tmp_path / "driveF")
     )
-    assert hits and "Ordinary" in hits[0]["file_name"]
+    assert hits and _ORDINARY.capitalize() in hits[0]["file_name"]
     assert hits[0].get("fuzzy_match") is True
 
 
@@ -215,19 +229,21 @@ def test_persistent_index_accelerates_without_lying(tmp_path):
     home = _make_tree(tmp_path)
     roots = [str(tmp_path)]
 
-    cold = UniversalFilesystem.search_filesystem("ordinary", root_dir=roots)
-    assert any("Ordinary" in h["file_name"] for h in cold)
+    cold = UniversalFilesystem.search_filesystem(_ORDINARY, root_dir=roots)
+    assert any(_ORDINARY.capitalize() in h["file_name"] for h in cold)
 
-    warm = UniversalFilesystem.search_filesystem("ordinary", root_dir=roots)
-    assert any("Ordinary" in h["file_name"] for h in warm)
+    warm = UniversalFilesystem.search_filesystem(_ORDINARY, root_dir=roots)
+    assert any(_ORDINARY.capitalize() in h["file_name"] for h in warm)
     assert get_file_index().stats["hits"] >= 1, "second search must use the index"
 
     # Created after indexing -> still found (never a stale miss).
-    (tmp_path / "home" / "Music" / "Brand New Track.mp3").write_text("x")
-    fresh = UniversalFilesystem.search_filesystem("brand new track", root_dir=roots)
-    assert any("Brand New Track" in h["file_name"] for h in fresh)
+    fresh_name = f"Brand New Track {uuid.uuid4().hex[:6]}.mp3"
+    (tmp_path / "home" / "Music" / fresh_name).write_text("x")
+    fresh = UniversalFilesystem.search_filesystem(fresh_name[:-4], root_dir=roots)
+    assert any(fresh_name in h["file_name"] for h in fresh)
 
     # Deleted after indexing -> never reported (existence-verified out).
-    (tmp_path / "home" / "Music" / "Kaba - Official Video.mp3").unlink()
-    gone = UniversalFilesystem.search_filesystem("kaba", root_dir=[str(tmp_path / "home")])
-    assert not any("Kaba" in h["file_name"] for h in gone)
+    (tmp_path / "home" / "Music" / f"{_TOKEN} - Official Video.mp3").unlink()
+    gone = UniversalFilesystem.search_filesystem(
+        _TOKEN, root_dir=[str(tmp_path / "home")])
+    assert not any(_TOKEN in h["file_name"].lower() for h in gone)

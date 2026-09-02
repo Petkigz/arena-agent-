@@ -2,8 +2,21 @@
 
 import json
 
+import pytest
+
 from desktop.settings import DEFAULTS, DesktopSettings
 from desktop.voice_client import DesktopAudioPlayer, DesktopVoiceClient, accumulate_tokens
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_settings(monkeypatch):
+    """Force the in-memory fallback: on the owner's machine PySide6 is
+    installed, so DesktopSettings reads the REAL persisted app settings
+    (their theme is 'system', not the DEFAULTS 'dark') and the defaults
+    assertions read the machine instead of the code (owner run
+    2026-09-02)."""
+    monkeypatch.setattr(DesktopSettings, "_has_qt",
+                        staticmethod(lambda: False))
 
 
 # ── accumulate_tokens (pure helper) ─────────────────────────────────────────

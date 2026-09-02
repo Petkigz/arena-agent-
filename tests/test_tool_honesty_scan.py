@@ -20,6 +20,7 @@ the first three fixes). The SAME classes repeated elsewhere:
 """
 
 import subprocess
+import sys
 from unittest.mock import patch
 
 from app.cognition.action_proposal import ActionProposal
@@ -223,22 +224,40 @@ def test_capability_token_match_refuses_bare_substrings():
 # 6. universal_filesystem: media open checks the launcher's exit code
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_play_media_reports_xdg_open_failure(tmp_path):
+def test_play_media_reports_launcher_failure(tmp_path):
     media = tmp_path / "song.mp3"
     media.write_bytes(b"\x00" * 32)
-    with patch("app.tools.universal_filesystem.subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=2, stdout="", stderr="xdg-open: no method available")
-        result = UniversalFilesystem.play_media_file(str(media))
-    assert result["success"] is False
-    assert "xdg-open failed" in result["error"].lower()
+    if sys.platform == "win32":
+        # Windows route: os.startfile has no exit-code channel — an OS
+        # error is the observable failure and must be reported honestly.
+        with patch("app.tools.universal_filesystem.os.startfile",
+                   side_effect=OSError("no file association")):
+            result = UniversalFilesystem.play_media_file(str(media))
+        assert result["success"] is False
+        assert "no file association" in result["error"].lower()
+    else:
+        # POSIX route: xdg-open's non-zero exit must be surfaced.
+        with patch("app.tools.universal_filesystem.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=2, stdout="", stderr="xdg-open: no method available")
+            result = UniversalFilesystem.play_media_file(str(media))
+        assert result["success"] is False
+        assert "xdg-open failed" in result["error"].lower()
 
 
 def test_play_media_succeeds_on_clean_exit(tmp_path):
     media = tmp_path / "song.mp3"
     media.write_bytes(b"\x00" * 32)
-    with patch("app.tools.universal_filesystem.subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr="")
-        result = UniversalFilesystem.play_media_file(str(media))
-    assert result["success"] is True
+    if sys.platform == "win32":
+        # Windows route: patch os.startfile so the test never actually
+        # opens the owner's media player.
+        with patch("app.tools.universal_filesystem.os.startfile") as mock_start:
+            result = UniversalFilesystem.play_media_file(str(media))
+        assert result["success"] is True
+        mock_start.assert_called_once()
+    else:
+        with patch("app.tools.universal_filesystem.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr="")
+            result = UniversalFilesystem.play_media_file(str(media))
+        assert result["success"] is True

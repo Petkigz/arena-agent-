@@ -15,3 +15,16 @@ def pytest_terminal_summary(terminalreporter):
         terminalreporter.write_line(
             f"::error file={node},title=pytest failure::{message[:7000]}"
         )
+
+
+# ── Hermeticity guard (owner run 2026-09-02) ─────────────────────────────
+# The suite's baseline is the OFFLINE deterministic layer (what CI and the
+# sandbox can run). The owner's machine has LM Studio up by default, and
+# the 2026-09-02 full run showed ~20 tests flipping on live-LLM variance
+# (interpreter conditions, embedding backend, 'provider unavailable'
+# error shapes) — 2.5 hours of noise, not regressions. This guard makes
+# every provider call behave exactly as if the server were unreachable,
+# so the suite is deterministic on ANY machine. Tests that exercise the
+# REAL transport internals (test_llm*.py, test_inference_profile.py)
+# remove the variable locally.
+os.environ.setdefault("ARENA_LLM_DISABLED", "1")

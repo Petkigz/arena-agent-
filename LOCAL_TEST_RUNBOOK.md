@@ -17,9 +17,9 @@ Everything below lives on branch `arena/01a0579e-arena-agent`
 hardware probes (screen, VLM, LoRA/GPU, ADB, audio, browser).** The unit
 suite (step 2) and `verify_fixes_live.py` (step 4) cover the rest.
 
-Order matters: the unit suite wants **LM Studio shut down** (~13 tests
-assert offline behavior); the diagnostics pack wants **LM Studio
-running** with your models loaded.
+Order no longer matters for LM Studio: the unit suite is hermetic
+(`ARENA_LLM_DISABLED`, see step 2); the diagnostics pack still wants **LM
+Studio running** with your models loaded.
 
 ---
 
@@ -41,12 +41,21 @@ python -m venv .venv
 
 ## 2. Unit suite (the regression gate)
 
-**Before running: shut down LM Studio** (or unload its models). Roughly 13
-tests assert offline behavior — "no LLM configured → success=False",
-"embedding backend is 'local'", "domain is classified as X" — and a running
-LM Studio with a loaded embedding model legitimately flips those outcomes.
-Those are live-environment disagreements, not regressions; run them with
-LM Studio closed and they go green.
+**LM Studio state no longer matters.** Since the 2026-09-02 owner run
+(50 failures traced to a live LM Studio flipping ~20 offline-asserting
+tests), `tests/conftest.py` sets `ARENA_LLM_DISABLED=1`: every provider
+call behaves exactly as if the server were unreachable — the honest
+offline path, same result shapes as a closed server. Run the suite with
+LM Studio up, down, half-loaded — the outcomes are identical. (Tests that
+exercise the real transport internals — `test_llm_model_fallback.py`,
+`test_semantic_matching.py` — remove the variable locally and use mocked
+transports.)
+
+Historical note: before this guard, roughly 13+ tests asserted offline
+behavior ("no LLM configured → success=False", "embedding backend is
+'local'", "domain is classified as X") and a running LM Studio with a
+loaded embedding model legitimately flipped them — live-environment
+disagreements, not regressions.
 
 Also on Windows: run commands **one per line** — PowerShell 5 does not
 accept `&&`, and `install` is not a command (that's pip). And use the

@@ -3320,6 +3320,26 @@ class CognitiveRuntime:
                 investigation_summary += ": " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
 
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
+            # D7 live regression (2026-09-02): with the probe returning
+            # "search_files: []" the live model still replied "Found 3
+            # such songs" — an invented count the loop never produced.
+            # The evidence is AUTHORITATIVE: the reply must reconcile
+            # against it, and emptiness must be stated as emptiness.
+            if loop_trace.results:
+                system_instruction += (
+                    "\n\n[GROUNDING — AUTHORITATIVE]: The executed actions "
+                    "above are the ONLY verified facts about the user's "
+                    "system for this request. Every claim in your reply "
+                    "must come from those results. If they show no "
+                    "matches, empty lists, or failures, say exactly that "
+                    "— never invent files, counts, or successes the "
+                    "results do not contain.")
+            else:
+                system_instruction += (
+                    "\n\n[GROUNDING — AUTHORITATIVE]: The investigation "
+                    "returned NO results — no evidence was gathered. "
+                    "Reply honestly that nothing was found; do NOT invent "
+                    "files, counts, or successes.")
             # AGI Phase 1: Enrich with common sense knowledge
             common_sense_context = self.enrich_with_common_sense(user_text)
             if common_sense_context:

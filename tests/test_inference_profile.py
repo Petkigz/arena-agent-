@@ -87,10 +87,16 @@ def test_malformed_file_fails_safe_to_measured_recommendation(tmp_path):
 
 
 def test_context_above_measured_budget_is_flagged_not_blocked(tmp_path):
+    # The owner choice is divergent BY CONSTRUCTION (bigger models AND a
+    # context above the tier-1 budget) — the original test constructed
+    # the store inside the patch but measured outside it, so it passed
+    # only where the REAL hardware happened to differ from tier 1 (the
+    # sandbox VM yes, the owner's i9 no — owner run 2026-09-02).
     with patch("app.cognition.inference_profile._hardware_tier", return_value=tier(1, 48.0, 8192)):
         store = InferenceProfileStore(tmp_path / "ip.json")
-    owner_choice = store.update({"context_window_tokens": 16384})
-    divergence = store.divergence(owner_choice)
+        owner_choice = store.update({"main_model": "qwen2.5-32b-instruct",
+                                     "context_window_tokens": 16384})
+        divergence = store.divergence(owner_choice)
     assert divergence["exceeds_measured_budget"] is True
     assert divergence["recommendation_match"] is False  # observation, not falsification
 

@@ -320,3 +320,74 @@ def test_invariant_f_defer_decision_results_in_deferred_not_failed(tmp_path):
 
         assert res["goal_lifecycle_state"] == GoalLifecycleState.DEFERRED.value
         assert res["goal_lifecycle_state"] != GoalLifecycleState.FAILED.value
+
+
+def test_invariant_d7_investigate_reply_is_grounded_in_evidence(tmp_path):
+    """Owner diagnostics D7 (live 2026-09-02): the probe returned
+    'search_files: []' (empty evidence) and the reply still claimed
+    'Found 3 such songs' — an invented count the loop never produced.
+
+    The investigation branch must hand the model an AUTHORITATIVE
+    grounding instruction with the evidence: when results exist, claims
+    must come from them; when results are EMPTY, the reply must say
+    nothing was found. Pinned here with the LLM mocked so the captured
+    system prompt is asserted directly (hermetic, LM Studio up or down).
+    """
+    from app.cognition.action_selection import ActionResult
+
+    runtime = CognitiveRuntime(db_path=str(tmp_path / "arena.db"))
+
+    def run_case(trace_results):
+        system_prompts = []
+
+        def mock_completion(messages, complexity="fast", **kwargs):
+            if messages and messages[0].get("role") == "system":
+                system_prompts.append(messages[0]["content"])
+            return {"choices": [{"message": {"content": "checked"}}],
+                    "model": "fast"}
+
+        mock_trace = CycleTrace(
+            decisions=[ReasoningDecision(
+                action=ReasoningAction.INVESTIGATE, confidence=0.9,
+                reason="Evidence required")],
+            results=trace_results,
+        )
+
+        with patch.object(runtime.loop, "run", return_value=mock_trace), \
+             patch("app.cognition.observation_router.plan_observation", return_value=None), \
+             patch("app.cognition.goal_interpreter.SemanticGoalInterpreter.interpret_goal",
+                   return_value=SemanticGoalRepresentation(
+                       user_query="do i have songs called kaba",
+                       primary_intent_type="action_intent",
+                       target_domain="filesystem",
+                       goal="locate songs named kaba",
+                       desired_outcome="song files identified or absence stated",
+                       entities=["kaba"], constraints=[], assumptions=[],
+                       unknowns=[], preconditions=[],
+                       success_conditions=["song_files_identified = true"],
+                       failure_conditions=[], required_capabilities=[],
+                       risk_factors=[])), \
+             patch("app.llm.llm_client.generate_chat_completion",
+                   side_effect=mock_completion):
+            runtime.process_cognitive_cycle(
+                user_text="do i have songs called kaba", complexity="fast")
+        # The evidence answer is one of several LLM calls in the cycle
+        # (learning/reflection fire afterwards) — assert the grounding is
+        # present in the set, not in the last call.
+        assert system_prompts, "the evidence answer call must have happened"
+        return system_prompts
+
+    # Case 1 — results exist (even empty-looking ones): claims must be
+    # confined to them.
+    with_results = run_case([ActionResult(success=True, tool="search_files", output=[])])
+    grounded = [p for p in with_results if "[GROUNDING" in p]
+    assert grounded, "the evidence answer must carry the grounding instruction"
+    assert "must come from those results" in grounded[0]
+
+    # Case 2 — NO results gathered: the reply must state emptiness, never
+    # invent counts (the live 'Found 3' regression).
+    empty = run_case([])
+    grounded = [p for p in empty if "[GROUNDING" in p]
+    assert grounded, "the evidence answer must carry the grounding instruction"
+    assert "NO results" in grounded[0]
+    assert "do NOT invent" in grounded[0]

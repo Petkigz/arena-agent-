@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import httpx
+import os
 
 from app.config import settings
 from app.utils.logger import app_logger, audit_logger
@@ -287,6 +288,12 @@ def probe_provider(
         "latency_ms": None,
         "error": None,
     }
+    if os.environ.get("ARENA_LLM_DISABLED") and client is None:
+        # Test/hermeticity guard (see app/llm.py llm_forced_offline): a
+        # caller-supplied client still probes for real (it is usually a
+        # mocked transport); the ambient provider is treated offline.
+        evidence["error"] = "ARENA_LLM_DISABLED: provider treated as unreachable"
+        return evidence
     try:
         response = http.get(f"{base}/models", timeout=timeout)
         if response.status_code != 200:

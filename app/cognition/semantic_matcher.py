@@ -45,6 +45,7 @@ import re
 import time
 
 import httpx
+import os
 from functools import lru_cache
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -155,6 +156,14 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
     """
     if not texts:
         return []
+    if os.environ.get("ARENA_LLM_DISABLED"):
+        # Test/hermeticity guard (see app/llm.py llm_forced_offline): the
+        # embedding server is treated as unreachable — honest local
+        # fallback, same shape as a refused connection.
+        _log_backend_transition("fallback",
+                  "Semantic matching: embedding backend disabled "
+                  "(ARENA_LLM_DISABLED); using local fuzzy matching")
+        return None
     try:
         with httpx.Client() as client:
             model = _pick_embedding_model(client)

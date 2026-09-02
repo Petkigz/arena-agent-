@@ -3,6 +3,7 @@ so the agent can never kill itself or a protected system process."""
 
 import os
 import subprocess
+import sys
 import time
 
 from app.tools.process_manager import ProcessManager
@@ -59,7 +60,11 @@ def test_kill_missing_process():
 
 
 def test_kill_real_process():
-    proc = subprocess.Popen(["sleep", "30"])
+    # sys.executable, not the Unix `sleep` binary — the owner runs the
+    # suite on Windows where `sleep` does not exist (FileNotFoundError,
+    # owner run 2026-09-02).
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         res = ProcessManager.kill_process(proc.pid)
         assert res["success"] is True

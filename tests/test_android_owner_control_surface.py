@@ -4,8 +4,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-API = (ROOT / "android/app/src/main/java/com/arena/voice/api/ApiClient.kt").read_text()
-SETTINGS = (ROOT / "android/app/src/main/java/com/arena/voice/ui/screens/SettingsScreen.kt").read_text()
+# encoding="utf-8": the Kotlin sources contain em-dashes and curly
+# quotes in the markers; on Windows the default locale codec
+# (cp125x) mangles them and every marker assertion fails
+# (owner run 2026-09-02).
+API = (ROOT / "android/app/src/main/java/com/arena/voice/api/ApiClient.kt").read_text(encoding="utf-8")
+SETTINGS = (ROOT / "android/app/src/main/java/com/arena/voice/ui/screens/SettingsScreen.kt").read_text(encoding="utf-8")
 
 
 def test_android_api_exposes_stage_specific_owner_control_routes():

@@ -23,6 +23,15 @@ from app.cognition.semantic_matcher import (
 )
 from app.cognition.tool_matcher import rank_tools
 
+
+@pytest.fixture(autouse=True)
+def _real_llm_transport(monkeypatch):
+    """These tests exercise the REAL transport/embedding internals
+    (fallback ladder, retry, embedding backends) — remove the suite's
+    hermeticity guard (tests/conftest.py sets ARENA_LLM_DISABLED) so the
+    mocked transports are actually reached."""
+    monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
+
 CONCEPTUAL_GOAL = "make the photo take less disk space"
 
 

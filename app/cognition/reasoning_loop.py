@@ -162,7 +162,10 @@ class CognitiveReasoningLoop:
                 return _finish(trace, decision.reason)
             # Budget gates BEFORE each investigation: stopping is a RESOURCE
             # decision, honestly named — never an arbitrary step count.
-            if _time.monotonic() > deadline:
+            # >= not >: on Windows time.monotonic() has ~15.6ms resolution —
+            # a 0.0s budget must exhaust at the deadline, not after the clock
+            # finally ticks (owner run 2026-09-02: 5 probes ran under a 0 budget).
+            if _time.monotonic() >= deadline:
                 return _finish(trace, f"Reasoning time budget exhausted "
                                       f"({budget.time_s:.0f}s) after {tool_calls_used} investigation(s).")
             if tool_calls_used >= budget.max_tool_calls:

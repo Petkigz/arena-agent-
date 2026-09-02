@@ -36,6 +36,18 @@ OUTPUT_TOKEN_BUDGETS = {
 }
 
 
+def llm_forced_offline() -> bool:
+    """Test/hermeticity guard: ARENA_LLM_DISABLED makes every provider
+    call behave EXACTLY as if the server were unreachable — the honest
+    offline path (simulation with success=False, embedding local
+    fallback), never a silent success. The owner runs the suite with LM
+    Studio UP (it is the machine's natural state); without this guard
+    ~20 tests assert offline shapes and flip on live-LLM variance (the
+    2026-09-02 owner run: interpreter variance, embedding backend,
+    'provider unavailable' error shapes). Set by tests/conftest.py."""
+    return bool(os.environ.get("ARENA_LLM_DISABLED"))
+
+
 def output_budget(kind: str, complexity: str = "fast") -> int:
     """Output token budget for a task kind at a complexity level.
 
@@ -65,6 +77,7 @@ def output_budget(kind: str, complexity: str = "fast") -> int:
 
 import contextlib
 import contextvars
+import os
 import re
 import threading
 import time
@@ -210,6 +223,8 @@ class LocalLLMClient:
         round-trip; `force=True` re-probes (used after a provider rejects
         a model, when the cache may be stale).
         """
+        if llm_forced_offline():
+            return None  # unreachable semantics — no selection is invented
         now = time.monotonic()
         with self._models_cache_lock:
             if (not force and self._models_cache is not None
@@ -330,6 +345,11 @@ class LocalLLMClient:
         """POST /chat/completions and return the parsed JSON. Raises
         httpx errors (and re-raises cancellation) — error POLICY lives in
         generate_chat_completion."""
+        if llm_forced_offline():
+            # Same shape as a refused connection: flows through the honest
+            # httpx.HTTPError policy in generate_chat_completion.
+            raise httpx.ConnectError(
+                "ARENA_LLM_DISABLED: provider treated as unreachable")
         url = f"{self.base_url}/chat/completions"
         response = run_cancellable_blocking_call(
             lambda: self.client.post(

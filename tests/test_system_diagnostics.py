@@ -327,7 +327,8 @@ def _fake_sensors(monkeypatch, current_c):
     import app.tools.system_diagnostics as mod
     monkeypatch.setattr(
         mod.psutil, "sensors_temperatures",
-        staticmethod(lambda: {"coretemp": [_Sensor(current_c)]}))
+        staticmethod(lambda: {"coretemp": [_Sensor(current_c)]}),
+        raising=False)  # Windows psutil lacks the attribute entirely
 
 
 def test_hot_sensor_reports_threshold_fact_not_throttling(monkeypatch):
