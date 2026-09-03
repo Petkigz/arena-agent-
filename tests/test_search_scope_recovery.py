@@ -201,3 +201,45 @@ def test_master_agent_search_without_scope_still_uses_user_files(fake_home):
         assert result.outputs.get("result_found") is True
     finally:
         marker.unlink()
+
+
+def test_investigation_probe_uses_extracted_operand_not_the_question(fake_home):
+    """D7 live failure (owner run 2026-09-03): the loop's synthesized
+    information need carries the WHOLE user sentence as its question.
+    _investigation_arguments used to overwrite the matcher's extracted
+    operand ('arena_diag_marker_<hex>') with that sentence, so the probe
+    searched for a SENTENCE as a filename and honestly returned [] for a
+    file that WAS there — the offline control passed only because the
+    matcher-forced ACT path honors the payload. Extracted operands must
+    win; the raw question is only the fallback."""
+    from app.cognition.information_gain import InformationNeed
+    from app.cognition.action_selection import (
+        InvestigationExecutor,
+        InvestigationRegistry,
+    )
+
+    marker = fake_home / "arena_diag_marker_live01"
+    marker.write_text("x", encoding="utf-8")
+    try:
+        need = InformationNeed(
+            question="Find files matching arena_diag_marker_live01, then tell "
+                     "me how many you found.",
+            target="user",
+            reason="Synthesized from the user's question (no explicit "
+                   "information need supplied).",
+            priority=0.6,
+        )
+        plan = InvestigationRegistry().plan(need)
+        assert plan is not None and plan.tool == "search_files"
+        payload = plan.arguments.get("payload") or {}
+        assert payload.get("query") == "arena_diag_marker_live01", (
+            "the matcher's extracted operand must not be clobbered by "
+            "the raw question")
+        result = InvestigationExecutor().execute(plan)
+        assert result.success is True
+        found = [e.get("file_path") for e in (result.output or [])]
+        assert str(marker) in found, (
+            "the probe must find the planted marker through the "
+            "investigation path, not only the forced-ACT path")
+    finally:
+        marker.unlink()

@@ -62,10 +62,16 @@ def _investigation_arguments(handler: Callable[..., Any], need: InformationNeed,
     names = {p.name for p in named}
     if "payload" in names or (has_var_kw and not named):
         payload = dict(extracted or {})
-        payload.update({
-            "query": need.question, "question": need.question,
-            "text": need.question, "target": need.target,
-        })
+        # Extracted operands WIN over the raw question (owner run
+        # 2026-09-03, D7 live failure): the matcher had already extracted
+        # the exact filename 'arena_diag_marker_<hex>' from the user's
+        # sentence, and overwriting it with the whole natural-language
+        # question turned the probe into a filename search for a
+        # SENTENCE — an honest [] for a file that WAS there. The question
+        # remains the fallback for matches that carried no operand.
+        for key, value in (("query", need.question), ("question", need.question),
+                           ("text", need.question), ("target", need.target)):
+            payload.setdefault(key, value)
         return {"payload": payload} if "payload" in names else payload
     if has_var_kw:
         return {"query": need.question, "question": need.question, "target": need.target}

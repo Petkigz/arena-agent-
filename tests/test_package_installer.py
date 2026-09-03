@@ -12,7 +12,7 @@ def test_list_packages_pip():
         import pytest
         pytest.skip("pip not available")
     res = PackageInstaller.list_packages("pip")
-    assert res["success"] is True
+    assert res["success"] is True, f"pip list failed: {res.get('error')}"
     assert res["count"] >= 1
 
 

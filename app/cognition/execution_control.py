@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 from uuid import uuid4
 
 from app.config import settings
@@ -451,17 +451,18 @@ def _kill_process_tree_windows(process: subprocess.Popen) -> None:
             pass
 
 
-def _drain_after_kill(process: subprocess.Popen):
-    """communicate() with a bound: even after a tree-kill a stray handle
-    can hold the pipe open — never hang the cancelling thread."""
+def _pump_stream(stream, sink: List[str]) -> None:
+    """Read one pipe to EOF in a daemon thread.
+
+    The poll loop must never be the sole reader: a child whose output
+    exceeds the OS pipe buffer (small on Windows) BLOCKS on write until
+    someone reads — a read-after-exit design deadlocks exactly there
+    (owner run 2026-09-03: `pip list` on a large system env missed its
+    60s deadline and list_packages reported failure)."""
     try:
-        return process.communicate(timeout=5)
-    except subprocess.TimeoutExpired:
-        try:
-            _kill_process_tree_windows(process) if os.name == "nt" else process.kill()
-        except Exception:
-            pass
-        return process.communicate()
+        sink.append(stream.read())
+    except Exception:
+        pass
 
 
 def run_cancellable_subprocess(
@@ -472,7 +473,11 @@ def run_cancellable_subprocess(
     timeout: int = 60,
     env: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess:
-    """Run a subprocess with timeout and cooperative process-group cancellation."""
+    """Run a subprocess with timeout and cooperative process-group cancellation.
+
+    Background reader threads drain both pipes for the WHOLE run (see
+    _pump_stream): outputs larger than the OS pipe buffer must never
+    deadlock the child against an unread pipe."""
     popen_kwargs: Dict[str, Any] = {
         "shell": shell,
         "cwd": cwd,
@@ -486,6 +491,33 @@ def run_cancellable_subprocess(
     else:
         popen_kwargs["start_new_session"] = True
     process = subprocess.Popen(args, **popen_kwargs)
+    stdout_buf: List[str] = []
+    stderr_buf: List[str] = []
+    readers = [
+        threading.Thread(target=_pump_stream, args=(process.stdout, stdout_buf), daemon=True),
+        threading.Thread(target=_pump_stream, args=(process.stderr, stderr_buf), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+
+    def _drain() -> Tuple[str, str]:
+        """Collect reader output with a bound: even after a kill a stray
+        inherited handle can hold a pipe open — never hang the caller."""
+        try:
+            process.wait(timeout=5)
+        except Exception:
+            pass
+        for reader in readers:
+            reader.join(timeout=5)
+        if any(reader.is_alive() for reader in readers):
+            try:
+                _kill_process_tree_windows(process) if os.name == "nt" else process.kill()
+            except Exception:
+                pass
+            for reader in readers:
+                reader.join(timeout=5)
+        return (stdout_buf[0] if stdout_buf else ""), (stderr_buf[0] if stderr_buf else "")
+
     deadline = time.monotonic() + max(1, int(timeout))
     while process.poll() is None:
         if execution_control_registry.is_cancel_requested():
@@ -503,7 +535,7 @@ def run_cancellable_subprocess(
                         os.killpg(process.pid, signal.SIGKILL)
                 except Exception:
                     pass
-            stdout, stderr = _drain_after_kill(process)
+            stdout, stderr = _drain()
             try:
                 execution_control_registry.checkpoint("subprocess_terminated")
             except ExecutionCancelled:
@@ -519,10 +551,10 @@ def run_cancellable_subprocess(
                     os.killpg(process.pid, signal.SIGKILL)
             except Exception:
                 process.kill()
-            stdout, stderr = _drain_after_kill(process)
+            stdout, stderr = _drain()
             raise subprocess.TimeoutExpired(args, timeout, output=stdout, stderr=stderr)
         time.sleep(0.05)
-    stdout, stderr = process.communicate()
+    stdout, stderr = _drain()
     return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
 
 

@@ -23,6 +23,7 @@ from app.cognition.execution_control import (
     ExecutionCancelled,
     ExecutionControlRegistry,
     run_cancellable_blocking_call,
+    run_cancellable_subprocess,
 )
 from app.cognition.runtime import CognitiveRuntime
 from app.tools.disposable_sandbox import DisposableSandbox
@@ -280,3 +281,25 @@ def test_cancellable_sandbox_terminates_process_group(tmp_path):
     assert elapsed < 5
     assert result_holder["result"]["success"] is False
     assert result_holder["result"]["cancelled"] is True
+
+
+def test_run_cancellable_subprocess_survives_output_larger_than_pipe_buffer():
+    """Regression (owner run 2026-09-03): reading the pipes only AFTER
+    exit deadlocks once output exceeds the OS pipe buffer (small on
+    Windows). The owner's system-env `pip list` JSON exceeded it, the
+    child blocked on write, the 60s deadline killed it, and
+    list_packages reported failure. Reader threads must drain the
+    pipes for the whole run."""
+    payload_len = 2_000_000  # >> the 64 KB Linux pipe buffer
+    code = (
+        "import sys\n"
+        "s = 'x' * 2_000_000\n"
+        "sys.stdout.write(s)\n"
+        "sys.stderr.write(s)\n"
+    )
+    result = run_cancellable_subprocess(
+        [sys.executable, "-c", code], timeout=20,
+    )
+    assert result.returncode == 0
+    assert len(result.stdout) == payload_len
+    assert len(result.stderr) == payload_len

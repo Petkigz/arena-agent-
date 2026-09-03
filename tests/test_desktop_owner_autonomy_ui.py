@@ -201,6 +201,11 @@ def test_owner_control_page_autonomy_tabs_offscreen(qapp):
         page._create_goal()
         assert "required" in page.status.text()
         page.goal_title.setText("Weekly backup review")
+        # Select the priority EXPLICITLY: the combo defaults to its first
+        # item ('critical' — owner run 2026-09-03 caught this line asserting
+        # 'high' against a default it had never run against; the wiring,
+        # not the default, is what this test must pin).
+        page.goal_priority.setCurrentText("high")
         page._create_goal()
         assert ("create_autonomous_goal", ("Weekly backup review", "", "high"), {}) in fake.calls
 
