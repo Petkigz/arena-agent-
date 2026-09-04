@@ -44,6 +44,31 @@ from app.cognition.resource_allocator import ResourceAllocator
 from app.cognition.confidence_calibrator import ConfidenceCalibrator
 from app.cognition.self_model import SelfModel
 
+def probe_evidence_str(output: Any, budget: int = 300) -> str:
+    """Render a probe's output so the DISCRIMINATING facts stay visible.
+
+    A bare str() of a search-result list buries the payload inside the
+    first dict's opening keys, and an 80-char slice cut the found
+    file path mid-string (owner run 2026-09-04: D7's marker WAS found
+    by the probe, but neither the executed-actions evidence nor the
+    model's grounding instruction ever contained the path — the reply
+    honestly said it could not confirm the find). Path-bearing results
+    render as raw paths; other payloads get a compact bounded rendering.
+    """
+    if isinstance(output, list):
+        if not output:
+            return "[]"
+        dicts = [o for o in output if isinstance(o, dict)]
+        if dicts and any(o.get("file_path") for o in dicts[:3]):
+            paths = [str(o.get("file_path")) for o in dicts if o.get("file_path")]
+            head = f"{len(output)} hit(s): " + "; ".join(paths[:5])
+            if len(paths) > 5:
+                head += f"; … +{len(paths) - 5} more"
+            return head[:budget]
+        return "; ".join(str(o)[:80] for o in output[:5])[:budget]
+    return str(output)[:budget]
+
+
 class CognitiveRuntime:
     """
     P1-A: Authoritative Single Composition Root for Arena's Cognitive Architecture.
@@ -3317,7 +3342,8 @@ class CognitiveRuntime:
             tracker.transition(GoalLifecycleState.EXECUTING, "Running bounded probe investigation loop.")
             investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s)" if loop_trace.results else "Diagnostic investigation completed."
             if loop_trace.results:
-                investigation_summary += ": " + "; ".join(f"{r.tool}: {str(r.output)[:80]}" for r in loop_trace.results)
+                investigation_summary += ": " + "; ".join(
+                f"{r.tool}: {probe_evidence_str(r.output)}" for r in loop_trace.results)
 
             system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
             # D7 live regression (2026-09-02): with the probe returning

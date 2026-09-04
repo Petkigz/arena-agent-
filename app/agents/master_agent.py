@@ -644,18 +644,60 @@ class MasterAgentOrchestrator:
                             outputs={"unsupported_capability": action_type}
                         )
                 else:
-                    # CapabilityResolver: Unsupported capability proposal -> Structured Failure
-                    app_logger.warning(f"CapabilityResolver: Proposal action_type '{action_type}' is unsupported.")
-                    return ExecutionResult(
-                        proposal_id=proposal_id,
-                        action_type=action_type,
-                        execution_status=ExecutionStatus.FAILED,
-                        attempted=True,
-                        executed_actions=[],
-                        assistant_reply=f"Capability execution failed: Action proposal type '{action_type}' is unsupported by capability resolvers.",
-                        error=f"Unsupported proposal action_type '{action_type}'",
-                        outputs={"unsupported_capability": action_type}
-                    )
+                    # Manifest fallback (owner run 2026-09-04, D6 live):
+                    # the forced synthesize_tool proposal reached this
+                    # dispatcher with no elif branch and no dynamic
+                    # registration — routing worked (manifest-first match),
+                    # execution couldn't, and the replanner papered over
+                    # the gap with a conversational answer while the tool
+                    # was never installed. The manifest is the authority
+                    # for what EXISTS: an action the ActionGate already
+                    # approved deserves the manifest handler, not an
+                    # 'unsupported' dead end.
+                    manifest_res = None
+                    try:
+                        from app.tools.manifest import get_tool_manifest
+                        entry = get_tool_manifest().get(action_type)
+                        if entry and callable(entry.get("handler")):
+                            handler = entry["handler"]
+                            manifest_res = handler(dict(payload))
+                    except Exception as exc:
+                        from app.cognition.execution_control import ExecutionCancelled
+                        if isinstance(exc, ExecutionCancelled):
+                            raise
+                        app_logger.warning(
+                            f"Manifest handler for '{action_type}' raised: {exc}")
+                        manifest_res = {"success": False,
+                                        "error": f"manifest handler error: {exc}"}
+                    if isinstance(manifest_res, dict) and manifest_res.get("success"):
+                        raw_output_data["manifest_res"] = manifest_res
+                        executed_actions.append(
+                            f"Executed manifest capability '{action_type}'.")
+                    elif isinstance(manifest_res, dict):
+                        return ExecutionResult(
+                            proposal_id=proposal_id,
+                            action_type=action_type,
+                            execution_status=ExecutionStatus.FAILED,
+                            attempted=True,
+                            executed_actions=[],
+                            assistant_reply=f"Manifest capability '{action_type}' execution failed: {manifest_res.get('error')}",
+                            error=manifest_res.get("error"),
+                            outputs={"manifest_capability": action_type,
+                                     "manifest_result": manifest_res},
+                        )
+                    else:
+                        # CapabilityResolver: Unsupported capability proposal -> Structured Failure
+                        app_logger.warning(f"CapabilityResolver: Proposal action_type '{action_type}' is unsupported.")
+                        return ExecutionResult(
+                            proposal_id=proposal_id,
+                            action_type=action_type,
+                            execution_status=ExecutionStatus.FAILED,
+                            attempted=True,
+                            executed_actions=[],
+                            assistant_reply=f"Capability execution failed: Action proposal type '{action_type}' is unsupported by capability resolvers.",
+                            error=f"Unsupported proposal action_type '{action_type}'",
+                            outputs={"unsupported_capability": action_type}
+                        )
             except Exception as e:
                 from app.cognition.execution_control import ExecutionCancelled
 

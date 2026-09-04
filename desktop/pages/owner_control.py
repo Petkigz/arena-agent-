@@ -179,6 +179,28 @@ class OwnerControlPage(QWidget):
     def _selected(self, listing):
         return self._data(listing.currentItem())
 
+    def _repopulate(self, listing, rows, label, id_keys):
+        """Rebuild a list WITHOUT losing the owner's selection.
+
+        Every action handler ends in refresh(), and refresh rebuilds
+        each list from scratch — QListWidget.clear() also destroys
+        currentItem(), so an owner who selects a preemption, reconciles
+        it, then requests resume had the selection silently vanish
+        between the two clicks (owner run 2026-09-04:
+        request_preemption_resume never issued). The selected row's
+        identity is remembered and re-selected after the rebuild."""
+        if isinstance(id_keys, str):
+            id_keys = (id_keys,)
+        selected = self._data(listing.currentItem()) or {}
+        keep = next((selected.get(k) for k in id_keys if selected.get(k)), None)
+        listing.clear()
+        for row in rows or []:
+            item = QListWidgetItem(label(row))
+            item.setData(Qt.ItemDataRole.UserRole, row)
+            listing.addItem(item)
+            if keep is not None and any(row.get(k) == keep for k in id_keys):
+                listing.setCurrentItem(item)
+
     def _show_detail(self, item):
         data = self._data(item)
         self.detail.setPlainText(json.dumps(data or {}, indent=2, ensure_ascii=False))
@@ -495,23 +517,22 @@ class OwnerControlPage(QWidget):
 
     def _refresh_autonomy(self):
         try:
-            self.goals.clear()
-            for goal in self._client.autonomous_goals().get("goals", []):
-                item = QListWidgetItem(
-                    f"{goal.get('title', goal.get('goal_id', ''))} [{goal.get('status', '')}/{goal.get('priority', '')}]"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, goal)
-                self.goals.addItem(item)
+            self._repopulate(
+                self.goals,
+                self._client.autonomous_goals().get("goals", []),
+                lambda g: f"{g.get('title', g.get('goal_id', ''))} "
+                          f"[{g.get('status', '')}/{g.get('priority', '')}]",
+                "goal_id",
+            )
         except Exception as exc:
             self.status.setText(f"Could not load goal queue: {exc}")
         try:
-            self.runs.clear()
-            for event in self._client.autonomy_run_events(limit=100).get("events", []):
-                item = QListWidgetItem(
-                    f"{event.get('cycle_id', '')[:18]} {event.get('stage', '')} {event.get('created_at', '')[:19]}"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, event)
-                self.runs.addItem(item)
+            self._repopulate(
+                self.runs,
+                self._client.autonomy_run_events(limit=100).get("events", []),
+                lambda e: f"{e.get('cycle_id', '')[:18]} {e.get('stage', '')} {e.get('created_at', '')[:19]}",
+                ("event_id", "cycle_id"),
+            )
         except Exception as exc:
             self.status.setText(f"Could not load run events: {exc}")
         try:
@@ -521,13 +542,12 @@ class OwnerControlPage(QWidget):
         except Exception as exc:
             self.status.setText(f"Could not load autonomy envelope: {exc}")
         try:
-            self.preemptions.clear()
-            for preemption in self._client.preemptions().get("preemptions", []):
-                item = QListWidgetItem(
-                    f"{preemption.get('preemption_id', '')[:22]} [{preemption.get('status', '')}] {preemption.get('reason', '')[:40]}"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, preemption)
-                self.preemptions.addItem(item)
+            self._repopulate(
+                self.preemptions,
+                self._client.preemptions().get("preemptions", []),
+                lambda p: f"{p.get('preemption_id', '')[:22]} [{p.get('status', '')}] {p.get('reason', '')[:40]}",
+                "preemption_id",
+            )
         except Exception as exc:
             self.status.setText(f"Could not load preemptions: {exc}")
         try:
@@ -543,14 +563,13 @@ class OwnerControlPage(QWidget):
         except Exception as exc:
             self.budget_label.setText(f"Measured worker budget unavailable: {exc}")
         try:
-            self.decisions.clear()
-            for decision in self._client.owner_decisions().get("decisions", []):
-                item = QListWidgetItem(
-                    f"{decision.get('decision_id', '')[:20]} [{decision.get('status', '')}] "
-                    + ",".join(decision.get("payload", {}).get("expected_change_types", []))
-                )
-                item.setData(Qt.ItemDataRole.UserRole, decision)
-                self.decisions.addItem(item)
+            self._repopulate(
+                self.decisions,
+                self._client.owner_decisions().get("decisions", []),
+                lambda d: f"{d.get('decision_id', '')[:20]} [{d.get('status', '')}] "
+                          + ",".join(d.get("payload", {}).get("expected_change_types", [])),
+                "decision_id",
+            )
         except Exception as exc:
             self.status.setText(f"Could not load owner decisions: {exc}")
 
@@ -762,38 +781,36 @@ class OwnerControlPage(QWidget):
             self.exploration.setValue(int(adaptive.get("owner_max_exploration_goals", 0)))
             self.pause_btn.setText("Resume under policy" if self._paused else "Emergency pause")
 
-            self.approvals.clear()
-            for approval in self._client.pending_approvals().get("approvals", []):
-                item = QListWidgetItem(
-                    f"{approval.get('action_type', '')}: {approval.get('reason', '')[:60]}"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, approval)
-                self.approvals.addItem(item)
+            self._repopulate(
+                self.approvals,
+                self._client.pending_approvals().get("approvals", []),
+                lambda a: f"{a.get('action_type', '')}: {a.get('reason', '')[:60]}",
+                "action_id",
+            )
 
-            self.authorizations.clear()
-            for authorization in self._client.active_authorizations().get("authorizations", []):
-                scope = "executable" if authorization.get("scope_recoverable") else "scope unavailable"
-                item = QListWidgetItem(
-                    f"{authorization.get('action_type', '')} [{scope}] expires {authorization.get('expires_at', '')}"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, authorization)
-                self.authorizations.addItem(item)
+            self._repopulate(
+                self.authorizations,
+                self._client.active_authorizations().get("authorizations", []),
+                lambda a: f"{a.get('action_type', '')} "
+                          f"[{'executable' if a.get('scope_recoverable') else 'scope unavailable'}] "
+                          f"expires {a.get('expires_at', '')}",
+                ("authorization_id", "auth_id", "id"),
+            )
 
-            self.plans.clear()
-            for plan in self._client.reviewed_plans().get("plans", []):
-                item = QListWidgetItem(
-                    f"{plan.get('goal_title', plan.get('plan_id', ''))} [{plan.get('status', '')}] r{plan.get('revision', 0)}"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, plan)
-                self.plans.addItem(item)
+            self._repopulate(
+                self.plans,
+                self._client.reviewed_plans().get("plans", []),
+                lambda p: f"{p.get('goal_title', p.get('plan_id', ''))} "
+                          f"[{p.get('status', '')}] r{p.get('revision', 0)}",
+                "plan_id",
+            )
 
-            self.executions.clear()
-            for execution in self._client.controlled_executions().get("executions", []):
-                item = QListWidgetItem(
-                    f"{execution.get('action_type', '')} [{execution.get('status', '')}]"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, execution)
-                self.executions.addItem(item)
+            self._repopulate(
+                self.executions,
+                self._client.controlled_executions().get("executions", []),
+                lambda e: f"{e.get('action_type', '')} [{e.get('status', '')}]",
+                "execution_id",
+            )
             if not self.status.text():
                 self.status.setText("Owner-control state refreshed")
         except Exception as exc:
