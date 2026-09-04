@@ -665,3 +665,34 @@ def test_get_winevent_blocks_group_by_blank_lines(monkeypatch):
     assert "Id           : 41" in first
     assert "cleanly shutting down" in first  # multi-line Message intact
     assert "Id           : 37" in result["entries"][1]
+
+
+def test_throughput_window_survives_early_timer_wake(monkeypatch):
+    """Owner run 2026-09-03 (Windows, Python 3.11.0): time.sleep(0.15)
+    returned ~9ms EARLY relative to time.monotonic(), and the single
+    if/sleep let the measured window dip to 0.141s — below the requested
+    interval. A rate over a shorter window misstates 'over interval
+    seconds'; the window must be re-slept until the deadline is
+    genuinely reached. Simulates the early wake so it is caught on any
+    platform."""
+    _fake_net_psutil(monkeypatch, [
+        _FakeIO(1_000_000_000, 2_000_000_000, 1_000, 2_000),
+        _FakeIO(1_050_000_000, 2_075_000_000, 1_500, 2_300),
+    ])
+    import time as _time
+    import app.tools.system_diagnostics as mod
+    real_sleep = _time.sleep
+
+    def early_waking_sleep(seconds: float) -> None:
+        # ~6% early, like the Windows coarse-timer deadline the owner hit
+        real_sleep(max(0.0, seconds * 0.94))
+
+    monkeypatch.setattr(mod.time, "sleep", early_waking_sleep)
+    result = SystemDiagnostics.network_activity(interval=0.15)
+    assert result["success"] is True
+    tp = result["current_throughput"]
+    assert tp["available"] is True
+    assert tp["measured_interval_s"] >= 0.15, tp
+    # rate x window still equals the measured delta
+    assert abs(tp["bytes_sent_per_s"] * tp["measured_interval_s"]
+               - 50_000_000) / 50_000_000 < 0.05, tp

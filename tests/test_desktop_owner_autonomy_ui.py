@@ -210,7 +210,17 @@ def test_owner_control_page_autonomy_tabs_offscreen(qapp):
         assert ("create_autonomous_goal", ("Weekly backup review", "", "high"), {}) in fake.calls
 
         # Schedule creation passes recurrence and timezone.
+        # _create_goal deliberately CLEARS the title field after a
+        # successful create (form-reset UX) and _create_schedule
+        # shares that field (owner run 2026-09-03: this assertion had
+        # never executed before and assumed the title survived).
+        # Prove the required-guard fires on the cleared title first,
+        # then create with the title re-set.
         page.schedule_run_at.setText("2026-08-25T09:00:00")
+        page._create_schedule()
+        assert "required" in page.status.text()
+        assert not any(c[0] == "create_scheduled_directive" for c in fake.calls)
+        page.goal_title.setText("Weekly backup review")
         page._create_schedule()
         assert any(c[0] == "create_scheduled_directive" and c[1][2] == "none" and c[1][3] == "Africa/Kampala" for c in fake.calls)
 

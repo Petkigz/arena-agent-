@@ -351,8 +351,15 @@ class SystemDiagnostics:
         counters: Dict[str, Any]
         try:
             elapsed = time.monotonic() - started
-            if elapsed < interval:
+            while elapsed < interval:
+                # Windows can wake the timer EARLY (owner run 2026-09-03,
+                # Python 3.11.0: a 0.15s request returned after ~0.141s of
+                # time.monotonic()), and a single if/sleep let the measured
+                # window dip below the requested interval — a rate over a
+                # shorter window misstates 'over interval seconds'. Re-sleep
+                # the remainder until the deadline is genuinely reached.
                 time.sleep(interval - elapsed)
+                elapsed = time.monotonic() - started
             io_second = psutil.net_io_counters()
             elapsed = time.monotonic() - started
             counters = {
