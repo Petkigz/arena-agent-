@@ -696,3 +696,66 @@ def test_throughput_window_survives_early_timer_wake(monkeypatch):
     # rate x window still equals the measured delta
     assert abs(tp["bytes_sent_per_s"] * tp["measured_interval_s"]
                - 50_000_000) / 50_000_000 < 0.05, tp
+
+
+def test_network_interval_edge_cases_clamp_never_crash_or_hang(monkeypatch):
+    """Owner review (2026-09-04): interval=0 / negative / tiny / huge /
+    garbage must produce a sane bounded window — never nonsense, never a
+    crash, never a hang. Pre-fix behavior: interval='abc' raised
+    ValueError straight through the API; interval=0 silently became the
+    0.5 DEFAULT (the `or` idiom treats an explicit zero as absent)
+    instead of the 0.1 floor every other too-small request gets; NaN
+    worked only by float-comparison accident. A fake clock makes the
+    5.0s cap instant to verify."""
+    counter = _fake_net_psutil(monkeypatch, [
+        _FakeIO(1_000_000_000, 2_000_000_000, 1_000, 2_000),
+        _FakeIO(1_050_000_000, 2_075_000_000, 1_500, 2_300),
+    ])
+    import app.tools.system_diagnostics as mod
+
+    class _FakeClock:
+        def __init__(self):
+            self.now = 1000.0
+
+        def monotonic(self):
+            # Real clocks ADVANCE between reads (call overhead) — a frozen
+            # fake deadlocks the product's deadline loop in float arithmetic
+            # once the remaining interval shrinks below one ULP of `now`.
+            self.now += 1e-6
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += max(0.0, float(seconds))
+
+    clock = _FakeClock()
+    monkeypatch.setattr(mod.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(mod.time, "sleep", clock.sleep)
+
+    expectations = {
+        0: 0.1,             # explicit zero clamps to the floor
+        -3: 0.1,            # negative -> floor
+        0.001: 0.1,         # tiny -> floor
+        100: 5.0,           # huge -> cap
+        None: 0.5,          # absent -> default
+        float("nan"): 0.5,  # not a window -> default
+        "abc": 0.5,         # garbage -> default (was: ValueError crash)
+        "0.2": 0.2,         # numeric string honored
+    }
+    for requested, expected_window in expectations.items():
+        counter["n"] = 0  # fresh two-reading window per invocation
+        result = SystemDiagnostics.network_activity(interval=requested)
+        assert result["success"] is True, (requested, result)
+        tp = result["current_throughput"]
+        assert tp["available"] is True, requested
+        assert tp["measured_interval_s"] == expected_window, (requested, tp)
+        # rate x window == the measured delta; the product rounds the
+        # reported window to 3 decimals but computes rates from the
+        # unrounded one, so allow sub-percent drift (µs-level here).
+        assert abs(tp["bytes_sent_per_s"] * tp["measured_interval_s"]
+                   - 50_000_000) / 50_000_000 < 0.001, (requested, tp)
+
+    # The same crash class one parameter over: garbage `top` must not
+    # escape the API either.
+    counter["n"] = 0
+    result = SystemDiagnostics.network_activity(top="abc", interval=0.15)
+    assert result["success"] is True, result

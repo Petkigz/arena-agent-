@@ -304,8 +304,24 @@ class SystemDiagnostics:
         are completely different answers to 'what is happening right now'.
         Connection visibility depends on OS privileges — the count of
         sockets that could not be attributed is reported honestly."""
-        top = max(1, min(int(top or 10), 50))
-        interval = max(0.1, min(float(interval or 0.5), 5.0))
+        # Param hardening (owner review 2026-09-04): a diagnostics API must
+        # never crash on a bad parameter. Explicit numbers clamp to a sane
+        # range; absent/unparseable/NaN input falls back to the DEFAULT —
+        # note interval=0 used to silently become the 0.5 default (the `or`
+        # idiom treats 0 as absent); an explicit zero now clamps to the 0.1
+        # floor like every other too-small request.
+        try:
+            top = int(top)
+        except (TypeError, ValueError):
+            top = 10
+        top = max(1, min(top, 50))
+        try:
+            interval = float(interval)
+        except (TypeError, ValueError):
+            interval = 0.5
+        if interval != interval:  # NaN is not a window; use the default
+            interval = 0.5
+        interval = max(0.1, min(interval, 5.0))
         try:
             io_first = psutil.net_io_counters()
         except Exception as exc:
