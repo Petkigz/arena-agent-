@@ -159,6 +159,9 @@ CONTROL_VERBS = {
     "flush", "release", "renew",
     # Audio/media
     "play", "pause", "mute", "unmute", "watch", "listen", "view",
+    # Additive change ('add kaba to my startup programs' — live owner
+    # report 2026-09-05: fell through to a no-capability ask).
+    "add",
     # Search/observation commands
     "search", "find", "list", "count", "check", "verify", "test",
     "analyze", "inspect", "monitor", "track",
@@ -266,6 +269,48 @@ _DELETE_FILE_RE = re.compile(
     r"\b(?:delete|remove|trash)\s+(?:(?:all|every|the)\s+)?(?:files?\s+)?"
     r"([\w\-.,'\"() ]+" + _EXT_TOKEN + r"(?:\s*(?:,|and)\s*[\w\-.,'\"() ]+" + _EXT_TOKEN + r")*)\s*[?.!]*$",
     re.I)
+
+# Mutation verbs: requests that say CLEAR/EMPTY/SET/DELETE want a WRITE.
+# A tool whose entire vocabulary (name + description + synonyms) contains
+# none of the request's mutation verbs cannot serve it — 'clear my
+# clipboard' must not be answered by the clipboard INSPECTOR while the
+# real clear tool or the OS-control layer sits unused (owner report
+# 2026-09-05, 'everything' generalization). Generic performatives
+# ('make', 'open', 'run') are deliberately absent: they don't indicate
+# state change and many tools serve them indirectly.
+_MUTATION_VERBS = frozenset({
+    "clear", "empty", "delete", "remove", "burn", "eject", "flush",
+    "purge", "clean", "wipe", "erase", "format", "reset", "restore",
+    "revert", "toggle", "enable", "disable", "install", "uninstall",
+    "move", "rename", "copy", "create", "write", "compress", "zip",
+    "unzip", "extract", "archive", "encrypt", "decrypt", "send",
+    "upload", "download", "share", "mount", "unmount", "print", "set",
+    "change", "modify", "update", "adjust", "configure", "edit", "mute",
+    "unmute", "add", "organize", "sort", "convert", "rotate", "resize",
+})
+
+# Write-verb families: the SAME state change named differently by users
+# and tools. Polarity passes when any family member appears on both
+# sides — 'change my wallpaper' satisfies a tool that speaks 'set'.
+_MUTATION_VERB_FAMILIES = (
+    {"change", "set", "make", "modify", "update", "adjust", "configure",
+     "edit", "toggle", "switch", "turn"},
+    {"clear", "empty", "clean", "purge", "wipe", "erase", "flush"},
+    {"delete", "remove", "trash"},
+    {"move", "rename", "relocate"},
+    {"copy", "duplicate"},
+    {"create", "write", "generate", "build"},
+    {"compress", "zip", "archive"},
+    {"extract", "unzip", "unarchive"},
+    {"encrypt", "decrypt"},
+    {"send", "share", "upload"},
+    {"install", "uninstall"},
+    {"mute", "unmute"},
+    {"add", "append"},
+    {"organize", "sort", "categorize", "group"},
+    {"convert", "transform"},
+    {"rotate", "resize", "scale", "crop"},
+)
 # Media consumption: 'play kaba', 'watch the video', 'listen to the song'.
 # The verb itself is the file signal for play/watch/listen (their objects
 # are media files); 'open'/'view' additionally need an explicit file-ish
@@ -606,6 +651,51 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
                 matched.append(action_type)
         if score > 0:
             scored.append((score, action_type, tuple(sorted(set(matched)))))
+
+    # Mutation polarity: when the request says CLEAR/SET/DELETE/..., the
+    # winner must speak a mutation verb. A read-only tool (nothing in its
+    # name+description+synonyms matches any of the request's mutation
+    # verbs, prefix-tolerant for inflections: 'set' matches 'setting')
+    # structurally cannot serve a write request — drop it and let either
+    # the real write tool or the OS-control layer win instead.
+    # Code snippets are CONTENT, not instruction: 'print(...)' inside a
+    # run-code request is not the user commanding a printout. Strip the
+    # snippet before polarity analysis (live suite catch: run-code
+    # requests with print() lost their tool to the polarity guard).
+    polarity_text = text
+    try:
+        snippet = _extract_code_snippet(text)
+        if snippet:
+            polarity_text = text.replace(snippet, " ")
+    except Exception:
+        pass
+    polarity_words = set(re.findall(r"[a-z_]+", polarity_text))
+    request_mutations = polarity_words & _MUTATION_VERBS
+    if request_mutations and scored:
+        # Verb families: users and tools name the same write with
+        # different words ('change my wallpaper' vs set_wallpaper); any
+        # family member on both sides satisfies the polarity.
+        acceptable = set(request_mutations)
+        for family in _MUTATION_VERB_FAMILIES:
+            if request_mutations & family:
+                acceptable |= family
+
+        def _speaks_mutation(action_type: str) -> bool:
+            entry = manifest.get(action_type) or {}
+            vocab = f"{action_type.replace('_', ' ')} {entry.get('description', '')} " \
+                    + " ".join(SYNONYMS.get(action_type, []))
+            vocab_words = re.findall(r"[a-z_]+", vocab.lower())
+            return any(
+                len(w) >= len(m) and w.startswith(m)
+                for w in vocab_words for m in acceptable
+            )
+        before_polarity = len(scored)
+        scored = [s for s in scored if _speaks_mutation(s[1])]
+        if before_polarity != len(scored):
+            app_logger.info(
+                f"Mutation polarity: dropped {before_polarity - len(scored)} "
+                f"read-only candidate(s) for mutation request "
+                f"({sorted(request_mutations)}).")
 
     if not scored:
         # General OS control fallback: a settings-change request with no

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 
 def pytest_terminal_summary(terminalreporter):
     """Expose CI failure details as check annotations when log blobs are unavailable."""
@@ -28,3 +30,23 @@ def pytest_terminal_summary(terminalreporter):
 # REAL transport internals (test_llm*.py, test_inference_profile.py)
 # remove the variable locally.
 os.environ.setdefault("ARENA_LLM_DISABLED", "1")
+
+
+@pytest.fixture(autouse=True)
+def _reset_interpreter_domain_cache():
+    """Isolation guard (found via the control-envelope batch, 2026-09-05):
+    SemanticGoalInterpreter caches manifest-derived domain vocabulary in
+    CLASS attributes (_manifest_domains_cache / the synced VALID_DOMAINS).
+    Tests that monkeypatch get_tool_manifest with a single-tool fake and
+    run a full cycle poison that cache for every later test in the
+    process (domain 'code' silently downgraded to 'unknown' — the exact
+    class of order-dependent failure that hides until two files run in
+    the right sequence). Reset after every test: one manifest pass to
+    rebuild is nothing compared to a poisoned vocabulary."""
+    yield
+    try:
+        from app.cognition.goal_interpreter import SemanticGoalInterpreter
+        SemanticGoalInterpreter._manifest_domains_cache = None
+        SemanticGoalInterpreter.VALID_DOMAINS = set(SemanticGoalInterpreter.LEGACY_DOMAINS)
+    except Exception:
+        pass

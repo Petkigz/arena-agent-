@@ -296,6 +296,7 @@ def _wrap(fn: Callable[..., Any], *key_args: str) -> Callable[[Dict[str, Any]], 
         return out
 
     handler.arena_required_keys = _required_keys  # type: ignore[attr-defined]
+    handler.arena_key_args = list(key_args)  # type: ignore[attr-defined]
     return _copy_availability(handler, fn)
 
 
@@ -310,6 +311,7 @@ def _ignore_payload(fn: Callable[[], Any]) -> Callable[[Dict[str, Any]], Any]:
         except ToolDependencyUnavailable as exc:
             return exc.as_result()
     handler.arena_required_keys = lambda: []  # type: ignore[attr-defined]
+    handler.arena_key_args = []  # type: ignore[attr-defined]
     return _copy_availability(handler, fn)
 
 
@@ -1027,6 +1029,17 @@ def payload_required_keys(action_type: str) -> List[str]:
         entry = get_tool_manifest().get(action_type) or {}
         getter = getattr(entry.get("handler"), "arena_required_keys", None)
         return list(getter()) if callable(getter) else []
+    except Exception:
+        return []
+
+
+def payload_keys(action_type: str) -> List[str]:
+    """ALL payload key names the tool accepts (required and optional),
+    for operand reasoning (completion, validation). Empty = unknown."""
+    try:
+        entry = get_tool_manifest().get(action_type) or {}
+        keys = getattr(entry.get("handler"), "arena_key_args", None)
+        return list(keys) if keys else []
     except Exception:
         return []
 

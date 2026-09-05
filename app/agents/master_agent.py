@@ -25,6 +25,126 @@ _MEDIA_VERB_RE = re.compile(r"(?:^|[^a-z0-9])(?:play|plays|playing|watch|listen|
 _PLAYBACK_AD_RE = re.compile(r"(?:^|[^a-z0-9])play(?:s|back|ing)?(?:$|[^a-z0-9])", re.IGNORECASE)
 
 
+def _resolve_file_reference(name: str) -> Dict[str, Any]:
+    """Bare name -> real path under the user's home, search-backed.
+    Ambiguity (several candidates) is reported as an ask — the one honest
+    clarification — and a miss as a miss. The shared idiom behind
+    move-by-bare-name, open-by-bare-name, and operand completion for
+    manifest tools."""
+    from pathlib import Path as _P
+    from app.tools.universal_filesystem import UniversalFilesystem
+    direct = _P(str(name)).expanduser()
+    if direct.exists():
+        return {"resolved": str(direct)}
+    hits = UniversalFilesystem.search_filesystem(
+        str(name), root_dir=str(_P.home()), max_results=5)
+    exact = [h for h in hits if h.get("file_name", "").lower() == str(name).lower()]
+    pool = exact or hits
+    if len(pool) == 1:
+        return {"resolved": pool[0]["file_path"]}
+    if not pool:
+        return {"error": f"couldn't find any file matching '{name}'"}
+    return {
+        "error": f"found {len(pool)} files matching '{name}': "
+                 + "; ".join(h["file_path"] for h in pool[:4])
+                 + " — tell me which one",
+        "matches": [h["file_path"] for h in pool[:4]],
+    }
+
+
+def _extract_operand_name(user_text: str, action_type: str) -> str:
+    """The file-name candidate in a request, generically: strip control
+    verbs, stopwords, and the tool's own vocabulary; what remains names
+    the operand ('set kaba.jpg as my wallpaper' -> 'kaba.jpg')."""
+    try:
+        from app.cognition.tool_matcher import CONTROL_VERBS, STOPWORDS, SYNONYMS
+        from app.tools.manifest import get_tool_manifest
+    except Exception:
+        return ""
+    text = str(user_text or "").lower()
+    if not text.strip():
+        return ""
+    entry = get_tool_manifest().get(action_type) or {}
+    tool_vocab = set(
+        re.findall(r"[a-z_]+", f"{action_type.replace('_', ' ')} "
+                    f"{entry.get('description', '')} "
+                    + " ".join(SYNONYMS.get(action_type, [])).lower())
+    )
+    drop = {w for w in tool_vocab if len(w) > 2} | set(CONTROL_VERBS) | set(STOPWORDS)
+    drop |= {"please", "then", "and", "the", "a", "an", "my", "me",
+             "it", "them", "that", "this", "as", "into", "to", "in",
+             "on", "with", "for", "of"}
+    tokens = re.findall(r"[a-z0-9_\-]+\.[a-z0-9]{1,5}|[a-z0-9_\-]+", text)
+    kept = [t for t in tokens if t not in drop and len(t) > 1]
+    return " ".join(kept)
+
+
+def _complete_path_operand(
+    action_type: str, payload: Dict[str, Any], user_text: str
+) -> Dict[str, Any]:
+    """Operand completion for manifest-fallback tools (owner report
+    2026-09-05, 'not only playing music but everything'): a required
+    PATH parameter that is missing entirely or carries a BARE NAME
+    ('image_path': 'kaba.jpg') is resolved against the real filesystem
+    before execution — the search is the 'find' step of any
+    'find/use X and <act>' compound. Only SINGLE-path tools participate:
+    multi-operand tools keep their own explicit contracts. Returns the
+    (possibly updated) payload plus a human-readable note, or an 'ask'
+    when the reference is genuinely ambiguous."""
+    from pathlib import Path as _P
+    payload = dict(payload or {})
+
+    def _pathish(key: str) -> bool:
+        return key.endswith("_path") or key.endswith("_path_str")
+
+    # Case 1: a path param present but carrying a bare name (not a real
+    # path) — resolve it.
+    for key, value in list(payload.items()):
+        if not _pathish(key) or not isinstance(value, str) or not value.strip():
+            continue
+        if _P(value).expanduser().exists():
+            continue
+        ref = _resolve_file_reference(value)
+        if ref.get("resolved"):
+            payload[key] = ref["resolved"]
+            return {"payload": payload, "note": (
+                f"Resolved '{value}' to {ref['resolved']} by filesystem search.")}
+        if ref.get("matches"):
+            return {"payload": payload, "ask": ref.get("error")}
+        # Unresolvable: leave it — the tool reports the missing file honestly.
+
+    # Case 2: a path param missing or empty — extract the operand from
+    # the request and fill it, but ONLY for single-logical-path tools:
+    #   * a bare generic 'path' alongside a specific '*_path' is an
+    #     alternate spelling of the same operand (set_wallpaper's
+    #     image_path/path), not a second file;
+    #   * source/destination or input/output pairs are DISTINCT operands —
+    #     filling one from a single name would guess which is which;
+    #   * output-ish keys (output_*/destination_*/target_*) are never
+    #     filled from the request — they name where to PUT a result.
+    from app.tools.manifest import payload_keys
+    all_pathish = [k for k in payload_keys(action_type) if _pathish(k)]
+    specific = [k for k in all_pathish if k != "path"]
+    logical = list(dict.fromkeys(specific or all_pathish))
+    fillable = [k for k in logical
+                if not k.startswith(("output", "destination", "target"))]
+    has_value = any(str(payload.get(k) or "").strip() for k in all_pathish)
+    if len(fillable) != 1 or has_value:
+        return {"payload": payload}
+    key = fillable[0]
+    name = _extract_operand_name(user_text, action_type)
+    if not name or name.lower() in ("it", "them", "that", "this"):
+        return {"payload": payload}
+    ref = _resolve_file_reference(name)
+    if ref.get("resolved"):
+        payload[key] = ref["resolved"]
+        return {"payload": payload, "note": (
+            f"Resolved '{name}' to {ref['resolved']} by filesystem search.")}
+    if ref.get("matches"):
+        return {"payload": payload, "ask": ref.get("error")}
+    return {"payload": payload}
+
+
 def _no_media_playback_capability() -> bool:
     """True when NO registered capability advertises media playback.
 
@@ -758,6 +878,33 @@ class MasterAgentOrchestrator:
                 from app.cognition.tool_registry import get_shared_registry
                 tr = get_shared_registry()
                 if action_type in tr._registry:
+                    # Operand completion (owner report 2026-09-05, 'not only
+                    # playing music but everything'): path parameters
+                    # carrying bare names — or missing while the request
+                    # names a file — are resolved by real filesystem search
+                    # before execution, the same self-serve idiom as
+                    # move/open-by-bare-name. Genuine ambiguity asks;
+                    # everything else acts.
+                    try:
+                        completion = _complete_path_operand(
+                            action_type, dict(payload), user_text)
+                        if completion.get("ask"):
+                            return ExecutionResult(
+                                proposal_id=proposal_id,
+                                action_type=action_type,
+                                execution_status=ExecutionStatus.FAILED,
+                                attempted=True,
+                                executed_actions=[str(completion["ask"])],
+                                assistant_reply=str(completion["ask"]),
+                                error="ambiguous file reference",
+                                outputs={"completion_ask": completion["ask"]},
+                            )
+                        if completion.get("note"):
+                            executed_actions.append(str(completion["note"]))
+                        payload = completion.get("payload", payload)
+                    except Exception as exc:
+                        app_logger.info(
+                            f"Operand completion skipped for '{action_type}': {exc}")
                     tr_res = tr.execute_registered_tool(action_type, payload)
                     raw_output_data["tr_res"] = tr_res
                     if tr_res.get("success"):
@@ -804,6 +951,34 @@ class MasterAgentOrchestrator:
                         entry = get_tool_manifest().get(action_type)
                         if entry and callable(entry.get("handler")):
                             handler = entry["handler"]
+                            # Operand completion (owner report 2026-09-05,
+                            # 'not only playing music but everything'):
+                            # path parameters carrying bare names — or
+                            # missing while the request names a file — are
+                            # resolved by real filesystem search before
+                            # execution, the same self-serve idiom as
+                            # move/open-by-bare-name. Genuine ambiguity
+                            # asks; everything else acts.
+                            try:
+                                completion = _complete_path_operand(
+                                    action_type, dict(payload), user_text)
+                                if completion.get("ask"):
+                                    return ExecutionResult(
+                                        proposal_id=proposal_id,
+                                        action_type=action_type,
+                                        execution_status=ExecutionStatus.FAILED,
+                                        attempted=True,
+                                        executed_actions=[str(completion["ask"])],
+                                        assistant_reply=str(completion["ask"]),
+                                        error="ambiguous file reference",
+                                        outputs={"completion_ask": completion["ask"]},
+                                    )
+                                if completion.get("note"):
+                                    executed_actions.append(str(completion["note"]))
+                                payload = completion.get("payload", payload)
+                            except Exception as exc:
+                                app_logger.info(
+                                    f"Operand completion skipped for '{action_type}': {exc}")
                             manifest_res = handler(dict(payload))
                     except Exception as exc:
                         from app.cognition.execution_control import ExecutionCancelled

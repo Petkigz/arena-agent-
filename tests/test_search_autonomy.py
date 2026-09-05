@@ -369,6 +369,7 @@ class TestPlaybackThroughOpenFile:
                 if name != "open_file"
             }
         monkeypatch.setattr(manifest_mod, "get_tool_manifest", bare_manifest)
+
         # master_agent imports the getter inside the function — patch the
         # module attribute it resolves from.
         import app.cognition.tool_registry as tr_mod

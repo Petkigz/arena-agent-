@@ -67,7 +67,7 @@ OS_ACTION_VERBS = {
     "extend", "duplicate", "mirror", "hide", "show", "pin", "unpin",
     "wallpaper",
     # System/network operations
-    "connect", "disconnect", "pair", "unpair", "scan", "sync", "block",
+    "add", "connect", "disconnect", "pair", "unpair", "scan", "sync", "block",
     "allow", "forward", "map", "clear", "empty", "clean", "purge",
     "flush", "release", "renew",
     # Audio/media
@@ -99,6 +99,11 @@ OS_SETTINGS_DOMAINS = {
     "window", "windows", "app", "apps", "application", "applications",
     "program", "programs", "process", "processes", "running", "clipboard",
     "tray", "startup", "services", "users", "login", "desktop",
+    # Concrete PC-state objects (owner report 2026-09-05: 'empty the
+    # recycle bin' / 'burn the playlist to a cd' carried control verbs and
+    # real objects but no settings-domain word — and fell through to a
+    # no-capability ask while full OS control sat unused).
+    "recycle", "bin", "trash", "cd", "dvd", "disc", "burner", "playlist",
     # Hardware/system
     "memory", "ram", "cpu", "gpu", "disk", "storage", "drive", "drives",
     "usb", "bluetooth", "wifi", "network", "ethernet", "adapter",
