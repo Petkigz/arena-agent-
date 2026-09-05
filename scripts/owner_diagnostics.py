@@ -247,9 +247,39 @@ def d5_diagnostic_interpretation() -> Tuple[str, str]:
                     f"reply={reply[:160]!r}")
 
 
+def _purge_d6_residue() -> str:
+    """D6 must measure THIS run's chain, not residue (owner machine, live
+    2026-09-05 20:52: the 19:16 run really installed reverse_words to
+    data/plugins/ — and every later D6, and even the suite's
+    verification-honesty test, legitimately found it installed from
+    disk). Remove the installed artifacts and refresh the in-process
+    catalog so the probe starts from NOT-installed. This is diagnostic
+    hygiene on a diag-created artifact; the run below reinstalls it."""
+    from app.agents.self_evolving_agent import SelfEvolvingAgent
+    import app.tools.manifest as manifest_module
+    from app.cognition import tool_registry as tr
+    removed = []
+    for p in (SelfEvolvingAgent.PLUGINS_DIR / "reverse_words.py",
+              SelfEvolvingAgent.DYNAMIC_TOOLS_DIR / "dynamic_reverse_words.py"):
+        try:
+            if p.exists():
+                p.unlink()
+                removed.append(p.name)
+        except OSError:
+            pass
+    manifest_module._TOOL_MANIFEST = None  # catalog rebuild drops the plugin
+    try:
+        tr.get_shared_registry()._registry.pop("reverse_words", None)
+    except Exception:
+        pass
+    return f"(purged residue: {', '.join(removed)})" if removed else ""
+
+
 def d6_self_evolution() -> Tuple[str, str]:
     """The system's hardest capability. Ground truth: after the cycle, a
-    reverse_words capability exists AND actually reverses words."""
+    reverse_words capability exists AND actually reverses words —
+    installed by THIS cycle, not left over from an earlier run."""
+    purged = _purge_d6_residue()
     res = _chat("Create a new tool called reverse_words that takes a "
                 "string and returns the words in reverse order. Write it, "
                 "test it, and install it as a permanent capability.")
@@ -267,7 +297,7 @@ def d6_self_evolution() -> Tuple[str, str]:
         # FAILURE (model wrote unusable code) from the chain never being
         # reached at all — the two need different fixes.
         actions = [str(a)[:60] for a in (res.get("executed_actions") or [])][:2]
-        return "fail", (f"tool NOT installed | lifecycle="
+        return "fail", (f"tool NOT installed {purged} | lifecycle="
                         f"{res.get('goal_lifecycle_state')} | "
                         f"actions={actions} | "
                         f"reply={reply_excerpt!r}")
@@ -276,7 +306,8 @@ def d6_self_evolution() -> Tuple[str, str]:
     got = str(out.get("result", out.get("output", out))).strip()
     ok = "three two one" in got
     return ("pass" if ok else "fail"), (
-        f"tool installed=True, executes correctly={ok} "
+        f"tool installed=True{', ' + purged if purged else ''}, "
+        f"executes correctly={ok} "
         f"(got {got!r}) | lifecycle={res.get('goal_lifecycle_state')} | "
         f"reply={reply_excerpt!r}")
 

@@ -128,9 +128,32 @@ def test_capability_creation_conditions_are_about_the_artifact():
     assert "response_delivered = true" not in rep.success_conditions
 
 
-def test_capability_plan_document_reply_is_not_achieved():
+def test_capability_plan_document_reply_is_not_achieved(monkeypatch):
     """The exact live failure: a plan document in the reply verified as
-    achieved. With artifact-typed conditions it must not."""
+    achieved. With artifact-typed conditions it must not.
+
+    Hermeticity (owner machine, live 2026-09-05 20:44): the property
+    under test is 'plan document + capability NOT installed -> not
+    achieved'. But a previous successful live D6 run had REALLY
+    installed reverse_words to data/plugins/, the manifest discovers it
+    from disk in every new process, and the verifier CORRECTLY probed
+    it installed — the test was asserting machine state, not the
+    property. The precondition is now controlled explicitly: the probe
+    reports not-installed for this test regardless of what the machine
+    has (a genuinely installed capability achieving the goal is the
+    OTHER test's job, in the capability-chain file, with a unique
+    name)."""
+    from app.cognition.tool_registry import get_shared_registry
+    registry = get_shared_registry()
+    real_lookup = registry.effective_capability
+
+    def _not_installed_for_this_test(name):
+        if str(name or "").lower() == "reverse_words":
+            return None
+        return real_lookup(name)
+
+    monkeypatch.setattr(registry, "effective_capability",
+                        _not_installed_for_this_test)
     rep = SemanticGoalInterpreter.interpret_goal(D6_TEXT)
     res = GoalVerifier.verify_goal_achievement(
         rep, [], "Here is my plan for the reverse_words tool: step 1 write "
