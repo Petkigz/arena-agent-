@@ -1,4 +1,4 @@
-"""Owner-machine diagnostics (run where LM Studio / hardware live).
+r"""Owner-machine diagnostics (run where LM Studio / hardware live).
 
 The sandbox can exercise the deterministic layer only. This pack runs on
 the OWNER's machine — where the local LLM, the real browser, the phone

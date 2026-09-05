@@ -6,6 +6,7 @@ import sys
 import psutil
 import platform
 import datetime
+from uuid import uuid4
 from typing import Dict, Any, List, Optional
 
 from app.config import settings
@@ -72,7 +73,11 @@ class EnvironmentGroundingEngine:
                 entity_id="host_environment"
             )
             wm.observe(Observation(
-                id=f"obs_env_{datetime.datetime.now().strftime('%H%M%S')}",
+                # uuid, NOT a timestamp: two topology observations in
+                # the same second collided on the PRIMARY KEY (live
+                # 2026-09-05: "UNIQUE constraint failed:
+                # world_observations.id" during D6 grounding).
+                id=f"obs_env_{uuid4().hex}",
                 subject="host_environment",
                 predicate="topology_update",
                 value=topology_snapshot,
