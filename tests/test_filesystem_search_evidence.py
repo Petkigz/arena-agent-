@@ -207,14 +207,17 @@ def test_artist_tail_stripped_from_file_question():
 
 
 def test_word_order_independent_fuzzy_match(tmp_path):
-    """Even WITH the artist left in the query, token-set scoring must match
-    'ordinary by alex warren' to 'Alex Warren - Ordinary.mp3'."""
+    """Even WITH the artist left in the query, the search must match
+    'ordinary by alex warren' to 'Alex Warren - Ordinary.mp3'. The token
+    tier (2026-09-05) answers this deterministically — a distinctive query
+    token as a filename substring — so the pinned invariant is the FIND,
+    satisfied by either the token tier or the fuzzy fallback it subsumes."""
     home = _make_tree(tmp_path)
     hits = UniversalFilesystem.search_filesystem(
         f"{_ORDINARY} by alex warren", root_dir=str(tmp_path / "driveF")
     )
     assert hits and _ORDINARY.capitalize() in hits[0]["file_name"]
-    assert hits[0].get("fuzzy_match") is True
+    assert hits[0].get("match") == "token" or hits[0].get("fuzzy_match") is True
 
 
 def test_persistent_index_accelerates_without_lying(tmp_path):

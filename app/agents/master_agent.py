@@ -14,6 +14,41 @@ from app.utils.hardware_monitor import HardwareMonitor
 # orchestrator must not require every optional tool dependency to be installed.
 from app.memory.human_nature_engine import HumanNatureEngine
 from app.memory.coworker_brain import CoworkerBrain
+
+# Media-consumption verbs: the second step of compound requests like
+# 'find the file kaba and play it'. They are instruction vocabulary (never
+# filename content — see goal_interpreter._QUERY_COMMAND_WORDS) and they
+# name a capability class (playback) the tool universe may or may not
+# provide. Underscore is a SEPARATOR, not a word char, so tool names like
+# 'play_media_file' match while 'display'/'playlist' never do.
+_MEDIA_VERB_RE = re.compile(r"(?:^|[^a-z0-9])(?:play|plays|playing|watch|listen|stream|view)(?:$|[^a-z0-9])", re.IGNORECASE)
+_PLAYBACK_AD_RE = re.compile(r"(?:^|[^a-z0-9])play(?:s|back|ing)?(?:$|[^a-z0-9])", re.IGNORECASE)
+
+
+def _no_media_playback_capability() -> bool:
+    """True when NO registered capability advertises media playback.
+
+    Checks the manifest (action name + description) and the dynamic tool
+    registry. Self-limiting by design: the day a playback tool is
+    installed (runtime or manifest), this returns False and the honest
+    'cannot play' note disappears — the note tracks reality, it is not a
+    hardcoded confession."""
+    try:
+        from app.tools.manifest import get_tool_manifest
+        for name, entry in get_tool_manifest().items():
+            blob = f"{name} {entry.get('description') or ''}"
+            if _PLAYBACK_AD_RE.search(blob):
+                return False
+    except Exception:
+        pass
+    try:
+        from app.cognition.tool_registry import get_shared_registry
+        for name in list(getattr(get_shared_registry(), "_registry", {}) or {}):
+            if _PLAYBACK_AD_RE.search(str(name)):
+                return False
+    except Exception:
+        pass
+    return True
 from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction, ReasoningDecision
 from app.cognition.belief_engine import BeliefEngine
 from app.cognition.execution_result import ExecutionResult, ExecutionStatus
@@ -221,6 +256,19 @@ class MasterAgentOrchestrator:
                     "value": "no_matching_files_found",
                     "source": "universal_filesystem"
                 })
+
+            # Honest partial-completion (live owner report 2026-09-05):
+            # a compound request whose consumption step ('find kaba and
+            # PLAY it') has no registered capability must not silently
+            # drop the unfulfilled half. The grounded step (search) runs
+            # and reports; the ungrounded step is stated honestly — the
+            # assistant never pretends the request was fully served, and
+            # never asks the owner for information (file type) it can
+            # determine itself from the search results.
+            if _MEDIA_VERB_RE.search(user_text or "") and _no_media_playback_capability():
+                executed_actions.append(
+                    "No media playback capability is registered — I can locate media files but not play them."
+                )
 
         elif action_type in ("move_file", "copy_file_verified"):
             # File management: resolve bare names ('move kaba.mp3 to my music
@@ -633,13 +681,27 @@ class MasterAgentOrchestrator:
                     if tr_res.get("success"):
                         executed_actions.append(f"Executed registered tool '{action_type}'.")
                     else:
+                        # Honest owner-facing reply for missing operands
+                        # (live owner report 2026-09-05): the raw validation
+                        # string ('missing required parameter(s): …') is
+                        # machine detail — the owner is told WHICH capability
+                        # matched and WHAT it still needs, never a raw stack
+                        # of payload keys as the answer.
+                        tr_error = tr_res.get("error") or "unknown error"
+                        missing_note = ""
+                        if "missing required parameter" in str(tr_error):
+                            missing_note = (" — your request didn't include "
+                                            "the information this capability needs, "
+                                            "and I won't invent it")
                         return ExecutionResult(
                             proposal_id=proposal_id,
                             action_type=action_type,
                             execution_status=ExecutionStatus.FAILED,
                             attempted=True,
                             executed_actions=[],
-                            assistant_reply=f"Registered tool '{action_type}' execution failed: {tr_res.get('error')}",
+                            assistant_reply=(
+                                f"I matched the capability '{action_type}' but couldn't run it"
+                                f"{missing_note}. Details: {tr_error}"),
                             error=tr_res.get("error"),
                             outputs={"unsupported_capability": action_type}
                         )
@@ -674,13 +736,21 @@ class MasterAgentOrchestrator:
                         executed_actions.append(
                             f"Executed manifest capability '{action_type}'.")
                     elif isinstance(manifest_res, dict):
+                        mf_error = manifest_res.get("error") or "unknown error"
+                        missing_note = ""
+                        if "missing required parameter" in str(mf_error):
+                            missing_note = (" — your request didn't include "
+                                            "the information this capability needs, "
+                                            "and I won't invent it")
                         return ExecutionResult(
                             proposal_id=proposal_id,
                             action_type=action_type,
                             execution_status=ExecutionStatus.FAILED,
                             attempted=True,
                             executed_actions=[],
-                            assistant_reply=f"Manifest capability '{action_type}' execution failed: {manifest_res.get('error')}",
+                            assistant_reply=(
+                                f"I matched the capability '{action_type}' but couldn't run it"
+                                f"{missing_note}. Details: {mf_error}"),
                             error=manifest_res.get("error"),
                             outputs={"manifest_capability": action_type,
                                      "manifest_result": manifest_res},

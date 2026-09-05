@@ -38,6 +38,19 @@ _QUERY_COMMAND_WORDS = {
     "read", "summarize", "summarise", "check", "verify", "ensure", "describe",
     "explain", "count", "pass", "first", "second", "finally", "next",
     "afterwards", "everything", "anything", "nothing",
+    # Prepositions (same class as 'of'/'with'/'for' above — never filename
+    # content): 'find kaba ON my system' left 'on' in the query.
+    "in", "on", "at",
+    # Media-consumption verbs — the second step of a compound request
+    # ('find the file kaba and PLAY it', live owner report 2026-09-05).
+    # Same token-exact philosophy as 'read'/'open': instruction vocabulary
+    # is never filename content. Stripping them lets the sequencing boundary
+    # semantics extend to 'and <verb>' compounds: the query serves the
+    # SEARCH step only, so trailing 'play it' must not contaminate it.
+    "play", "watch", "listen", "hear", "view", "stream", "pause",
+    # Apposition markers: 'a song CALLED kaba' — the marker is discourse,
+    # the name after it is the content.
+    "called", "named",
 }
 
 # Sequencing boundary in compound requests: search_files serves the SEARCH

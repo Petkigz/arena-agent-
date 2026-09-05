@@ -102,6 +102,31 @@ class GoalReplanner:
     )
 
     @classmethod
+    def _is_operand_placeholder(cls, candidate: Dict[str, Any]) -> bool:
+        """True when the candidate carries NONE of the operands its tool
+        requires — a capability SIGNAL, not an executable plan.
+
+        Live owner report 2026-09-05: 'find the file kaba and play it' —
+        the search (contaminated query) found nothing, the replanner
+        reached for the next discovery candidate (resize_image — 1.5,
+        payload = the raw request text), executed it, and the raw
+        missing-parameter validation error became the owner-facing reply.
+
+        PRIMARY discovery keeps such candidates (the executor's per-action
+        branches resolve bare names themselves — compress/move/copy); but
+        a REPLAN choosing among the leftovers after a failure must not
+        gamble on a tool the request never supplied operands for. Zero-arg
+        tools (required = []) always pass."""
+        try:
+            from app.tools.manifest import missing_required_payload_keys
+            return bool(missing_required_payload_keys(
+                str(candidate.get("action_type") or ""),
+                candidate.get("payload"),
+            ))
+        except Exception:
+            return False
+
+    @classmethod
     def _cannot_satisfy_goal_conditions(cls, action_type: str, goal_rep: Any) -> bool:
         """True when this action STRUCTURALLY cannot verify the goal.
 
@@ -205,6 +230,7 @@ class GoalReplanner:
             c for c in all_candidates
             if not cls.is_failed_strategy_instance(c, failed_action_type, f_payload)
             and not cls._cannot_satisfy_goal_conditions(c.get("action_type"), goal_rep)
+            and not cls._is_operand_placeholder(c)
         ]
 
         if not plan_b_candidates:
@@ -217,6 +243,7 @@ class GoalReplanner:
                 f for f in fallbacks
                 if not cls.is_failed_strategy_instance(f, failed_action_type, f_payload)
                 and not cls._cannot_satisfy_goal_conditions(f.get("action_type"), goal_rep)
+                and not cls._is_operand_placeholder(f)
             ]
 
         replan_proposal = ActionPlanner.plan_and_evaluate_action(

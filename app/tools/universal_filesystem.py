@@ -229,6 +229,20 @@ class UniversalFilesystem:
         "msocache", "recovery", "onedrivetemp", "dist-info",
     }
 
+    # Content-type and device-discourse words that must never match ALONE in
+    # the token-tier fallback ('song kaba' must find kaba.mp3, not every
+    # song on the machine). They still participate in the full-phrase pass,
+    # which ranks strictly above the token tier. Mirrors the scope-inference
+    # rule that content-type words never narrow a search.
+    _GENERIC_TOKENS = frozenset({
+        "song", "songs", "music", "video", "videos", "movie", "movies",
+        "photo", "photos", "picture", "pictures", "image", "images",
+        "file", "files", "document", "documents", "audio", "media",
+        "folder", "folders",
+        "system", "systems", "computer", "machine", "laptop", "device",
+        "devices", "drive", "drives",
+    })
+
     _INDEX_TTL_S = 1800.0  # cache trusted for fast-path hits up to 30 min
 
     # ------------------------------------------------------------------
@@ -472,6 +486,37 @@ class UniversalFilesystem:
         query_norm = _re.sub(r"[^a-z0-9]+", "", query_lower)
         query_tokens = [t for t in _re.split(r"[^a-z0-9]+", query_lower) if len(t) >= 3]
 
+        # Distinctive tokens for the token-tier fallback: the query's
+        # content words, longest (most specific) first, minus generic
+        # type/device words. A contaminated compound query ('kaba on
+        # system play' — live owner report 2026-09-05) can never be a
+        # filename substring, but its distinctive token 'kaba' is: the
+        # file the user named must still be found. Phrase matches rank
+        # strictly above token matches.
+        #
+        # PRECONDITION — the query must be natural-language-shaped
+        # (multi-word, not ending in a file extension). A filename query
+        # ('zz_test_move_kaba.mp3') is PRECISE: decomposing it into words
+        # ('test', 'move') matches unrelated paths and can fill the
+        # result budget before the walk reaches the real exact match.
+        # Contamination and word-order problems happen in SENTENCES, not
+        # in filenames.
+        _q_words = query_raw.strip().split()
+        _filename_shaped = (
+            len(_q_words) <= 1
+            or bool(_re.search(r"\.\w{1,5}$", query_raw.strip()))
+        )
+        token_tier = [] if _filename_shaped else [
+            t for t in sorted(set(query_tokens), key=len, reverse=True)
+            if len(t) >= 4 and t not in cls._GENERIC_TOKENS
+        ]
+
+        def _token_hit(name_lower: str) -> Optional[str]:
+            for t in token_tier:
+                if t in name_lower:
+                    return t
+            return None
+
         # ── Indexed-provider fast path (P0 review #11) ─────────────────────
         # Everything-style indexed search answers over EVERY drive instantly
         # (live NTFS MFT); the Python walker stays as the fallback. Contract:
@@ -518,6 +563,7 @@ class UniversalFilesystem:
             app_logger.warning(f"File index fast path skipped ({exc}); using live walk.")
 
         exact: List[Dict[str, Any]] = []
+        tokened: List[Dict[str, Any]] = []
         fuzzy: List[Dict[str, Any]] = []
         deadline = _time.monotonic() + float(timeout_s)
 
@@ -627,33 +673,49 @@ class UniversalFilesystem:
                         index_batch.append((d, str(Path(root) / d), 1))
                         if query_lower in dl:
                             exact.append(_entry(Path(root) / d, d, True))
-                        elif (
-                            not exact
-                            and query_norm
-                            and len(fuzzy) < 30
-                            and _prefilter(dl)
-                            and _fuzzy_score(d) >= 0.78
-                        ):
-                            e = _entry(Path(root) / d, d, True)
-                            e["match"] = "fuzzy"
-                            e["fuzzy_score"] = round(_fuzzy_score(d), 2)
-                            fuzzy.append(e)
+                        elif not exact:
+                            tok = _token_hit(dl) if token_tier else None
+                            if tok is not None:
+                                e = _entry(Path(root) / d, d, True)
+                                e["match"] = "token"
+                                e["matched_token"] = tok
+                                tokened.append(e)
+                            elif (
+                                query_norm
+                                and len(fuzzy) < 30
+                                and _prefilter(dl)
+                                and _fuzzy_score(d) >= 0.78
+                            ):
+                                e = _entry(Path(root) / d, d, True)
+                                e["match"] = "fuzzy"
+                                e["fuzzy_score"] = round(_fuzzy_score(d), 2)
+                                fuzzy.append(e)
                     for f in files:
                         fl = f.lower()
                         index_batch.append((f, str(Path(root) / f), 0))
                         if query_lower in fl:
                             exact.append(_entry(Path(root) / f, f, False))
-                        elif (
-                            not exact
-                            and query_norm
-                            and len(fuzzy) < 30
-                            and _prefilter(fl)
-                            and _fuzzy_score(f) >= 0.78
-                        ):
-                            e = _entry(Path(root) / f, f, False)
-                            e["match"] = "fuzzy"
-                            e["fuzzy_score"] = round(_fuzzy_score(f), 2)
-                            fuzzy.append(e)
+                        elif not exact:
+                            tok = _token_hit(fl) if token_tier else None
+                            if tok is not None:
+                                e = _entry(Path(root) / f, f, False)
+                                e["match"] = "token"
+                                e["matched_token"] = tok
+                                tokened.append(e)
+                            elif (
+                                query_norm
+                                and len(fuzzy) < 30
+                                and _prefilter(fl)
+                                and _fuzzy_score(f) >= 0.78
+                            ):
+                                e = _entry(Path(root) / f, f, False)
+                                e["match"] = "fuzzy"
+                                e["fuzzy_score"] = round(_fuzzy_score(f), 2)
+                                fuzzy.append(e)
+                    # Only an EXACT phrase hit ends the walk early — the
+                    # file was found precisely. Token hits are provisional:
+                    # they must never stop the walk before a real exact
+                    # match (later in the tree) is reached.
                     if len(exact) >= max_results:
                         break
                     if len(index_batch) >= 4096:
@@ -669,6 +731,13 @@ class UniversalFilesystem:
 
         if exact:
             return exact[:max_results]
+        # Token tier: a distinctive query token matched as a substring
+        # ('kaba' inside 'Kaba - Song.mp3' when the contaminated phrase
+        # 'kaba on system play' could never match). Most-specific token
+        # hits first.
+        if tokened:
+            tokened.sort(key=lambda m: -len(m.get("matched_token") or ""))
+            return tokened[:max_results]
         # No exact hits anywhere → fuzzy candidates are the answer the owner
         # needs (typo'd title). Best scores first.
         fuzzy.sort(key=lambda m: -(m.get("fuzzy_score") or 0))

@@ -16,7 +16,7 @@ import importlib
 import inspect
 import types
 from threading import RLock
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.utils.logger import app_logger
 
@@ -272,6 +272,30 @@ def _wrap(fn: Callable[..., Any], *key_args: str) -> Callable[[Dict[str, Any]], 
             return fn(**kwargs)
         except ToolDependencyUnavailable as exc:
             return exc.as_result()
+
+    def _required_keys() -> List[str]:
+        """Payload keys the tool REQUIRES (no default), for callers that
+        must know BEFORE execution whether a candidate carries real
+        operands. Lazy (same dependency rules as the call path) and
+        exception-safe: unresolvable dependency -> [] (the handler will
+        report it honestly at execution time)."""
+        try:
+            sig = _signature()
+        except Exception:
+            return []
+        if sig is None:
+            return []
+        out = []
+        for n, p in sig.parameters.items():
+            if (
+                p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+                and p.default is p.empty
+                and n in key_args
+            ):
+                out.append(n)
+        return out
+
+    handler.arena_required_keys = _required_keys  # type: ignore[attr-defined]
     return _copy_availability(handler, fn)
 
 
@@ -285,6 +309,7 @@ def _ignore_payload(fn: Callable[[], Any]) -> Callable[[Dict[str, Any]], Any]:
             return fn()
         except ToolDependencyUnavailable as exc:
             return exc.as_result()
+    handler.arena_required_keys = lambda: []  # type: ignore[attr-defined]
     return _copy_availability(handler, fn)
 
 
@@ -987,3 +1012,34 @@ def get_tool_manifest() -> Dict[str, Dict[str, Any]]:
     if _TOOL_MANIFEST is None:
         _TOOL_MANIFEST = build_tool_manifest()
     return _TOOL_MANIFEST
+
+
+def payload_required_keys(action_type: str) -> List[str]:
+    """Payload keys the tool REQUIRES (aliases not yet resolved), without
+    executing anything. Empty list = tool needs no operands (safe to run
+    on a bare request) OR the action/dependency is unknown (the honest
+    execution-time report still applies). Lets planners distinguish a
+    real plan from a capability PLACEHOLDER before committing."""
+    try:
+        entry = get_tool_manifest().get(action_type) or {}
+        getter = getattr(entry.get("handler"), "arena_required_keys", None)
+        return list(getter()) if callable(getter) else []
+    except Exception:
+        return []
+
+
+def missing_required_payload_keys(
+    action_type: str, payload: Optional[Dict[str, Any]]
+) -> List[str]:
+    """Required payload keys NOT covered by `payload` (aliases included).
+    A candidate with missing keys is a discovery signal, not an executable
+    plan — executing it just converts a placeholder into a validation
+    error (live owner report 2026-09-05: 'find kaba and play it' replanned
+    into resize_image with no operands and the raw error became the reply)."""
+    payload = payload or {}
+    missing = []
+    for key in payload_required_keys(action_type):
+        alias = _PAYLOAD_KEY_ALIASES.get(key)
+        if key not in payload and (alias is None or alias not in payload):
+            missing.append(key)
+    return missing
