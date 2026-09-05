@@ -357,3 +357,51 @@ def test_exhausted_repairs_fail_honestly():
         assert get_shared_registry().effective_capability(name) is None
     finally:
         _cleanup(name)
+
+
+# -- GENERALITY (owner challenge 2026-09-05: "the fixes must apply to the
+# whole system, not just the diagnostic probes"). The D6 probe uses
+# reverse_words; this runs the SAME full pipeline for a completely
+# different capability shape - a word counter, a different prompt, a
+# different code body - and requires the same verified terminal state.
+# If the chain were fitted to reverse_words, this fails.
+
+WORDCOUNT_CODE = '''```python
+def execute_tool(params=None):
+    params = params or {}
+    text = str(params.get("text", "") or "")
+    return {"success": True,
+            "result": str(len(text.split())),
+            "details": {"chars": len(text)}}
+```'''
+
+
+def test_d6_pipeline_generalizes_beyond_the_diagnostic_probe(synth_llm_wc):
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+    from app.cognition.tool_registry import get_shared_registry
+
+    name = f"wordcount{uuid.uuid4().hex[:6]}"
+    _cleanup(name)
+    try:
+        res = CognitivePipeline.process_chat(
+            f"Create a new tool called {name} that takes a string and "
+            "returns the number of words in it. Write it, test it, and "
+            "install it as a permanent capability.")
+        assert res.get("action_type") == "synthesize_tool", res
+        entry = get_shared_registry().effective_capability(name)
+        assert entry is not None, "must install - not just answer"
+        out = get_shared_registry().execute_registered_tool(
+            name, {"text": "one two three four five"}) or {}
+        assert "5" in str(out.get("result", out.get("output", out))), out
+    finally:
+        _cleanup(name)
+
+
+@pytest.fixture()
+def synth_llm_wc():
+    """A working model whose code implements WORD COUNTING - a different
+    contract body than the reverse-words fixture."""
+    with patch("app.llm.llm_client.generate_chat_completion",
+               return_value={"choices": [{"message": {
+                   "role": "assistant", "content": WORDCOUNT_CODE}}]}):
+        yield

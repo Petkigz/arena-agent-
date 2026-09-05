@@ -358,3 +358,16 @@ def test_stale_config_warning_is_loud_once_then_debug(caplog):
     assert len(warnings_) == 1  # once loud
     assert len(client.fallback_events) == 3  # every decision still recorded
     assert fake.post_models == ["qwen/qwen3-14b"] * 3
+
+
+def test_auto_selection_generalizes_to_unseen_vendor_lists():
+    """No qwen anywhere: role scoring must still pick sensibly on a
+    vendor list it has never seen - largest general instruct for main,
+    smallest instruct for fast, embedder passed over."""
+    client = LocalLLMClient(base_url="http://test/v1")
+    unseen = ["gemma-2-9b-it", "mistral-7b-instruct-v0.3",
+              "llama-3.1-8b-instruct", "nomic-embed-text"]
+    assert client.select_loaded_fallback(
+        "auto", unseen, role="main") == "llama-3.1-8b-instruct"
+    assert client.select_loaded_fallback(
+        "auto", unseen, role="fast") == "mistral-7b-instruct-v0.3"
