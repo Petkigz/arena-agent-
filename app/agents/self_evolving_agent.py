@@ -11,6 +11,18 @@ from app.utils.logger import app_logger, audit_logger
 from app.llm import llm_client, ModelCompletionUnavailable, require_real_completion
 from app.tools.disposable_sandbox import DisposableSandbox
 
+def _bounded_result(res, n: int = 300) -> str:
+    """Bounded, key-defensive tail of a sandbox run result — the repair
+    prompt must carry the REAL failure evidence, never a raw dump."""
+    if isinstance(res, dict):
+        for key in ("output", "stdout", "stderr", "error", "result",
+                    "message"):
+            value = res.get(key)
+            if value:
+                return str(value)[:n]
+    return str(res)[:n]
+
+
 class SelfEvolvingAgent:
     """
     Self-Evolving & Dynamic Tool Synthesizer Engine.
@@ -22,6 +34,10 @@ class SelfEvolvingAgent:
     hotload if tests pass, then register in PluginRegistry + manifest. This is
     executable capability synthesis that is deterministic-verified, not hallucinated.
     """
+
+    # Bounded repair loop budget (review 2026-09-05): the model gets
+    # MAX_SYNTH_ATTEMPTS chances, each fed the previous failure evidence.
+    MAX_SYNTH_ATTEMPTS = 3
 
     DYNAMIC_TOOLS_DIR = settings.BASE_DIR / "app" / "tools"
     PLUGINS_DIR = settings.DATA_DIR / "plugins"
@@ -49,8 +65,13 @@ class SelfEvolvingAgent:
 
         app_logger.info(f"SelfEvolvingAgent synthesizing new Python tool module: '{module_filename}' for objective '{task_objective}'")
 
-        # 1. Prompt LLM to write self-contained Python tool code
-        prompt = (
+        # Bounded repair loop (review 2026-09-05, P2): the model
+        # PROPOSES; the sandbox DECIDES. A failed attempt is fed back to
+        # the model together with the sandbox's own failure evidence and
+        # retried, up to MAX_SYNTH_ATTEMPTS — self-evolution must not
+        # depend on the model being perfect on the first try, and it is
+        # never accepted without verification either.
+        base_prompt = (
             f"Write a clean, self-contained Python module file to solve this task objective: '{task_objective}'\n"
             f"Requirements:\n"
             f"1) Define a top-level function: def execute_tool(params: dict = None) -> dict:\n"
@@ -59,42 +80,6 @@ class SelfEvolvingAgent:
             f"4) Catch exceptions and return success=False with the real error; never fabricate completion.\n"
             f"5) Output ONLY executable Python code block inside ```python ... ```."
         )
-
-        llm_res = llm_client.generate_chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            complexity="main",
-            max_tokens=800
-        )
-
-        try:
-            raw_content = require_real_completion(llm_res)
-        except ModelCompletionUnavailable as exc:
-            return {
-                "success": False,
-                "verified": False,
-                "available": False,
-                "error": str(exc),
-                "tool_module_name": f"dynamic_{safe_name}",
-                "file_path": None,
-            }
-
-        # Extract python code block
-        if "```python" in raw_content:
-            code_block = raw_content.split("```python")[1].split("```")[0].strip()
-        elif "```" in raw_content:
-            code_block = raw_content.split("```")[1].split("```")[0].strip()
-        else:
-            code_block = raw_content.strip()
-
-        if not code_block or "def execute_tool" not in code_block:
-            return {
-                "success": False,
-                "verified": False,
-                "available": True,
-                "error": "Model output did not contain the required execute_tool implementation",
-                "tool_module_name": f"dynamic_{safe_name}",
-                "file_path": None,
-            }
 
         # 2. Generate pytest contract (deterministic verification)
         test_code = f'''
@@ -119,49 +104,123 @@ def test_execute_tool_handles_invalid():
     assert "success" in res
 '''
 
-        # 3. Test code inside DisposableSandbox first (both direct run + pytest)
-        sb = DisposableSandbox.create_sandbox(f"sb_synth_{safe_name}")
-        sandbox_id = sb["sandbox_id"]
-        sandbox_path = Path(sb["sandbox_path"])
+        attempts_used = 0
+        last_failure = "no attempt completed"
+        code_block = ""
+        sb_run: Dict[str, Any] = {"success": False, "error": last_failure}
+        pytest_res: Dict[str, Any] = {"success": False, "error": last_failure}
+        verified = False
+        direct_ok = False
+        pytest_ok = False
 
-        # Write module to sandbox
-        try:
-            (sandbox_path / f"dynamic_{safe_name}.py").write_text(code_block, encoding="utf-8")
-        except Exception:
-            pass
+        for attempt in range(1, cls.MAX_SYNTH_ATTEMPTS + 1):
+            attempts_used = attempt
+            prompt = base_prompt
+            if attempt > 1:
+                prompt += (
+                    f"\n\nYour previous attempt FAILED verification. "
+                    f"Previous code:\n"
+                    f"```python\n{code_block[:2000]}\n```\n"
+                    f"Failure evidence from the sandbox:\n{last_failure[:600]}\n"
+                    f"Fix the problem and return the COMPLETE corrected "
+                    f"module."
+                )
 
-        # Direct execution test — write runner file to avoid shell quoting
-        # hell. sys.executable (not bare 'python'): the SAME interpreter
-        # that runs Arena must run the generated code — a bare 'python'
-        # does not exist on many hosts (live: the sandboxed run would fail
-        # for a portability reason, not a code reason).
-        py = f'"{sys.executable}"' if " " in str(sys.executable) else str(sys.executable)
-        runner_code = (
-            f"import sys\n"
-            f"sys.path.insert(0, '.')\n"
-            f"exec(open('dynamic_{safe_name}.py').read())\n"
-            f"print(execute_tool({{'n': 10, 'objective': '{task_objective}'}}))\n"
-        )
-        try:
-            (sandbox_path / f"runner_{safe_name}.py").write_text(runner_code, encoding="utf-8")
-            sb_run = DisposableSandbox.run_in_sandbox(sandbox_id, f"{py} runner_{safe_name}.py")
-        except Exception as e:
-            sb_run = {"success": False, "error": str(e)}
-        
-        # Pytest run
-        try:
-            (sandbox_path / f"test_dynamic_{safe_name}.py").write_text(test_code, encoding="utf-8")
-            pytest_res = DisposableSandbox.run_in_sandbox(
-                sandbox_id, f"{py} -m pytest test_dynamic_{safe_name}.py -q")
-        except Exception as e:
-            pytest_res = {"success": False, "error": str(e)}
+            llm_res = llm_client.generate_chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                complexity="main",
+                max_tokens=800
+            )
 
-        DisposableSandbox.destroy_sandbox(sandbox_id)
+            try:
+                raw_content = require_real_completion(llm_res)
+            except ModelCompletionUnavailable as exc:
+                last_failure = f"model returned no usable completion: {exc}"
+                if attempt < cls.MAX_SYNTH_ATTEMPTS:
+                    app_logger.info(
+                        f"Synthesis attempt {attempt}/{cls.MAX_SYNTH_ATTEMPTS} "
+                        f"produced no usable completion — retrying")
+                    continue
+                return {
+                    "success": False,
+                    "verified": False,
+                    "available": False,
+                    "attempts": attempts_used,
+                    "error": f"No usable model completion in "
+                             f"{attempts_used} attempts: {exc}",
+                    "tool_module_name": f"dynamic_{safe_name}",
+                    "file_path": None,
+                }
 
-        # Decide if we should hotload: require direct run success OR pytest success
-        direct_ok = sb_run.get("success", False) if isinstance(sb_run, dict) else False
-        pytest_ok = pytest_res.get("success", False) if isinstance(pytest_res, dict) else False
-        verified = direct_ok or pytest_ok
+            # Extract python code block
+            if "```python" in raw_content:
+                code_block = raw_content.split("```python")[1].split("```")[0].strip()
+            elif "```" in raw_content:
+                code_block = raw_content.split("```")[1].split("```")[0].strip()
+            else:
+                code_block = raw_content.strip()
+
+            if not code_block or "def execute_tool" not in code_block:
+                last_failure = ("output did not contain the required "
+                                "execute_tool implementation")
+                app_logger.info(
+                    f"Synthesis attempt {attempt}/{cls.MAX_SYNTH_ATTEMPTS} "
+                    f"rejected: {last_failure} — requesting a repair")
+                continue
+
+            # 3. Test code inside DisposableSandbox first (both direct run + pytest)
+            sb = DisposableSandbox.create_sandbox(f"sb_synth_{safe_name}")
+            sandbox_id = sb["sandbox_id"]
+            sandbox_path = Path(sb["sandbox_path"])
+
+            # Write module to sandbox
+            try:
+                (sandbox_path / f"dynamic_{safe_name}.py").write_text(code_block, encoding="utf-8")
+            except Exception:
+                pass
+
+            # Direct execution test — write runner file to avoid shell quoting
+            # hell. sys.executable (not bare 'python'): the SAME interpreter
+            # that runs Arena must run the generated code — a bare 'python'
+            # does not exist on many hosts (live: the sandboxed run would fail
+            # for a portability reason, not a code reason).
+            py = f'"{sys.executable}"' if " " in str(sys.executable) else str(sys.executable)
+            runner_code = (
+                f"import sys\n"
+                f"sys.path.insert(0, '.')\n"
+                f"exec(open('dynamic_{safe_name}.py').read())\n"
+                f"print(execute_tool({{'n': 10, 'objective': '{task_objective}'}}))\n"
+            )
+            try:
+                (sandbox_path / f"runner_{safe_name}.py").write_text(runner_code, encoding="utf-8")
+                sb_run = DisposableSandbox.run_in_sandbox(sandbox_id, f"{py} runner_{safe_name}.py")
+            except Exception as e:
+                sb_run = {"success": False, "error": str(e)}
+
+            # Pytest run
+            try:
+                (sandbox_path / f"test_dynamic_{safe_name}.py").write_text(test_code, encoding="utf-8")
+                pytest_res = DisposableSandbox.run_in_sandbox(
+                    sandbox_id, f"{py} -m pytest test_dynamic_{safe_name}.py -q")
+            except Exception as e:
+                pytest_res = {"success": False, "error": str(e)}
+
+            DisposableSandbox.destroy_sandbox(sandbox_id)
+
+            # Decide if we should hotload: require direct run success OR pytest success
+            direct_ok = sb_run.get("success", False) if isinstance(sb_run, dict) else False
+            pytest_ok = pytest_res.get("success", False) if isinstance(pytest_res, dict) else False
+            verified = direct_ok or pytest_ok
+            if verified:
+                break
+            last_failure = (
+                f"sandbox verification rejected the code "
+                f"(direct_ok={direct_ok}, pytest_ok={pytest_ok}); "
+                f"direct output: {_bounded_result(sb_run, 300)}; "
+                f"pytest output: {_bounded_result(pytest_res, 300)}")
+            app_logger.info(
+                f"Synthesis attempt {attempt}/{cls.MAX_SYNTH_ATTEMPTS} "
+                f"failed sandbox verification — requesting a repair")
 
         # DIAG D6 (live 2026-09-01): 'Successfully created reverse_words'
         # was claimed while registry.effective_capability() found nothing —
@@ -249,7 +308,11 @@ def test_execute_tool_handles_invalid():
                                  "result": f"Install failed: {str(e)}",
                                  "details": {}}
         else:
-            app_logger.warning(f"Tool {module_filename} failed verification — NOT installed anywhere (direct_ok={direct_ok}, pytest_ok={pytest_ok})")
+            app_logger.warning(
+                f"Tool {module_filename} failed verification after "
+                f"{attempts_used} attempt(s) — NOT installed anywhere "
+                f"(direct_ok={direct_ok}, pytest_ok={pytest_ok}); last "
+                f"failure: {last_failure[:300]}")
 
         # Claim success ONLY when verified AND installed AND the installed
         # capability executed through the registry.
@@ -277,6 +340,8 @@ def test_execute_tool_handles_invalid():
             "task_objective": task_objective,
             "verified": verified,
             "installed": installed,
+            "attempts": attempts_used,
+            "last_failure": None if verified else last_failure,
             "direct_test": sb_run,
             "pytest_result": pytest_res,
             "live_execution_result": execution_res

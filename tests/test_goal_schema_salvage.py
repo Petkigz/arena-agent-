@@ -73,8 +73,12 @@ def test_compound_domain_representation_is_salvaged_not_discarded():
         assert step in conditions, (step, rep.success_conditions)
     # the compound domain is normalized to its first valid component
     assert rep.target_domain == "code"
-    # provenance is HONEST about the salvage
-    assert rep.provenance_source == "llm_schema_salvaged"
+    # Since 2026-09-05 compound domains are normalized AT VALIDATION
+    # (review P4) — the representation passes the strict schema, so it
+    # no longer routes through salvage. Provenance is the clean
+    # disambiguation path; the salvage layer remains for genuinely
+    # malformed representations.
+    assert rep.provenance_source == "llm_semantic_disambiguation"
     # and the model's goal phrase is used, not the heuristic's
     assert "requirements" in rep.goal.lower()
 

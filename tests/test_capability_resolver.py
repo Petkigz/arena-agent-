@@ -301,3 +301,38 @@ def test_d9_milestone_phrases_resolve_ready_in_the_runtime(tmp_path):
         assert status_map[p]["ready"] is True, (p, status_map[p])
         assert "alias match" in status_map[p]["evidence"], \
             (p, status_map[p]["evidence"])
+
+
+# ── disjunctive phrases (live 2026-09-05, review P3) ───────────────────
+
+def test_disjunctive_phrase_grounds_via_component():
+    """'Image recognition or duplicate detection software/tool' stayed
+    unresolved while its component grounds — the LLM lists several
+    candidate concepts in one capability line. The phrase must resolve
+    to the component's tool, with evidence naming the component."""
+    vocab = CapabilityResolver.build_vocabulary(
+        ["detect_duplicate_files", "search_files", "detect_faces"])
+    res = CapabilityResolver.resolve(
+        "Image recognition or duplicate detection software/tool", vocab)
+    assert res.resolved
+    assert res.tier == "disjunct"
+    assert res.canonical == "detect_duplicate_files"
+    assert "duplicate detection" in res.detail
+
+
+def test_conjunctive_phrases_are_not_split():
+    """'and' means every part is required — grounding only one part
+    would under-constrain the planner, so conjunctions stay whole (and
+    here: unresolved, honestly)."""
+    vocab = CapabilityResolver.build_vocabulary(
+        ["detect_duplicate_files", "search_files"])
+    res = CapabilityResolver.resolve(
+        "image recognition and duplicate detection", vocab)
+    assert not res.resolved
+
+
+def test_disjunct_with_no_grounding_component_stays_unresolved():
+    vocab = CapabilityResolver.build_vocabulary(["search_files"])
+    res = CapabilityResolver.resolve(
+        "photo scanning or file management", vocab)
+    assert not res.resolved

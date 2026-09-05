@@ -115,10 +115,23 @@ def _merge_bigrams(tokens):
     return merged
 
 
+_DISJUNCT_RE = re.compile(r"\s+(?:or|/)\s+|\s*/\s+|\s*,\s*")
+
+
+def _split_disjuncts(phrase: str):
+    """Split a capability phrase on DISJUNCTIONS only ('or', '/', ','),
+    keeping only components that still carry at least one content stem.
+    Returns [] when the phrase is not disjunctive."""
+    parts = [p.strip() for p in _DISJUNCT_RE.split(str(phrase or ""))]
+    parts = [p for p in parts if p and CapabilityResolver.phrase_stems(p)]
+    return parts if len(parts) > 1 else []
+
+
 @dataclass
 class CapabilityResolution:
     """One phrase's resolution outcome. `tier` is one of
-    'exact' | 'alias' | 'semantic' | 'unresolved'; `canonical` is a REAL
+    'exact' | 'alias' | 'disjunct' (component of an 'or'-phrase) |
+    'semantic' | 'unresolved'; `canonical` is a REAL
     vocabulary name (validated) or None."""
     phrase: str
     tier: str
@@ -242,6 +255,29 @@ class CapabilityResolver:
             return CapabilityResolution(
                 phrase, "alias", alias_target, alias_target,
                 f"alias match: '{phrase}' -> {alias_target}")
+
+        # ── tier 2.5: disjunctive phrases (live 2026-09-05: 'Image
+        # recognition or duplicate detection software/tool' stayed
+        # unresolved while its COMPONENT 'duplicate detection' grounds
+        # at the alias tier). The LLM routinely lists several candidate
+        # concepts in one capability line joined by 'or' / '/' / ','.
+        # Each component is resolved on its own; if one grounds, the
+        # phrase grounds to it — evidence names the component so the
+        # ladder stays honest about WHAT matched. Conjunctions ('and')
+        # are deliberately NOT split: a conjunctive requirement means
+        # every part is required, and grounding only one part would
+        # under-constrain the planner.
+        components = _split_disjuncts(phrase)
+        if len(components) > 1:
+            for component in components:
+                comp_res = cls.resolve(component, vocabulary)
+                if comp_res.resolved:
+                    return CapabilityResolution(
+                        phrase, "disjunct", comp_res.canonical,
+                        comp_res.canonical,
+                        f"component '{component}' of the disjunctive phrase "
+                        f"grounds ({comp_res.tier} tier): "
+                        f"{comp_res.detail}")
 
         # ── tier 3: semantic — strict stem overlap with real names.
         needed = max(1, math.ceil(cls.MIN_OVERLAP_RATIO * len(phrase_stems)))

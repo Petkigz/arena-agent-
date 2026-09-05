@@ -260,3 +260,100 @@ def test_d6_chat_pipeline_installs_and_executes_capability(synth_llm):
         assert "three two one" in got, out
     finally:
         _cleanup(name)
+
+
+# ── the repair loop (review 2026-09-05, P2): model proposes, sandbox ──
+# decides, failures feed back. Self-evolution must not depend on the
+# model being perfect on the first try — but it is never accepted
+# without verification either.
+
+BROKEN_NO_FUNC = "I would write a tool that reverses words, like this pseudo-code..."
+
+
+def test_repair_recovers_from_code_without_execute_tool():
+    """First attempt lacks the required contract; the repair prompt (fed
+    the rejection evidence) gets GOOD_CODE and the chain completes."""
+    from app.agents.self_evolving_agent import SelfEvolvingAgent
+    from app.cognition.tool_registry import get_shared_registry
+    name = _unique_tool_name()
+    calls = []
+
+    def _llm(messages, **kwargs):
+        calls.append(messages[0]["content"])
+        content = BROKEN_NO_FUNC if len(calls) == 1 else GOOD_CODE
+        return {"choices": [{"message": {
+            "role": "assistant", "content": content}}]}
+
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=_llm):
+        res = SelfEvolvingAgent.synthesize_and_hotload_tool(
+            task_objective="reverse the words in a string",
+            tool_name_query=name)
+    try:
+        assert res["success"] is True, res
+        assert res["attempts"] == 2, res
+        assert "FAILED verification" in calls[1]  # repair prompt carries evidence
+        assert get_shared_registry().effective_capability(name) is not None
+    finally:
+        _cleanup(name)
+
+
+def test_repair_recovers_from_sandbox_verification_failure():
+    """First attempt HAS execute_tool but the code itself is broken —
+    the SANDBOX rejects it, the failure output feeds the repair prompt,
+    and the second attempt installs."""
+    from app.agents.self_evolving_agent import SelfEvolvingAgent
+    from app.cognition.tool_registry import get_shared_registry
+    name = _unique_tool_name()
+    RAISES = ("```python\ndef execute_tool(params=None):\n"
+              "    raise RuntimeError('boom')\n```")
+    calls = []
+
+    def _llm(messages, **kwargs):
+        calls.append(messages[0]["content"])
+        content = RAISES if len(calls) == 1 else GOOD_CODE
+        return {"choices": [{"message": {
+            "role": "assistant", "content": content}}]}
+
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=_llm):
+        res = SelfEvolvingAgent.synthesize_and_hotload_tool(
+            task_objective="reverse the words in a string",
+            tool_name_query=name)
+    try:
+        assert res["success"] is True, res
+        assert res["attempts"] == 2, res
+        # the repair prompt carries the sandbox's own failure evidence
+        assert "boom" in calls[1] or "RuntimeError" in calls[1]
+        assert get_shared_registry().effective_capability(name) is not None
+    finally:
+        _cleanup(name)
+
+
+def test_exhausted_repairs_fail_honestly():
+    """Three unusable attempts: bounded loop, honest failure naming the
+    attempts, nothing installed anywhere."""
+    from app.agents.self_evolving_agent import SelfEvolvingAgent
+    from app.cognition.tool_registry import get_shared_registry
+    name = _unique_tool_name()
+    calls = []
+
+    def _llm(messages, **kwargs):
+        calls.append(1)
+        return {"choices": [{"message": {
+            "role": "assistant", "content": BROKEN_NO_FUNC}}]}
+
+    with patch("app.llm.llm_client.generate_chat_completion",
+               side_effect=_llm):
+        res = SelfEvolvingAgent.synthesize_and_hotload_tool(
+            task_objective="reverse the words in a string",
+            tool_name_query=name)
+    try:
+        assert res["success"] is False
+        assert res["attempts"] == SelfEvolvingAgent.MAX_SYNTH_ATTEMPTS == 3
+        assert len(calls) == 3  # bounded — no infinite repair loop
+        assert "execute_tool" in res["last_failure"]
+        assert res.get("installed") is not True
+        assert get_shared_registry().effective_capability(name) is None
+    finally:
+        _cleanup(name)

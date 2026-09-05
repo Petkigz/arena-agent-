@@ -459,14 +459,36 @@ class SemanticGoalInterpreter:
             if clean_intent not in cls.VALID_INTENTS:
                 errors.append(f"Invalid 'primary_intent_type' '{raw_intent}'. Must be one of {cls.VALID_INTENTS}")
 
-        # 2. Validate target domain
+        # 2. Validate target domain. Compound domains ('code/data',
+        # 'code+data', 'code, data') are the model's normal phrasing for
+        # compound requests — normalize to the FIRST valid component (its
+        # primary framing) instead of rejecting the whole representation
+        # and routing it through salvage (live 2026-09-05: this happened
+        # on every compound-goal diag turn). Genuinely invalid domains
+        # (no valid component) still fail validation.
         raw_domain = parsed_json.get("target_domain")
         if not raw_domain or not isinstance(raw_domain, str):
             errors.append("Missing or non-string 'target_domain'")
         else:
             clean_domain = raw_domain.lower().strip()
-            if clean_domain not in cls._valid_domains():
-                errors.append(f"Invalid 'target_domain' '{raw_domain}'. Must be one of {sorted(cls._valid_domains())}")
+            valid = cls._valid_domains()
+            if clean_domain not in valid:
+                components = [c for c in
+                              re.split(r"[^a-z0-9_]+", clean_domain) if c]
+                primary = next(
+                    (c for c in components if c in valid), None)
+                if primary is not None:
+                    app_logger.info(
+                        "Normalized compound target_domain "
+                        f"'{raw_domain}' -> '{primary}' (first valid "
+                        "component)")
+                    clean_domain = primary
+                    parsed_json = {**parsed_json,
+                                   "target_domain": primary}
+                else:
+                    errors.append(
+                        f"Invalid 'target_domain' '{raw_domain}'. Must be "
+                        f"one of {sorted(valid)}")
 
         # 3. Validate goal & desired outcome
         goal = parsed_json.get("goal")

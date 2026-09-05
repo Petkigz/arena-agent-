@@ -83,7 +83,12 @@ class ScreenCaptureTool:
         try:
             from PIL import Image
             img = Image.open(image_path).convert("L").resize((8, 8), Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS)
-            pixels = list(img.getdata())
+            # Pillow >= 13 deprecates getdata (removal in 14); use
+            # get_flattened_data where present, keep getdata for the
+            # Pillow versions that do not have it yet.
+            pixels = list(img.get_flattened_data()
+                           if hasattr(img, "get_flattened_data")
+                           else img.getdata())
             avg = sum(pixels) / len(pixels)
             # Build 64-bit hash: 1 if pixel > avg else 0
             bits = "".join("1" if p > avg else "0" for p in pixels)
