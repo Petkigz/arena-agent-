@@ -166,7 +166,10 @@ class _FakeModelsResp:
 def test_env_row_names_the_runtime_fallback_when_model_not_loaded(monkeypatch):
     """The paste-back must show WHICH loaded model the runtime will use
     when the configured one is missing (live 2026-09-01: qwen2.5-9b-instruct
-    NOT loaded while qwen3.5-9b was)."""
+    NOT loaded while qwen3.5-9b was). Since 2026-09-05 the runtime pick is
+    role-scored — the best loaded model for the route (qwen/qwen3-14b on
+    the owner's real list), not the id closest to the stale config — and
+    the row names the escape hatches (auto / pin a loaded id)."""
     import httpx as _httpx
     from app.config import settings
     loaded = ["qwen2.5-3b-instruct", "qwen3.5-9b", "qwen/qwen3-14b",
@@ -185,10 +188,35 @@ def test_env_row_names_the_runtime_fallback_when_model_not_loaded(monkeypatch):
     rows = {r["name"]: r for r in od.RESULTS}
     main_row = rows["model for main route: qwen2.5-9b-instruct"]
     assert main_row["status"] == "fail"  # the config is still wrong
-    assert "qwen3.5-9b" in main_row["detail"]
-    assert "runtime will use" in main_row["detail"]
+    assert "qwen/qwen3-14b" in main_row["detail"]
+    assert "auto-picks" in main_row["detail"]
+    assert "MAIN_MODEL=auto" in main_row["detail"]
     fast_row = rows["model for fast route: qwen2.5-3b-instruct"]
     assert fast_row["status"] == "pass"
+
+
+def test_env_row_auto_mode_reports_the_role_scored_pick(monkeypatch):
+    """MAIN_MODEL=auto: the env row becomes a PASS naming the pick — a
+    policy decision, not a config error."""
+    import httpx as _httpx
+    from app.config import settings
+    loaded = ["qwen2.5-3b-instruct", "qwen3.5-9b", "qwen/qwen3-14b",
+              "qwen2.5-vl-3b-instruct", "qwen2.5-coder-7b-instruct",
+              "omnicoder-qwen3.5-9b-claude-4.6-opus-uncensored-v2"]
+    monkeypatch.setattr(settings, "MAIN_MODEL", "auto")
+    monkeypatch.setattr(settings, "FAST_MODEL", "qwen2.5-3b-instruct")
+
+    def _fake_get(url, timeout=None):
+        return _FakeModelsResp({"data": [{"id": m} for m in loaded]})
+
+    monkeypatch.setattr(_httpx, "get", _fake_get)
+    od.RESULTS.clear()
+    status, _ = od.lm_studio_reachability()
+    assert status == "pass"
+    rows = {r["name"]: r for r in od.RESULTS}
+    main_row = rows["model for main route: auto"]
+    assert main_row["status"] == "pass"
+    assert "qwen/qwen3-14b" in main_row["detail"]
 
 
 def test_env_row_exact_match_no_substring_false_positive(monkeypatch):

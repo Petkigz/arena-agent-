@@ -84,8 +84,8 @@ def lm_studio_reachability() -> Tuple[str, str]:
         models = [m.get("id") for m in res.json().get("data", [])]
         record("env", "loaded models", "pass",
                f"{len(models)}: {', '.join(str(m) for m in models[:6])}")
-        want = {settings.FAST_MODEL: "fast route",
-                settings.MAIN_MODEL: "main route"}
+        want = {settings.FAST_MODEL: "fast",
+                settings.MAIN_MODEL: "main"}
         # Exact id match only (a leading '<vendor>/' prefix is stripped —
         # 'qwen/qwen3-14b' is 'qwen3-14b'). A substring test would report
         # 'qwen3.5-9b' as loaded when only the 'omnicoder-qwen3.5-9b-…'
@@ -97,19 +97,38 @@ def lm_studio_reachability() -> Tuple[str, str]:
             return str(model_id) in ids or str(model_id) in stripped
         from app.llm import llm_client
         for model_id, role in want.items():
-            if _loaded(model_id):
-                record("env", f"model for {role}: {model_id}", "pass",
-                       "loaded")
+            label = f"model for {role} route"
+            configured = str(model_id or "").strip()
+            if configured.lower() in ("", "auto"):
+                # MAIN_MODEL/FAST_MODEL=auto: the runtime scans the loaded
+                # models and uses the best one for the route (role-scored:
+                # size, chat tuning, specialism — never closeness to a
+                # stale id, and fine-tunes are never excluded for their
+                # tuning). That is a policy, not a failure.
+                picked = llm_client.select_loaded_fallback(
+                    "auto", models, role=role)
+                record("env", f"{label}: auto", "pass" if picked else "fail",
+                       f"auto → '{picked}' (role-scored best loaded {role} "
+                       f"model)" if picked else
+                       "auto set but no chat-capable model is loaded")
+                continue
+            if _loaded(configured):
+                record("env", f"{label}: {configured}", "pass", "loaded")
             else:
-                # The runtime now routes to the closest loaded model
-                # (llm.py, P1 2026-09-01) — name that decision in the
-                # paste-back so the mitigation is visible, while the row
-                # itself stays FAIL: the config is still wrong.
-                chosen = llm_client.select_loaded_fallback(model_id, models)
-                detail = (f"NOT loaded — runtime will use '{chosen}'"
+                # The runtime routes to the best loaded model for the
+                # route (llm.py, 2026-09-05 role-scored selection) — name
+                # that decision and the escape hatches in the paste-back,
+                # while the row itself stays FAIL: the config is still
+                # not pointing at a loaded id.
+                chosen = llm_client.select_loaded_fallback(
+                    configured, models, role=role)
+                detail = (f"NOT loaded — runtime auto-picks '{chosen}' "
+                          f"(best loaded {role} model); set "
+                          f"{role.upper()}_MODEL=auto or a loaded id"
                           if chosen else
-                          "NOT loaded — no other models loaded; simulation")
-                record("env", f"model for {role}: {model_id}", "fail", detail)
+                          "NOT loaded — no other usable models loaded; "
+                          "simulation")
+                record("env", f"{label}: {configured}", "fail", detail)
         return "pass", f"reachable at {base} ({elapsed:.0f} ms)"
     except Exception as exc:
         return "fail", f"LM Studio unreachable at {base}: {exc}"

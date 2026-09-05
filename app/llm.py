@@ -172,6 +172,17 @@ def active_token_budget_status() -> Optional[Dict[str, Any]]:
     return ledger.summary() if ledger is not None else None
 
 
+# Role-scored selection (owner request 2026-09-05): rank every LOADED
+# model for the ROUTE it must serve, not for closeness to a stale
+# configured id. A fine-tune is never excluded for its tuning
+# ('uncensored', merges, RP edits compete on the same scale); only
+# non-chat tools (embedders, rerankers, guards, speech) are passed over
+# for chat routes — a role judgment, not a quality judgment.
+_CHAT_TUNING_TOKENS = frozenset({"instruct", "chat", "chatml"})
+_NON_CHAT_TAGS = ("embed", "rerank", "guard", "whisper", "tts",
+                  "voice", "clip", "bge-", "retriev")
+
+
 class LocalLLMClient:
     # Model-availability routing (P1, live 2026-09-01): a request for a
     # model that is not loaded used to go straight to HTTP 400 and then to
@@ -247,13 +258,30 @@ class LocalLLMClient:
         return models
 
     @staticmethod
-    def _fallback_score(requested: str, candidate: str) -> float:
-        """Closeness heuristic between an unavailable requested model id
-        and a loaded candidate: same letter-prefix family (qwen vs llama),
-        explicit chat tuning ('instruct'/'chat'), similar parameter count,
-        general-purpose rather than vision- or code-specialized. This is a
-        PREFERENCE RANKING for picking the least-surprising stand-in — it
-        is not a capability claim about either model."""
+    def _normalize_model_id(model_id: str) -> str:
+        """Comparable form of a provider model id: lowercase, vendor
+        prefix dropped ('qwen/qwen3-14b' -> 'qwen3-14b'), .gguf/-gguf
+        suffix dropped. Used to satisfy a CONFIGURED id under a drifting
+        provider-side id — the same model, so it is not a fallback."""
+        mid = str(model_id or "").strip().lower()
+        if "/" in mid:
+            mid = mid.split("/", 1)[1]
+        for suffix in (".gguf", "-gguf"):
+            if mid.endswith(suffix):
+                mid = mid[: -len(suffix)]
+        return mid
+
+    @staticmethod
+    def _role_score(candidate: str, role: str,
+                    family_hint: str = "") -> Optional[float]:
+        """Best-model score of `candidate` for `role` ('main' or 'fast'):
+        parameter count is the anchor (within a family it tracks general
+        capability), +3 for explicit chat tuning (instruction following
+        is what the agent routes need), -1.5 code-specialized, -4
+        vision-specialized (weaker per-size text reasoners), +0.5 when
+        the family matches a requested id (mild tie preference so a
+        same-family stand-in wins ties). Returns None for non-chat
+        tools. A PREFERENCE RANKING, not a capability claim."""
         def _tokens(s: str) -> List[str]:
             return re.split(r"[^a-z0-9.]+", str(s or "").lower()) or [""]
         def _family(s: str) -> str:
@@ -265,57 +293,76 @@ class LocalLLMClient:
                 if m:
                     return float(m.group(1))
             return None
-        score = 0.0
-        if _family(requested) and _family(requested) == _family(candidate):
-            score += 2.0
-        cand_lower = str(candidate).lower()
-        if "instruct" in cand_lower or "chat" in cand_lower:
-            score += 2.0
-        if "coder" in cand_lower or "-code" in cand_lower:
-            score -= 1.0
-        if "-vl" in cand_lower or "vision" in cand_lower:
-            score -= 2.0
-        req_params = _params(_tokens(requested))
-        cand_params = _params(_tokens(candidate))
-        if req_params is not None and cand_params is not None:
-            score += max(0.0, 3.0 - abs(req_params - cand_params))
-            if req_params == cand_params:
-                score += 1.0
-        return score
+        lower = str(candidate or "").lower()
+        if any(tag in lower for tag in _NON_CHAT_TAGS):
+            return None
+        tokens = _tokens(candidate)
+        params = _params(tokens) or 0.0
+        tuning = 3.0 if any(t in _CHAT_TUNING_TOKENS
+                            for t in tokens) else 0.0
+        specialism = 0.0
+        if "coder" in lower or "-code" in lower:
+            specialism -= 1.5
+        if "-vl" in lower or "vision" in lower:
+            specialism -= 4.0
+        family = 0.5
+        if not (family_hint and _family(candidate) == family_hint):
+            family = 0.0
+        if role == "fast":
+            return -params + tuning + specialism + family
+        return params + tuning + specialism + family
 
     def select_loaded_fallback(
         self, requested: str, loaded: Optional[List[str]],
-        exclude=frozenset(),
+        exclude=frozenset(), role: str = "main",
     ) -> Optional[str]:
-        """Pick the closest LOADED model for an unavailable `requested`
-        id, or None when there is nothing else to pick (the requested id
-        itself is never its own fallback). Deterministic: highest
-        closeness score, ties broken by lexicographic id."""
+        """Pick the best LOADED model for `role` when the `requested` id
+        is unavailable ('auto'/'' means no family hint), or None when
+        nothing chat-capable is loaded. `requested` is never its own
+        fallback. Deterministic: highest role score, ties broken by
+        lexicographic id."""
+        requested_key = str(requested or "").strip().lower()
+        hint = ""
+        if requested_key not in ("", "auto"):
+            m = re.match(r"[a-z]+", requested_key)
+            hint = m.group(0) if m else ""
         candidates = [m for m in (loaded or [])
                       if m != requested and m not in exclude]
-        if not candidates:
+        scored = [(self._role_score(c, role, hint), c) for c in candidates]
+        eligible = [(s, c) for s, c in scored if s is not None]
+        if not eligible:
             return None
-        return min(
-            candidates,
-            key=lambda c: (-self._fallback_score(requested, c), c),
-        )
+        return min(eligible, key=lambda sc: (-sc[0], sc[1]))[1]
 
-    def _resolve_model(self, requested: str) -> "Tuple[str, Optional[Dict[str, Any]]]":
+    def _resolve_model(
+        self, requested: str, role: str = "main",
+    ) -> "Tuple[str, Optional[Dict[str, Any]]]":
         """The routing decision: is the requested model actually loaded?
-        YES -> use it. NO -> closest loaded fallback (or the requested
-        model itself when the probe is unavailable/empty, so the request
-        path can fail honestly rather than invent a selection)."""
+        YES -> use it. Loaded under an equivalent id (vendor prefix or
+        .gguf drift) -> use the PROVIDER's id, silently (same model, not
+        a fallback). NO -> the best loaded model for the route (or the
+        requested model itself when the probe is unavailable/empty, so
+        the request path can fail honestly rather than invent a
+        selection)."""
         loaded = self.list_loaded_models()
         if loaded is None or requested in loaded:
             return requested, None
-        fallback = self.select_loaded_fallback(requested, loaded)
+        norm = self._normalize_model_id(requested)
+        if norm:
+            matches = [m for m in loaded
+                       if self._normalize_model_id(m) == norm and m != requested]
+            if len(matches) == 1:
+                return matches[0], None
+        fallback = self.select_loaded_fallback(requested, loaded, role=role)
         if fallback is None:
             return requested, None
         return fallback, {
             "requested": requested,
             "used": fallback,
-            "reason": "requested model not loaded; selected the closest "
-                      "loaded model (family/chat-tuning/size heuristic)",
+            "role": role,
+            "reason": "requested model not loaded; selected the best "
+                      f"loaded {role} model (role-scored: size, chat "
+                      "tuning, specialism)",
         }
 
     def _record_fallback(self, info: Dict[str, Any]) -> None:
@@ -377,14 +424,35 @@ class LocalLLMClient:
         unreachable or nothing usable is loaded.
         """
         requested_model = self.route_request(complexity)
-        model, fallback_info = self._resolve_model(requested_model)
+        role = complexity if complexity in ("fast", "main") else "main"
+        if str(requested_model or "").strip().lower() in ("", "auto"):
+            # MAIN_MODEL/FAST_MODEL=auto: scan the loaded models and use
+            # the best one for the route (role-scored). Observable as a
+            # fallback event, logged INFO — a policy decision, not a
+            # failure.
+            picked = self.select_loaded_fallback(
+                "auto", self.list_loaded_models(), role=role)
+            if picked:
+                self._record_fallback({
+                    "requested": "auto", "used": picked, "role": role,
+                    "reason": f"MAIN_MODEL/FAST_MODEL=auto: role-scored "
+                              f"selection for the {role} route",
+                })
+                app_logger.info(
+                    f"Model auto-selection ({role} route): using "
+                    f"'{picked}'. Set MAIN_MODEL/FAST_MODEL to a loaded "
+                    f"id to pin one.")
+                requested_model = picked
+        model, fallback_info = self._resolve_model(requested_model, role)
         if fallback_info:
             self._record_fallback(fallback_info)
             app_logger.warning(
                 f"LLM model '{fallback_info['requested']}' is not loaded; "
-                f"using loaded model '{fallback_info['used']}' instead. "
-                f"Load '{fallback_info['requested']}' in LM Studio or update "
-                f"MAIN_MODEL/FAST_MODEL to remove this fallback.")
+                f"using loaded model '{fallback_info['used']}' instead "
+                f"(best loaded {fallback_info.get('role', 'main')} model). "
+                f"Load '{fallback_info['requested']}' in LM Studio, set "
+                f"MAIN_MODEL/FAST_MODEL=auto to always use the best "
+                f"loaded model, or set it to a loaded id to pin one.")
         # P0 review #10: the reasoning budget is REAL. Under an active
         # reasoning_token_budget scope no component may exceed the cycle's
         # remaining token budget — request 8192 under a 2048 budget and the
