@@ -101,7 +101,18 @@ class MessageRouter:
 
     def __init__(self, runtime: CognitiveRuntime):
         self.runtime = runtime
-        self._processing_tasks: Dict[str, asyncio.Task] = {}
+        # Per-conversation serialization (owner report 2026-09-05: the
+        # exported chat showed replies next to the WRONG questions).
+        # Messages arrive from several sockets at once — desktop, web
+        # tabs, phone, voice ingestion — and each handler appends the
+        # assistant reply at COMPLETION time. Without ordering, a slow
+        # reply lands in history AFTER the next question, and every
+        # later view (history hydration, export) shows mismatched pairs.
+        # One lock per conversation: the question and its reply persist
+        # adjacent, in arrival order, whoever asked and however slow the
+        # cycle. (The old _processing_tasks dict was declared and never
+        # used — serialization was planned, never built.)
+        self._conversation_locks: Dict[str, asyncio.Lock] = {}
         self._rate_limits: Dict[str, List[float]] = {}  # conversation_id -> timestamps
         self._rate_limit_max = 30  # max messages per minute
         self._rate_limit_window = 60  # seconds
@@ -113,6 +124,23 @@ class MessageRouter:
         """Inject voice service for voice message handling."""
         self.voice_service = voice_service
         app_logger.info("Voice service injected into message router")
+
+    def _conversation_lock(self, conversation_id: str) -> asyncio.Lock:
+        """The per-conversation ordering lock (created on first use).
+
+        The dict is created lazily too: several tests build the router via
+        MessageRouter.__new__ (no __init__), and any construction path must
+        get ordering, not an AttributeError.
+        """
+        locks = getattr(self, "_conversation_locks", None)
+        if locks is None:
+            locks = {}
+            self._conversation_locks = locks
+        lock = locks.get(conversation_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            locks[conversation_id] = lock
+        return lock
 
     def _check_rate_limit(self, conversation_id: str) -> bool:
         """Check if conversation has exceeded rate limit. Returns True if allowed."""
@@ -205,130 +233,140 @@ class MessageRouter:
             "status": "processing"
         })
 
-        # Store user message in history
-        message_id = f"msg_{uuid.uuid4().hex[:12]}"
-        add_to_history(conversation_id, "user", content, message_id=message_id)
+        # Ordering (owner report 2026-09-05: the exported chat showed
+        # replies beside the WRONG questions). Messages arrive from
+        # several sockets at once (desktop, web tabs, phone, voice
+        # ingestion), and without serialization the QUESTION of a second
+        # message can persist before the REPLY of the first — every
+        # later view (history hydration, export) then shows mismatched
+        # pairs. The question append, processing, reply append and token
+        # stream are one ordered section per conversation. See
+        # _conversation_locks.
+        async with self._conversation_lock(conversation_id):
+            # Store user message in history
+            message_id = f"msg_{uuid.uuid4().hex[:12]}"
+            add_to_history(conversation_id, "user", content, message_id=message_id)
 
-        # The assistant reply gets its OWN id: clients match streamed tokens and
-        # action steps against it. Sharing the user's id would make other
-        # clients append the reply onto the sender's message bubble.
-        assistant_message_id = f"msg_{uuid.uuid4().hex[:12]}"
+            # The assistant reply gets its OWN id: clients match streamed tokens and
+            # action steps against it. Sharing the user's id would make other
+            # clients append the reply onto the sender's message bubble.
+            assistant_message_id = f"msg_{uuid.uuid4().hex[:12]}"
 
-        # Cross-client sync: broadcast the question to the room so every
-        # client (web tabs, desktop) renders messages from the others, not
-        # just the replies. Named room_message to avoid the client->server
-        # user_message type; clients dedupe their own pending copy.
-        await ws_manager.send_to_conversation(conversation_id, {
-            "type": "room_message",
-            "conversation_id": conversation_id,
-            "message_id": message_id,
-            "content": content,
-        })
-
-        # Owner-wide signal: every UI (even ones parked in other rooms) learns
-        # that this conversation is now the most recently active, so they can
-        # refresh their list / follow the owner's chat across devices.
-        try:
-            await ws_manager.broadcast_to_all({
-                "type": "conversation_activity",
-                "conversation_id": conversation_id,
-            })
-        except Exception as exc:
-            app_logger.warning(f"Could not broadcast conversation activity: {exc}")
-
-        try:
-            # Generate action steps based on content analysis
-            action_steps = self._generate_action_steps(content)
-
-            # Send action steps as they progress (attached to the assistant
-            # reply so every UI can render them on the streaming bubble).
-            for step in action_steps:
-                step["status"] = "in_progress"
-                await ws_manager.send_to_conversation(conversation_id, {
-                    "type": "action_step",
-                    "conversation_id": conversation_id,
-                    "message_id": assistant_message_id,
-                    **step,
-                })
-                await asyncio.sleep(0.2)
-
-                step["status"] = "complete"
-                await ws_manager.send_to_conversation(conversation_id, {
-                    "type": "action_step",
-                    "conversation_id": conversation_id,
-                    "message_id": assistant_message_id,
-                    **step,
-                })
-
-            # Build conversational history for the runtime. The user message
-            # was JUST appended by add_to_history above, so drop it — the
-            # runtime re-appends the current turn itself.
-            history = get_conversation_history(conversation_id)
-            if history and history[-1].get("role") == "user" and history[-1].get("content") == content:
-                history = history[:-1]
-
-            # Route through the authoritative cognitive runtime (world model, beliefs,
-            # reasoning loop, goal verification, memory) rather than a raw LLM call.
-            # P2: Pass multimodal context (image_path, attachments) so vision is grounded
-            response_text = await self._call_cognitive_runtime(
-                content,
-                image_path=image_path,
-                audio_path=audio_path,
-                attachments=attachments,
-                conversation_id=conversation_id,
-                conversation_history=history[-16:],
-            )
-
-            # Surface the exact pending scope to the owner. This event is only a
-            # request; approval mints a separate short-lived authorization grant.
-            try:
-                from app.cognition.approval_store import approval_store
-                pending = [
-                    req for req in approval_store.list_pending()
-                    if req.conversation_id == conversation_id
-                ]
-                if pending:
-                    latest = max(pending, key=lambda req: req.created_at)
-                    await ws_manager.send_to_conversation(conversation_id, {
-                        "type": "approval_request",
-                        "conversation_id": conversation_id,
-                        **latest.to_dict(),
-                    })
-            except Exception as exc:
-                app_logger.warning(f"Could not surface approval request: {exc}")
-
-            # Store assistant response in history BEFORE streaming the final
-            # token. The response text is already final here, and persisting
-            # first guarantees that any client which sees `done: true` and
-            # immediately re-fetches history (e.g. a second device syncing)
-            # will see the full reply instead of a stale history.
-            add_to_history(conversation_id, "assistant", response_text, message_id=assistant_message_id)
-
-            # Stream response tokens to client
-            tokens = self._tokenize_response(response_text) or [" "]
-            for i, token in enumerate(tokens):
-                is_done = i == len(tokens) - 1
-                await ws_manager.send_to_conversation(conversation_id, {
-                    "type": "message_token",
-                    "conversation_id": conversation_id,
-                    "message_id": assistant_message_id,
-                    "token": token,
-                    "done": is_done,
-                })
-                await asyncio.sleep(0.02)  # Simulate natural typing speed
-            return response_text
-
-        except asyncio.CancelledError:
-            app_logger.info(f"Message processing cancelled for {conversation_id}")
-            raise
-        except Exception as e:
-            app_logger.error(f"Error processing message: {e}", exc_info=True)
+            # Cross-client sync: broadcast the question to the room so every
+            # client (web tabs, desktop) renders messages from the others, not
+            # just the replies. Named room_message to avoid the client->server
+            # user_message type; clients dedupe their own pending copy.
             await ws_manager.send_to_conversation(conversation_id, {
-                "type": "error",
+                "type": "room_message",
                 "conversation_id": conversation_id,
-                "message": f"Error processing message: {str(e)}"
+                "message_id": message_id,
+                "content": content,
             })
-            return None
+
+            # Owner-wide signal: every UI (even ones parked in other rooms) learns
+            # that this conversation is now the most recently active, so they can
+            # refresh their list / follow the owner's chat across devices.
+            try:
+                await ws_manager.broadcast_to_all({
+                    "type": "conversation_activity",
+                    "conversation_id": conversation_id,
+                })
+            except Exception as exc:
+                app_logger.warning(f"Could not broadcast conversation activity: {exc}")
+
+            try:
+                # Generate action steps based on content analysis
+                action_steps = self._generate_action_steps(content)
+
+                # Send action steps as they progress (attached to the assistant
+                # reply so every UI can render them on the streaming bubble).
+                for step in action_steps:
+                    step["status"] = "in_progress"
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "action_step",
+                        "conversation_id": conversation_id,
+                        "message_id": assistant_message_id,
+                        **step,
+                    })
+                    await asyncio.sleep(0.2)
+
+                    step["status"] = "complete"
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "action_step",
+                        "conversation_id": conversation_id,
+                        "message_id": assistant_message_id,
+                        **step,
+                    })
+
+                # Build conversational history for the runtime. The user message
+                # was JUST appended by add_to_history above, so drop it — the
+                # runtime re-appends the current turn itself.
+                history = get_conversation_history(conversation_id)
+                if history and history[-1].get("role") == "user" and history[-1].get("content") == content:
+                    history = history[:-1]
+
+                # Route through the authoritative cognitive runtime (world model, beliefs,
+                # reasoning loop, goal verification, memory) rather than a raw LLM call.
+                # P2: Pass multimodal context (image_path, attachments) so vision is grounded
+                response_text = await self._call_cognitive_runtime(
+                    content,
+                    image_path=image_path,
+                    audio_path=audio_path,
+                    attachments=attachments,
+                    conversation_id=conversation_id,
+                    conversation_history=history[-16:],
+                )
+
+                # Surface the exact pending scope to the owner. This event is only a
+                # request; approval mints a separate short-lived authorization grant.
+                try:
+                    from app.cognition.approval_store import approval_store
+                    pending = [
+                        req for req in approval_store.list_pending()
+                        if req.conversation_id == conversation_id
+                    ]
+                    if pending:
+                        latest = max(pending, key=lambda req: req.created_at)
+                        await ws_manager.send_to_conversation(conversation_id, {
+                            "type": "approval_request",
+                            "conversation_id": conversation_id,
+                            **latest.to_dict(),
+                        })
+                except Exception as exc:
+                    app_logger.warning(f"Could not surface approval request: {exc}")
+
+                # Store assistant response in history BEFORE streaming the final
+                # token. The response text is already final here, and persisting
+                # first guarantees that any client which sees `done: true` and
+                # immediately re-fetches history (e.g. a second device syncing)
+                # will see the full reply instead of a stale history.
+                add_to_history(conversation_id, "assistant", response_text, message_id=assistant_message_id)
+
+                # Stream response tokens to client
+                tokens = self._tokenize_response(response_text) or [" "]
+                for i, token in enumerate(tokens):
+                    is_done = i == len(tokens) - 1
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "message_token",
+                        "conversation_id": conversation_id,
+                        "message_id": assistant_message_id,
+                        "token": token,
+                        "done": is_done,
+                    })
+                    await asyncio.sleep(0.02)  # Simulate natural typing speed
+                return response_text
+
+            except asyncio.CancelledError:
+                app_logger.info(f"Message processing cancelled for {conversation_id}")
+                raise
+            except Exception as e:
+                app_logger.error(f"Error processing message: {e}", exc_info=True)
+                await ws_manager.send_to_conversation(conversation_id, {
+                    "type": "error",
+                    "conversation_id": conversation_id,
+                    "message": f"Error processing message: {str(e)}"
+                })
+                return None
 
     async def _call_cognitive_runtime(
         self,

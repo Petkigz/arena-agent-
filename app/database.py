@@ -287,20 +287,29 @@ class DatabaseManager:
             conn.commit()
             return cursor.lastrowid
 
-    def get_conversation_messages(self, conversation_id: str, limit: int = 50) -> List[Dict[str, str]]:
+    def get_conversation_messages(
+        self, conversation_id: str, limit: Optional[int] = 50,
+    ) -> List[Dict[str, str]]:
+        """`limit=None` returns the FULL history (the server-side chat
+        export needs every message — the owner report 2026-09-05: a
+        client-side export can only export what it hydrated, capped at
+        the last 50, with hydration-time timestamps)."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, role, content FROM conversations "
+                "SELECT id, role, content, created_at FROM conversations "
                 "WHERE conversation_id = ? ORDER BY id ASC",
                 (conversation_id,),
             )
             rows = cursor.fetchall()
             # Return the most recent `limit` messages, preserving order. The row
-            # id is exposed as message_id for cross-client dedupe.
+            # id is exposed as message_id for cross-client dedupe; created_at
+            # is the message's REAL time (exports show it, not hydration time).
+            selected = rows if limit is None else rows[-limit:]
             return [
-                {"message_id": r["id"], "role": r["role"], "content": r["content"]}
-                for r in rows[-limit:]
+                {"message_id": r["id"], "role": r["role"],
+                 "content": r["content"], "created_at": r["created_at"]}
+                for r in selected
             ]
 
     def get_conversation_ids(self) -> List[str]:

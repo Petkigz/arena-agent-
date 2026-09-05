@@ -104,3 +104,15 @@ def test_conversation_previews_and_ids(clean_db):
     assert by_id["conv_a"]["title"].startswith("hello there")
     assert by_id["conv_a"]["lastMessage"] == "hi"
     assert by_id["conv_b"]["title"].startswith("second chat")
+
+
+def test_full_history_limit_none(clean_db):
+    """limit=None is the server-side export's contract: EVERY message,
+    not the most recent 50."""
+    for i in range(60):
+        clean_db.add_conversation_message("conv_full", "user", f"msg {i}")
+    msgs = clean_db.get_conversation_messages("conv_full", limit=None)
+    assert len(msgs) == 60
+    assert msgs[0]["content"] == "msg 0" and msgs[-1]["content"] == "msg 59"
+    # the real timestamps ride along for the export
+    assert all(m.get("created_at") for m in msgs)

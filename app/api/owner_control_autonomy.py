@@ -5,7 +5,7 @@ Extracted verbatim from app/main.py (composition refactor step 10a). These
 endpoints keep the stage separation invariants: decisions authorize planning
 only; execution is always a separate explicit action.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 
@@ -426,6 +426,46 @@ def list_conversations_endpoint(limit: int = Query(50, ge=1, le=200)):
     handler, so REST and WebSocket surfaces always agree."""
     from backend.message_router import list_conversation_previews
     return {"success": True, "conversations": list_conversation_previews(limit=limit)}
+
+@router.get("/conversations/{conversation_id}/export")
+def export_conversation_endpoint(conversation_id: str):
+    """Authoritative server-side chat export (owner report 2026-09-05: the
+    client-side Markdown export showed replies beside the WRONG questions).
+    The client-side export can only export what that one client hydrated —
+    capped at the last 50 messages, timestamps replaced by hydration time,
+    and exposed to out-of-order persistence from concurrent clients. This
+    endpoint reads the FULL SQLite history in row order: question and reply
+    are adjacent by construction (the router persists them under one
+    per-conversation lock)."""
+    from app.database import db
+    messages = db.get_conversation_messages(conversation_id, limit=None)
+    if not messages:
+        raise HTTPException(
+            status_code=404, detail="Conversation not found or empty")
+    try:
+        from backend.message_router import list_conversation_previews
+        previews = list_conversation_previews(limit=200)
+    except Exception:
+        previews = []
+    title = next(
+        (p.get("title") for p in previews if p.get("id") == conversation_id),
+        conversation_id)
+    lines = [
+        f"# {title}",
+        "",
+        f"*{len(messages)} messages — exported from the server's "
+        f"authoritative history (full, ordered).*",
+        "",
+        "---",
+        "",
+    ]
+    for m in messages:
+        role = "**You**" if m.get("role") == "user" else "**Arena**"
+        when = str(m.get("created_at") or "")
+        header = f"### {role}" + (f" — {when}" if when else "")
+        lines += [header, "", str(m.get("content") or ""), ""]
+    return Response(content="\n".join(lines), media_type="text/markdown")
+
 
 @router.get("/owner-control/questions")
 def list_owner_questions_endpoint(status: Optional[str] = Query("pending"), limit: int = Query(100, ge=1, le=500)):
