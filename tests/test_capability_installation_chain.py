@@ -223,3 +223,40 @@ def test_verifier_unknown_when_no_name_to_probe():
         rep, [], "I created and installed the tool.")
     assert res.verified_success is False
     assert res.final_state != GoalLifecycleState.ACHIEVED
+
+
+# ── the COMPOSITION: one chat request drives the whole chain ───────────
+
+def test_d6_chat_pipeline_installs_and_executes_capability(synth_llm):
+    """The D6 live shape as ONE request (owner runs 2026-09-01..09-05):
+    every link of the chain has its own green test, yet the live diag
+    kept failing — what breaks is the COMPOSITION (routing -> ActionGate
+    -> SelfEvolvingAgent generation -> sandbox verify -> registry
+    install -> execute). One chat request with a working model for the
+    code-generation call, and the capability must EXIST and EXECUTE
+    afterwards. This is the level the diagnostics pack actually
+    exercises; pinning it here keeps a regression in ANY link from
+    hiding behind the link-level greens."""
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+    from app.cognition.tool_registry import get_shared_registry
+
+    name = _unique_tool_name()
+    _cleanup(name)
+    try:
+        res = CognitivePipeline.process_chat(
+            f"Create a new tool called {name} that takes a string and "
+            "returns the words in reverse order. Write it, test it, and "
+            "install it as a permanent capability.")
+        assert res.get("action_type") == "synthesize_tool", (
+            "the manifest-first match must route capability creation to "
+            f"the synthesizer (got {res.get('action_type')!r})")
+        entry = get_shared_registry().effective_capability(name)
+        assert entry is not None, (
+            "the capability must be REGISTERED by the chat request — a "
+            "conversational reply is not installation")
+        out = get_shared_registry().execute_registered_tool(
+            name, {"text": "one two three"}) or {}
+        got = str(out.get("result", out.get("output", out)))
+        assert "three two one" in got, out
+    finally:
+        _cleanup(name)

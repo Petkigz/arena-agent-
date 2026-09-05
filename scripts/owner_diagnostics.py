@@ -242,8 +242,15 @@ def d6_self_evolution() -> Tuple[str, str]:
     reg = tr.get_shared_registry()
     entry = reg.effective_capability("reverse_words")
     if entry is None:
+        # Actions BEFORE the reply (the d7 precedent): the 300-char record
+        # cap then eats only the reply tail. 'Executed registered tool
+        # synthesize_tool' vs no such action distinguishes a synthesis
+        # FAILURE (model wrote unusable code) from the chain never being
+        # reached at all — the two need different fixes.
+        actions = [str(a)[:60] for a in (res.get("executed_actions") or [])][:2]
         return "fail", (f"tool NOT installed | lifecycle="
                         f"{res.get('goal_lifecycle_state')} | "
+                        f"actions={actions} | "
                         f"reply={reply_excerpt!r}")
     out = reg.execute_registered_tool(
         "reverse_words", {"text": "one two three"}) or {}
