@@ -270,6 +270,88 @@ class MasterAgentOrchestrator:
                     "No media playback capability is registered — I can locate media files but not play them."
                 )
 
+        elif action_type == "open_file":
+            # Open a file with its default application — the deterministic
+            # playback path (live owner report 2026-09-05: the PC HAS media
+            # players; opening the found file IS playing it). The operand may
+            # be a direct path or a BARE NAME resolved by real filesystem
+            # search — same idiom as move-by-bare-name: the resolution search
+            # IS the 'find' step of 'find X and play it'. Genuine ambiguity
+            # (several candidate files) asks; everything else acts.
+            from pathlib import Path as _P
+            from app.tools.universal_filesystem import UniversalFilesystem
+
+            def _resolve_open_target(name: str) -> Dict[str, Any]:
+                direct = _P(str(name)).expanduser()
+                if direct.exists():
+                    return {"resolved": str(direct)}
+                hits = UniversalFilesystem.search_filesystem(
+                    str(name), root_dir=str(_P.home()), max_results=5)
+                exact = [h for h in hits
+                         if h.get("file_name", "").lower() == str(name).lower()]
+                pool = exact or hits
+                if len(pool) == 1:
+                    return {"resolved": pool[0]["file_path"]}
+                if not pool:
+                    return {"error": f"couldn't find any file matching '{name}'"}
+                return {
+                    "error": f"found {len(pool)} files matching '{name}': "
+                             + "; ".join(h["file_path"] for h in pool[:4])
+                             + " — tell me which one",
+                    "matches": [h["file_path"] for h in pool[:4]],
+                }
+
+            target = str(
+                payload.get("file_path") or payload.get("path")
+                or payload.get("name") or payload.get("source_name")
+                or payload.get("query") or ""
+            ).strip()
+            raw_output_data["open_target"] = target
+            if not target:
+                execution_success = False
+                executed_actions.append(
+                    "No file was specified — name the file to open "
+                    "(e.g. 'play kaba.mp3' or 'open the file report.pdf').")
+            else:
+                res = _resolve_open_target(target)
+                if res.get("resolved"):
+                    open_res = UniversalFilesystem.open_with_default_app(res["resolved"])
+                    raw_output_data["open_res"] = open_res
+                    if open_res.get("success"):
+                        executed_actions.append(
+                            f"Found '{open_res.get('file_name')}' at "
+                            f"{open_res.get('file_path')} and opened it with "
+                            f"your default application.")
+                        execution_facts.append({
+                            "subject": open_res.get("file_name", "file"),
+                            "predicate": "file_path",
+                            "value": open_res.get("file_path"),
+                            "source": "universal_filesystem",
+                        })
+                        execution_facts.append({
+                            "subject": open_res.get("file_name", "file"),
+                            "predicate": "opened",
+                            "value": "succeeded",
+                            "source": "universal_filesystem",
+                            "entity_type": "file",
+                        })
+                    else:
+                        execution_success = False
+                        executed_actions.append(
+                            f"Found the file at {res.get('resolved')} but couldn't open it: "
+                            f"{open_res.get('error')}")
+                        execution_facts.append({
+                            "subject": "filesystem",
+                            "predicate": "file_open",
+                            "value": "failed",
+                            "source": "universal_filesystem",
+                        })
+                else:
+                    execution_success = False
+                    executed_actions.append(
+                        str(res.get("error") or "couldn't identify the file to open"))
+
+
         elif action_type in ("move_file", "copy_file_verified"):
             # File management: resolve bare names ('move kaba.mp3 to my music
             # folder') to real paths via filesystem search, then execute the

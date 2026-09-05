@@ -477,6 +477,9 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _list_caps_handler)
     add("launch_app", "os_control", 2, "Launch an installed application",
         _wrap(SystemAppInventory.launch_any_app, "app_query"))
+    add("open_file", "os_control", 2,
+        "Open a file with its default application — play music or video files, view documents and images (the PC's own media players do the playback)",
+        _wrap(UniversalFilesystem.open_with_default_app, "file_path_str"))
     add("list_apps", "os_control", 0, "List installed applications",
         _ignore_payload(SystemAppInventory.scan_installed_applications))
     add("mouse_click", "os_control", 3, "Grounded raw-coordinate click: requires window/process grounding ID, fresh display-topology digest and immediate re-observation",

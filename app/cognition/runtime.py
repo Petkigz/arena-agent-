@@ -1426,6 +1426,12 @@ class CognitiveRuntime:
         "os.launch_app": {"evidence": "SystemAppInventory.launch_any_app (host-native)"},
         "filesystem.search": {"evidence": "search_files tool (host-native)"},
         "filesystem.read": {"evidence": "universal filesystem tools (host-native)"},
+        # Playback is OPENING the file: the OS default application (the
+        # PC's own media players) does the playing. Under-claiming this
+        # made 'find kaba and play it' ask the owner for the file type
+        # while full OS control sat unused (live owner report 2026-09-05).
+        "media.playback": {"evidence": "open_file tool — opens media files with the OS default application (host-native)"},
+        "file.open": {"evidence": "open_file tool (host-native)"},
         "browser.open": {"evidence": "open_url via host default browser"},
         "web.search": {
             "evidence": "web_search tool (network-dependent; reachability not probed per cycle)"},

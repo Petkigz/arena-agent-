@@ -746,6 +746,95 @@ class UniversalFilesystem:
         return fuzzy[:max_results]
 
     @classmethod
+    def open_with_default_app(cls, file_path_str: str) -> Dict[str, Any]:
+        """Open a file with the OS default application (live owner report
+        2026-09-05: 'find the file kaba and play it').
+
+        The PC HAS media players; opening a media file with the default
+        application IS playback. This is the deterministic, no-LLM path to
+        that control: Windows ``os.startfile`` (shell default handler),
+        macOS ``open``, Linux ``xdg-open``. Policy-gated in the same class
+        as application launch (open_application, Level 2 reversible) — the
+        action launches the OS-chosen handler for the file type.
+
+        Honest failures, never fabricated success: a missing file, a
+        blocked policy, or an absent platform opener each report exactly
+        what happened.
+        """
+        import platform as _platform
+
+        raw = str(file_path_str or "").strip()
+        if not raw:
+            return {
+                "success": False,
+                "error": "no file path provided — nothing to open",
+            }
+        path = Path(raw).expanduser()
+        if not path.exists():
+            return {
+                "success": False,
+                "error": f"file not found: {path}",
+                "file_path": str(path),
+            }
+
+        allowed, reason, level = PolicyEvaluator.evaluate_action(
+            "open_application",
+            {"app_name": str(path), "target_file": str(path)},
+        )
+        if not allowed:
+            audit_logger.info(f"open_file blocked by policy: {reason}")
+            return {
+                "success": False,
+                "error": f"Policy Blocked: {reason}",
+                "authority_level": level,
+                "file_path": str(path),
+            }
+
+        system = _platform.system()
+        try:
+            if system == "Windows":
+                os.startfile(str(path))  # type: ignore[attr-defined]
+                opener = "os.startfile"
+            elif system == "Darwin":
+                subprocess.Popen(["open", str(path)])
+                opener = "open"
+            else:
+                subprocess.Popen(
+                    ["xdg-open", str(path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                opener = "xdg-open"
+        except FileNotFoundError:
+            return {
+                "success": False,
+                "error": (
+                    f"no file-opener available on this {system} system "
+                    f"('{'os.startfile' if system == 'Windows' else 'open' if system == 'Darwin' else 'xdg-open'}' "
+                    "not found) — the file exists but I cannot open it here"
+                ),
+                "file_path": str(path),
+                "file_name": path.name,
+            }
+        except OSError as exc:
+            return {
+                "success": False,
+                "error": f"could not open '{path.name}': {exc}",
+                "file_path": str(path),
+                "file_name": path.name,
+            }
+
+        audit_logger.info(f"open_file: opened '{path.name}' via {opener}")
+        return {
+            "success": True,
+            "file_path": str(path),
+            "file_name": path.name,
+            "opener": opener,
+            "side_effects": True,
+            "note": f"Opened '{path.name}' with the default application.",
+        }
+
+    @classmethod
     def list_directory(cls, directories: List[Dict[str, Any]], include_hidden: bool = False) -> Dict[str, Any]:
         """Read-only listing of directory entries (Level-0 observation).
 

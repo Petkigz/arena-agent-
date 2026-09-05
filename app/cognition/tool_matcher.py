@@ -158,7 +158,7 @@ CONTROL_VERBS = {
     "allow", "forward", "map", "clear", "empty", "clean", "purge",
     "flush", "release", "renew",
     # Audio/media
-    "play", "pause", "mute", "unmute",
+    "play", "pause", "mute", "unmute", "watch", "listen", "view",
     # Search/observation commands
     "search", "find", "list", "count", "check", "verify", "test",
     "analyze", "inspect", "monitor", "track",
@@ -266,6 +266,23 @@ _DELETE_FILE_RE = re.compile(
     r"\b(?:delete|remove|trash)\s+(?:(?:all|every|the)\s+)?(?:files?\s+)?"
     r"([\w\-.,'\"() ]+" + _EXT_TOKEN + r"(?:\s*(?:,|and)\s*[\w\-.,'\"() ]+" + _EXT_TOKEN + r")*)\s*[?.!]*$",
     re.I)
+# Media consumption: 'play kaba', 'watch the video', 'listen to the song'.
+# The verb itself is the file signal for play/watch/listen (their objects
+# are media files); 'open'/'view' additionally need an explicit file-ish
+# signal so 'open chrome' still routes to application launch (live owner
+# report 2026-09-05: the PC has media players — opening the file IS
+# playback; before this route existed, 'find X and play it' grounded only
+# the find half and reported playback as a missing capability).
+_PLAY_RE = re.compile(
+    r"\b(?:play|watch|listen\s+to)\s+(?:the\s+|my\s+|that\s+)?"
+    r"(?:" + _FILE_OP_NOUN + r"\s+)?(?:called\s+|named\s+)?"
+    r"(.+?)\s*[?.!]*$", re.I)
+_PLAY_IT_RE = re.compile(
+    r"\b(?:play|watch|listen\s+to)\s+(?:it|them|that|this)\s*[?.!]*$", re.I)
+_OPEN_FILE_RE = re.compile(
+    r"\b(?:open|view)\s+(?:the\s+|my\s+)?"
+    r"(?:" + _FILE_OP_NOUN + r"\s+)?(?:called\s+|named\s+)?"
+    r"(.+?)\s*[?.!]*$", re.I)
 
 
 def _strip_trailing_clause(name: str) -> str:
@@ -296,12 +313,62 @@ def _file_op_payload(source: str, destination: Optional[str] = None) -> Dict[str
     return payload
 
 
+def _open_file_payload(name: str) -> Dict[str, Any]:
+    """Payload for open_file: a real path when the operand is path-shaped,
+    else the bare name for search-based resolution at execution time."""
+    name = _strip_trailing_clause(name)
+    if not name:
+        return {}
+    return {"file_path": name} if _looks_like_path(name) else {"name": name}
+
+
 def _match_file_operation(text: str) -> Optional[ToolMatch]:
     """Deterministic file-management routing: move/rename/copy/delete with
     operands. Requires a file-ish signal (extension token, file noun, or
     called/named) so non-file sentences fall through untouched."""
     has_ext = bool(re.search(_EXT_TOKEN + r"\b", text))
     has_noun = bool(re.search(r"\b" + _FILE_OP_NOUN + r"\b", text))
+
+    # Media consumption first — it is the request's GOAL, not a side
+    # effect: 'find kaba and play it' wants the file OPENED, with the
+    # search as the resolution step (same idiom as move-by-bare-name).
+    m = _PLAY_RE.search(text)
+    if m:
+        obj = m.group(1).strip()
+        # A captured pronoun means the object was named earlier in the
+        # sentence (find-then-play compound) — handled below.
+        if obj.lower() not in ("it", "them", "that", "this", "him", "her"):
+            return ToolMatch(action_type="open_file", score=3.0,
+                             payload=_open_file_payload(obj),
+                             matched_terms=("play/open media",))
+    if _PLAY_IT_RE.search(text):
+        # 'find/locate/search ... <name> ... and play it': the named
+        # object lives in the find clause; extract_search_query already
+        # strips instruction verbs and discourse to get the content term.
+        try:
+            from app.cognition.goal_interpreter import extract_search_query
+            obj = extract_search_query(text)
+        except Exception:
+            obj = ""
+        # Device discourse ('on my system') survives extract_search_query
+        # by design (it is a search token) but is never filename content
+        # for the OPEN operand — 'kaba system' would miss 'Kaba - Song.mp3'.
+        device_stripped = " ".join(
+            t for t in obj.split()
+            if t.lower() not in ("system", "pc", "computer", "machine", "laptop", "device")
+        )
+        obj = device_stripped or obj
+        if obj and obj.lower() not in ("it", "them", "that", "this"):
+            return ToolMatch(action_type="open_file", score=3.0,
+                             payload=_open_file_payload(obj),
+                             matched_terms=("find-then-play",))
+    m = _OPEN_FILE_RE.search(text)
+    if m and (has_ext or has_noun or "called" in text or "named" in text):
+        obj = m.group(1).strip()
+        if obj.lower() not in ("it", "them", "that", "this"):
+            return ToolMatch(action_type="open_file", score=2.0,
+                             payload=_open_file_payload(obj),
+                             matched_terms=("open/view file",))
 
     m = _MOVE_RE.search(text)
     if m and (has_ext or has_noun or "called" in text or "named" in text):
@@ -528,8 +595,15 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
         # The tool's own name appearing verbatim in the message is a strong signal.
         name_words = set(action_type.split("_")) - STOPWORDS
         if name_words and name_words <= words:
-            score += 2.0
-            matched.append(action_type)
+            # ...unless the name's entire content is ONE CONTROL VERB: a
+            # stopword-heavy name ('open_file' -> {'open'} after 'file' is
+            # stopworded) makes the bonus fire on every imperative sentence
+            # containing that verb (live 2026-09-05: 'open chrome' scored
+            # 3.0 for open_file and stole the application-launch route).
+            # A lone ubiquitous verb is not a name match.
+            if not (len(name_words) == 1 and next(iter(name_words)) in CONTROL_VERBS):
+                score += 2.0
+                matched.append(action_type)
         if score > 0:
             scored.append((score, action_type, tuple(sorted(set(matched)))))
 

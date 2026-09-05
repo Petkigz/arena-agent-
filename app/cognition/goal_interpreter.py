@@ -686,6 +686,21 @@ class SemanticGoalInterpreter:
         elif domain_clean == "web_research":
             candidates.append({"name": "Web Search & Browser Research", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
         elif domain_clean == "filesystem":
+            # Consumption compounds ('find kaba and play it') propose the
+            # OPEN action first: the resolution search happens inside it
+            # (move-by-bare-name idiom) — the search alone only finds, and
+            # the request's goal is playing.
+            if _has_any_word(str(user_text or "").lower(), ["play", "watch", "listen"]):
+                _name = extract_search_query(user_text)
+                _name = " ".join(
+                    t for t in str(_name or "").split()
+                    if t.lower() not in ("system", "pc", "computer", "machine", "laptop", "device")
+                ) or str(user_text or "").strip()
+                candidates.append({
+                    "name": "Open File With Default Application",
+                    "action_type": "open_file",
+                    "payload": {"name": _name, "action_type": "open_file"},
+                })
             candidates.append({"name": "Local Filesystem Search", "action_type": "search_files", "payload": {"query": extract_search_query(user_text), "action_type": "search_files"}})
             candidates.append({"name": "Web Research Fallback", "action_type": "web_search", "payload": {"query": user_text, "action_type": "web_search"}})
         elif domain_clean == "vision_desktop":
@@ -1055,9 +1070,19 @@ class SemanticGoalInterpreter:
                 req_caps = ["browser.open", "web.search"]
             elif _has_any_word(text_lower, ["find", "file", "ordinary", "document", "song"]):
                 domain = "filesystem"
-                goal = f"Locate or inspect local file: '{user_text[:60]}'"
-                outcome = "Matching file path identified"
-                req_caps = ["filesystem.search", "filesystem.read"]
+                if _has_any_word(text_lower, ["play", "watch", "listen"]):
+                    # Consumption compound ('find kaba and play it'): the
+                    # request's goal is OPENING the file — the PC's default
+                    # application does the playback (live owner report
+                    # 2026-09-05: reporting playback as a missing capability
+                    # under-claimed the control the system actually has).
+                    goal = f"Locate and open local media file: '{user_text[:60]}'"
+                    outcome = "File opened with the default application"
+                    req_caps = ["filesystem.search", "media.playback"]
+                else:
+                    goal = f"Locate or inspect local file: '{user_text[:60]}'"
+                    outcome = "Matching file path identified"
+                    req_caps = ["filesystem.search", "filesystem.read"]
             elif _has_any_word(text_lower, ["screenshot", "screen"]):
                 domain = "vision_desktop"
                 goal = f"Capture and analyze active screen window"

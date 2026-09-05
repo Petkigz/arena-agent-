@@ -233,104 +233,241 @@ class TestDiscoveryBreadthPreserved:
         assert "compress_files" in actions
 
 
-# ── 6. Honest partial-completion reporting ──────────────────────────────────
+# ── 6. Playback as a REAL capability (owner report 2026-09-05, round 2) ─────
+#
+# The PC has media players and the agent has OS control: opening the found
+# file with its default application IS playback. Reporting playback as a
+# missing capability under-claimed the control the system actually has.
+# The 'No media playback capability' note from round 18 stays as a guard
+# that self-extinguishes the moment a playback-advertising tool exists —
+# which open_file now does.
 
 
-class TestHonestPlaybackReporting:
-    def _executor_note_fires(self, user_text):
-        from app.agents.master_agent import _MEDIA_VERB_RE, _no_media_playback_capability
-        return bool(_MEDIA_VERB_RE.search(user_text)) and _no_media_playback_capability()
+class TestPlaybackThroughOpenFile:
+    def _exec(self, payload, user_text):
+        from app.cognition.action_proposal import ActionProposal
+        from app.agents.master_agent import MasterAgentOrchestrator
+        proposal = ActionProposal(
+            action_type="open_file", payload=payload,
+            recommendation_reason="test",
+        )
+        return MasterAgentOrchestrator.execute_proposal(proposal, user_text).to_dict()
 
-    def test_playback_verbs_trigger_the_honest_note(self):
-        for text in (
-            "find the file kaba and play it",
-            "find kaba and watch it",
-            "locate the recording and listen to it",
-        ):
-            assert self._executor_note_fires(text), text
+    def test_open_file_tool_opens_with_platform_opener(self, tmp_path, monkeypatch):
+        """The real code path: a fake platform opener receives the file."""
+        import app.tools.universal_filesystem as ufs
+        target = tmp_path / "kaba.mp3"
+        target.write_bytes(b"x")
+        calls = []
+        monkeypatch.setattr(
+            ufs.subprocess, "Popen",
+            lambda cmd, **kw: calls.append(cmd) or type("P", (), {"poll": lambda s: 0})())
+        res = ufs.UniversalFilesystem.open_with_default_app(str(target))
+        assert res["success"] is True, res
+        assert res["opener"] == "xdg-open"
+        assert calls == [["xdg-open", str(target)]]
 
-    def test_non_media_requests_do_not_get_the_note(self):
-        assert not self._executor_note_fires("find the file kaba")
-        assert not self._executor_note_fires("find document report.pdf and summarize it")
+    def test_open_file_honest_failure_names_the_reason(self, tmp_path):
+        import app.tools.universal_filesystem as ufs
+        target = tmp_path / "kaba.mp3"
+        target.write_bytes(b"x")
+        res = ufs.UniversalFilesystem.open_with_default_app(str(target))
+        # This sandbox has no xdg-open: the failure must name exactly that,
+        # never fabricate success. (On Windows os.startfile exists.)
+        assert res["success"] is False
+        assert "open" in str(res.get("error", "")).lower()
 
-    def test_note_is_self_limiting_when_playback_tool_registered(self):
-        # The day a playback capability is actually installed, the honest
-        # 'cannot play' note must disappear — it tracks reality.
-        from app.cognition.tool_registry import get_shared_registry
-        from app.agents.master_agent import _no_media_playback_capability
-        assert _no_media_playback_capability() is True  # precondition
-        reg = get_shared_registry()
-        reg._registry["play_media_file"] = object()  # dynamic install
-        try:
-            assert _no_media_playback_capability() is False
-        finally:
-            reg._registry.pop("play_media_file", None)
+    def test_open_file_requires_a_path(self):
+        import app.tools.universal_filesystem as ufs
+        res = ufs.UniversalFilesystem.open_with_default_app("")
+        assert res["success"] is False
 
-
-# ── 7. Full-cycle integration: the owner's exact request ────────────────────
-
-
-class TestFindAndPlayFullCycle:
-    def test_search_finds_file_and_reports_missing_playback_honestly(self, tmp_path):
-        """End-to-end: 'find the file kaba and play it' with the file present.
-
-        The assistant must (a) route to search_files, (b) actually find the
-        file, (c) reply with the located path, and (d) state honestly that
-        playback is not a registered capability — never ask the owner for
-        self-serveable information."""
-        import time
+    def test_play_by_bare_name_finds_then_opens(self, monkeypatch):
+        """'play kaba' — the resolution search is the 'find' step; the open
+        is the 'play' step. One action, real evidence, no clarifying
+        question about file types the search itself reveals."""
+        import app.tools.universal_filesystem as ufs
+        opened = []
+        monkeypatch.setattr(
+            ufs.UniversalFilesystem, "open_with_default_app",
+            classmethod(lambda cls, p: opened.append(p) or {
+                "success": True, "file_path": p, "file_name": p.rsplit("/", 1)[-1],
+                "opener": "stub", "note": "opened",
+            }))
+        import tempfile, shutil
         from pathlib import Path
-
-        from app.cognition.runtime import CognitiveRuntime
-
-        # The cycle's search runs over the user's files; plant a decoy-named
-        # real media file in a fresh HOME directory (created via mkdtemp so
-        # it is outside the repo and unique per run).
-        import tempfile
-        fake_home = Path(tempfile.mkdtemp(prefix="arena_kaba_"))
-        media_dir = fake_home / "Music"
-        media_dir.mkdir()
-        media_file = media_dir / "Kaba - Song.mp3"
-        media_file.write_bytes(b"\x00" * 16)
-
+        fake_home = Path(tempfile.mkdtemp(prefix="arena_open_"))
+        media = fake_home / "Music"
+        media.mkdir()
+        (media / "Kaba - Song.mp3").write_bytes(b"\x00" * 8)
         old_home = Path.home()
         import os
         os.environ["HOME"] = str(fake_home)
         try:
-            rt = CognitiveRuntime.get_instance()
-            result = rt.process_cognitive_cycle(
-                user_text="find the file kaba on my system and play it",
-                complexity="fast",
-            )
+            d = self._exec({"name": "kaba"}, "play kaba")
         finally:
             os.environ["HOME"] = str(old_home)
-            import shutil
             shutil.rmtree(fake_home, ignore_errors=True)
+        assert d["execution_status"] == "succeeded", d
+        assert len(opened) == 1 and "Kaba - Song.mp3" in opened[0]
+        assert "Kaba - Song.mp3" in " ".join(d["executed_actions"])
+        assert "opened it with your default application" in " ".join(d["executed_actions"])
 
-        assert result.get("action_type") == "search_files"
-        executed = " ".join(str(a) for a in (result.get("executed_actions") or []))
-        reply = str(result.get("assistant_reply") or "")
-        assert "Kaba - Song.mp3" in executed, executed
-        assert "playback capability" in executed, executed
-        # The reply must not interrogate the owner for information the
-        # search itself just obtained (the live bug: 'can you confirm if
-        # kaba is a specific type of file (e.g., MP3, AVI)?').
-        assert not re.search(r"confirm.{0,40}(type of file|MP3|AVI)", reply, re.I)
-        # And it must never leak a raw tool validation error.
-        assert "resize_image" not in reply
-        assert "missing required parameter" not in reply
+    def test_genuine_ambiguity_asks_which_file(self, monkeypatch):
+        """Two kaba files = the one case where asking is correct."""
+        import tempfile, shutil
+        from pathlib import Path
+        import os
+        fake_home = Path(tempfile.mkdtemp(prefix="arena_ambig_"))
+        media = fake_home / "Music"
+        media.mkdir()
+        (media / "kaba.mp3").write_bytes(b"\x00")
+        (media / "kaba video.mp4").write_bytes(b"\x00")
+        old_home = Path.home()
+        os.environ["HOME"] = str(fake_home)
+        try:
+            d = self._exec({"name": "kaba"}, "play kaba")
+        finally:
+            os.environ["HOME"] = str(old_home)
+            shutil.rmtree(fake_home, ignore_errors=True)
+        assert d["execution_status"] == "failed"
+        assert "tell me which one" in " ".join(d["executed_actions"])
 
     def test_miss_is_honest_not_fabricated(self):
-        """No kaba anywhere: the cycle must report the miss without
-        executing operand-less tools and without inventing results."""
+        d = self._exec({"name": "zzqqx_not_anywhere"}, "play zzqqx_not_anywhere")
+        assert d["execution_status"] == "failed"
+        assert "couldn't find any file matching" in " ".join(d["executed_actions"])
+
+    def test_media_playback_capability_now_resolves(self):
+        """The capability ladder must see playback as backed — no ask-gate
+        for 'find X and play it' when the control exists."""
         from app.cognition.runtime import CognitiveRuntime
         rt = CognitiveRuntime.get_instance()
-        result = rt.process_cognitive_cycle(
-            user_text="find the file zzqqx_not_anywhere and play it",
-            complexity="fast",
+        cap_map, _status, unresolved = rt._resolve_capability_status(
+            required_capabilities=["filesystem.search", "media.playback"],
+            target_domain="filesystem",
         )
+        assert cap_map.get("media.playback") is True
+        assert not unresolved
+
+    def test_playback_note_self_extinguished_by_open_file(self):
+        """The round-18 'No media playback capability' note must NOT fire
+        now that open_file advertises playback — it tracked reality, and
+        reality gained the capability."""
+        from app.agents.master_agent import _no_media_playback_capability
+        assert _no_media_playback_capability() is False
+
+    def test_playback_note_would_fire_without_any_playback_tool(self, monkeypatch):
+        """Guard: if a build genuinely lacks playback, the note fires."""
+        import app.tools.manifest as manifest_mod
+        import app.agents.master_agent as ma
+
+        def bare_manifest():
+            return {
+                name: entry
+                for name, entry in manifest_mod.get_tool_manifest().items()
+                if name != "open_file"
+            }
+        monkeypatch.setattr(manifest_mod, "get_tool_manifest", bare_manifest)
+        # master_agent imports the getter inside the function — patch the
+        # module attribute it resolves from.
+        import app.cognition.tool_registry as tr_mod
+        monkeypatch.setattr(
+            tr_mod, "get_shared_registry",
+            lambda: type("R", (), {"_registry": {}})())
+        assert ma._no_media_playback_capability() is True
+
+
+# ── 7. Routing pins for the playback path ───────────────────────────────────
+
+
+class TestPlaybackRoutingPins:
+    def test_play_requests_route_to_open_file(self):
+        from app.cognition.tool_matcher import match_control_tool
+        for text, expect_name in (
+            ("find the file kaba and play it", "kaba"),
+            ("find the file kaba on my system and play it", "kaba"),
+            ("play kaba", "kaba"),
+            ("play kaba.mp3", "kaba.mp3"),
+            ("watch the video kaba", "kaba"),
+            ("listen to the song kaba", "kaba"),
+            ("open kaba.mp3", "kaba.mp3"),
+        ):
+            m = match_control_tool(text)
+            assert m is not None and m.action_type == "open_file", (text, m)
+            assert m.payload.get("name") == expect_name or m.payload.get("file_path") == expect_name, (text, m.payload)
+
+    def test_app_launch_not_stolen_by_open_file(self):
+        """'open chrome' is an APPLICATION launch; open_file must not win
+        via its name stem 'open' (the lone-control-verb name-bonus rule)."""
+        from app.cognition.tool_matcher import match_control_tool
+        m = match_control_tool("open chrome")
+        assert m is None or m.action_type != "open_file"
+        m = match_control_tool("open notepad")
+        assert m is None or m.action_type != "open_file"
+
+    def test_non_media_find_still_routes_to_search(self):
+        from app.cognition.tool_matcher import match_control_tool
+        m = match_control_tool("find the file kaba")
+        assert m is not None and m.action_type == "search_files"
+
+    def test_interpreter_models_playback_goal(self):
+        from app.cognition.goal_interpreter import SemanticGoalInterpreter
+        gr = SemanticGoalInterpreter.interpret_goal(
+            "find the file kaba and play it", complexity="fast")
+        assert gr.target_domain == "filesystem"
+        assert "media.playback" in gr.required_capabilities
+        assert "open_file" in {c.get("action_type") for c in gr.recommended_candidates}
+        # Without the consumption verb the goal stays a plain search.
+        gr2 = SemanticGoalInterpreter.interpret_goal(
+            "find the file kaba", complexity="fast")
+        assert "media.playback" not in gr2.required_capabilities
+
+
+# ── 8. Full-cycle integration: the owner's exact request ────────────────────
+
+
+class TestFindAndPlayFullCycle:
+    def test_find_and_play_opens_the_file_end_to_end(self, monkeypatch):
+        """'find the file kaba and play it' with the file present: route to
+        open_file, resolve by real search, open with the default app, and
+        report the found path — never ask the owner for the file type."""
+        import tempfile, shutil, os
+        from pathlib import Path
+        import app.tools.universal_filesystem as ufs
+        from app.cognition.runtime import CognitiveRuntime
+
+        opened = []
+        monkeypatch.setattr(
+            ufs.UniversalFilesystem, "open_with_default_app",
+            classmethod(lambda cls, p: opened.append(p) or {
+                "success": True, "file_path": p, "file_name": p.rsplit("/", 1)[-1],
+                "opener": "stub", "note": "opened",
+            }))
+
+        fake_home = Path(tempfile.mkdtemp(prefix="arena_cycle_"))
+        media = fake_home / "Music"
+        media.mkdir()
+        (media / "Kaba - Song.mp3").write_bytes(b"\x00" * 16)
+        old_home = Path.home()
+        os.environ["HOME"] = str(fake_home)
+        try:
+            rt = CognitiveRuntime.get_instance()
+            result = rt.process_cognitive_cycle(
+                user_text="find the file kaba and play it", complexity="fast")
+        finally:
+            os.environ["HOME"] = str(old_home)
+            shutil.rmtree(fake_home, ignore_errors=True)
+
+        assert result.get("action_type") == "open_file"
         executed = " ".join(str(a) for a in (result.get("executed_actions") or []))
         reply = str(result.get("assistant_reply") or "")
-        assert "resize_image" not in executed + reply
-        assert "missing required parameter" not in executed + reply
-        assert "playback capability" in executed  # still honest about 'play'
+        assert opened, "the open must actually be attempted"
+        assert "Kaba - Song.mp3" in opened[0]
+        assert "Kaba - Song.mp3" in executed or "Kaba - Song.mp3" in reply
+        # The live bug: asking the owner for information the search itself
+        # just obtained ('can you confirm if kaba is MP3, AVI?').
+        assert not re.search(r"confirm.{0,40}(type of file|MP3|AVI)", reply, re.I)
+        # And never a leaked tool validation error.
+        assert "resize_image" not in reply
+        assert "missing required parameter" not in reply

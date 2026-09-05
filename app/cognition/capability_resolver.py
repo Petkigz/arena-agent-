@@ -194,6 +194,23 @@ class CapabilityResolver:
         frozenset({"date", "categor"}): "group_files_by_date",
         # 'file analysis' — identify/hash binary files.
         frozenset({"file", "analy"}): "binary_analyze",
+        # Media playback phrasings (live owner report 2026-09-05): the
+        # deterministic playback path is open_file — the OS default
+        # application plays the file. These phrases previously resolved
+        # nowhere, so 'find X and play it' gated to a blind ask.
+        frozenset({"play", "music"}): "media.playback",
+        frozenset({"play", "video"}): "media.playback",
+        frozenset({"play", "audio"}): "media.playback",
+        frozenset({"play", "media"}): "media.playback",
+        frozenset({"play", "file"}): "media.playback",
+        frozenset({"play", "song"}): "media.playback",
+        frozenset({"watch", "video"}): "media.playback",
+        frozenset({"playback"}): "media.playback",
+        frozenset({"audio", "playback"}): "media.playback",
+        frozenset({"video", "playback"}): "media.playback",
+        frozenset({"music", "playback"}): "media.playback",
+        frozenset({"media", "player"}): "media.playback",
+        frozenset({"file", "open"}): "file.open",
     }
 
     # Semantic tier strictness: a candidate must cover at least this

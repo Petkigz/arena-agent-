@@ -71,7 +71,7 @@ OS_ACTION_VERBS = {
     "allow", "forward", "map", "clear", "empty", "clean", "purge",
     "flush", "release", "renew",
     # Audio/media
-    "play", "pause", "mute", "unmute",
+    "play", "pause", "mute", "unmute", "watch", "listen", "view",
     # Search/observation commands
     "search", "find", "list", "count", "check", "verify", "test",
     "analyze", "inspect", "monitor", "track",
