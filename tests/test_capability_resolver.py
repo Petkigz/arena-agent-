@@ -336,3 +336,16 @@ def test_disjunct_with_no_grounding_component_stays_unresolved():
     res = CapabilityResolver.resolve(
         "photo scanning or file management", vocab)
     assert not res.resolved
+
+
+# ── file reading (live 2026-09-05: 'file reading' hung unresolved while ──
+# the capability exists natively)
+
+def test_file_reading_phrases_resolve_to_filesystem_read():
+    vocab = CapabilityResolver.build_vocabulary(
+        ["filesystem.read", "filesystem.search", "read_document"])
+    for phrase in ("file reading", "read the file", "read file"):
+        res = CapabilityResolver.resolve(phrase, vocab)
+        assert res.resolved, phrase
+        assert res.tier == "alias"
+        assert res.canonical == "filesystem.read"

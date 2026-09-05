@@ -176,6 +176,11 @@ class CapabilityResolver:
         # 'file scanning capability' — scanning files for matches and
         # inventory is exactly what search_files does.
         frozenset({"file", "scan"}): "filesystem.search",
+        # 'file reading' / 'read file' (live 2026-09-05: 'file reading
+        # and processing abilities' hung unresolved; the D4/D7 flows
+        # read files through the universal filesystem tools natively,
+        # and read_document executes the same for registered dispatch).
+        frozenset({"file", "read"}): "filesystem.read",
         frozenset({"filesystem", "scan"}): "filesystem.search",
         # 'duplicate detection' — the registered content-addressed
         # duplicate finder (sha256 over size buckets, read-only). Named

@@ -220,6 +220,11 @@ class LocalLLMClient:
         self._models_cache_lock = threading.Lock()
         # Bounded ring of observable fallback decisions (last 50).
         self.fallback_events: List[Dict[str, Any]] = []
+        # The stale-config WARNING is loud ONCE per requested id; repeats
+        # drop to DEBUG (live 2026-09-05: it logged before every
+        # main-route call — 6x per diag run — long after the point was
+        # made; the diag env row keeps the permanent record).
+        self._fallback_warned: set = set()
 
     # ------------------------------------------------------------------
     # Model availability
@@ -446,13 +451,22 @@ class LocalLLMClient:
         model, fallback_info = self._resolve_model(requested_model, role)
         if fallback_info:
             self._record_fallback(fallback_info)
-            app_logger.warning(
-                f"LLM model '{fallback_info['requested']}' is not loaded; "
-                f"using loaded model '{fallback_info['used']}' instead "
-                f"(best loaded {fallback_info.get('role', 'main')} model). "
-                f"Load '{fallback_info['requested']}' in LM Studio, set "
-                f"MAIN_MODEL/FAST_MODEL=auto to always use the best "
-                f"loaded model, or set it to a loaded id to pin one.")
+            warned_key = str(fallback_info.get("requested") or "")
+            if warned_key in self._fallback_warned:
+                app_logger.debug(
+                    f"LLM model '{fallback_info['requested']}' is not "
+                    f"loaded; using '{fallback_info['used']}' (already "
+                    f"warned this session)")
+            else:
+                self._fallback_warned.add(warned_key)
+                app_logger.warning(
+                    f"LLM model '{fallback_info['requested']}' is not "
+                    f"loaded; using loaded model '{fallback_info['used']}' "
+                    f"instead (best loaded "
+                    f"{fallback_info.get('role', 'main')} model). Load "
+                    f"'{fallback_info['requested']}' in LM Studio, set "
+                    f"MAIN_MODEL/FAST_MODEL=auto to always use the best "
+                    f"loaded model, or set it to a loaded id to pin one.")
         # P0 review #10: the reasoning budget is REAL. Under an active
         # reasoning_token_budget scope no component may exceed the cycle's
         # remaining token budget — request 8192 under a 2048 budget and the

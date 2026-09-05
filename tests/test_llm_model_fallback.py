@@ -339,3 +339,22 @@ def test_specialists_rank_below_general_models_of_the_same_size():
     s = LocalLLMClient._role_score
     assert s("qwen2.5-3b-instruct", "main") > s("qwen2.5-vl-3b-instruct", "main")
     assert s("qwen3.5-9b", "main") > s("qwen2.5-coder-7b-instruct", "main")
+
+
+def test_stale_config_warning_is_loud_once_then_debug(caplog):
+    """The same stale-config fallback fired its WARNING before every
+    main-route call (6x per live diag run). The first occurrence stays
+    loud; repeats drop to DEBUG — the diag env row keeps the permanent
+    record, and every fallback still lands in fallback_events."""
+    import logging
+    fake = _FakeHTTP(models_sequence=[OWNER_LOADED] * 6)
+    client = _client_with(fake)
+    with caplog.at_level("DEBUG", logger="app"):
+        for _ in range(3):
+            client.generate_chat_completion(
+                [{"role": "user", "content": "hi"}], complexity="main")
+    warnings_ = [r for r in caplog.records
+                 if r.levelno == logging.WARNING and "is not loaded" in r.message]
+    assert len(warnings_) == 1  # once loud
+    assert len(client.fallback_events) == 3  # every decision still recorded
+    assert fake.post_models == ["qwen/qwen3-14b"] * 3

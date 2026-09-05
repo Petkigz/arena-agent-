@@ -512,7 +512,14 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(UniversalFilesystem.group_files_by_date, "root_dir", "execute"))
     add("resize_image", "filesystem", 2, "Resize an image",
         _wrap(UniversalFilesystem.resize_image, "image_path_str", "target_width", "target_height"))
-    add("read_document", "filesystem", 0, "Read a document",
+    # NOTE: do NOT list file extensions (pdf/docx/...) here — 'pdf'
+    # in the description flipped the routing of 'Find document
+    # report.pdf' from search_files to read_document (closed-loop
+    # invariants, 2026-09-05). The description must convey file READING
+    # without attracting find-a-file requests.
+    add("read_document", "filesystem", 0,
+        "Read a file's content (text and document files): the "
+        "file-reading capability — path in, text out",
         _wrap(DocumentManager.read_document, "file_path_str"))
     add("create_document", "filesystem", 1, "Create a document",
         _wrap(DocumentManager.create_document, "file_path_str", "content", "overwrite"))

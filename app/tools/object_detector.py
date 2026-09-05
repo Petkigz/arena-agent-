@@ -39,8 +39,11 @@ except ImportError:
 class ObjectDetectorTool:
     """Deterministic local object + face detector."""
 
-    # Face cascade — ships with opencv-python
+    # Face cascade — vendored in app/tools/cascades/ (OpenCV 5 wheels
+    # no longer bundle cascade data; cv2.data.haarcascades is empty on
+    # modern installs — live 2026-09-05).
     _face_cascade: Optional[Any] = None
+    _face_cascade_missing = False  # negative result cached: warn ONCE
     _yolo_model: Optional[Any] = None
     _ssd_net: Optional[Any] = None
     _ssd_labels: List[str] = []
@@ -51,9 +54,17 @@ class ObjectDetectorTool:
             return None
         if cls._face_cascade is not None:
             return cls._face_cascade
+        if cls._face_cascade_missing:
+            # Already searched and missed: the warning fired once — do
+            # not repeat it on every detection attempt (live: it logged
+            # on every diag run, twice per run).
+            return None
         try:
-            # Try common locations for haarcascade
+            # Vendored first (works on OpenCV 5, which ships no data),
+            # then the wheel's own data dir, then system installs.
             candidates = [
+                Path(__file__).resolve().parent / "cascades" /
+                "haarcascade_frontalface_default.xml",
                 Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml" if hasattr(cv2, "data") else None,
                 Path("/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"),
                 Path("/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"),
@@ -66,9 +77,14 @@ class ObjectDetectorTool:
                         app_logger.info(f"Face cascade loaded from {p}")
                         return cascade
             # B16 fix: don't try bare name without path (fails on many systems), just return None if candidates fail
-            app_logger.warning("Face cascade not found in candidates — face detection unavailable (install opencv with data)")
+            cls._face_cascade_missing = True
+            app_logger.warning("Face cascade not found in candidates — face detection unavailable (vendored copy missing; install opencv with data)")
             return None
         except Exception as e:
+            # Also cache the negative here (live: this path re-warned on
+            # every attempt when the installed cv2 build lacks the
+            # objdetect module entirely).
+            cls._face_cascade_missing = True
             app_logger.warning(f"Could not load face cascade: {e}")
             return None
 
