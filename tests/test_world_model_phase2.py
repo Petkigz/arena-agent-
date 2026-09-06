@@ -230,6 +230,47 @@ class TestTemporalReasoning:
         firefox_stale = [o for o in stale if o.subject == "firefox"]
         assert len(firefox_stale) == 0
 
+    def test_temporal_interval_and_before_after_queries(self, tmp_path):
+        wm = WorldModel(str(tmp_path / "wm.db"))
+        now = datetime.now(timezone.utc)
+        observations = [
+            Observation(
+                id="obs_before", subject="job", predicate="status", value="queued",
+                source="scheduler", observed_at=(now - timedelta(hours=3)).isoformat(),
+            ),
+            Observation(
+                id="obs_middle", subject="job", predicate="status", value="running",
+                source="scheduler", observed_at=(now - timedelta(hours=2)).isoformat(),
+            ),
+            Observation(
+                id="obs_after", subject="job", predicate="status", value="done",
+                source="scheduler", observed_at=(now - timedelta(hours=1)).isoformat(),
+            ),
+        ]
+        for observation in observations:
+            wm.observe(observation)
+
+        start = (now - timedelta(hours=2, minutes=30)).isoformat()
+        end = (now - timedelta(hours=1, minutes=30)).isoformat()
+        interval = wm.observations_between(start, end, subject="job")
+        before = wm.observations_before(start, subject="job")
+        after = wm.observations_after(end, subject="job")
+
+        assert [item.id for item in interval] == ["obs_middle"]
+        assert [item.id for item in before] == ["obs_before"]
+        assert [item.id for item in after] == ["obs_after"]
+
+        relation = wm.temporal_relation("obs_before", "obs_after")
+        assert relation["status"] == "ordered"
+        assert relation["relation"] == "before"
+        assert relation["delta_seconds"] == 7200.0
+
+    def test_temporal_queries_keep_missing_order_unknown(self, tmp_path):
+        wm = WorldModel(str(tmp_path / "wm.db"))
+        result = wm.temporal_relation("missing-a", "missing-b")
+        assert result["status"] == "unknown"
+        assert result["relation"] == "unknown"
+
     def test_entity_state_status_distinguishes_current_stale_and_unknown(self, tmp_path):
         wm = WorldModel(str(tmp_path / "wm.db"))
         now = datetime.now(timezone.utc)

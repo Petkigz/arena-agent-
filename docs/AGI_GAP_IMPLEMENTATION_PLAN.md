@@ -25,6 +25,7 @@ Implemented in the current branch:
 - Initial turn-based prospective memory is now wired through the existing reminder store: explicit session-scoped turn reminders persist delivery conditions, advance with cognitive turns, deliver once, and expose expiry state.
 - Initial versioned `UserState` is now wired to runtime context and owner-control APIs with explicit provenance, evidence IDs, confidence, expiry, append-only history, and owner-stated precedence over inference.
 - Initial bounded social-state records are now wired into runtime context with evidence-linked nesting, expiry, and explicit false-belief comparison; no subjective mind-reading claim is made.
+- Initial temporal queries are now wired into WorldModel for inclusive intervals, strict before/after retrieval, and explicit ordered/unknown observation relations.
 
 Usefulness feedback remains intentionally unimplemented in this slice; it must be added only through an approved existing extension point rather than a parallel store.
 
@@ -358,7 +359,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 - Add observation freshness and `currently_unobserved` semantics. **Implemented for WorldModel state reads and runtime capture:** current observations are eligible evidence, stale observations remain queryable history but surface as `UNKNOWN`/`currently_unobserved`.
 - Add a versioned `UserState` with provenance and confidence. **Initial store is implemented and wired:** runtime retrieval preserves source, evidence IDs, confidence, version, expiry, and explicit-owner precedence over inference; owner-control APIs expose updates and history.
 - Extend `social_cognition.py` with bounded nested mental-state records and false-belief test fixtures. **Initial implementation is wired:** mental-state records carry bounded belief chains, confidence/evidence, expiry, current-vs-historical reads, and an explicit false-belief comparison result.
-- Add temporal state for conversation turns, deadlines, intervals, and before/after queries.
+- Add temporal state for conversation turns, deadlines, intervals, and before/after queries. **Initial temporal query coverage is implemented:** WorldModel now exposes bounded interval, before, after, and observation-order queries; turn/deadline state is covered by the prospective-memory slice.
 - Add prospective memory for turn-based and wall-clock reminders. **Initial turn-based implementation is wired:** explicit `remind me in N turns` requests persist a session-scoped delivery condition, advance with each cognitive turn, deliver once, and expose expiry/delivery state.
 - Connect state retrieval to planning, tone, clarification, and owner-question behavior.
 - Add an explicit distinction between:
