@@ -439,7 +439,7 @@ def test_context_panel_is_progressive():
     app_source = (REPO / "desktop" / "app.py").read_text(encoding="utf-8")
     assert 'context_collapsed' in app_source  # choice persisted
     settings_source = (REPO / "desktop" / "settings.py").read_text(encoding="utf-8")
-    assert '"context_collapsed": False' in settings_source  # registered default (bool-normalized)
+    assert '"context_collapsed": True' in settings_source  # registered default (bool-normalized, progressive)
 
 
 def test_web_shadow_scale_consumes_tokens():
@@ -447,3 +447,39 @@ def test_web_shadow_scale_consumes_tokens():
     assert "tokens.shadow" in config_source
     # The hardcoded shadow literals must not return.
     assert "0 25px 50px -12px rgba(0, 0, 0, 0.25)" not in config_source
+
+
+# --------------------------------------------------------------------------
+# Shell hierarchy (round-21d, review sections 2/3/5/7)
+# --------------------------------------------------------------------------
+
+
+def test_beanie_landing_source_is_restrained():
+    """Review section 2: no giant quick-action tiles; greeting + composer + subtle chips."""
+    source = (REPO / "desktop" / "pages" / "beanie.py").read_text(encoding="utf-8")
+    assert "setMinimumHeight(56)" not in source  # the old tile height
+    assert "_talk_btn" not in source  # giant talk button removed (mic is in the composer)
+    assert "Ask Beanie anything" in source  # landing composer placeholder
+    assert "Good " in source  # time-based greeting
+    assert "What are we working on today?" in source  # resting message
+    assert "_chip_style" in source  # subtle suggestions
+
+
+def test_sidebar_source_groups_navigation():
+    """Review section 5: grouped sections with an owner area; flat nav items."""
+    source = (REPO / "desktop" / "widgets" / "sidebar.py").read_text(encoding="utf-8")
+    for section in ("Conversations", "Workspace", "Tools", "Owner", "System"):
+        assert f'("{section}",' in source, f"sidebar lost the {section} section"
+    assert "Owner Control" in source and "owner_control" in source
+    assert "_nav_style" in source and "background: transparent" in source
+
+
+def test_landing_composer_wired_and_context_progressive_by_default():
+    """Landing submits route to the conversation; context hidden unless wanted."""
+    app_source = (REPO / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert "_landing_submit" in app_source
+    assert "on_submit=self._landing_submit" in app_source
+    assert '"context_collapsed": True' in (REPO / "desktop" / "settings.py").read_text(encoding="utf-8")
+
+    chat_source = (REPO / "desktop" / "pages" / "chat.py").read_text(encoding="utf-8")
+    assert 'QPushButton("➤")' in chat_source  # icon send button, not text

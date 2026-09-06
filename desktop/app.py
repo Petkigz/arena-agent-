@@ -188,7 +188,11 @@ class MainWindow(QMainWindow):
         self._voice_state_signal.connect(self._on_voice_state)
 
         # Pages
-        self.beanie = BeaniePage(on_talk=self._toggle_talk, on_quick_action=self._quick_action)
+        self.beanie = BeaniePage(
+            on_talk=self._toggle_talk,
+            on_quick_action=self._quick_action,
+            on_submit=self._landing_submit,
+        )
         self.chat = ChatPage(on_send=self._send_message, on_voice=self._toggle_talk)
         self.pansophy = PansophyPage(self.client)
         self.files = FilesPage(self.client)
@@ -386,7 +390,7 @@ class MainWindow(QMainWindow):
     def _on_online(self) -> None:
         self._set_status("idle")
         self.sidebar.set_status(True)
-        self.beanie.set_message("I'm here.")
+        self.beanie.set_message("What are we working on today?")
         self.context.set_text("● Online\n\nConnected to the backend.")
 
     @Slot(str)
@@ -442,7 +446,7 @@ class MainWindow(QMainWindow):
         if done:
             self._set_status("idle")
             self.chat.set_voice_status("idle")
-            self.beanie.set_message("I'm here.")
+            self.beanie.set_message("What are we working on today?")
 
     @Slot(str, str)
     def _handle_room_message(self, message_id: str, content: str) -> None:
@@ -488,6 +492,12 @@ class MainWindow(QMainWindow):
         self._set_status("offline")
         self.beanie.set_message("Connection error.")
 
+    def _landing_submit(self, text: str) -> None:
+        """Landing composer: the conversation is the primary surface — hand the
+        message to the chat page and send it."""
+        self._nav_to_key("chat")
+        self._send_message(text)
+
     # ── Quick actions / talk ──
     def _quick_action(self, action: str) -> None:
         # Map quick actions to chat prompts (simplest useful behavior).
@@ -497,6 +507,9 @@ class MainWindow(QMainWindow):
             "research": "Research the latest on my current project.",
             "talk": "",
         }
+        if action == "talk":
+            self._toggle_talk()
+            return
         prompt = prompts.get(action, "")
         if prompt:
             self._nav_to_key("chat")
@@ -534,7 +547,7 @@ class MainWindow(QMainWindow):
             self._set_status("idle")
             self.chat.set_voice_status("idle")
             self.sidebar.set_conversation_mode(False)
-            self.beanie.set_message("I'm here.")
+            self.beanie.set_message("What are we working on today?")
 
     # ── Voice callbacks ─────────────────────────────────────────────────────
     @Slot(str, bool)
@@ -577,7 +590,7 @@ class MainWindow(QMainWindow):
         elif orb_state == "speaking":
             self.beanie.set_message("Speaking…")
         elif orb_state == "idle":
-            self.beanie.set_message("I'm here.")
+            self.beanie.set_message("What are we working on today?")
         # The backend streams the reply audio around the "speaking" state; the
         # player consumes it on its own thread, so nothing extra to do here.
 

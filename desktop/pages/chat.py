@@ -63,11 +63,13 @@ class ChatPage(QWidget):
         composer.addWidget(self.input, stretch=1)
 
         self.mic_btn = QPushButton("🎙")
+        self.mic_btn.setFixedSize(44, 40)
         self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.mic_btn.clicked.connect(self._on_voice)
         composer.addWidget(self.mic_btn)
 
-        self.send_btn = QPushButton("Send")
+        self.send_btn = QPushButton("➤")
+        self.send_btn.setFixedSize(44, 40)
         self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
         self.send_btn.clicked.connect(self._submit)
         composer.addWidget(self.send_btn)

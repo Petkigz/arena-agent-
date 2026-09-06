@@ -105,7 +105,38 @@ web already compiles to — this is canonicalization, not a redesign):
 Remaining for the fine-tune track: web `transition-all` usages could narrow to specific
 properties (repaint hygiene); sidebar collapse-to-icon-rail (needs design iteration → Phase 3).
 
-## Phase 2 — Beanie state machine as a shared specification
+## Phase 2 — DONE (round-21d): desktop shell hierarchy — the review's §2/§3/§5/§7
+
+Executed against the full review text (re-read this round), following its order (their
+"Phase 2 — fix desktop shell", "Phase 3 — make context progressive"):
+
+- **§2 Restrained Beanie landing** (`desktop/pages/beanie.py`): the four 56px quick-action
+  tiles and the giant "🎙 Talk to Beanie" button are gone. Landing = orb → "Beanie" →
+  time-based greeting ("Good evening.") → "What are we working on today?" → a landing
+  composer ("Ask Beanie anything…" + inline 🎙 + ➤, wired through `app._landing_submit` to
+  hand the message to the conversation and switch to it) → the same four actions as subtle
+  flat text chips. Beanie is the identity layer, not a voice-assistant landing page.
+- **§3 Context progressive by default**: `context_collapsed` now defaults to True — the rail
+  is hidden unless the owner expands it ("Otherwise: hide it"). Toggle + persistence
+  unchanged from round-21c.
+- **§5 Grouped sidebar** (`desktop/widgets/sidebar.py`): the flat 10-button dashboard stack
+  is now grouped sections — **Conversations** (Chats + recent list), **Workspace** (Pansophy,
+  Projects, Files), **Tools** (Images, Code), **Owner** (Owner Control, Tools, Beanie),
+  **System** (Settings) — with flat transparent nav items (hover surface, like the web's
+  sidebar items) instead of boxed buttons. Owner/admin surfaces live in their own area.
+- **§7 De-buttoned composer** (`desktop/pages/chat.py`): "Send" → compact ➤ accent icon;
+  mic fixed-size icon button. Everything else stays contextual.
+- The "Talk to me" chip now actually toggles voice (it previously mapped to an empty prompt).
+
+**Not done this round (honest scope):** the inline "Working context" card inside the
+conversation (review §4's mockup) needs backend surface area the desktop chat flow doesn't
+have yet (project/objective per turn) — it rides with Phase 4 (API contracts). Mobile shell
+(§8) remains future work; the review itself confirmed no Android client exists in the repo.
+
+Guards: widget tests (restrained landing, chip actions, grouped sidebar routing — run
+wherever Qt exists) + headless source checks in `tests/test_design_tokens.py`.
+
+## Phase 2b — Beanie state machine as a shared specification
 
 Largely DONE by Phase 1's plumbing: `desktop/pages/beanie.py` already imports
 `PRESENCE_COLORS`/`PRESENCE_DURATIONS` from `desktop.theme`, which now serves the canonical

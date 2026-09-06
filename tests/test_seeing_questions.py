@@ -43,7 +43,8 @@ def test_desktop_handlers_are_distinct_and_complete():
     token_block = source[source.index("def _handle_chat_token"):source.index("def _handle_room_message")]
     assert "stream_token(token, done)" in token_block
     assert 'if done:' in token_block                      # the status reset lives HERE
-    assert 'beanie.set_message("I\'m here.")' in token_block
+    # Resting message = the landing question (round-21d review; was "I'm here.")
+    assert 'beanie.set_message("What are we working on today?")' in token_block
 
     room_block = source[source.index("def _handle_room_message"):source.index("@Slot(list)")]
     assert "show_user_message(message_id, content)" in room_block

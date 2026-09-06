@@ -88,7 +88,7 @@ class LeftSidebar(QFrame):
         layout.addWidget(self.conversation_btn)
 
         # Conversation list
-        self._chats_label = QLabel("Chats")
+        self._chats_label = QLabel("Conversations")
         self._chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
         layout.addWidget(self._chats_label)
         self.conv_list = QListWidget()
@@ -100,18 +100,40 @@ class LeftSidebar(QFrame):
         self.conv_list.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.conv_list, stretch=1)
 
-        # Navigation (mirrors the web sidebar: Chats / Pansophy / Files / Code / Settings / Projects)
-        for label, key in [
-            ("Chats", "chat"), ("Pansophy", "pansophy"), ("Files", "files"),
-            ("Code", "code"), ("Images", "images"), ("Projects", "projects"),
-            ("Owner Control", "owner_control"), ("Settings", "settings"),
-            ("Beanie", "beanie"), ("Tools", "tools"),
-        ]:
-            btn = QPushButton(label)
-            btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
-            btn.clicked.connect(lambda _=False, k=key: on_nav(k))
-            self._nav_buttons.append(btn)
-            layout.addWidget(btn)
+        # Grouped navigation (round-21d design review): the sidebar reads as
+        # "Beanie, an AI that has capabilities", not an OS dashboard. Flat nav
+        # items grouped into sections; owner/admin surfaces live in their own
+        # area instead of sitting beside user-facing navigation.
+        self._nav_sections: List[QLabel] = []
+        nav_groups = [
+            ("Conversations", [("Chats", "chat")]),
+            ("Workspace", [("Pansophy", "pansophy"), ("Projects", "projects"), ("Files", "files")]),
+            ("Tools", [("Images", "images"), ("Code", "code")]),
+            ("Owner", [("Owner Control", "owner_control"), ("Tools", "tools"), ("Beanie", "beanie")]),
+            ("System", [("Settings", "settings")]),
+        ]
+        for section_title, items in nav_groups:
+            label = QLabel(section_title)
+            label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
+            self._nav_sections.append(label)
+            layout.addWidget(label)
+            for label_text, key in items:
+                btn = QPushButton(label_text)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setStyleSheet(self._nav_style())
+                btn.clicked.connect(lambda _=False, k=key: on_nav(k))
+                self._nav_buttons.append(btn)
+                layout.addWidget(btn)
+
+    def _nav_style(self) -> str:
+        """Flat nav item — matches the conversation-list look (no button chrome)."""
+        return (
+            f"QPushButton {{ background: transparent; color: {TEXT_PRIMARY};"
+            f" border: none; border-radius: 6px; padding: 8px 12px; text-align: left; }}"
+            f"QPushButton:hover {{ background: {BG_SURFACE}; }}"
+            f"QPushButton:pressed {{ background: {_lighten(BG_SURFACE, -0.15).name()}; }}"
+            f"QPushButton:focus {{ border: 1px solid {ACCENT}; }}"
+        )
 
     def _on_item_clicked(self, item) -> None:
         cid = item.data(Qt.ItemDataRole.UserRole)
@@ -154,6 +176,8 @@ class LeftSidebar(QFrame):
             f" QListWidget::item {{ padding: 8px; border-radius: 6px; }}"
             f" QListWidget::item:selected {{ background: {BG_SURFACE}; }}"
         )
+        for label in self._nav_sections:
+            label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
         for btn in self._nav_buttons:
-            btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
+            btn.setStyleSheet(self._nav_style())
 
