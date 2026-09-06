@@ -40,11 +40,19 @@ fun BeanieTopBar(
             Icon(Icons.Default.Menu, contentDescription = "Conversations")
         }
         Column(Modifier.weight(1f)) {
-            Text(
-                "Beanie",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Beanie",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    "Personal AI Assistant",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier

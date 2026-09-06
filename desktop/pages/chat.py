@@ -31,8 +31,42 @@ class ChatPage(QWidget):
         self._streaming = ""
 
         right = QVBoxLayout(self)
-        right.setContentsMargins(16, 16, 16, 12)
+        right.setContentsMargins(16, 12, 16, 12)
         right.setSpacing(8)
+
+        # Beanie-first header: the conversation title is context, not the
+        # product identity. This mirrors the web and Android top bars.
+        header = QFrame()
+        header.setObjectName("beanieChatHeader")
+        header.setStyleSheet(
+            f"QFrame#beanieChatHeader {{ background: {BG_SECONDARY};"
+            f" border: 1px solid {BORDER_SUBTLE}; border-radius: 12px; }}"
+        )
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(12, 8, 12, 8)
+        header_row.setSpacing(10)
+        self.header_orb = PresenceOrbWidget(diameter=30)
+        header_row.addWidget(self.header_orb)
+        identity = QVBoxLayout()
+        identity.setSpacing(0)
+        self._header_name = QLabel("Beanie")
+        self._header_name.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {TEXT_PRIMARY};")
+        identity.addWidget(self._header_name)
+        header_meta = QHBoxLayout()
+        header_meta.setSpacing(5)
+        self._header_status = QLabel("● Offline")
+        self._header_status.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED};")
+        self._header_conversation = QLabel("Current conversation")
+        self._header_conversation.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY};")
+        header_meta.addWidget(self._header_status)
+        header_meta.addWidget(QLabel("·"))
+        header_meta.addWidget(self._header_conversation)
+        identity.addLayout(header_meta)
+        header_row.addLayout(identity, stretch=1)
+        self._header_subtitle = QLabel("Personal AI Assistant")
+        self._header_subtitle.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED};")
+        header_row.addWidget(self._header_subtitle)
+        right.addWidget(header)
 
         # Scrollable message list (widget-based, so orbs animate in place).
         self.scroll = QScrollArea()
@@ -125,8 +159,25 @@ class ChatPage(QWidget):
             self._streaming = ""
         self._scroll_to_bottom()
 
+    def set_conversation_title(self, title: str) -> None:
+        self._header_conversation.setText(title or "Current conversation")
+        self._header_conversation.setToolTip(title or "Current conversation")
+
+    def set_connection_status(self, online: bool, detail: str = "") -> None:
+        label = "Online" if online else "Offline"
+        if detail:
+            label += f" · {detail}"
+        color = PRESENCE_COLORS.get("success") if online else TEXT_MUTED
+        self._header_orb.set_status("idle" if online else "offline")
+        self._header_status.setText(f"● {label}")
+        self._header_status.setStyleSheet(f"font-size: 12px; color: {color};")
+
     def refresh_theme(self) -> None:
         self.scroll.setStyleSheet(f"background: {BG_PRIMARY}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;")
+        self.findChild(QFrame, "beanieChatHeader").setStyleSheet(
+            f"QFrame#beanieChatHeader {{ background: {BG_SECONDARY};"
+            f" border: 1px solid {BORDER_SUBTLE}; border-radius: 12px; }}"
+        )
         self.container.setStyleSheet(f"background: {BG_PRIMARY};")
         self.input.setStyleSheet(_composer_style())
         self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
@@ -162,7 +213,9 @@ class ChatPage(QWidget):
         }
         if status not in labels:
             self.voice_banner.hide()
+            self.header_orb.set_status("idle" if status != "offline" else "offline")
             return
+        self.header_orb.set_status(status)
         label = labels[status]
         color = colors[status]
         self.voice_banner.setText(f'<span style="color:{color};">●</span>  {label}')

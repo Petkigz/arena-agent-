@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /**
@@ -20,8 +21,9 @@ import androidx.compose.ui.unit.dp
  * the SAME PresenceStatus: the landing orb, the chat timeline avatar, the
  * composer mic, the voice indicator. One state, many reactive surfaces.
  *
- * Colors + pulse durations are pinned to design/tokens.json beanie.states by
- * tests/test_android_design_tokens.py.
+ * Colors + pulse durations are loaded at runtime from the packaged canonical
+ * design/tokens.json beanie.states table; the enum values remain a compile-time
+ * contract and are pinned to that table by tests/test_android_design_tokens.py.
  */
 
 enum class PresenceStatus(val color: Color, val pulseMs: Int) {
@@ -51,7 +53,9 @@ fun ReactiveBeanieOrb(
     sizeDp: Int = 220,
     modifier: Modifier = Modifier,
 ) {
-    val loopMs = if (status.pulseMs > 0) status.pulseMs else 1000
+    val context = LocalContext.current
+    val token = remember(context, status) { SharedPresenceTokens.forStatus(context, status) }
+    val loopMs = if (token.pulseMs > 0) token.pulseMs else 1000
 
     val transition = rememberInfiniteTransition(label = "orb")
 
@@ -88,7 +92,7 @@ fun ReactiveBeanieOrb(
         val cx = size.width / 2f
         val cy = size.height / 2f
         val base = size.minDimension / 2f
-        val color = status.color
+        val color = token.color
 
         // ── Outer glow halo ──
         if (status != PresenceStatus.OFFLINE && status != PresenceStatus.SLEEPING) {

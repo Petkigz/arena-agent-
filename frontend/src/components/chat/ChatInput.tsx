@@ -96,7 +96,7 @@ export function ChatInput({
   }, [message, pendingAttachments, disabled]);
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-border-subtle bg-background-primary p-4" data-tutorial="chat-input" role="form" aria-label="Message input">
+    <form onSubmit={handleSubmit} className="flex-shrink-0 bg-background-primary px-4 pb-4 pt-2" data-tutorial="chat-input" role="form" aria-label="Message input">
       <div className="max-w-4xl mx-auto">
         {/* Pending attachments preview */}
         {pendingAttachments.length > 0 && (
@@ -135,8 +135,10 @@ export function ChatInput({
           </div>
         )}
 
-        {/* Input row */}
-        <div className="flex items-end gap-2">
+        {/* The composer is the surface: the bottom region stays visually quiet. */}
+        <div className="rounded-2xl border border-border-subtle bg-background-panel/90 p-2 shadow-xl backdrop-blur-xl focus-within:border-border-active focus-within:shadow-glow">
+          {/* Input row */}
+          <div className="flex items-end gap-2">
           {/* Attach button */}
           <AttachmentButton onAttach={handleAttach} disabled={disabled} />
 
@@ -201,6 +203,7 @@ export function ChatInput({
           >
             <Send className="w-5 h-5" aria-hidden="true" />
           </Button>
+          </div>
         </div>
       </div>
     </form>

@@ -1,5 +1,6 @@
 export { MessageBubble } from './MessageBubble';
 export { ChatInput } from './ChatInput';
+export { ChatHeader } from './ChatHeader';
 export { ActionSteps } from './ActionSteps';
 export { ReasoningTrace } from './ReasoningTrace';
 export { CodeChanges } from './CodeChanges';

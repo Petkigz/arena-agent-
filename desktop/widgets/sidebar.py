@@ -107,7 +107,9 @@ class LeftSidebar(QFrame):
         # area instead of sitting beside user-facing navigation.
         self._nav_sections: List[QLabel] = []
         nav_groups = [
-            ("Conversations", [("Chats", "chat")]),
+            # Conversation history is the primary navigation surface below;
+            # retain the semantic group label for parity with the other shells.
+            ("Conversations", []),
             ("Workspace", [("Pansophy", "pansophy"), ("Projects", "projects"), ("Files", "files")]),
             ("Tools", [("Images", "images"), ("Code", "code")]),
             ("Owner", [("Owner Control", "owner_control"), ("Tools", "tools"), ("Beanie", "beanie")]),
