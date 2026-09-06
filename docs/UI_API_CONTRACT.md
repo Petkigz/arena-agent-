@@ -31,6 +31,7 @@ Server → client messages:
 | `conversation_created` | `conversation_id`, `title` | after create |
 | `message_token` | `token`, `done` | streaming reply (token-by-token; `done: true` ends the turn) |
 | `room_message` | `message_id`, `content` | message from another client in the shared room (echo suppression is client-side) |
+| `action_step` | `label`, `status` | streamed tool activity attached to the assistant reply; `status` streams `in_progress` → `complete` (web: ActionSteps, Android: ToolActivity, desktop: Live Context rail) |
 | `conversation_activity` | `conversation_id` | owner-wide signal: another device moved the active conversation (cross-device follow) |
 | `error` | `message` | transport/processing error |
 

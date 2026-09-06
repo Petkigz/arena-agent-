@@ -526,3 +526,66 @@ def test_web_page_transitions_use_motion_tokens():
         source = (REPO / rel).read_text(encoding="utf-8")
         assert "MOTION.base_ms / 1000" in source, f"{rel} lost the token-driven duration"
         assert "duration: 0.25" not in source
+
+
+# --------------------------------------------------------------------------
+# 21l review: one product, three shells — the Context rail (agent's mind)
+# --------------------------------------------------------------------------
+
+
+def test_desktop_live_context_rail():
+    """Desktop = command center: Mission / Working on / Memory / Tools."""
+    source = (REPO / "desktop" / "widgets" / "context.py").read_text(encoding="utf-8")
+    for section in ("MISSION", "WORKING ON", "MEMORY", "TOOLS"):
+        assert section in source, f"Live Context rail lost the {section} section"
+    # The rail consumes the same context dict as the inline card…
+    assert "def set_context(self, context: dict)" in source
+    # …and the streamed tool events (update-by-label, like web/Android).
+    assert "def set_tool_activity" in source
+    assert "in_progress" in source and "complete" in source
+    assert "def set_status" in source  # structured connection state, not a text dump
+
+    app = (REPO / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert "self.context.set_context(context or {})" in app  # rail fed from working context
+    assert "_handle_action_step" in app                      # action_step → rail
+    assert "self.context.clear_tools()" in app               # fresh send → fresh timeline
+
+
+def test_desktop_client_parses_action_steps():
+    """The desktop chat client handles the action_step WS events the web renders."""
+    source = (REPO / "desktop" / "chat_client.py").read_text(encoding="utf-8")
+    assert 't == "action_step"' in source
+    assert "on_action_step" in source
+
+
+def test_web_context_panel_is_the_agents_mind():
+    """Web ContextPanel: Mission / Working on / Memory / Tools — not a metrics
+    sidebar (Statistics / Knowledge Graph / Current Chat removed)."""
+    source = (REPO / "frontend" / "src" / "components" / "layout" / "ContextPanel.tsx").read_text(encoding="utf-8")
+    for section in ("Mission", "Working on", "Memory", "Tools"):
+        assert section in source, f"ContextPanel lost the {section} section"
+    # Dashboard noise is gone…
+    assert "Statistics" not in source
+    assert "Knowledge Graph" not in source
+    assert "Current Chat" not in source
+    # …tool activity reuses the semantic ActionSteps renderer…
+    assert "ActionSteps" in source
+    test = (REPO / "frontend" / "src" / "test" / "components" / "ContextPanel.test.tsx").read_text(encoding="utf-8")
+    assert "agent-mind sections" in test
+
+
+def test_context_vocabulary_is_shared_across_all_three_shells():
+    """One product, three shells: the same context concept on web (reference),
+    desktop (command center) and Android (quiet, progressive)."""
+    web = (REPO / "frontend" / "src" / "components" / "layout" / "ContextPanel.tsx").read_text(encoding="utf-8")
+    desktop = (REPO / "desktop" / "widgets" / "context.py").read_text(encoding="utf-8")
+    android = (REPO / "android" / "app" / "src" / "main" / "java" / "com" / "arena" / "voice" / "ui" / "components" / "WorkingContext.kt").read_text(encoding="utf-8")
+    # Mission / goal
+    assert ("Mission" in web) and ("MISSION" in desktop) and ("objective" in android)
+    # Working on / project
+    assert ("Working on" in web) and ("WORKING ON" in desktop) and ("project" in android)
+    # Memory
+    assert ("Memory" in web) and ("MEMORY" in desktop) and ("memories" in android)
+    # Tools / activity
+    assert ("Tools" in web) and ("TOOLS" in desktop)
+    assert "ToolActivityTimeline" in (REPO / "android" / "app" / "src" / "main" / "java" / "com" / "arena" / "voice" / "ui" / "components" / "ToolActivity.kt").read_text(encoding="utf-8")

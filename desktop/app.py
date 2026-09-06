@@ -90,6 +90,7 @@ class MainWindow(QMainWindow):
     _chat_list_signal = Signal(list)
     _chat_history_signal = Signal(str, list)
     _chat_created_signal = Signal(str, str)
+    _chat_action_signal = Signal(str, str)
     _chat_error_signal = Signal(str)
     # Marshal voice events from the voice WS recv thread onto the GUI thread
     # (the _on_voice_* handlers mutate widgets, which must only happen on the
@@ -160,6 +161,7 @@ class MainWindow(QMainWindow):
         self.chat_client = DesktopChatClient(ws_url=ws_url, conversation_id=conversation_id)
         self.chat_client.on_connected = self._on_chat_connected
         self.chat_client.on_token = lambda t, d: self._chat_token_signal.emit(t, d)
+        self.chat_client.on_action_step = lambda l, st: self._chat_action_signal.emit(l, st)
         self.chat_client.on_room_message = lambda mid, c: self._chat_room_signal.emit(mid, c)
         self.chat_client.on_conversation_list = lambda c: self._chat_list_signal.emit(c)
         self.chat_client.on_history = lambda cid, h: self._chat_history_signal.emit(cid, h)
@@ -181,6 +183,7 @@ class MainWindow(QMainWindow):
         self._chat_history_signal.connect(self._handle_conversation_history)
         self._chat_created_signal.connect(self._handle_conversation_created)
         self._chat_error_signal.connect(self._handle_chat_error)
+        self._chat_action_signal.connect(self._handle_action_step)
 
         self._voice_transcript_signal.connect(self._on_voice_transcript)
         self._voice_reply_signal.connect(self._on_voice_reply)
@@ -391,14 +394,14 @@ class MainWindow(QMainWindow):
         self._set_status("idle")
         self.sidebar.set_status(True)
         self.beanie.set_message("What are we working on today?")
-        self.context.set_text("● Online\n\nConnected to the backend.")
+        self.context.set_status(True)
 
     @Slot(str)
     def _on_offline(self, err: str) -> None:
         self._set_status("offline")
         self.sidebar.set_status(False)
         self.beanie.set_message("Offline — start the backend.")
-        self.context.set_text(f"● Offline\n\n{err}")
+        self.context.set_status(False, err)
 
     # ── Chat (ChatGPT-style) ──
     def _on_chat_connected(self) -> None:
@@ -438,6 +441,7 @@ class MainWindow(QMainWindow):
         self._set_status("thinking")
         self.chat.set_voice_status("thinking")
         self.beanie.set_message("Thinking…")
+        self.context.clear_tools()
         self._fetch_working_context()
         self.chat_client.send_user_message(self.current_conv_id, content)
 
@@ -497,6 +501,12 @@ class MainWindow(QMainWindow):
         self.chat.hide_working_context()
         self.beanie.set_message("Connection error.")
 
+    @Slot(str, str)
+    def _handle_action_step(self, label: str, status: str) -> None:
+        """Tool activity → the Live Context rail (same semantic event the web
+        renders as ActionSteps and Android as ToolActivity)."""
+        self.context.set_tool_activity(label, status)
+
     def _fetch_working_context(self) -> None:
         """While Beanie works, compose the inline working-context card (review
         section 4) from the same endpoints the web context panels use. Runs on
@@ -514,6 +524,9 @@ class MainWindow(QMainWindow):
 
     @Slot(dict)
     def _handle_working_context(self, context: dict) -> None:
+        # The Live Context rail always shows the agent's mind; the inline card
+        # appears only while Beanie works.
+        self.context.set_context(context or {})
         if getattr(self, "_beanie_working", False):
             self.chat.show_working_context(context)
 

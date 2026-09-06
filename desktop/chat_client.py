@@ -42,6 +42,9 @@ class DesktopChatClient:
         #: Called with a conversation_id when the owner chats in ANY room
         #: (cross-device follow signal).
         self.on_activity: Optional[Callable[[str], None]] = None
+        #: Called with (label, status) for streamed tool activity — the same
+        #: semantic events the web/Android render ("in_progress" -> "complete").
+        self.on_action_step: Optional[Callable[[str, str], None]] = None
 
     @property
     def connected(self) -> bool:
@@ -171,6 +174,12 @@ class DesktopChatClient:
         elif t == "room_message":
             if self.on_room_message:
                 self.on_room_message(data.get("message_id", ""), data.get("content", ""))
+        elif t == "action_step":
+            if self.on_action_step:
+                self.on_action_step(
+                    data.get("label") or data.get("action") or "",
+                    data.get("status", ""),
+                )
         elif t == "conversation_activity":
             # Owner-wide signal: another device moved the active conversation.
             if self.on_activity:

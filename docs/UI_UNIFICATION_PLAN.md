@@ -254,6 +254,33 @@ check) and every existing assertion was repathed to the new structure — none w
 Still needing a real build/device loop: Gradle compile verification (no Android SDK in this
 sandbox — Kotlin is source-verified and machine-guarded).
 
+## Phase 7 — DONE (round-21l): one product, three shells — the Context rail
+
+The 21l review's frame: not three designs — one product with three shells sharing the same
+conceptual hierarchy (Beanie → Conversation + Context → Messages/Actions → Composer).
+The shared design language it asks for (colors/typography/spacing/radius/motion + the
+11-state Beanie machine) was already locked and guarded in earlier rounds; what was
+missing was the **Context rail as the agent's mind**:
+
+- **Web (reference)**: ContextPanel rewritten from a metrics sidebar (Statistics,
+  Knowledge Graph tallies, Current Chat) into the agent's mind — quiet sections for
+  **Mission / Working on / Progress / Memory / Tools**, tool activity reusing the semantic
+  ActionSteps renderer. "Not everything cards": sections are small icon + muted uppercase
+  labels, no Card wrappers; the conversation stays the dominant surface.
+- **Desktop (command center)**: the right rail — previously a connection-status text box
+  — is now a **Live Context** rail: ● status line + MISSION / WORKING ON / MEMORY / TOOLS.
+  The desktop chat client now parses the `action_step` WS events it previously ignored
+  (documented in the API contract, guarded) and streams them into the rail's execution
+  timeline (update-by-label, ✓/⟳/✗ semantics, same as web/Android). The working-context
+  fetch feeds both the rail and the inline card.
+- **Android (quiet)**: already correct per the review — conversation-first, context as one
+  quiet line + a sheet, activity as timeline rows. No change.
+
+Guarded: 4 web tests (sections, semantic tools, no dashboard noise, quiet placeholders) +
+4 backend tests including `test_context_vocabulary_is_shared_across_all_three_shells`,
+which pins the same context vocabulary (mission/working-on/memory/tools) across web,
+desktop and Android sources.
+
 ## Phase 6 — DONE (round-21h): polish — token-driven, never random margins
 
 Systematic polish across all three clients, every value from `design/tokens.json`:
