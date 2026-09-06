@@ -93,6 +93,8 @@ def test_runtime_reviews_before_action_gate_without_authorizing(tmp_path):
     assert result["criticality_review"]["required"] is True
     assert gate_seen_review and gate_seen_review[0]["required"] is True
     assert result["criticality_review"]["recommendation"] == "surface_review_and_preserve_uncertainty"
+    assert result["compute_policy"]["advisory_only"] is True
+    assert result["compute_policy"]["calibration_status"] == "not_calibrated"
     assert result["gate_blocked"] == "policy_gate"
 
 

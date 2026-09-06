@@ -40,7 +40,7 @@ from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
 from app.cognition.goal_verifier import GoalVerifier, GoalVerificationResult
 from app.cognition.execution_truth import ExecutionTruth
 from app.cognition.goal_replanner import GoalReplanner
-from app.cognition.resource_allocator import ResourceAllocator
+from app.cognition.resource_allocator import ResourceAllocator, TaskComplexity
 from app.cognition.confidence_calibrator import ConfidenceCalibrator
 from app.cognition.epistemic_presentation import presentation_for_cycle
 from app.cognition.response_grounding import reconcile_response
@@ -4031,33 +4031,8 @@ class CognitiveRuntime:
             goal_rep=goal_rep,
             user_text=user_text,
         )
-        # The previous call passed TaskComplexity as the first positional
-        # argument (goal_rep), so allocation silently fell back to a trivial
-        # budget. Keep the classified level explicit and pass the actual goal
-        # context into the allocator.
-        budget = self.resource_allocator.allocate(
-            goal_rep=goal_rep,
-            user_text=user_text,
-            override_complexity=complexity_level,
-        )
-        trace.resource_allocation = {
-            "complexity": budget.complexity.value,
-            "model": budget.model,
-            "max_reasoning_cycles": budget.max_reasoning_cycles,
-            "max_investigation_depth": budget.max_investigation_depth,
-            "max_replan_attempts": budget.max_replan_attempts,
-            "max_tokens": budget.max_tokens,
-            "timeout_ms": budget.timeout_ms,
-            "classification_reason": budget.classification_reason,
-        }
-        self.blackboard.set(
-            "resource_allocation",
-            dict(trace.resource_allocation),
-            source="resource_allocator",
-            confidence=1.0,
-        )
-        app_logger.info(f"Resource Allocation: Complexity={complexity_level.value}, Model={budget.model}, MaxCycles={budget.max_reasoning_cycles}, Reason={complexity_reason}")
-        
+        # The allocation is finalized after the selected proposal is known so
+        # value-of-compute can account for authoritative risk and reversibility.
         # Phase 3B: Consult analogical memory for similar past tasks
         similar_tasks = []
         try:
@@ -4110,6 +4085,79 @@ class CognitiveRuntime:
             ),
             "correction_outcome": "pending_verification",
         })
+
+        # Phase 4: apply the value-of-compute policy to the bounded planning
+        # allocation. Missing owner-stakes and usefulness evidence remain
+        # UNKNOWN; the policy may spend more compute, but never authorizes an
+        # action or treats a heuristic score as calibration.
+        history_available = any(
+            score.action_type == fine_action_type
+            for score in self.outcomes.all_scores()
+        )
+        compute_assessment = self.resource_allocator.assess_value_of_compute(
+            goal_rep=goal_rep,
+            proposal=proposal,
+            history_available=history_available,
+        )
+        allocation_complexity = complexity_level
+        if compute_assessment.recommended_route == "deliberate":
+            if complexity_level in (
+                TaskComplexity.TRIVIAL,
+                TaskComplexity.SIMPLE,
+                TaskComplexity.MODERATE,
+            ):
+                allocation_complexity = TaskComplexity.COMPLEX
+        elif (
+            compute_assessment.recommended_route == "standard"
+            and complexity_level is TaskComplexity.TRIVIAL
+        ):
+            allocation_complexity = TaskComplexity.SIMPLE
+        trace.compute_policy = compute_assessment.to_dict()
+        trace.compute_policy.update({
+            "baseline_complexity": complexity_level.value,
+            "applied_complexity": allocation_complexity.value,
+            "allocation_changed": allocation_complexity != complexity_level,
+        })
+        self.blackboard.set(
+            "value_of_compute",
+            dict(trace.compute_policy),
+            source="value_of_compute_policy",
+            confidence=1.0,
+        )
+
+        # The previous call passed TaskComplexity as the first positional
+        # argument (goal_rep), so allocation silently fell back to a trivial
+        # budget. Keep the classified level explicit and pass the actual goal
+        # context into the allocator.
+        complexity_level = allocation_complexity
+        budget = self.resource_allocator.allocate(
+            goal_rep=goal_rep,
+            user_text=user_text,
+            override_complexity=complexity_level,
+        )
+        trace.resource_allocation = {
+            "complexity": budget.complexity.value,
+            "model": budget.model,
+            "max_reasoning_cycles": budget.max_reasoning_cycles,
+            "max_investigation_depth": budget.max_investigation_depth,
+            "max_replan_attempts": budget.max_replan_attempts,
+            "max_tokens": budget.max_tokens,
+            "timeout_ms": budget.timeout_ms,
+            "classification_reason": budget.classification_reason,
+            "value_of_compute_route": compute_assessment.recommended_route,
+        }
+        self.blackboard.set(
+            "resource_allocation",
+            dict(trace.resource_allocation),
+            source="resource_allocator",
+            confidence=1.0,
+        )
+        app_logger.info(
+            f"Resource Allocation: Complexity={complexity_level.value}, "
+            f"Model={budget.model}, MaxCycles={budget.max_reasoning_cycles}, "
+            f"Reason={complexity_reason}, "
+            f"ValueOfCompute={compute_assessment.recommended_route}"
+        )
         
         # Phase 3A: Skill classification and transfer adjustment
         skill_type = self.skills.classify(fine_action_type)
@@ -4276,6 +4324,7 @@ class CognitiveRuntime:
                 "criticality_review": dict(trace.criticality_review),
                 "route_comparison": dict(trace.route_comparison),
                 "hypothesis_state": dict(trace.hypothesis_state),
+                "compute_policy": dict(trace.compute_policy),
             }
 
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
@@ -4726,4 +4775,5 @@ class CognitiveRuntime:
             "criticality_review": dict(trace.criticality_review),
             "route_comparison": dict(trace.route_comparison),
             "hypothesis_state": dict(trace.hypothesis_state),
+            "compute_policy": dict(trace.compute_policy),
         }

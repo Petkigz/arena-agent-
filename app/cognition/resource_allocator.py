@@ -101,6 +101,170 @@ class AllocationStats:
     under_allocated: int     # tasks that needed more resources than given
 
 
+@dataclass(frozen=True)
+class ValueOfComputeAssessment:
+    """Advisory value-of-compute decision with explicit unknown signals.
+
+    This is a recommendation for allocating deliberation effort, not an
+    authorization decision and not a calibrated estimate of task success.
+    Optional owner-stakes and usefulness inputs remain ``None`` when no
+    owner-provided evidence exists; they are never inferred from urgency,
+    wording, or a single outcome.
+    """
+    recommended_route: str  # fast, standard, or deliberate
+    score: float
+    signals: Dict[str, Optional[float]]
+    signal_status: Dict[str, str]
+    rationale: List[str]
+    decision_stage: str = "value_of_compute_advisory"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "recommended_route": self.recommended_route,
+            "score": round(float(self.score), 6),
+            "signals": dict(self.signals),
+            "signal_status": dict(self.signal_status),
+            "rationale": list(self.rationale),
+            "decision_stage": self.decision_stage,
+            "advisory_only": True,
+            "calibration_status": "not_calibrated",
+        }
+
+
+class ValueOfComputePolicy:
+    """Bounded deterministic policy for deciding when more reasoning is worth it."""
+
+    WEIGHTS = {
+        "risk": 0.25,
+        "irreversibility": 0.15,
+        "uncertainty": 0.20,
+        "novelty": 0.15,
+        "expected_information_gain": 0.15,
+        "owner_stakes": 0.05,
+        "predicted_user_usefulness": 0.05,
+    }
+
+    @staticmethod
+    def _clamp(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def assess(
+        cls,
+        *,
+        goal_rep: Optional[Any] = None,
+        proposal: Optional[Any] = None,
+        history_available: Optional[bool] = None,
+        expected_information_gain: Optional[float] = None,
+        owner_stakes: Optional[float] = None,
+        predicted_user_usefulness: Optional[float] = None,
+    ) -> ValueOfComputeAssessment:
+        signals: Dict[str, Optional[float]] = {
+            "risk": None,
+            "irreversibility": None,
+            "uncertainty": None,
+            "novelty": None,
+            "expected_information_gain": cls._clamp(expected_information_gain),
+            "owner_stakes": cls._clamp(owner_stakes),
+            "predicted_user_usefulness": cls._clamp(predicted_user_usefulness),
+        }
+        status: Dict[str, str] = {}
+        rationale: List[str] = []
+
+        risk_factors = list(getattr(goal_rep, "risk_factors", []) or []) if goal_rep else []
+        if proposal is not None:
+            try:
+                from app.cognition.tool_registry import capability_safety_or_none
+                declared = capability_safety_or_none(str(getattr(proposal, "action_type", "") or ""))
+                safety = 99 if declared is None else int(declared)
+                signals["risk"] = cls._clamp(safety / 3.0)
+                status["risk"] = "authoritative_capability_safety"
+            except Exception:
+                signals["risk"] = cls._clamp(
+                    int(getattr(proposal, "safety_level", 99) or 99) / 3.0
+                )
+                status["risk"] = "proposal_declared_safety_fallback"
+            reversible = getattr(proposal, "reversibility", None)
+            signals["irreversibility"] = None if reversible is None else (0.0 if reversible else 1.0)
+            status["irreversibility"] = "proposal_metadata" if reversible is not None else "unknown"
+        elif risk_factors:
+            signals["risk"] = cls._clamp(len(risk_factors) / 3.0)
+            status["risk"] = "goal_risk_factor_count"
+        else:
+            status["risk"] = "unknown"
+
+        unknowns = list(getattr(goal_rep, "unknowns", []) or []) if goal_rep else []
+        if unknowns:
+            signals["uncertainty"] = cls._clamp(len(unknowns) / 3.0)
+            status["uncertainty"] = "goal_unknown_count"
+            if signals["expected_information_gain"] is None:
+                signals["expected_information_gain"] = cls._clamp(len(unknowns) / 3.0)
+                status["expected_information_gain"] = "heuristic_from_goal_unknown_count"
+            if signals["uncertainty"] is not None and signals["uncertainty"] >= 0.34:
+                rationale.append(f"{len(unknowns)} unresolved goal unknown(s)")
+        else:
+            signals["uncertainty"] = 0.0 if goal_rep is not None else None
+            status["uncertainty"] = "no_recorded_goal_unknowns" if goal_rep is not None else "unknown"
+
+        if history_available is False:
+            signals["novelty"] = 1.0
+            status["novelty"] = "no_verified_action_history"
+            rationale.append("no verified local action history")
+        elif history_available is True:
+            signals["novelty"] = 0.0
+            status["novelty"] = "verified_action_history_present"
+        else:
+            status["novelty"] = "unknown"
+
+        for name in ("expected_information_gain", "owner_stakes", "predicted_user_usefulness"):
+            if name in status:
+                continue
+            if signals[name] is not None:
+                status[name] = "explicit_input"
+            else:
+                status[name] = "unknown"
+
+        weighted = [
+            (cls.WEIGHTS[name], value)
+            for name, value in signals.items()
+            if value is not None
+        ]
+        score = (
+            sum(weight * value for weight, value in weighted)
+            / sum(weight for weight, _ in weighted)
+            if weighted else 0.5
+        )
+        if score >= 0.60:
+            route = "deliberate"
+        elif score <= 0.25:
+            route = "fast"
+        else:
+            route = "standard"
+        if not weighted:
+            rationale.append("no decision-grade compute-value signals; keep route standard")
+        if signals["risk"] is not None and signals["risk"] >= 0.67:
+            rationale.append("risk signal favors additional deliberation")
+        if signals["irreversibility"] is not None and signals["irreversibility"] >= 0.5:
+            rationale.append("irreversibility signal favors additional deliberation")
+        if signals["owner_stakes"] is None:
+            rationale.append("owner stakes are UNKNOWN; no stakes are inferred")
+        if signals["predicted_user_usefulness"] is None:
+            rationale.append("predicted usefulness is UNKNOWN; no usefulness is inferred")
+
+        return ValueOfComputeAssessment(
+            recommended_route=route,
+            score=score,
+            signals=signals,
+            signal_status=status,
+            rationale=rationale,
+        )
+
+
 # ── Resource Allocator ───────────────────────────────────────────────
 
 class ResourceAllocator:
@@ -130,6 +294,26 @@ class ResourceAllocator:
         self._outcome_store = outcome_store
         self._allocation_history: List[Tuple[ResourceAllocation, bool, float]] = []
         # (allocation, success, latency_ms)
+
+    def assess_value_of_compute(
+        self,
+        *,
+        goal_rep: Optional[Any] = None,
+        proposal: Optional[Any] = None,
+        history_available: Optional[bool] = None,
+        expected_information_gain: Optional[float] = None,
+        owner_stakes: Optional[float] = None,
+        predicted_user_usefulness: Optional[float] = None,
+    ) -> ValueOfComputeAssessment:
+        """Return an advisory deliberation-value assessment."""
+        return ValueOfComputePolicy.assess(
+            goal_rep=goal_rep,
+            proposal=proposal,
+            history_available=history_available,
+            expected_information_gain=expected_information_gain,
+            owner_stakes=owner_stakes,
+            predicted_user_usefulness=predicted_user_usefulness,
+        )
 
     def classify_complexity(
         self,
