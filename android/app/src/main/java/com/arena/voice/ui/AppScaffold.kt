@@ -24,20 +24,12 @@ import com.arena.voice.ui.screens.BeanieScreen
 import com.arena.voice.ui.screens.ChatScreen
 import com.arena.voice.ui.screens.FilesScreen
 import com.arena.voice.ui.screens.PansophyScreen
-import com.arena.voice.ui.screens.PresenceStatus
+import com.arena.voice.ui.components.PresenceStatus
+import com.arena.voice.ui.theme.MotionTokens
 import com.arena.voice.ui.screens.ProjectsScreen
 import com.arena.voice.ui.screens.SettingsScreen
 import com.arena.voice.ui.screens.VisionScreen
 
-
-/**
- * Motion tokens — the shared design system's durations (design/tokens.json,
- * motion.fast_ms = 150). Pinned by tests/test_android_design_tokens.py.
- */
-object MotionTokens {
-    const val FAST_MS = 150
-    const val BASE_MS = 300
-}
 
 enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     BEANIE("beanie", "Beanie", Icons.Default.Person),

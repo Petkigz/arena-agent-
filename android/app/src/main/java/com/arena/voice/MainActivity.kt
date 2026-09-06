@@ -21,8 +21,8 @@ import androidx.lifecycle.lifecycleScope
 import com.arena.voice.api.ApiClient
 import com.arena.voice.service.WakeWordService
 import com.arena.voice.ui.AppScaffold
-import com.arena.voice.ui.ArenaVoiceTheme
-import com.arena.voice.ui.screens.PresenceStatus
+import com.arena.voice.ui.components.PresenceStatus
+import com.arena.voice.ui.theme.ArenaVoiceTheme
 import com.arena.voice.util.SettingsRepository
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.AndroidEntryPoint

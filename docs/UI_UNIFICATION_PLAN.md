@@ -225,9 +225,34 @@ presentation layer was revived:
   mic → listening → STT → thinking → streaming → speaking is one visible arc across landing,
   chat and orb.
 
+**Phase 4 (round-21j) — DONE: the 21j review's structural refactor.**
+Freeze functionality, build the visual layer — ChatScreen went from a 536-line monolith
+(drawer + header + messages + context + sheet + composer + tool cards + animations) to pure
+composition, mirroring the review's AppShell structure:
+
+- `ui/components/` — BeanieTopBar, BeanieComposer, BeanieMessage, BeanieEmptyState,
+  BeaniePresence (PresenceStatus + ReactiveBeanieOrb, extracted from BeanieScreen),
+  ToolActivity, WorkingContext, ConversationDrawer (+ VoiceStatusIndicator).
+- `ui/theme/` — Colors (token-pinned schemes), Typography, Shapes (ArenaRadius),
+  Spacing, Elevation, Motion (MotionTokens moved out of AppScaffold).
+- **ComposerDock**: one integrated input surface — chrome-less BasicTextField in a
+  bordered/elevated container that owns focus/disabled states; quiet icons; the send button
+  is the single accent control; the mic reacts to the SAME presence state as the orb.
+- **Tool activity = timeline rows below the bubble** (web parity — the web renders
+  ActionSteps under the bubble), never a card nested in the bubble.
+- **Working context = one quiet line** ("◉ Working on  Project · Objective  ›") that opens
+  the detail sheet; the sheet shows PROJECT / OBJECTIVE / RELEVANT MEMORY.
+- **Drawer regrouped**: Beanie / + New chat / RECENT (current conversation selected) /
+  WORKSPACE / Settings — grouping via section labels + spacing.
+- **No hard Dividers** anywhere in the conversation surfaces (spacing / surface contrast /
+  subtle borders instead). Duplicate-import code smell fixed; a guard now catches it.
+
+Guards: `tests/test_android_design_tokens.py` grew to 20 tests (component layer,
+integrated composer, no dividers, theme primitives pinned to tokens.json, duplicate-import
+check) and every existing assertion was repathed to the new structure — none weakened.
+
 Still needing a real build/device loop: Gradle compile verification (no Android SDK in this
-sandbox — Kotlin is source-verified and machine-guarded). Guards:
-`tests/test_android_design_tokens.py` (14 tests).
+sandbox — Kotlin is source-verified and machine-guarded).
 
 ## Phase 6 — DONE (round-21h): polish — token-driven, never random margins
 
