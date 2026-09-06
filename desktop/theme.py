@@ -25,22 +25,34 @@ logger = logging.getLogger(__name__)
 # binary). MUST equal the canonical tokens — enforced by tests.
 _FALLBACK_THEME_COLORS = {
     "dark": {
-        "BG_PRIMARY": "#0F172A",
-        "BG_SECONDARY": "#1E293B",
-        "BG_SURFACE": "#334155",
+        "BG_PRIMARY": "#060A16",
+        "BG_SECONDARY": "#0B1226",
+        "BG_SURFACE": "#151F3A",
+        "BG_PANEL": "#0D1730",
+        "BG_ELEVATED": "#1C2946",
+        "BORDER_SUBTLE": "#20304F",
+        "BORDER_ACTIVE": "#3A5480",
+        "GLOW_PRIMARY": "#5B8CFF",
+        "GLOW_SECONDARY": "#8B5CF6",
         "TEXT_PRIMARY": "#F1F5F9",
         "TEXT_SECONDARY": "#94A3B8",
         "TEXT_MUTED": "#64748B",
-        "ACCENT": "#3B82F6",
+        "ACCENT": "#3D74FF",
     },
     "light": {
         "BG_PRIMARY": "#F8FAFC",
         "BG_SECONDARY": "#E2E8F0",
         "BG_SURFACE": "#CBD5E1",
+        "BG_PANEL": "#E8EDF5",
+        "BG_ELEVATED": "#F1F5FA",
+        "BORDER_SUBTLE": "#D3DCEA",
+        "BORDER_ACTIVE": "#B7C6DE",
+        "GLOW_PRIMARY": "#5B8CFF",
+        "GLOW_SECONDARY": "#8B5CF6",
         "TEXT_PRIMARY": "#1E293B",
         "TEXT_SECONDARY": "#475569",
         "TEXT_MUTED": "#64748B",
-        "ACCENT": "#3B82F6",
+        "ACCENT": "#3D74FF",
     },
 }
 _FALLBACK_PRESENCE_COLORS = {
@@ -71,7 +83,7 @@ _FALLBACK_PRESENCE_DURATIONS = {
 }
 
 try:
-    from desktop.design_tokens import PRESENCE_COLORS, PRESENCE_DURATIONS, THEME_COLORS
+    from desktop.design_tokens import PANEL_ALPHA, PRESENCE_COLORS, PRESENCE_DURATIONS, THEME_COLORS
 
     _TOKENS_LOADED = True
 except Exception:  # pragma: no cover - packaged binary without design/tokens.json
@@ -91,6 +103,15 @@ TEXT_PRIMARY = THEME_COLORS["dark"]["TEXT_PRIMARY"]
 TEXT_SECONDARY = THEME_COLORS["dark"]["TEXT_SECONDARY"]
 TEXT_MUTED = THEME_COLORS["dark"]["TEXT_MUTED"]
 ACCENT = THEME_COLORS["dark"]["ACCENT"]
+
+# Atmosphere (round-21q): translucent panels, subtle borders, Beanie's glow.
+PANEL_ALPHA = 0.72
+BG_PANEL = THEME_COLORS["dark"]["BG_PANEL"]
+BG_ELEVATED = THEME_COLORS["dark"]["BG_ELEVATED"]
+BORDER_SUBTLE = THEME_COLORS["dark"]["BORDER_SUBTLE"]
+BORDER_ACTIVE = THEME_COLORS["dark"]["BORDER_ACTIVE"]
+GLOW_PRIMARY = THEME_COLORS["dark"]["GLOW_PRIMARY"]
+GLOW_SECONDARY = THEME_COLORS["dark"]["GLOW_SECONDARY"]
 
 
 def _is_system_dark() -> bool:

@@ -24,7 +24,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 TOKENS_PATH = REPO / "design" / "tokens.json"
-INDEX_CSS = REPO / "frontend" / "src" / "index.css"
+FRONTEND_DIR = REPO / "frontend"
+INDEX_CSS = FRONTEND_DIR / "src" / "index.css"
 TAILWIND_CONFIG = REPO / "frontend" / "tailwind.config.js"
 ORB_TSX = REPO / "frontend" / "src" / "components" / "presence" / "ReactiveBeanieOrb.tsx"
 
@@ -56,6 +57,12 @@ def _canonical_theme_colors(tokens: dict) -> dict:
             "BG_PRIMARY": spec["background"]["primary"],
             "BG_SECONDARY": spec["background"]["secondary"],
             "BG_SURFACE": spec["background"]["surface"],
+            "BG_PANEL": spec["background"]["panel"],
+            "BG_ELEVATED": spec["background"]["elevated"],
+            "BORDER_SUBTLE": spec["border"]["subtle"],
+            "BORDER_ACTIVE": spec["border"]["active"],
+            "GLOW_PRIMARY": spec["glow"]["primary"],
+            "GLOW_SECONDARY": spec["glow"]["secondary"],
             "TEXT_PRIMARY": spec["text"]["primary"],
             "TEXT_SECONDARY": spec["text"]["secondary"],
             "TEXT_MUTED": spec["text"]["muted"],
@@ -80,12 +87,17 @@ def test_tokens_json_schema():
     tokens = _tokens()
     for theme in ("dark", "light"):
         spec = tokens["color"]["themes"][theme]
-        for part in ("primary", "secondary", "surface"):
+        for part in ("primary", "secondary", "surface", "panel", "elevated"):
             assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["background"][part]), (theme, part)
+        assert 0 < spec["background"]["panel_alpha"] <= 1, (theme, "panel_alpha")
         for part in ("primary", "secondary", "muted"):
             assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["text"][part]), (theme, part)
+        for part in ("subtle", "active"):
+            assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["border"][part]), (theme, part)
+        for part in ("primary", "secondary"):
+            assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["glow"][part]), (theme, part)
         assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["accent"]), theme
-    for part in ("primary", "success", "warning", "error"):
+    for part in ("primary", "secondary", "success", "warning", "error"):
         assert re.fullmatch(r"#[0-9A-Fa-f]{6}", tokens["color"]["accent"][part]), part
     for group, keys in (
         ("knowledge_node_types", ("concept", "entity", "memory", "conversation", "file", "other")),
@@ -303,10 +315,36 @@ def test_index_css_variables_equal_canonical():
     for selector, theme in ((":root", "dark"), ("html.light", "light")):
         spec = tokens["color"]["themes"][theme]
         variables = _css_variables(css, selector)
-        for part in ("primary", "secondary", "surface"):
+        for part in ("primary", "secondary", "surface", "elevated"):
             assert variables[f"--color-background-{part}"] == spec["background"][part], (theme, part)
+        # The panel is the translucency: the token hex composed with its alpha.
+        panel_hex, alpha = spec["background"]["panel"], spec["background"]["panel_alpha"]
+        expected_panel = "rgba({}, {}, {}, {})".format(
+            int(panel_hex[1:3], 16), int(panel_hex[3:5], 16), int(panel_hex[5:7], 16), alpha
+        )
+        assert variables["--color-background-panel"] == expected_panel, (theme, "panel")
+        for part in ("subtle", "active"):
+            assert variables[f"--color-border-{part}"] == spec["border"][part], (theme, part)
+        for part in ("primary", "secondary"):
+            assert variables[f"--color-glow-{part}"] == spec["glow"][part], (theme, part)
         for part in ("primary", "secondary", "muted"):
             assert variables[f"--color-text-{part}"] == spec["text"][part], (theme, part)
+
+
+def test_glow_and_panel_vocabulary_reaches_the_web_app():
+    """Atmosphere (21q): glow/panel/border tokens must be consumed, not just declared."""
+    tailwind = TAILWIND_CONFIG.read_text(encoding="utf-8")
+    assert "tokens.color.themes.dark.glow" in tailwind, "boxShadow glow no longer derived from tokens"
+    assert "panel: 'var(--color-background-panel)'" in tailwind, "translucent panel color dropped from tailwind"
+    assert "subtle: 'var(--color-border-subtle)'" in tailwind, "border.subtle dropped from tailwind"
+
+    composer = (FRONTEND_DIR / "src" / "components" / "chat" / "ChatInput.tsx").read_text(encoding="utf-8")
+    assert "focus:shadow-glow" in composer, "composer focus glow removed"
+    assert "border-border-subtle" in composer, "composer subtle border removed"
+
+    context = (FRONTEND_DIR / "src" / "components" / "layout" / "ContextPanel.tsx").read_text(encoding="utf-8")
+    assert "bg-background-panel" in context, "context rail translucency removed"
+    assert "border-border-subtle" in context, "context rail subtle border removed"
 
 
 def test_tailwind_config_consumes_tokens_json():

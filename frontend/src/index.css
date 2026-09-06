@@ -12,10 +12,19 @@
   --arena-font-size: 14px;
   --arena-font-family: system-ui;
   
-  /* Dark theme (default) */
-  --color-background-primary: #0F172A;
-  --color-background-secondary: #1E293B;
-  --color-background-surface: #334155;
+  /* Dark theme (default) — the Beanie atmosphere: light emitted into a dark
+     environment. Near-black navy canvas, translucent deep-navy panels,
+     subtle blue borders, electric-blue accent, blue→violet glow.
+     (design/tokens.json is the source of truth; guarded by tests.) */
+  --color-background-primary: #060A16;
+  --color-background-secondary: #0B1226;
+  --color-background-surface: #151F3A;
+  --color-background-elevated: #1C2946;
+  --color-background-panel: rgba(13, 23, 48, 0.72);
+  --color-border-subtle: #20304F;
+  --color-border-active: #3A5480;
+  --color-glow-primary: #5B8CFF;
+  --color-glow-secondary: #8B5CF6;
   --color-text-primary: #F1F5F9;
   --color-text-secondary: #94A3B8;
   --color-text-muted: #64748B;
@@ -26,6 +35,12 @@ html.light {
   --color-background-primary: #F8FAFC;
   --color-background-secondary: #E2E8F0;
   --color-background-surface: #CBD5E1;
+  --color-background-elevated: #F1F5FA;
+  --color-background-panel: rgba(232, 237, 245, 0.72);
+  --color-border-subtle: #D3DCEA;
+  --color-border-active: #B7C6DE;
+  --color-glow-primary: #5B8CFF;
+  --color-glow-secondary: #8B5CF6;
   --color-text-primary: #1E293B;
   --color-text-secondary: #475569;
   --color-text-muted: #64748B;

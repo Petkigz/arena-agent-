@@ -153,7 +153,7 @@ export function ChatInput({
               disabled={disabled}
               rows={1}
               aria-label="Type your message"
-              className="w-full px-4 py-2.5 bg-background-secondary text-text-primary rounded-2xl border border-background-surface focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none placeholder-text-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2.5 bg-background-panel text-text-primary rounded-2xl border border-border-subtle focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent focus:shadow-glow resize-none placeholder-text-muted disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ maxHeight: '200px' }}
             />
           </div>

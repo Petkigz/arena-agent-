@@ -67,7 +67,7 @@ describe('design tokens (shared source of truth)', () => {
       expect(THEMES[theme].text.secondary).toMatch(/^#[0-9A-Fa-f]{6}$/);
       expect(THEMES[theme].accent).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
-    expect(ACCENT.primary).toBe('#3B82F6');
+    expect(ACCENT.primary).toBe('#3D74FF');
     expect(ACCENT.success).toBe('#10B981');
     expect(ACCENT.warning).toBe('#F59E0B');
     expect(ACCENT.error).toBe('#EF4444');

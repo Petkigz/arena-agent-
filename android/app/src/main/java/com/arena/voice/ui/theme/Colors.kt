@@ -17,13 +17,13 @@ import androidx.compose.ui.graphics.Color
  */
 
 val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF3B82F6),
+    primary = Color(0xFF3D74FF),
     secondary = Color(0xFF10B981),
     tertiary = Color(0xFFF59E0B),
     error = Color(0xFFEF4444),
-    background = Color(0xFF0F172A),
-    surface = Color(0xFF1E293B),
-    surfaceVariant = Color(0xFF334155),
+    background = Color(0xFF060A16),
+    surface = Color(0xFF0B1226),
+    surfaceVariant = Color(0xFF151F3A),
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
@@ -34,7 +34,7 @@ val DarkColorScheme = darkColorScheme(
 )
 
 val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF3B82F6),
+    primary = Color(0xFF3D74FF),
     secondary = Color(0xFF10B981),
     tertiary = Color(0xFFF59E0B),
     error = Color(0xFFEF4444),

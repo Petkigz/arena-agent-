@@ -14,6 +14,20 @@ const darkBackground = tokens.color.themes.dark.background;
 const shadows = tokens.shadow;
 // Motion durations + easing come from the shared design system too.
 const motion = tokens.motion;
+// Beanie's glow (atmosphere): light emitted by the presence states into the
+// dark environment — electric blue primary, violet secondary.
+function withAlpha(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+const glow = tokens.color.themes.dark.glow;
+const glowShadows = {
+  glow: `0 0 24px 0 ${withAlpha(glow.primary, 0.35)}`,
+  'glow-strong': `0 0 40px 0 ${withAlpha(glow.primary, 0.5)}`,
+  'glow-violet': `0 0 24px 0 ${withAlpha(glow.secondary, 0.35)}`,
+};
 const animations = {
   'pulse-slow': `pulse ${motion.pulse_slow_ms}ms ${motion.easing} infinite`,
   'pulse-fast': `pulse ${motion.pulse_fast_ms}ms ${motion.easing} infinite`,
@@ -29,13 +43,19 @@ export default {
   ],
   theme: {
     extend: {
-      boxShadow: shadows,
+      boxShadow: { ...shadows, ...glowShadows },
       colors: {
         // Theme-aware colors using CSS variables
         background: {
           primary: 'var(--color-background-primary)',
           secondary: 'var(--color-background-secondary)',
           surface: 'var(--color-background-surface)',
+          panel: 'var(--color-background-panel)',
+          elevated: 'var(--color-background-elevated)',
+        },
+        border: {
+          subtle: 'var(--color-border-subtle)',
+          active: 'var(--color-border-active)',
         },
         text: {
           primary: 'var(--color-text-primary)',

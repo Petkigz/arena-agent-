@@ -19,9 +19,19 @@ export interface BeanieStateSpec {
 }
 
 export interface ThemePalette {
-  background: { primary: string; secondary: string; surface: string };
+  background: {
+    primary: string;
+    secondary: string;
+    surface: string;
+    panel: string;
+    elevated: string;
+    panel_alpha: number;
+  };
   text: { primary: string; secondary: string; muted: string };
   accent: string;
+  border: { subtle: string; active: string };
+  /** Beanie's glow — light emitted by the presence states (atmosphere). */
+  glow: { primary: string; secondary: string };
 }
 
 /** All 11 Beanie presence states, keyed by state name. */

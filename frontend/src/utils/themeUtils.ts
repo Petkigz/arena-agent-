@@ -56,7 +56,8 @@ export const themeColors = {
     muted: 'var(--color-text-muted)',
   },
   accent: {
-    primary: '#3B82F6',
+    primary: '#3D74FF',
+    secondary: '#8B5CF6',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',

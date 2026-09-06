@@ -37,6 +37,7 @@ __all__ = [
     "SHADOWS",
     "MOTION",
     "FOCUS_RING_WIDTH_PX",
+    "PANEL_ALPHA",
     "load_tokens",
     "tokens_path",
 ]
@@ -62,7 +63,11 @@ _BEANIE_STATES = (
     "sleeping",
 )
 
-_THEME_KEYS = ("BG_PRIMARY", "BG_SECONDARY", "BG_SURFACE", "TEXT_PRIMARY", "TEXT_SECONDARY", "TEXT_MUTED", "ACCENT")
+_THEME_KEYS = (
+    "BG_PRIMARY", "BG_SECONDARY", "BG_SURFACE", "BG_PANEL", "BG_ELEVATED",
+    "BORDER_SUBTLE", "BORDER_ACTIVE", "GLOW_PRIMARY", "GLOW_SECONDARY",
+    "TEXT_PRIMARY", "TEXT_SECONDARY", "TEXT_MUTED", "ACCENT",
+)
 
 
 def tokens_path() -> Path:
@@ -90,13 +95,23 @@ def _validate(tokens: dict) -> None:
         theme = _require(themes, theme_name, "color.themes")
         background = _require(theme, "background", f"color.themes.{theme_name}")
         text = _require(theme, "text", f"color.themes.{theme_name}")
-        for part, source in (("primary", background), ("secondary", background), ("surface", background)):
+        for part, source in (("primary", background), ("secondary", background), ("surface", background),
+                             ("panel", background), ("elevated", background)):
             _hex(_require(source, part, f"color.themes.{theme_name}.background"), f"{theme_name}.background.{part}")
+        alpha = _require(background, "panel_alpha", f"color.themes.{theme_name}.background")
+        if not isinstance(alpha, (int, float)) or isinstance(alpha, bool) or not 0 < alpha <= 1:
+            raise DesignTokenError(f"design tokens: {theme_name}.background.panel_alpha must be 0..1")
+        border = _require(theme, "border", f"color.themes.{theme_name}")
+        for part in ("subtle", "active"):
+            _hex(_require(border, part, f"color.themes.{theme_name}.border"), f"{theme_name}.border.{part}")
+        glow = _require(theme, "glow", f"color.themes.{theme_name}")
+        for part in ("primary", "secondary"):
+            _hex(_require(glow, part, f"color.themes.{theme_name}.glow"), f"{theme_name}.glow.{part}")
         for part in ("primary", "secondary", "muted"):
             _hex(_require(text, part, f"color.themes.{theme_name}.text"), f"{theme_name}.text.{part}")
         _hex(_require(theme, "accent", f"color.themes.{theme_name}"), f"{theme_name}.accent")
     accent = _require(color, "accent", "color")
-    for part in ("primary", "success", "warning", "error"):
+    for part in ("primary", "secondary", "success", "warning", "error"):
         _hex(_require(accent, part, "color.accent"), f"color.accent.{part}")
 
     beanie = _require(tokens, "beanie", "root")
@@ -185,6 +200,12 @@ def theme_colors(tokens: dict) -> dict:
             "BG_PRIMARY": theme["background"]["primary"].upper(),
             "BG_SECONDARY": theme["background"]["secondary"].upper(),
             "BG_SURFACE": theme["background"]["surface"].upper(),
+            "BG_PANEL": theme["background"]["panel"].upper(),
+            "BG_ELEVATED": theme["background"]["elevated"].upper(),
+            "BORDER_SUBTLE": theme["border"]["subtle"].upper(),
+            "BORDER_ACTIVE": theme["border"]["active"].upper(),
+            "GLOW_PRIMARY": theme["glow"]["primary"].upper(),
+            "GLOW_SECONDARY": theme["glow"]["secondary"].upper(),
             "TEXT_PRIMARY": theme["text"]["primary"].upper(),
             "TEXT_SECONDARY": theme["text"]["secondary"].upper(),
             "TEXT_MUTED": theme["text"]["muted"].upper(),
@@ -225,6 +246,8 @@ SPACING: dict = TOKENS["spacing"]
 SHADOWS: dict = TOKENS["shadow"]
 MOTION: dict = TOKENS["motion"]
 FOCUS_RING_WIDTH_PX: int = TOKENS["focus"]["ring_width_px"]
+# Translucent-panel opacity (atmosphere: deep-navy panels over the canvas).
+PANEL_ALPHA: float = float(TOKENS["color"]["themes"]["dark"]["background"]["panel_alpha"])
 
 # Static shape check: THEME_COLORS keys must stay compatible with theme.apply_theme,
 # which does `for key, value in THEME_COLORS[name].items(): globals()[key] = value`.

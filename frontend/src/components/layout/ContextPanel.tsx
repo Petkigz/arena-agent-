@@ -45,7 +45,7 @@ export function ContextPanel() {
       transition={{ duration: 0.3, ease: 'easeOut' }}
       aria-label="Context panel"
       className={cn(
-        'bg-background-secondary border-l border-background-surface overflow-y-auto transition-all duration-300',
+        'bg-background-panel border-l border-border-subtle overflow-y-auto transition-all duration-300',
         collapsed ? 'w-16' : 'w-80'
       )}
     >
@@ -120,7 +120,7 @@ export function ContextPanel() {
       </div>
 
       {/* Collapse toggle */}
-      <div className="p-2 border-t border-background-surface">
+      <div className="p-2 border-t border-border-subtle">
         <button
           onClick={toggleContextPanel}
           className="w-full flex items-center justify-center p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-background-surface transition-colors"
