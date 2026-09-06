@@ -321,3 +321,30 @@ def test_owner_control_page_cognition_tab_offscreen(qapp):
         assert "grants no authority" in page.status.text()
     finally:
         page.deleteLater()
+
+
+def test_live_theme_switch_actually_repaints(qapp):
+    """apply_theme('light') must change what pages render (G4 regression).
+
+    Pages rebuild stylesheets from `from desktop.theme import ...` names bound
+    at import time; desktop.theme.apply_theme now rebinds those importer
+    copies, so a live switch repaints the real palette instead of silently
+    re-applying the stale dark one.
+    """
+    from desktop import theme
+    from desktop.pages.owner_control import OwnerControlPage
+
+    page = OwnerControlPage(FakeClient())
+    try:
+        theme.apply_theme("light")
+        page.refresh_theme()
+        title_css = page.title.styleSheet()
+        assert theme.THEME_COLORS["light"]["TEXT_PRIMARY"] in title_css
+        assert theme.THEME_COLORS["dark"]["TEXT_PRIMARY"] not in title_css
+        # Fresh stylesheet helpers follow the switch too.
+        from desktop.styles import _input_style
+
+        assert theme.THEME_COLORS["light"]["BG_SECONDARY"] in _input_style()
+    finally:
+        theme.apply_theme("dark")
+        page.deleteLater()

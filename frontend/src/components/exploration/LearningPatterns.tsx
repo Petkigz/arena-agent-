@@ -5,6 +5,7 @@ import type { Conversation } from '../../types';
 import type { KnowledgeNode } from '../../stores/knowledgeGraphStore';
 import { TrendingUp, Brain, Database, MessageCircle, Star, Calendar, Tag } from 'lucide-react';
 import { format, subDays, differenceInDays } from 'date-fns';
+import { MEMORY_TYPE_COLORS } from '../../design/tokens';
 
 interface LearningPatternsProps {
   memories: Memory[];
@@ -67,12 +68,8 @@ export function LearningPatterns({ memories, conversations, knowledgeNodes }: Le
       procedural: '⚙️',
       conversation: '💬',
     };
-    const colors: Record<string, string> = {
-      episodic: '#8B5CF6',
-      semantic: '#3B82F6',
-      procedural: '#10B981',
-      conversation: '#F59E0B',
-    };
+    // Memory-type colors come from the shared design system (design/tokens.json).
+    const colors: Record<string, string> = MEMORY_TYPE_COLORS;
 
     return categories.map((cat) => {
       const catMemories = memories.filter((m) => m.category === cat);
@@ -210,7 +207,7 @@ export function LearningPatterns({ memories, conversations, knowledgeNodes }: Le
                   className="w-full rounded-t transition-all"
                   style={{
                     height: `${Math.max(height, total > 0 ? 4 : 0)}%`,
-                    backgroundColor: total > 0 ? '#8B5CF6' : '#E2E8F0',
+                    backgroundColor: total > 0 ? MEMORY_TYPE_COLORS.episodic : MEMORY_TYPE_COLORS.empty,
                     opacity: total > 0 ? 0.6 + (total / maxActivity) * 0.4 : 0.3,
                   }}
                 />

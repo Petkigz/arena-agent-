@@ -5,7 +5,7 @@ Extracted from desktop/app.py monolith.
 
 from __future__ import annotations
 
-from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, _lighten
+from desktop.theme import _lighten
 
 
 def _button_style(bg: str, fg: str) -> str:

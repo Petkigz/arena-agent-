@@ -8,7 +8,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import rawTokens from '../../../design/tokens.json';
-import { ACCENT, BEANIE_ORB_STATUSES, BEANIE_STATES, THEMES, beanieColor } from '../design/tokens';
+import {
+  ACCENT,
+  BEANIE_ORB_STATUSES,
+  BEANIE_STATES,
+  KNOWLEDGE_NODE_TYPE_COLORS,
+  MEMORY_TYPE_COLORS,
+  THEMES,
+  beanieColor,
+} from '../design/tokens';
 
 const EXPECTED_STATES = [
   'idle',
@@ -61,5 +69,14 @@ describe('design tokens (shared source of truth)', () => {
   it('matches the raw token file (no transformation drift)', () => {
     expect(BEANIE_STATES).toEqual(rawTokens.beanie.states);
     expect(THEMES).toEqual(rawTokens.color.themes);
+  });
+
+  it('exposes the semantic taxonomies (node types, memory types) as hex palettes', () => {
+    for (const key of ['concept', 'entity', 'memory', 'conversation', 'file', 'other']) {
+      expect(KNOWLEDGE_NODE_TYPE_COLORS[key]).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
+    for (const key of ['episodic', 'semantic', 'procedural', 'conversation', 'empty']) {
+      expect(MEMORY_TYPE_COLORS[key]).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
   });
 });

@@ -1,4 +1,5 @@
 import type { VoiceState } from '../../services/websocket';
+import { beanieColor } from '../../design/tokens';
 
 const LABELS: Partial<Record<VoiceState, string>> = {
   listening: 'Listening…',
@@ -8,12 +9,14 @@ const LABELS: Partial<Record<VoiceState, string>> = {
   speaking: 'Speaking…',
 };
 
+// Voice states map onto Beanie presence states; colors come from the shared
+// design system (design/tokens.json) — the same palette the orb renders.
 const COLORS: Partial<Record<VoiceState, string>> = {
-  listening: '#10B981',
-  recording: '#10B981',
-  processing: '#F59E0B',
-  thinking: '#F59E0B',
-  speaking: '#8B5CF6',
+  listening: beanieColor('listening'),
+  recording: beanieColor('listening'),
+  processing: beanieColor('thinking'),
+  thinking: beanieColor('thinking'),
+  speaking: beanieColor('speaking'),
 };
 
 /**

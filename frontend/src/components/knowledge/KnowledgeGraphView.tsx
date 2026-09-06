@@ -15,6 +15,7 @@ import { useKnowledgeGraphStore, type KnowledgeNode, type NodeType } from '../..
 import { EmptyState } from '../ui/EmptyState';
 import { Brain, FileText, MessageCircle, Database, Plus, Search, Download, Upload, Filter, X } from 'lucide-react';
 import { notifications } from '../../services/notifications';
+import { KNOWLEDGE_NODE_TYPE_COLORS } from '../../design/tokens';
 import { NodeDetailPanel } from './NodeDetailPanel';
 import { NodeEditorModal } from './NodeEditorModal';
 import { EdgeEditorModal } from './EdgeEditorModal';
@@ -34,13 +35,9 @@ const nodeTypeIcons = {
   file: FileText,
 };
 
-const nodeTypeColors: Record<string, string> = {
-  concept: '#8B5CF6',
-  entity: '#3B82F6',
-  memory: '#10B981',
-  conversation: '#F59E0B',
-  file: '#EC4899',
-};
+// Taxonomy colors come from the shared design system (design/tokens.json) —
+// the same file NodeDetailPanel uses, so the two views cannot diverge.
+const nodeTypeColors = KNOWLEDGE_NODE_TYPE_COLORS;
 
 const allNodeTypes: { value: NodeType; label: string }[] = [
   { value: 'concept', label: 'Concept' },
@@ -397,7 +394,7 @@ export function KnowledgeGraphView() {
               <MiniMap
                 nodeColor={(node) => {
                   const type = (node.data?.node as KnowledgeNode | undefined)?.type;
-                  return type ? nodeTypeColors[type] : '#94A3B8';
+                  return type ? nodeTypeColors[type] : KNOWLEDGE_NODE_TYPE_COLORS.other;
                 }}
                 maskColor="rgba(0,0,0,0.1)"
               />

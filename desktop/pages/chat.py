@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget, QFrame
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT
+from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS
 from desktop.styles import _button_style, _input_style
 from desktop.pages.message_bubble import MessageBubble
 from desktop.widgets.orb import PresenceOrbWidget
@@ -137,11 +137,11 @@ class ChatPage(QWidget):
             "speaking": "Speaking…",
         }
         colors = {
-            "listening": "#10B981",
-            "recording": "#10B981",
-            "processing": "#F59E0B",
-            "thinking": "#F59E0B",
-            "speaking": "#8B5CF6",
+            "listening": PRESENCE_COLORS["listening"],
+            "recording": PRESENCE_COLORS["listening"],
+            "processing": PRESENCE_COLORS["thinking"],
+            "thinking": PRESENCE_COLORS["thinking"],
+            "speaking": PRESENCE_COLORS["speaking"],
         }
         if status not in labels:
             self.voice_banner.hide()

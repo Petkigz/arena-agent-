@@ -87,6 +87,13 @@ def test_tokens_json_schema():
         assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["accent"]), theme
     for part in ("primary", "success", "warning", "error"):
         assert re.fullmatch(r"#[0-9A-Fa-f]{6}", tokens["color"]["accent"][part]), part
+    for group, keys in (
+        ("knowledge_node_types", ("concept", "entity", "memory", "conversation", "file", "other")),
+        ("memory_types", ("episodic", "semantic", "procedural", "conversation", "empty")),
+    ):
+        palette = tokens["color"][group]
+        for key in keys:
+            assert re.fullmatch(r"#[0-9A-Fa-f]{6}", palette[key]), (group, key)
     assert tokens["typography"]["base_font_size_px"] > 0
     assert "Inter" in tokens["typography"]["font_family"]
 
@@ -221,6 +228,51 @@ def test_desktop_theme_modules_compile_without_qt():
         ast.parse(source)
 
 
+def test_apply_theme_rebinds_importer_modules():
+    """Live theme switching must repaint importer modules, not just desktop.theme.
+
+    Regression guard for the round-21 rendering bug: pages bind theme constants
+    at import time (`from desktop.theme import BG_PRIMARY, ...`), so mutating
+    desktop.theme's globals alone left every page painting the palette that was
+    active at import. apply_theme now rebinds the importers' copies.
+    """
+    import sys
+    import types
+
+    theme, _stubbed = _import_desktop_theme()
+
+    fake_page = types.ModuleType("desktop.fakepage")
+    fake_page.BG_PRIMARY = theme.BG_PRIMARY  # simulate an import-time copy
+    fake_page.TEXT_MUTED = theme.TEXT_MUTED
+    fake_page.UNRELATED = "untouched"
+    foreign = types.ModuleType("notarena")
+    foreign.BG_PRIMARY = theme.BG_PRIMARY
+    sys.modules["desktop.fakepage"] = fake_page
+    sys.modules["notarena"] = foreign
+    try:
+        theme.apply_theme("light")
+        light = theme.THEME_COLORS["light"]
+        assert fake_page.BG_PRIMARY == light["BG_PRIMARY"]
+        assert fake_page.TEXT_MUTED == light["TEXT_MUTED"]
+        assert fake_page.UNRELATED == "untouched"  # unrelated attributes untouched
+        assert foreign.BG_PRIMARY == theme.THEME_COLORS["dark"]["BG_PRIMARY"]  # non-desktop modules untouched
+
+        theme.apply_theme("dark")
+        assert fake_page.BG_PRIMARY == theme.THEME_COLORS["dark"]["BG_PRIMARY"]
+    finally:
+        sys.modules.pop("desktop.fakepage", None)
+        sys.modules.pop("notarena", None)
+        theme.apply_theme("dark")
+
+
+def test_desktop_voice_banner_uses_presence_tokens():
+    """The chat voice banner must not hand-copy Beanie presence hexes."""
+    chat_source = (REPO / "desktop" / "pages" / "chat.py").read_text(encoding="utf-8")
+    assert "PRESENCE_COLORS" in chat_source
+    for hex_color in ("'#10B981'", "'#F59E0B'", "'#8B5CF6'", '"#10B981"', '"#F59E0B"', '"#8B5CF6"'):
+        assert hex_color not in chat_source, f"hardcoded presence color {hex_color} returned to chat.py"
+
+
 # --------------------------------------------------------------------------
 # Web side (parsed from Python so node is not required to catch drift)
 # --------------------------------------------------------------------------
@@ -283,3 +335,30 @@ def test_web_and_desktop_presence_palettes_are_identical():
     assert design_tokens.PRESENCE_COLORS == colors
     assert design_tokens.PRESENCE_DURATIONS == durations
     assert set(design_tokens.PRESENCE_COLORS) == EXPECTED_STATES
+
+
+def test_web_semantic_palettes_consumed_from_tokens():
+    """Duplicated semantic color maps (node types, memory types, voice states) must import tokens.
+
+    KnowledgeGraphView and NodeDetailPanel used to hand-copy the SAME node-type
+    dict — two copies that could drift. LearningPatterns hand-copied memory-type
+    colors; ListeningIndicator hand-copied voice-state colors.
+    """
+    checks = (
+        (REPO / "frontend/src/components/knowledge/KnowledgeGraphView.tsx", "KNOWLEDGE_NODE_TYPE_COLORS"),
+        (REPO / "frontend/src/components/knowledge/NodeDetailPanel.tsx", "KNOWLEDGE_NODE_TYPE_COLORS"),
+        (REPO / "frontend/src/components/exploration/LearningPatterns.tsx", "MEMORY_TYPE_COLORS"),
+        (REPO / "frontend/src/components/beanie/ListeningIndicator.tsx", "beanieColor"),
+    )
+    for path, marker in checks:
+        source = path.read_text(encoding="utf-8")
+        assert marker in source, f"{path.name} must use the shared design tokens ({marker})"
+        assert "design/tokens" in source, f"{path.name} must import from design/tokens"
+
+    # The hand-copied dicts must not return.
+    graph_source = (REPO / "frontend/src/components/knowledge/KnowledgeGraphView.tsx").read_text(encoding="utf-8")
+    detail_source = (REPO / "frontend/src/components/knowledge/NodeDetailPanel.tsx").read_text(encoding="utf-8")
+    for source in (graph_source, detail_source):
+        assert "concept: '#8B5CF6'" not in source
+    learning_source = (REPO / "frontend/src/components/exploration/LearningPatterns.tsx").read_text(encoding="utf-8")
+    assert "episodic: '#8B5CF6'" not in learning_source

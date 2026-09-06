@@ -115,6 +115,42 @@ def _is_system_dark() -> bool:
     return True
 
 
+# Color constants that apply_theme may mutate. Pages import these by value
+# (`from desktop.theme import BG_PRIMARY, ...`), which snapshots the values at
+# import time — apply_theme must rebind those copies or the UI keeps painting
+# the palette that was active at import (dark), no matter what the user picks.
+_THEME_CONSTANT_NAMES = (
+    "BG_PRIMARY",
+    "BG_SECONDARY",
+    "BG_SURFACE",
+    "TEXT_PRIMARY",
+    "TEXT_SECONDARY",
+    "TEXT_MUTED",
+    "ACCENT",
+)
+
+
+def _rebind_importers() -> None:
+    """Propagate the current palette to every module that imported it by value.
+
+    `from desktop.theme import X` binds the value current at import; mutating
+    desktop.theme's globals alone leaves those copies stale, which made live
+    theme switching (and starting with 'light' saved) repaint most widgets in
+    the OLD palette. Rebinding all desktop-package modules here keeps every
+    existing `from ... import` site correct with no per-page plumbing.
+    """
+    import sys
+
+    fresh = {name: globals()[name] for name in _THEME_CONSTANT_NAMES}
+    for module in tuple(sys.modules.values()):
+        module_name = getattr(module, "__name__", "")
+        if not module_name.startswith("desktop"):
+            continue
+        for const in _THEME_CONSTANT_NAMES:
+            if hasattr(module, const):
+                setattr(module, const, fresh[const])
+
+
 def apply_theme(name: str) -> str:
     """Switch the active palette (returns the normalized name).
 
@@ -126,10 +162,12 @@ def apply_theme(name: str) -> str:
         resolved = "dark" if _is_system_dark() else "light"
         for key, value in THEME_COLORS[resolved].items():
             globals()[key] = value
+        _rebind_importers()
         return "system"
     normalized = raw if raw in THEME_COLORS else "dark"
     for key, value in THEME_COLORS[normalized].items():
         globals()[key] = value
+    _rebind_importers()
     return normalized
 
 

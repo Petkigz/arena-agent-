@@ -47,6 +47,33 @@ same file*.
   config/orb really import the tokens) + `frontend/src/test/design-tokens.test.ts` (5 tests).
   Web sources are parsed from Python, so the design system is guarded even without node.
 
+## Phase 1.5 — DONE (round-21b): rendering integrity — why the screen didn't match the code
+
+The owner reported the UI "isn't coming out like that" despite the tokens existing. Root cause
+found in the desktop rendering pipeline, now fixed:
+
+**The live-theme (and saved-light-startup) bug.** Every page binds theme constants at import
+time (`from desktop.theme import BG_PRIMARY, ...` = a snapshot of the values at import, dark by
+default). `apply_theme('light')` mutated only `desktop.theme`'s globals, so `refresh_theme()`
+"re-applied" stylesheets rebuilt from the STALE dark copies — the switch was a silent no-op for
+most of the UI, and only helpers using function-local imports (`_input_style()` etc.) picked up
+fresh values. Result: a mixed dark/light UI that never matched the design. Fix (general, one
+place): `desktop.theme.apply_theme` now rebinds every `desktop.*` module's copied constants
+after switching, so all existing `from ... import` sites render the current palette with zero
+per-page plumbing. Regression-guarded twice: a headless mechanism test
+(`test_apply_theme_rebinds_importer_modules`) and a real widget test that switches to light
+and asserts the repainted stylesheet carries light values
+(`test_live_theme_switch_actually_repaints`, runs wherever a Qt runtime exists).
+
+**Duplicated semantic palettes on the web.** `KnowledgeGraphView` and `NodeDetailPanel`
+hand-copied the SAME node-type color dict (two copies that could drift apart);
+`LearningPatterns` hand-copied memory-type colors; `ListeningIndicator` hand-copied
+voice-state colors. All now come from `design/tokens.json`
+(`color.knowledge_node_types`, `color.memory_types`, `beanie.states` via `beanieColor`).
+The desktop chat voice banner's hand-copied presence hexes now read `PRESENCE_COLORS`.
+Remaining intentional hex literals: the orb's internal white highlights, the
+ScreenshotAnnotator user pen palette (data, not theming), and one graph-edge default stroke.
+
 ## Phase 2 — Beanie state machine as a shared specification
 
 Largely DONE by Phase 1's plumbing: `desktop/pages/beanie.py` already imports
@@ -62,10 +89,9 @@ The web already implements the target hierarchy (conversation primary, progressi
 Align the desktop shell file-by-file: chat page as the home surface, context/sidebar
 (`desktop/widgets/context.py`, `sidebar.py`) progressive — collapsible, not permanent columns.
 reuse `styles.py` helpers; do NOT tweak margins ad hoc — spacing/radius tokens enter
-`design/tokens.json` first, then styles reference them. Known pre-existing wart to fix here:
-pages bind `TEXT_*`/`BG_*` constants at import time, so an `apply_theme` switch after import
-leaves stale copies — move to reading through `desktop.theme` (function accessors) during
-this pass.
+`design/tokens.json` first, then styles reference them. (The import-time theme-binding wart
+that used to live here is fixed — see Phase 1.5 — but pages still rebuild stylesheets in
+`refresh_theme()` one by one; folding that into a single restyle pass belongs in this phase.)
 
 ## Phase 4 — API contracts formalized
 

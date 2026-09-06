@@ -2,6 +2,7 @@ import type { KnowledgeNode, KnowledgeEdge } from '../../stores/knowledgeGraphSt
 import { X, Brain, Database, MessageCircle, FileText, Link, Star, Calendar, Tag, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Card } from '../ui';
+import { KNOWLEDGE_NODE_TYPE_COLORS } from '../../design/tokens';
 
 const nodeTypeIcons = {
   concept: Brain,
@@ -11,13 +12,9 @@ const nodeTypeIcons = {
   file: FileText,
 };
 
-const nodeTypeColors: Record<string, string> = {
-  concept: '#8B5CF6',
-  entity: '#3B82F6',
-  memory: '#10B981',
-  conversation: '#F59E0B',
-  file: '#EC4899',
-};
+// Taxonomy colors come from the shared design system (design/tokens.json) —
+// the same file KnowledgeGraphView uses, so the two views cannot diverge.
+const nodeTypeColors = KNOWLEDGE_NODE_TYPE_COLORS;
 
 interface NodeDetailPanelProps {
   node: KnowledgeNode;
