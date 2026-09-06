@@ -24,6 +24,13 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
         "kind": "semantic",
         "source": "owner_note",
     }]
+    trace.hypothesis_state = {
+        "count": 2,
+        "max_hypotheses": 4,
+        "bounded": True,
+        "competing": True,
+        "epistemic_status": "hypothesis_set",
+    }
     trace.resource_allocation = {
         "complexity": "moderate",
         "model": "fast",
@@ -53,8 +60,9 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
             "SELECT epistemic_presentation_json, grounding_result_json, "
-            "retrieved_memories_json, resource_allocation_json, "
-            "criticality_review_json, route_comparison_json "
+            "retrieved_memories_json, hypothesis_state_json, "
+            "resource_allocation_json, criticality_review_json, "
+            "route_comparison_json "
             "FROM cognitive_traces WHERE trace_id=?",
             (trace.trace_id,),
         ).fetchone()
@@ -63,14 +71,17 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
     persisted = json.loads(row[0])
     grounding = json.loads(row[1])
     retrieved = json.loads(row[2])
-    allocation = json.loads(row[3])
-    review = json.loads(row[4])
-    route = json.loads(row[5])
+    hypotheses = json.loads(row[3])
+    allocation = json.loads(row[4])
+    review = json.loads(row[5])
+    route = json.loads(row[6])
     assert persisted["confidence_label"] == "Highly confident"
     assert persisted["evidence_basis"] == ["fresh observation"]
     assert grounding["status"] == "verified"
     assert grounding["authoritative_facts"] == ["fresh observation"]
     assert retrieved == [{"memory_id": "memory-1", "kind": "semantic", "source": "owner_note"}]
+    assert hypotheses["competing"] is True
+    assert hypotheses["bounded"] is True
     assert allocation["complexity"] == "moderate"
     assert allocation["max_tokens"] == 500
     assert review["triggers"] == ["no_verified_action_history"]

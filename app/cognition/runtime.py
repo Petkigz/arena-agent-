@@ -3305,6 +3305,23 @@ class CognitiveRuntime:
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
 
+        # Preserve bounded competing explanations as hypothesis telemetry. This
+        # is intentionally separate from environmental belief, execution truth,
+        # and authorization; no hypothesis is treated as a verified fact.
+        try:
+            trace.hypothesis_state = self.beliefs.hypothesis_snapshot(
+                user_text[:30].strip() or "user_query",
+                query_pred,
+            )
+            self.blackboard.set(
+                "active_hypotheses",
+                dict(trace.hypothesis_state),
+                source="belief_engine.hypotheses",
+                confidence=1.0,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Hypothesis snapshot unavailable: {exc}")
+
         # Manifest-first routing (the rewire): a deterministic match against the
         # REAL tool manifest overrides the LLM's 3-intent classification. The
         # manifest decides what is possible; the LLM only advises on ambiguous
@@ -3615,6 +3632,7 @@ class CognitiveRuntime:
                     "grounding": simulated_grounding.to_dict(),
                     "epistemic_presentation": presentation.to_dict(),
                     "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
                     "llm_available": False,
                 }
 
@@ -3717,6 +3735,7 @@ class CognitiveRuntime:
                 "grounding": answer_grounding.to_dict(),
                 "epistemic_presentation": answer_presentation.to_dict(),
                 "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
                 # Owner review P1 #9: 'observable, never silent' must
                 # hold at the boundary the consumer sees. When a loaded
                 # FALLBACK model answered (the requested model was not
@@ -3889,6 +3908,7 @@ class CognitiveRuntime:
                 "grounding": investigation_grounding.to_dict(),
                 "epistemic_presentation": investigation_presentation.to_dict(),
                 "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
                 # Owner review P1 #9: fallback disclosure at the boundary
                 # (same contract as the ANSWER branch above).
                 **({"model_fallback": dict(llm_res["model_fallback"])}
@@ -4000,6 +4020,7 @@ class CognitiveRuntime:
                 "grounding": defer_grounding.to_dict(),
                 "epistemic_presentation": defer_presentation.to_dict(),
                 "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
             }
 
         # Branch D: ACT / Action Strategy Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Execution
@@ -4254,6 +4275,7 @@ class CognitiveRuntime:
                 "epistemic_presentation": blocked_presentation.to_dict(),
                 "criticality_review": dict(trace.criticality_review),
                 "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
             }
 
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
@@ -4703,4 +4725,5 @@ class CognitiveRuntime:
             "epistemic_presentation": action_presentation.to_dict(),
             "criticality_review": dict(trace.criticality_review),
             "route_comparison": dict(trace.route_comparison),
+            "hypothesis_state": dict(trace.hypothesis_state),
         }

@@ -138,6 +138,19 @@ class CognitiveReasoningLoop:
             if self.cognitive_state is not None:
                 self.cognitive_state.reasoning["confidence"] = decision.confidence
                 self.cognitive_state.reasoning["hypotheses"] = list(decision.belief.alternatives) if decision.belief else []
+                self.cognitive_state.reasoning["hypothesis_set"] = (
+                    self.engine.hypothesis_snapshot(subject, predicate)
+                    if decision.belief else {
+                        "subject": subject,
+                        "predicate": predicate,
+                        "items": [],
+                        "count": 0,
+                        "max_hypotheses": self.engine.hypotheses.max_hypotheses,
+                        "bounded": True,
+                        "competing": False,
+                        "epistemic_status": "hypothesis_set",
+                    }
+                )
                 self.cognitive_state.reasoning["status"] = decision.action.value
                 self.cognitive_state.touch()
             self._emit("reasoning_decision", {"subject": subject, "predicate": predicate, "action": decision.action.value, "confidence": decision.confidence})

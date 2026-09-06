@@ -37,6 +37,7 @@ class CognitiveTrace:
     epistemic_presentation: Dict[str, Any] = field(default_factory=dict)
     grounding_result: Dict[str, Any] = field(default_factory=dict)
     retrieved_memories: List[Dict[str, Any]] = field(default_factory=list)
+    hypothesis_state: Dict[str, Any] = field(default_factory=dict)
     resource_allocation: Dict[str, Any] = field(default_factory=dict)
     criticality_review: Dict[str, Any] = field(default_factory=dict)
     route_comparison: Dict[str, Any] = field(default_factory=dict)
@@ -248,6 +249,7 @@ class CognitiveTrace:
                     epistemic_presentation_json TEXT NOT NULL DEFAULT '{}',
                     grounding_result_json TEXT NOT NULL DEFAULT '{}',
                     retrieved_memories_json TEXT NOT NULL DEFAULT '[]',
+                    hypothesis_state_json TEXT NOT NULL DEFAULT '{}',
                     resource_allocation_json TEXT NOT NULL DEFAULT '{}',
                     criticality_review_json TEXT NOT NULL DEFAULT '{}',
                     route_comparison_json TEXT NOT NULL DEFAULT '{}',
@@ -268,6 +270,7 @@ class CognitiveTrace:
                 ("epistemic_presentation_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("grounding_result_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("retrieved_memories_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ("hypothesis_state_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("resource_allocation_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("criticality_review_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("route_comparison_json", "TEXT NOT NULL DEFAULT '{}'"),
@@ -276,8 +279,8 @@ class CognitiveTrace:
                     cursor.execute(f"ALTER TABLE cognitive_traces ADD COLUMN {column} {ddl}")
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
-                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, resource_allocation_json, criticality_review_json, route_comparison_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, hypothesis_state_json, resource_allocation_json, criticality_review_json, route_comparison_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trace_id,
                 self.session_id or "default",
@@ -298,6 +301,7 @@ class CognitiveTrace:
                 json.dumps(self.epistemic_presentation, default=str),
                 json.dumps(self.grounding_result, default=str),
                 json.dumps(self.retrieved_memories, default=str),
+                json.dumps(self.hypothesis_state, default=str),
                 json.dumps(self.resource_allocation, default=str),
                 json.dumps(self.criticality_review, default=str),
                 json.dumps(self.route_comparison, default=str),

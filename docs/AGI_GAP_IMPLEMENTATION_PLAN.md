@@ -439,7 +439,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
   **Current runtime telemetry records fast/authoritative-route agreement, planner/action agreement, whether a correction was applied, and the post-cycle verified outcome. A single verified outcome is explicitly not calibration, adaptation, or proof of route quality.**
 - Add a value-of-compute policy using risk, reversibility, uncertainty, novelty, owner stakes, expected information gain, and predicted user usefulness.
 - Add a criticality-triggered adversarial review for high-risk, novel, contradictory, or overconfident conclusions. **A bounded pre-gate review now records risk, no-history, conflict, unresolved-unknown, overconfidence, malformed-proposal, and missing-prediction triggers; it remains advisory and cannot authorize or execute actions.**
-- Add bounded hypothesis sets so the system can preserve competing explanations without premature synthesis.
+- Add bounded hypothesis sets so the system can preserve competing explanations without premature synthesis. **The belief/reasoning path now retains a bounded ranked set with explicit hypothesis provenance, exposes it in cognitive state, blackboard, runtime traces, and refuses to answer from competing hypotheses without evidence or an explicit `UNKNOWN` defer.**
 - Feed validated usefulness feedback into strategy selection only after separating it from correctness, politeness, and user preference effects.
 - Version ontology/schema changes separately from ordinary belief updates.
 - Add migration and rollback for ontology revisions.
