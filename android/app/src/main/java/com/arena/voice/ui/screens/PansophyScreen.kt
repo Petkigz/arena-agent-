@@ -102,7 +102,7 @@ fun PansophyScreen(viewModel: PansophyViewModel = hiltViewModel()) {
                 items(viewModel.items) { line ->
                     Text(
                         text = line,
-                        color = if (line.startsWith("──")) Color(0xFF94A3B8) else Color(0xFFF1F5F9),
+                        color = if (line.startsWith("──")) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                         fontSize = if (line.startsWith("──")) 12.sp else 14.sp,
                         modifier = Modifier.padding(vertical = 3.dp),
                     )

@@ -50,6 +50,7 @@ fun AppScaffold(
     apiKey: String,
     onToggleTalk: () -> Unit,
     onQuickAction: (String) -> Unit,
+    onLandingSubmit: (String) -> Unit = {},
     onSaveServerUrl: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
     onSaveTheme: (String) -> Unit,
@@ -92,6 +93,16 @@ fun AppScaffold(
                     isListening = isListening,
                     onToggleTalk = onToggleTalk,
                     onQuickAction = onQuickAction,
+                    // The conversation is the primary surface: a landing submit
+                    // hands off to the chat tab (review section 2/4).
+                    onSubmit = { text ->
+                        onLandingSubmit(text)
+                        navController.navigate(AppTab.CHAT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                 )
             }
             composable(AppTab.CHAT.route) {

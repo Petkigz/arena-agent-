@@ -173,10 +173,39 @@ that used to live here is fixed — see Phase 1.5 — but pages still rebuild st
   app.py with a still-working guard so a late fetch never shows a stale card; hidden on
   completion/error; partial context renders, offline renders nothing).
 
-## Phase 5 — Mobile shell (future)
+## Phase 5 — STARTED (round-21f): Android revival — same Beanie, mobile body
 
-Genuinely different shell per the analysis — not a squeezed desktop. Built from
-`design/tokens.json` + Phase-4 contracts. No work until the owner starts it.
+The Android client EXISTS (`android/`, Kotlin + Jetpack Compose, ~5k LOC — missed by the
+reviewer's GitHub search and by our own round-21 inventory; corrected). The review's salvage
+rule applies cleanly: networking (`ApiClient`), the WebSocket conversation client, voice
+services and models are sound and already speak the Phase-4 API contract — KEPT. The
+presentation layer was revived:
+
+- **One Arena theme** (`ui/Theme.kt`): Material 3 roles mapped to `design/tokens.json`
+  (background/surface/surfaceVariant ← bg primary/secondary/surface; onBackground/onSurface ←
+  text.primary; onSurfaceVariant ← text.secondary; outline ← text.muted; primary/secondary/
+  tertiary/error ← accent scale). `dynamicColor` now defaults to **false** — Arena's palette,
+  not the device wallpaper (Material You remains opt-in). Light-scheme drifts fixed
+  (#FFFFFF surface → #E2E8F0; #0F172A onBackground → #1E293B). Status bar follows the canvas,
+  not the accent.
+- **Restrained landing** (mirrors desktop round-21d): orb → "Beanie" → time-based greeting →
+  "What are we working on today?" → landing composer ("Ask Beanie anything…" + inline mic +
+  send, routed to the conversation) → the four quick actions as subtle text chips. The 56dp
+  tiles and the giant talk button are gone; the "Talk to me" chip now actually toggles voice
+  (it mapped to an empty prompt, same bug as desktop).
+- **Theme-driven screens**: every hardcoded `Color(0xFF…)` in Chat/Pansophy/Files/Vision
+  screens replaced with Material roles; the voice pill reads the PresenceStatus palette
+  (shared state machine); bubbles use the token radius (16dp = xxl); the composer matches the
+  web/desktop composer radius.
+- **Machine-guarded like the other clients** (`tests/test_android_design_tokens.py`, 7
+  tests): Theme.kt schemes == canonical tokens, the Compose PresenceStatus enum == the 11
+  Beanie states (color + duration), screens stay theme-driven, landing structure pinned —
+  parsed from Python, so the guard runs without an Android toolchain.
+
+Next on Android (needs a real build/device loop): the §4 working-context card in the
+conversation, drawer-grouped navigation beyond the 7-tab bottom bar, and voice-flow polish.
+Note: Kotlin changes are source-verified (structure + drift tests) but not compiled here —
+no Android SDK in the sandbox; first Gradle build may surface routine compile fixes.
 
 ## Phase 6 — Polish last
 

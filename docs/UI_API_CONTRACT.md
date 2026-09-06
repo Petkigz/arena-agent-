@@ -94,6 +94,9 @@ the UI depends on. Endpoint drift = test failure, see §4.)
 ## 4. Keeping the contract honest
 
 - `tests/test_desktop_backend_client.py` pins the client methods' HTTP calls.
+- The Android client (`android/`) consumes the same contract: `VoiceWebSocketClient` speaks
+  the `/ws` protocol above and `ApiClient` hits the documented HTTP endpoints — one contract,
+  three clients.
 - `tests/test_ui_api_contract.py` pins this document against the backend route table and
   the desktop client surface, so an endpoint rename fails CI instead of silently breaking
   a client.

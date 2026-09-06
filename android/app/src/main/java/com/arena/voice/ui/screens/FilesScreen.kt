@@ -85,7 +85,7 @@ fun FilesScreen(viewModel: FilesViewModel = hiltViewModel()) {
                 items(viewModel.results) { line ->
                     Text(
                         text = line,
-                        color = Color(0xFFF1F5F9),
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(vertical = 4.dp),
                     )

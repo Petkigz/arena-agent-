@@ -92,7 +92,7 @@ fun ChatScreen(
                     },
                     modifier = Modifier.padding(horizontal = 12.dp),
                 )
-                Divider(color = Color(0xFF334155), modifier = Modifier.padding(vertical = 8.dp))
+                Divider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(conversations, key = { it.first }) { (id, title) ->
                         NavigationDrawerItem(
@@ -106,7 +106,7 @@ fun ChatScreen(
                         )
                     }
                 }
-                Divider(color = Color(0xFF334155), modifier = Modifier.padding(vertical = 8.dp))
+                Divider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                 NavigationDrawerItem(
                     label = { Text("Settings") },
                     selected = false,
@@ -142,7 +142,7 @@ fun ChatScreen(
                             Modifier
                                 .size(8.dp)
                                 .background(
-                                    if (isConnected) Color(0xFF10B981) else Color(0xFF94A3B8),
+                                    if (isConnected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
                                     CircleShape,
                                 ),
                         )
@@ -150,7 +150,7 @@ fun ChatScreen(
                         Text(
                             if (isConnected) "Online" else "Offline",
                             fontSize = 12.sp,
-                            color = if (isConnected) Color(0xFF10B981) else Color(0xFF94A3B8),
+                            color = if (isConnected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
                         )
                     }
                 }
@@ -177,7 +177,7 @@ fun ChatScreen(
                 }
             }
 
-            Divider(color = Color(0xFF334155))
+            Divider(color = MaterialTheme.colorScheme.surfaceVariant)
 
             // ── Body: messages (Beanie orb beside assistant messages) ──
             if (messages.isEmpty()) {
@@ -190,10 +190,10 @@ fun ChatScreen(
                 ) {
                     ReactiveBeanieOrb(status = PresenceStatus.IDLE, sizeDp = 96)
                     Spacer(Modifier.height(16.dp))
-                    Text("I'm Beanie.", color = Color(0xFFF1F5F9), fontSize = 18.sp)
+                    Text("I'm Beanie.", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp)
                     Text(
                         "Send a message or tap the mic to talk.",
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                     )
                 }
@@ -218,16 +218,17 @@ fun ChatScreen(
                 else -> null
             }
             if (voiceLabel != null) {
+                // Presence colors come from the shared Beanie state machine (tokens-pinned).
                 val voiceColor = when (voiceStatus) {
-                    PresenceStatus.LISTENING -> Color(0xFF10B981)
-                    PresenceStatus.THINKING -> Color(0xFFF59E0B)
-                    PresenceStatus.SPEAKING -> Color(0xFF8B5CF6)
-                    else -> Color(0xFF10B981)
+                    PresenceStatus.LISTENING -> PresenceStatus.LISTENING.color
+                    PresenceStatus.THINKING -> PresenceStatus.THINKING.color
+                    PresenceStatus.SPEAKING -> PresenceStatus.SPEAKING.color
+                    else -> PresenceStatus.IDLE.color
                 }
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Row(
                         Modifier
-                            .background(Color(0xFF1E293B), RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -237,7 +238,7 @@ fun ChatScreen(
                                 .background(voiceColor, CircleShape),
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(voiceLabel, color = Color(0xFFF1F5F9), fontSize = 13.sp)
+                        Text(voiceLabel, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
                     }
                 }
             }
@@ -258,7 +259,7 @@ fun ChatScreen(
                     onValueChange = { input = it },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Message Beanie…") },
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(16.dp),
                     maxLines = 4,
                 )
 
@@ -299,30 +300,30 @@ private fun MessageBubble(msg: ChatMessage) {
             Spacer(Modifier.width(8.dp))
         }
         Surface(
-            color = if (isUser) Color(0xFF3B82F6) else Color(0xFF1E293B),
+            color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(16.dp),
         ) {
             Column(Modifier.padding(12.dp)) {
                 if (msg.isStreaming && msg.content.isBlank()) {
-                    Text("Beanie is thinking…", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                    Text("Beanie is thinking…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
                 Text(
                     text = msg.content.ifBlank { "" },
-                    color = if (isUser) Color.White else Color(0xFFF1F5F9),
+                    color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
                 )
                 if (msg.actionSteps.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     msg.actionSteps.takeLast(2).forEach { step ->
                         Text(
                             text = "• $step",
-                            color = Color(0xFF94A3B8),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                         )
                     }
                 }
                 if (msg.isStreaming) {
                     Spacer(Modifier.height(4.dp))
-                    Text("▍", color = Color(0xFF94A3B8))
+                    Text("▍", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

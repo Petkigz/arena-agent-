@@ -172,35 +172,35 @@ fun VisionScreen(viewModel: VisionViewModel = hiltViewModel()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Beanie is looking…", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                Text("Beanie is looking…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }
         }
 
         viewModel.error?.let { msg ->
-            Text("⚠ $msg", color = Color(0xFFEF4444), fontSize = 13.sp)
+            Text("⚠ $msg", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
 
-        Text("OCR text", style = MaterialTheme.typography.labelLarge, color = Color(0xFF94A3B8))
+        Text("OCR text", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
             shape = MaterialTheme.shapes.medium,
         ) {
             Text(
                 text = viewModel.ocrText.ifBlank { "(nothing yet)" },
-                color = Color(0xFFF1F5F9),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(12.dp),
             )
         }
 
-        Text("AI analysis", style = MaterialTheme.typography.labelLarge, color = Color(0xFF94A3B8))
+        Text("AI analysis", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
             shape = MaterialTheme.shapes.medium,
         ) {
             Text(
                 text = viewModel.analysisText.ifBlank { "(nothing yet)" },
-                color = Color(0xFFF1F5F9),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(12.dp),
             )

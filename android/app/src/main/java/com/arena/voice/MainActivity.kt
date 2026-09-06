@@ -134,6 +134,7 @@ class MainActivity : ComponentActivity() {
                         apiKey = apiKey,
                         onToggleTalk = { toggleTalk() },
                         onQuickAction = { action -> handleQuickAction(action) },
+                        onLandingSubmit = { text -> handleLandingSubmit(text) },
                         onSaveServerUrl = { url -> saveServerUrl(url) },
                         onSaveApiKey = { key -> saveApiKey(key) },
                         onSaveTheme = { t -> saveTheme(t) },
@@ -170,7 +171,7 @@ class MainActivity : ComponentActivity() {
         return when {
             isListening -> "Listening…"
             !isConnected -> "Offline — connect to your PC."
-            else -> "I'm here."
+            else -> "What are we working on today?"
         }
     }
 
@@ -309,12 +310,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Landing composer: send from the home screen into the shared conversation. */
+    private fun handleLandingSubmit(text: String) {
+        val content = text.trim()
+        if (content.isNotEmpty()) {
+            webSocketClient.sendUserMessage(webSocketClient.conversationId, content)
+        }
+    }
+
     private fun handleQuickAction(action: String) {
+        if (action == "talk") {
+            // The chip is a voice entry point, not an empty prompt.
+            toggleTalk()
+            return
+        }
         val prompt = when (action) {
             "continue_project" -> "What were we working on? Continue the project."
             "whats_new" -> "What's new in my system?"
             "research" -> "Research the latest on my current project."
-            "talk" -> null
             else -> null
         }
         if (prompt != null) {
