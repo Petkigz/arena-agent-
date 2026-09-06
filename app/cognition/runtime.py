@@ -3051,7 +3051,18 @@ class CognitiveRuntime:
         memory_context = ""
         try:
             memory_records = self.memory.retrieve_context_records(user_text, limit=8, per_kind=2)
-            memory_context = self.memory.render_context(memory_records)
+            memory_metadata = self.memory.context_metadata(
+                memory_records,
+                stale_after_hours=float(
+                    getattr(settings, "ARENA_MEMORY_STALE_AFTER_HOURS", 720.0)
+                ),
+            )
+            memory_context = self.memory.render_context(
+                memory_records,
+                stale_after_hours=float(
+                    getattr(settings, "ARENA_MEMORY_STALE_AFTER_HOURS", 720.0)
+                ),
+            )
             trace.retrieved_memories = [
                 {
                     "memory_id": record.memory_id,
@@ -3061,6 +3072,7 @@ class CognitiveRuntime:
                     "outcome": record.outcome,
                     "success": record.success,
                     "created_at": record.created_at,
+                    **memory_metadata.get(record.memory_id, {}),
                 }
                 for record in memory_records
             ]

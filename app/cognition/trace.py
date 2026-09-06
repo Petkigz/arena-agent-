@@ -72,6 +72,131 @@ class CognitiveTrace:
         self._persist_trace_to_db()
 
     @classmethod
+    def record_usefulness_feedback(
+        cls,
+        trace_id: str,
+        *,
+        usefulness: str,
+        outcome_signal: str = "",
+        retrieval_useful: Optional[bool] = None,
+        note: str = "",
+    ) -> Dict[str, Any]:
+        """Append an owner usefulness event to the trace database.
+
+        Usefulness is deliberately stored separately from correctness or goal
+        verification.  A helpful but incomplete answer, a correct answer that
+        required clarification, and an incorrect answer are different signals;
+        this event never rewrites epistemic state or execution truth.
+        """
+        allowed_usefulness = {"helpful", "partially_helpful", "not_helpful"}
+        allowed_signals = {
+            "",
+            "task_completed",
+            "clarification_requested",
+            "correction_followup",
+            "abandoned",
+            "unknown",
+        }
+        usefulness = str(usefulness or "").strip().lower()
+        outcome_signal = str(outcome_signal or "").strip().lower()
+        if usefulness not in allowed_usefulness:
+            raise ValueError(
+                "usefulness must be one of: helpful, partially_helpful, not_helpful"
+            )
+        if outcome_signal not in allowed_signals:
+            raise ValueError(
+                "outcome_signal must be one of: task_completed, "
+                "clarification_requested, correction_followup, abandoned, unknown"
+            )
+        note = str(note or "").strip()[:2000]
+        feedback_id = f"feedback_{uuid.uuid4().hex[:12]}"
+        created_at = _now()
+        try:
+            with sqlite3.connect(str(settings.DB_PATH)) as conn:
+                try:
+                    trace_exists = conn.execute(
+                        "SELECT 1 FROM cognitive_traces WHERE trace_id = ? LIMIT 1",
+                        (str(trace_id),),
+                    ).fetchone()
+                except sqlite3.OperationalError as exc:
+                    if "no such table" in str(exc).lower():
+                        raise KeyError(f"unknown trace_id: {trace_id}") from exc
+                    raise
+                if trace_exists is None:
+                    raise KeyError(f"unknown trace_id: {trace_id}")
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS cognitive_trace_usefulness (
+                        feedback_id TEXT PRIMARY KEY,
+                        trace_id TEXT NOT NULL,
+                        usefulness TEXT NOT NULL,
+                        outcome_signal TEXT NOT NULL DEFAULT '',
+                        retrieval_useful INTEGER,
+                        note TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL
+                    )
+                """)
+                conn.execute("""
+                    INSERT INTO cognitive_trace_usefulness
+                    (feedback_id, trace_id, usefulness, outcome_signal,
+                     retrieval_useful, note, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    feedback_id,
+                    str(trace_id),
+                    usefulness,
+                    outcome_signal,
+                    None if retrieval_useful is None else int(bool(retrieval_useful)),
+                    note,
+                    created_at,
+                ))
+                conn.commit()
+        except KeyError:
+            raise
+        except Exception as exc:
+            app_logger.warning(f"CognitiveTrace usefulness feedback failed: {exc}")
+            raise RuntimeError(f"could not record usefulness feedback: {exc}") from exc
+        return {
+            "feedback_id": feedback_id,
+            "trace_id": str(trace_id),
+            "usefulness": usefulness,
+            "outcome_signal": outcome_signal,
+            "retrieval_useful": retrieval_useful,
+            "note": note,
+            "created_at": created_at,
+        }
+
+    @classmethod
+    def list_usefulness_feedback(cls, trace_id: str) -> List[Dict[str, Any]]:
+        """Return owner usefulness events without mixing in correctness fields."""
+        try:
+            with sqlite3.connect(str(settings.DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("""
+                    SELECT feedback_id, trace_id, usefulness, outcome_signal,
+                           retrieval_useful, note, created_at
+                    FROM cognitive_trace_usefulness
+                    WHERE trace_id = ?
+                    ORDER BY created_at ASC
+                """, (str(trace_id),)).fetchall()
+            return [
+                {
+                    **dict(row),
+                    "retrieval_useful": (
+                        None if row["retrieval_useful"] is None
+                        else bool(row["retrieval_useful"])
+                    ),
+                }
+                for row in rows
+            ]
+        except sqlite3.OperationalError:
+            # The trace may predate feedback support; absence is an empty
+            # measurement set, not evidence that the response was useful.
+            return []
+        except Exception as exc:
+            app_logger.warning(f"CognitiveTrace usefulness feedback read failed: {exc}")
+            return []
+
+    @classmethod
     def update_persisted_reply(cls, trace_id: str, reply: str) -> bool:
         """Update only the owner-visible reply for a post-cycle delivery notice.
 

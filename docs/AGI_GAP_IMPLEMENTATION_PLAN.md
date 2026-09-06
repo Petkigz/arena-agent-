@@ -28,8 +28,10 @@ Implemented in the current branch:
 - Initial temporal queries are now wired into WorldModel for inclusive intervals, strict before/after retrieval, and explicit ordered/unknown observation relations.
 - Initial Phase 3 retrieval routing is now wired through the active runtime `MemoryStore`: bounded per-kind retrieval keeps episodic, semantic, procedural, and lesson records visible; prompt context labels them as historical evidence; retrieved record metadata is persisted in the cognitive trace. The legacy global RAG adapter remains only for compatibility callers that do not have a runtime store.
 - Structural analogical memory now reaches the active action planner: verified outcomes from similar task signatures apply a small bounded utility adjustment to matching candidates, while approval, execution-truth, and observation gates remain unchanged.
+- Initial trace-linked usefulness feedback is now available through owner-controlled API events. Usefulness remains separate from correctness, verification, and retrieval truth; no strategy adaptation is automatic from a single signal.
+- Retrieved memory context now marks age-based staleness and explicit verified-outcome conflicts without discarding either record or guessing a resolution.
 
-Usefulness feedback remains intentionally unimplemented in this slice; it must be added only through an approved existing extension point rather than a parallel store.
+Usefulness-based strategy adaptation remains intentionally unimplemented in this slice; it must be added only through validated longitudinal evidence rather than a parallel feedback store.
 
 ---
 
@@ -266,7 +268,7 @@ The phases below are ordered by leverage and safety, not by how impressive the f
   - Long-horizon project completion and recovery.
   - User-reported usefulness, both explicit ratings and carefully bounded implicit signals such as follow-up corrections, task completion, abandonment, or requests for clarification.
   - Correlation between usefulness and answer characteristics such as evidence freshness, confidence label, retrieval choices, latency, and response completeness.
-- Define a feedback event contract so usefulness signals are not confused with correctness: a correct answer can be unhelpful, and a useful answer can be incomplete but appropriately scoped.
+- Define a feedback event contract so usefulness signals are not confused with correctness: a correct answer can be unhelpful, and a useful answer can be incomplete but appropriately scoped. **Initial trace-linked owner events are implemented; longitudinal aggregation and strategy adaptation remain pending.**
 - Keep all probes isolated from the live brain, as the existing measurement isolation work requires.
 
 ### Exit criteria
@@ -406,8 +408,8 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
   - irrelevant details decay;
   - exceptions and failures remain recoverable;
   - every gist retains source episode IDs.
-- Add retrieval usefulness feedback: did the memory change the decision or improve the outcome?
-- Add memory conflict and stale-memory handling.
+- Add retrieval usefulness feedback: did the memory change the decision or improve the outcome? **Initial owner feedback events can record retrieval usefulness against a trace; automatic attribution and strategy adaptation remain pending.**
+- Add memory conflict and stale-memory handling. **Initial age markers and explicit verified-outcome conflict markers are wired into runtime memory context; records remain queryable and unresolved conflicts stay visible.**
 
 ### Exit criteria
 

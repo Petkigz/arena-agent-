@@ -312,6 +312,13 @@ class ReflectionRequest(BaseModel):
     outcome_summary: str
     user_feedback: Optional[str] = None
 
+class TraceUsefulnessRequest(BaseModel):
+    """Owner feedback about usefulness, separate from correctness."""
+    usefulness: str
+    outcome_signal: str = ""
+    retrieval_useful: Optional[bool] = None
+    note: str = ""
+
 class NotificationRequest(BaseModel):
     title: str
     message: str
@@ -2720,6 +2727,38 @@ def ast_generate_test_endpoint(module_query: str = Query(...)):
     return ASTJanitor.generate_pytest_contract(module_query)
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
+@router.post("/cognition/traces/{trace_id}/usefulness")
+def record_trace_usefulness_endpoint(trace_id: str, req: TraceUsefulnessRequest):
+    """Record an owner usefulness signal without changing correctness state."""
+    from app.cognition.trace import CognitiveTrace
+    try:
+        feedback = CognitiveTrace.record_usefulness_feedback(
+            trace_id,
+            usefulness=req.usefulness,
+            outcome_signal=req.outcome_signal,
+            retrieval_useful=req.retrieval_useful,
+            note=req.note,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"success": True, "feedback": feedback}
+
+
+@router.get("/cognition/traces/{trace_id}/usefulness")
+def list_trace_usefulness_endpoint(trace_id: str):
+    """Return usefulness events; absence is unmeasured, not useful."""
+    from app.cognition.trace import CognitiveTrace
+    return {
+        "success": True,
+        "trace_id": trace_id,
+        "feedback": CognitiveTrace.list_usefulness_feedback(trace_id),
+    }
+
+
 @router.post("/memory/rag-search")
 def rag_search_endpoint(req: RAGSearchRequest):
     results = SemanticRAGEngine.search_memories(req.query, limit=req.limit)

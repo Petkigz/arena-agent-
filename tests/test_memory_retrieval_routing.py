@@ -43,3 +43,41 @@ def test_retrieval_does_not_return_unrelated_memory(tmp_path):
     retrieved = store.retrieve_context_records("project browser recovery", limit=4)
 
     assert [record.memory_id for record in retrieved] == [matching.memory_id]
+
+
+def test_context_marks_stale_and_conflicting_verified_outcomes(tmp_path):
+    store = MemoryStore(tmp_path / "memory.db")
+    query = "project browser recovery"
+    first = store.add(
+        "episodic",
+        "The project browser recovery succeeded",
+        source="goal_verifier",
+        task_id="same-task",
+        outcome="achieved",
+        success=True,
+    )
+    second = store.add(
+        "episodic",
+        "The project browser recovery failed",
+        source="goal_verifier",
+        task_id="same-task",
+        outcome="failed",
+        success=False,
+    )
+    old = "2020-01-01T00:00:00+00:00"
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE cognitive_memory SET created_at = ? WHERE memory_id = ?",
+            (old, first.memory_id),
+        )
+        conn.commit()
+
+    records = store.retrieve_context_records(query, limit=4, per_kind=2)
+    metadata = store.context_metadata(records, stale_after_hours=1)
+
+    assert metadata[first.memory_id]["freshness"] == "stale"
+    assert metadata[first.memory_id]["conflicting"] is True
+    assert metadata[second.memory_id]["conflicting"] is True
+    rendered = store.render_context(records, stale_after_hours=1)
+    assert "MEMORY CONFLICT NOTICE" in rendered
+    assert "stale/conflicting" in rendered
