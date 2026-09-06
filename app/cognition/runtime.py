@@ -3073,6 +3073,27 @@ class CognitiveRuntime:
                 )
         except Exception as exc:
             app_logger.warning(f"Versioned user state context unavailable: {exc}")
+        try:
+            social_states = self.social_cognition.get_agent_mental_states("owner")[:5]
+            if social_states:
+                self.blackboard.set(
+                    "social_state_context",
+                    [
+                        {
+                            "state_type": state.state_type.value,
+                            "content": state.content,
+                            "confidence": state.confidence,
+                            "evidence": list(state.evidence[:2]),
+                            "belief_chain": list(state.belief_chain),
+                            "nesting_depth": state.nesting_depth,
+                        }
+                        for state in social_states
+                    ],
+                    source="social_cognition",
+                    confidence=1.0,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Social state context unavailable: {exc}")
         # P2 AGI: Multimodal ingestion — if image_path or attachments provided, analyze and ground
         multimodal_context = ""
         if image_path:

@@ -5,6 +5,7 @@ Tests for Phase 17: Social Cognition Module
 import pytest
 import tempfile
 import os
+from datetime import datetime, timedelta, timezone
 from app.cognition.social_cognition import (
     SocialCognitionEngine,
     MentalState,
@@ -55,6 +56,49 @@ class TestSocialCognition:
         assert retrieved is not None
         assert retrieved.content == state.content
     
+    def test_nested_mental_state_is_bounded_and_false_beliefs_are_explicit(self, social_engine):
+        state = social_engine.infer_nested_mental_state(
+            ["arena", "owner"],
+            MentalState.BELIEF,
+            "the report is in the archive",
+            ["owner said the report was archived"],
+            confidence=0.65,
+        )
+        assert state.belief_chain == ["arena", "owner"]
+        assert state.nesting_depth == 1
+        assert state.expires_at is not None
+
+        false_belief = social_engine.evaluate_belief_against_observation(
+            state.state_id, "the report is in the inbox"
+        )
+        aligned = social_engine.evaluate_belief_against_observation(
+            state.state_id, "the report is in the archive"
+        )
+        assert false_belief["status"] == "false_belief"
+        assert aligned["status"] == "aligned"
+
+        with pytest.raises(ValueError):
+            social_engine.infer_nested_mental_state(
+                ["arena", "owner", "teammate", "reviewer"],
+                MentalState.BELIEF,
+                "nested too deeply",
+                ["fixture"],
+            )
+
+    def test_expired_social_inference_is_hidden_but_auditable(self, social_engine):
+        expired = social_engine.infer_mental_state(
+            "owner",
+            MentalState.DESIRE,
+            "finish the old task",
+            ["stale message"],
+            expires_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        )
+        assert social_engine.get_mental_state(expired.state_id) is None
+        historical = social_engine.get_mental_state(expired.state_id, include_expired=True)
+        assert historical is not None
+        assert social_engine.get_agent_mental_states("owner") == []
+        assert social_engine.get_agent_mental_states("owner", include_expired=True)
+
     def test_update_mental_state(self, social_engine):
         """Test updating mental states."""
         state = social_engine.infer_mental_state(

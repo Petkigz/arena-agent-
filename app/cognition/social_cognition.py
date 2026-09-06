@@ -15,7 +15,7 @@ import sqlite3
 import json
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 import uuid
 from app.utils.logger import app_logger
@@ -71,13 +71,23 @@ class RelationshipType(Enum):
 
 @dataclass
 class MentalStateModel:
-    """Model of someone's mental state."""
+    """Evidence-linked model of a possible mental state.
+
+    ``agent_id`` is the subject being modelled. ``perspective_agent_id`` and
+    ``belief_chain`` make bounded nesting explicit: ``[arena, owner]`` means
+    Arena models the owner's state, while ``[arena, owner, teammate]`` is one
+    additional level. This is a model with uncertainty, not mind-reading.
+    """
     state_id: str = field(default_factory=lambda: f"state_{uuid.uuid4().hex[:8]}")
     agent_id: str = ""  # Who this mental state belongs to
     state_type: MentalState = MentalState.BELIEF
     content: str = ""  # What the mental state is about
-    confidence: float = 0.5  # How confident we are (0-1)
-    evidence: List[str] = field(default_factory=list)  # Why we believe this
+    confidence: float = 0.5  # 0-1, evidence-derived only
+    evidence: List[str] = field(default_factory=list)  # Why we model this
+    perspective_agent_id: str = "arena"
+    belief_chain: List[str] = field(default_factory=list)
+    nesting_depth: int = 0
+    expires_at: Optional[str] = None
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
     
@@ -90,13 +100,18 @@ class MentalStateModel:
             'content': self.content,
             'confidence': self.confidence,
             'evidence': self.evidence,
+            'perspective_agent_id': self.perspective_agent_id,
+            'belief_chain': self.belief_chain,
+            'nesting_depth': self.nesting_depth,
+            'expires_at': self.expires_at,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MentalStateModel':
-        """Create from dictionary."""
+        """Create from dictionary, including older records without nesting."""
+        chain = [str(item) for item in data.get('belief_chain', []) if str(item).strip()]
         return cls(
             state_id=data['state_id'],
             agent_id=data['agent_id'],
@@ -104,6 +119,10 @@ class MentalStateModel:
             content=data['content'],
             confidence=data.get('confidence', 0.5),
             evidence=data.get('evidence', []),
+            perspective_agent_id=str(data.get('perspective_agent_id', 'arena')),
+            belief_chain=chain,
+            nesting_depth=int(data.get('nesting_depth', max(0, len(chain) - 1))),
+            expires_at=data.get('expires_at'),
             created_at=data.get('created_at', _now()),
             updated_at=data.get('updated_at', _now())
         )
@@ -241,6 +260,10 @@ class SocialInteraction:
 class SocialCognitionEngine:
     """
     Engine for social cognition and interaction.
+
+    Mental-state nesting is deliberately capped at two levels beyond the
+    observing perspective. Expired inferences are excluded from current reads
+    but remain in SQLite history for auditability.
     
     Provides methods for:
     - Modeling mental states of others (theory of mind)
@@ -249,6 +272,9 @@ class SocialCognitionEngine:
     - Building and maintaining relationships
     - Collaborative problem solving
     """
+
+    MAX_NESTING_DEPTH = 2
+    DEFAULT_INFERENCE_TTL_HOURS = 24
     
     def __init__(self, db_path: str = "data/social_cognition.db"):
         """Initialize the social cognition engine."""
@@ -315,6 +341,59 @@ class SocialCognitionEngine:
             conn.commit()
     
     # Theory of Mind Methods
+
+    @staticmethod
+    def _validate_confidence(confidence: float) -> float:
+        confidence = float(confidence)
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError("mental-state confidence must be between 0 and 1")
+        return confidence
+
+    @classmethod
+    def _validate_belief_chain(
+        cls,
+        perspective_agent_id: str,
+        agent_id: str,
+        belief_chain: Optional[List[str]],
+    ) -> tuple[List[str], int]:
+        chain = [str(item).strip() for item in (belief_chain or []) if str(item).strip()]
+        if not chain:
+            return [], 0
+        if chain[0] != str(perspective_agent_id).strip():
+            raise ValueError("belief_chain must start with perspective_agent_id")
+        if chain[-1] != str(agent_id).strip():
+            raise ValueError("belief_chain must end with agent_id")
+        depth = len(chain) - 1
+        if depth < 0 or depth > cls.MAX_NESTING_DEPTH:
+            raise ValueError(
+                f"mental-state nesting depth must be <= {cls.MAX_NESTING_DEPTH}"
+            )
+        if len(set(chain)) != len(chain):
+            raise ValueError("belief_chain cannot contain repeated agents")
+        return chain, depth
+
+    @staticmethod
+    def _default_expiry(expires_at: Optional[str]) -> Optional[str]:
+        if expires_at is not None:
+            # Validate caller-provided timestamps before persisting them.
+            datetime.fromisoformat(str(expires_at))
+            return str(expires_at)
+        return (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+
+    @staticmethod
+    def _is_expired(state: MentalStateModel, now: Optional[datetime] = None) -> bool:
+        if not state.expires_at:
+            return False
+        try:
+            expiry = datetime.fromisoformat(str(state.expires_at))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            current = now or datetime.now(timezone.utc)
+            if current.tzinfo is None:
+                current = current.replace(tzinfo=timezone.utc)
+            return current >= expiry
+        except (TypeError, ValueError, OverflowError):
+            return True
     
     def infer_mental_state(
         self,
@@ -322,7 +401,11 @@ class SocialCognitionEngine:
         state_type: MentalState,
         content: str,
         evidence: List[str],
-        confidence: float = 0.5
+        confidence: float = 0.5,
+        *,
+        perspective_agent_id: str = "arena",
+        belief_chain: Optional[List[str]] = None,
+        expires_at: Optional[str] = None,
     ) -> MentalStateModel:
         """
         Infer a mental state for an agent.
@@ -333,16 +416,31 @@ class SocialCognitionEngine:
             content: What the mental state is about
             evidence: Evidence for this inference
             confidence: How confident we are (0-1)
+            perspective_agent_id: Agent holding the model (normally Arena)
+            belief_chain: Bounded observer-to-subject chain for nested states
+            expires_at: Optional expiry; inferred states default to 24 hours
         
         Returns:
             MentalStateModel object
         """
+        confidence = self._validate_confidence(confidence)
+        perspective_agent_id = str(perspective_agent_id or "arena").strip() or "arena"
+        agent_id = str(agent_id or "").strip()
+        if not agent_id:
+            raise ValueError("agent_id is required")
+        chain, nesting_depth = self._validate_belief_chain(
+            perspective_agent_id, agent_id, belief_chain
+        )
         state = MentalStateModel(
             agent_id=agent_id,
             state_type=state_type,
-            content=content,
+            content=str(content or "")[:2000],
             confidence=confidence,
-            evidence=evidence
+            evidence=[str(item)[:500] for item in (evidence or [])],
+            perspective_agent_id=perspective_agent_id,
+            belief_chain=chain,
+            nesting_depth=nesting_depth,
+            expires_at=self._default_expiry(expires_at),
         )
         
         self._save_mental_state(state)
@@ -353,13 +451,43 @@ class SocialCognitionEngine:
         )
         
         return state
+
+    def infer_nested_mental_state(
+        self,
+        agent_chain: List[str],
+        state_type: MentalState,
+        content: str,
+        evidence: List[str],
+        confidence: float = 0.5,
+        expires_at: Optional[str] = None,
+    ) -> MentalStateModel:
+        """Record a bounded nested model such as Arena → owner → teammate.
+
+        ``agent_chain`` is ordered from the modelling perspective to the
+        subject, and its maximum depth is enforced by the same contract used
+        by direct inference.
+        """
+        chain = [str(item).strip() for item in (agent_chain or []) if str(item).strip()]
+        if len(chain) < 2:
+            raise ValueError("nested mental states require at least observer and subject")
+        return self.infer_mental_state(
+            agent_id=chain[-1],
+            state_type=state_type,
+            content=content,
+            evidence=evidence,
+            confidence=confidence,
+            perspective_agent_id=chain[0],
+            belief_chain=chain,
+            expires_at=expires_at,
+        )
     
     def update_mental_state(
         self,
         state_id: str,
         content: Optional[str] = None,
         confidence: Optional[float] = None,
-        evidence: Optional[List[str]] = None
+        evidence: Optional[List[str]] = None,
+        expires_at: Optional[str] = None,
     ) -> Optional[MentalStateModel]:
         """
         Update an existing mental state.
@@ -382,10 +510,13 @@ class SocialCognitionEngine:
             state.content = content
         
         if confidence is not None:
-            state.confidence = confidence
+            state.confidence = self._validate_confidence(confidence)
         
         if evidence is not None:
-            state.evidence.extend(evidence)
+            state.evidence.extend(str(item)[:500] for item in evidence)
+
+        if expires_at is not None:
+            state.expires_at = self._default_expiry(expires_at)
         
         state.updated_at = _now()
         
@@ -398,7 +529,9 @@ class SocialCognitionEngine:
     def get_agent_mental_states(
         self,
         agent_id: str,
-        state_type: Optional[MentalState] = None
+        state_type: Optional[MentalState] = None,
+        *,
+        include_expired: bool = False,
     ) -> List[MentalStateModel]:
         """
         Get all mental states for an agent.
@@ -425,12 +558,19 @@ class SocialCognitionEngine:
             states = []
             for row in cursor.fetchall():
                 state_data = json.loads(row[0])
-                states.append(MentalStateModel.from_dict(state_data))
+                state = MentalStateModel.from_dict(state_data)
+                if include_expired or not self._is_expired(state):
+                    states.append(state)
             
             return states
     
-    def get_mental_state(self, state_id: str) -> Optional[MentalStateModel]:
-        """Get a specific mental state by ID."""
+    def get_mental_state(
+        self,
+        state_id: str,
+        *,
+        include_expired: bool = False,
+    ) -> Optional[MentalStateModel]:
+        """Get a current mental state; expired inferences remain auditable."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT state_data FROM mental_states WHERE state_id = ?",
@@ -439,10 +579,38 @@ class SocialCognitionEngine:
             row = cursor.fetchone()
             
             if row:
-                state_data = json.loads(row[0])
-                return MentalStateModel.from_dict(state_data)
+                state = MentalStateModel.from_dict(json.loads(row[0]))
+                if include_expired or not self._is_expired(state):
+                    return state
             
             return None
+
+    def evaluate_belief_against_observation(
+        self,
+        state_id: str,
+        observed_content: str,
+    ) -> Dict[str, Any]:
+        """Compare a recorded belief with an observation without rewriting it."""
+        state = self.get_mental_state(state_id)
+        if state is None:
+            return {
+                "status": "unknown",
+                "reason": "mental state is missing or expired",
+                "state_id": state_id,
+            }
+        belief = " ".join(str(state.content).casefold().split())
+        observed = " ".join(str(observed_content or "").casefold().split())
+        status = "aligned" if belief == observed else "false_belief"
+        return {
+            "status": status,
+            "state_id": state.state_id,
+            "belief_content": state.content,
+            "observed_content": observed_content,
+            "belief_chain": list(state.belief_chain),
+            "nesting_depth": state.nesting_depth,
+            "confidence": state.confidence,
+            "evidence": list(state.evidence),
+        }
     
     # Emotion Recognition Methods
     
