@@ -30,6 +30,7 @@ Implemented in the current branch:
 - Structural analogical memory now reaches the active action planner: verified outcomes from similar task signatures apply a small bounded utility adjustment to matching candidates, while approval, execution-truth, and observation gates remain unchanged.
 - Initial trace-linked usefulness feedback is now available through owner-controlled API events. Usefulness remains separate from correctness, verification, and retrieval truth; no strategy adaptation is automatic from a single signal.
 - Retrieved memory context now marks age-based staleness and explicit verified-outcome conflicts without discarding either record or guessing a resolution.
+- Initial Phase 4 resource allocation is now wired to the actual goal and user text, persisted in the trace, and recorded against verified latency/outcome data. This is measurement and routing evidence, not proof that a fast/slow route is universally optimal.
 
 Usefulness-based strategy adaptation remains intentionally unimplemented in this slice; it must be added only through validated longitudinal evidence rather than a parallel feedback store.
 
@@ -428,6 +429,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 
 - Implement a fast candidate generator that emits a low-cost hypothesis, confidence, and evidence needs.
 - Let the deliberate path independently verify, reject, or refine that candidate.
+- Wire resource allocation to the actual goal context and persist allocation/outcome telemetry. **Initial allocation telemetry is implemented; fast/slow agreement and correction measurement remain pending.**
 - Measure:
   - fast answer accuracy;
   - deliberate correction rate;

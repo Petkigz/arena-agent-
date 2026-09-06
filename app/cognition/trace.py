@@ -37,6 +37,7 @@ class CognitiveTrace:
     epistemic_presentation: Dict[str, Any] = field(default_factory=dict)
     grounding_result: Dict[str, Any] = field(default_factory=dict)
     retrieved_memories: List[Dict[str, Any]] = field(default_factory=list)
+    resource_allocation: Dict[str, Any] = field(default_factory=dict)
     model_used: str = "fast"
     latency_ms: float = 0.0
     is_finalized: bool = False
@@ -245,6 +246,7 @@ class CognitiveTrace:
                     epistemic_presentation_json TEXT NOT NULL DEFAULT '{}',
                     grounding_result_json TEXT NOT NULL DEFAULT '{}',
                     retrieved_memories_json TEXT NOT NULL DEFAULT '[]',
+                    resource_allocation_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL
                 )
             """)
@@ -262,13 +264,14 @@ class CognitiveTrace:
                 ("epistemic_presentation_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("grounding_result_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("retrieved_memories_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ("resource_allocation_json", "TEXT NOT NULL DEFAULT '{}'"),
             ):
                 if column not in cols:
                     cursor.execute(f"ALTER TABLE cognitive_traces ADD COLUMN {column} {ddl}")
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
-                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, resource_allocation_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trace_id,
                 self.session_id or "default",
@@ -289,6 +292,7 @@ class CognitiveTrace:
                 json.dumps(self.epistemic_presentation, default=str),
                 json.dumps(self.grounding_result, default=str),
                 json.dumps(self.retrieved_memories, default=str),
+                json.dumps(self.resource_allocation, default=str),
                 self.created_at
             ))
             conn.commit()

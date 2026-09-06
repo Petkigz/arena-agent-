@@ -2765,6 +2765,7 @@ class CognitiveRuntime:
             "observation_error": observation_error or None,
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
+            "resource_allocation": dict(trace.resource_allocation),
             "latency_ms": round(latency, 2),
             "trace_id": trace.trace_id,
             "session_id": session_id,
@@ -3960,8 +3961,35 @@ class CognitiveRuntime:
         tracker.transition(GoalLifecycleState.PLANNED, "Simulated candidate branches with CounterfactualSimulator.")
         
         # Phase 5: Meta-Cognition - Classify task complexity and allocate resources
-        complexity_level, complexity_reason = self.resource_allocator.classify_complexity(goal_rep)
-        budget = self.resource_allocator.allocate(complexity_level)
+        complexity_level, complexity_reason = self.resource_allocator.classify_complexity(
+            goal_rep=goal_rep,
+            user_text=user_text,
+        )
+        # The previous call passed TaskComplexity as the first positional
+        # argument (goal_rep), so allocation silently fell back to a trivial
+        # budget. Keep the classified level explicit and pass the actual goal
+        # context into the allocator.
+        budget = self.resource_allocator.allocate(
+            goal_rep=goal_rep,
+            user_text=user_text,
+            override_complexity=complexity_level,
+        )
+        trace.resource_allocation = {
+            "complexity": budget.complexity.value,
+            "model": budget.model,
+            "max_reasoning_cycles": budget.max_reasoning_cycles,
+            "max_investigation_depth": budget.max_investigation_depth,
+            "max_replan_attempts": budget.max_replan_attempts,
+            "max_tokens": budget.max_tokens,
+            "timeout_ms": budget.timeout_ms,
+            "classification_reason": budget.classification_reason,
+        }
+        self.blackboard.set(
+            "resource_allocation",
+            dict(trace.resource_allocation),
+            source="resource_allocator",
+            confidence=1.0,
+        )
         app_logger.info(f"Resource Allocation: Complexity={complexity_level.value}, Model={budget.model}, MaxCycles={budget.max_reasoning_cycles}, Reason={complexity_reason}")
         
         # Phase 3B: Consult analogical memory for similar past tasks
@@ -4372,6 +4400,14 @@ class CognitiveRuntime:
         assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, action_presentation)
 
         latency = (time.time() - start_time) * 1000
+        try:
+            self.resource_allocator.record_outcome(
+                budget,
+                verify_res.verified_success,
+                round(latency, 2),
+            )
+        except Exception as exc:
+            app_logger.warning(f"Resource allocation outcome recording failed: {exc}")
         trace.model_used = agent_res.get("model_used", "fast")
         trace.finalize(
             reply=assistant_reply,
