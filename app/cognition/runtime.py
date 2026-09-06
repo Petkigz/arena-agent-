@@ -2460,11 +2460,9 @@ class CognitiveRuntime:
         trace.goal_verified = verification.verified_success
         assistant_reply, execution_grounding = reconcile_response(
             assistant_reply,
-            observation_evidence=(
-                "; ".join(verification.met_conditions or [])
-                or "verified action outcome"
-                if verification.verified_success else ""
-            ),
+            observation_evidence="; ".join(verification.met_conditions or []),
+            authoritative_facts=verification.met_conditions,
+            observation_empty=False if verification.verified_success else None,
         )
         trace.grounding_result = execution_grounding.to_dict()
         try:
@@ -3459,7 +3457,13 @@ class CognitiveRuntime:
             obs_state = self.capture_observed_world_state([investigation_summary], assistant_reply, goal_rep)
             assistant_reply, investigation_grounding = reconcile_response(
                 assistant_reply,
-                observation_evidence=investigation_summary if loop_trace.results else "no results",
+                observation_evidence=investigation_summary if loop_trace.results else "",
+                authoritative_facts=(
+                    [investigation_summary]
+                    if loop_trace.results else
+                    ["the bounded investigation returned no probe results"]
+                ),
+                observation_empty=not bool(loop_trace.results),
             )
             trace.grounding_result = investigation_grounding.to_dict()
             verify_res = GoalVerifier.verify_goal_achievement(
@@ -3857,11 +3861,9 @@ class CognitiveRuntime:
         trace.goal_verified = verify_res.verified_success
         assistant_reply, action_grounding = reconcile_response(
             assistant_reply,
-            observation_evidence=(
-                "; ".join(verify_res.met_conditions or [])
-                or "verified action outcome"
-                if verify_res.verified_success else ""
-            ),
+            observation_evidence="; ".join(verify_res.met_conditions or []),
+            authoritative_facts=verify_res.met_conditions,
+            observation_empty=False if verify_res.verified_success else None,
         )
         trace.grounding_result = action_grounding.to_dict()
         try:
@@ -4048,11 +4050,9 @@ class CognitiveRuntime:
         # empty-observation contradictions and otherwise leaves model prose intact.
         assistant_reply, action_grounding = reconcile_response(
             assistant_reply,
-            observation_evidence=(
-                "; ".join(verify_res.met_conditions or [])
-                or "verified action outcome"
-                if verify_res.verified_success else ""
-            ),
+            observation_evidence="; ".join(verify_res.met_conditions or []),
+            authoritative_facts=verify_res.met_conditions,
+            observation_empty=False if verify_res.verified_success else None,
         )
         trace.grounding_result = action_grounding.to_dict()
 

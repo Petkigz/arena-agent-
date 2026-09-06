@@ -64,6 +64,30 @@ def test_honest_negative_discovery_is_not_rewritten():
     assert result.recovery_applied is False
 
 
+def test_structured_empty_observation_does_not_depend_on_text_markers():
+    reply, result = reconcile_response(
+        "I found three matching files.",
+        authoritative_facts=["search probe returned an empty result set"],
+        observation_empty=True,
+    )
+
+    assert "no matching results" in reply
+    assert result.recovery_applied is True
+    assert result.authoritative_facts == ["the observation returned no matching results"]
+
+
+def test_structured_authoritative_facts_are_retained():
+    reply, result = reconcile_response(
+        "The app is running.",
+        authoritative_facts=["process_state=running", "source=direct_probe"],
+        observation_empty=False,
+    )
+
+    assert reply == "The app is running."
+    assert result.status == "supported"
+    assert result.authoritative_facts == ["process_state=running", "source=direct_probe"]
+
+
 def test_unstructured_prose_is_not_rewritten_without_authoritative_evidence():
     reply, result = reconcile_response("This might be the right explanation.")
 

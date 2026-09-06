@@ -59,13 +59,17 @@ def reconcile_response(
     *,
     deterministic_answers: Optional[Iterable[Dict[str, Any]]] = None,
     observation_evidence: str = "",
+    authoritative_facts: Optional[Iterable[Any]] = None,
+    observation_empty: Optional[bool] = None,
 ) -> tuple[str, ResponseGrounding]:
     """Return a safe response and the evidence reconciliation result.
 
     A deterministic mismatch is corrected using the authoritative computed
     value. An explicitly empty observation cannot be narrated as a positive
-    discovery. Other prose is left unchanged and receives a conservative
-    status rather than a fabricated rewrite.
+    discovery. Callers with structured evidence can provide ``authoritative_facts``
+    and ``observation_empty``; the text heuristics remain only as a backward-
+    compatible fallback. Other prose is left unchanged and receives a
+    conservative status rather than a fabricated rewrite.
     """
     reply = str(reply or "")
     facts: List[str] = []
@@ -97,11 +101,16 @@ def reconcile_response(
         )
 
     observation_fact = str(observation_evidence or "").strip()
+    fact_items = [str(item).strip()[:500] for item in (authoritative_facts or []) if str(item).strip()]
     evidence = observation_fact.lower()
-    empty_observation = (
+    inferred_empty_observation = (
         "[]" in evidence
         or re.search(r"(?<!\d)0\s+(?:hit(?:s)?|result(?:s)?)\b", evidence) is not None
         or re.search(r"\b(?:no matches|no results|nothing found)\b", evidence) is not None
+    )
+    empty_observation = (
+        bool(observation_empty)
+        if observation_empty is not None else inferred_empty_observation
     )
     normalized_reply = reply.lower()
     # Negated reports are not positive discoveries. Strip the common negative
@@ -152,11 +161,11 @@ def reconcile_response(
             supported=True,
             authoritative_facts=facts,
         )
-    if observation_fact:
+    if fact_items or observation_fact:
         return reply, ResponseGrounding(
             status="supported",
             supported=True,
-            authoritative_facts=[observation_fact[:500]],
+            authoritative_facts=fact_items or [observation_fact[:500]],
         )
     return reply, ResponseGrounding(
         status="unknown",
