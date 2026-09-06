@@ -2187,23 +2187,6 @@ class OwnerCorrectionRequest(BaseModel):
     skill_name: str = "general"
     note: str = ""
 
-class UserCorrectionRequest(BaseModel):
-    trace_id: str = Field(min_length=1)
-    correction: str = Field(min_length=2)
-    error_type: str = "other"
-    subject: str = ""
-    predicate: str = ""
-    corrected_value: Any = None
-    action_type: str = ""
-    goal_type: str = ""
-
-class UsefulnessFeedbackRequest(BaseModel):
-    trace_id: str = Field(min_length=1)
-    signal_type: str = ""
-    value: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    rating: Optional[int] = Field(default=None, ge=1, le=5)
-    note: str = ""
-
 class TrainingDatasetExportRequest(BaseModel):
     skill_name: str
 
@@ -2280,75 +2263,6 @@ def list_training_candidates_endpoint(
         status=status_value, skill_name=skill_name
     )
     return {"success": True, "candidates": [item.to_dict() for item in candidates]}
-
-
-@router.post("/feedback/correction")
-def create_user_correction_endpoint(req: UserCorrectionRequest):
-    """Apply explicit owner feedback to a preserved cognitive trace."""
-    from app.cognition.runtime import CognitiveRuntime
-
-    try:
-        result = CognitiveRuntime.get_instance().handle_user_correction(
-            trace_id=req.trace_id,
-            correction=req.correction,
-            error_type=req.error_type,
-            subject=req.subject,
-            predicate=req.predicate,
-            corrected_value=req.corrected_value,
-            action_type=req.action_type,
-            goal_type=req.goal_type,
-        )
-        return result
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.get("/feedback/corrections")
-def list_user_corrections_endpoint(
-    trace_id: Optional[str] = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
-):
-    from app.cognition.runtime import CognitiveRuntime
-    corrections = CognitiveRuntime.get_instance().correction_handler.store.list(
-        trace_id=trace_id, limit=limit
-    )
-    return {"success": True, "corrections": [item.to_dict() for item in corrections]}
-
-
-@router.post("/feedback/usefulness")
-def create_usefulness_feedback_endpoint(req: UsefulnessFeedbackRequest):
-    """Record explicit or bounded implicit usefulness feedback for a trace."""
-    from app.cognition.runtime import CognitiveRuntime
-
-    if req.rating is None and req.value is None:
-        raise HTTPException(status_code=400, detail="Either rating or value is required")
-    if req.rating is not None and req.value is not None:
-        raise HTTPException(status_code=400, detail="Provide rating or value, not both")
-    if req.rating is None and not req.signal_type:
-        raise HTTPException(status_code=400, detail="signal_type is required with value")
-    try:
-        return CognitiveRuntime.get_instance().record_usefulness_feedback(
-            trace_id=req.trace_id,
-            signal_type=req.signal_type,
-            value=req.value,
-            rating=req.rating,
-            note=req.note,
-        )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.get("/feedback/usefulness/summary")
-def usefulness_feedback_summary_endpoint():
-    from app.cognition.runtime import CognitiveRuntime
-    return {
-        "success": True,
-        "summary": CognitiveRuntime.get_instance().usefulness_feedback.summary(),
-    }
 
 
 @router.post("/loras/training-candidates/owner-correction")

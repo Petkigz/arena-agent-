@@ -141,17 +141,6 @@ class CognitiveRuntime:
         self.training_examples = TrainingExampleStore(
             db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db"
         )
-        # Phase 0/1 correction loop: preserve the original trace, update
-        # owner-provided hypotheses, and only generalize strategy changes
-        # after repeated corrections.
-        from app.cognition.correction_learning import CorrectionHandler
-        self.correction_handler = CorrectionHandler(
-            db_path=path,
-            belief_engine=self.beliefs,
-            strategy_store=self.outcomes,
-        )
-        from app.cognition.usefulness_feedback import UsefulnessFeedbackStore
-        self.usefulness_feedback = UsefulnessFeedbackStore(path)
         from app.cognition.adaptive_autonomy import AdaptiveAutonomyCalibrator
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
             path=str(Path(path).parent / "adaptive_autonomy.json") if path else "data/adaptive_autonomy.json"
@@ -1978,77 +1967,6 @@ class CognitiveRuntime:
                     existing.append(c)
         except Exception as e:
             app_logger.warning(f"Could not note artifact candidates: {e}")
-
-    def handle_user_correction(
-        self,
-        *,
-        trace_id: str,
-        correction: str,
-        error_type: str = "other",
-        subject: str = "",
-        predicate: str = "",
-        corrected_value: Any = None,
-        action_type: str = "",
-        goal_type: str = "",
-    ) -> Dict[str, Any]:
-        """Apply explicit owner feedback to the current trace and strategy.
-
-        This is deliberately separate from LoRA review: it changes the
-        evidence/hypothesis and strategy-calibration stores, but never trains
-        or auto-approves a model update.
-        """
-        result = self.correction_handler.handle(
-            trace_id=trace_id,
-            correction=correction,
-            error_type=error_type,
-            subject=subject,
-            predicate=predicate,
-            corrected_value=corrected_value,
-            action_type=action_type,
-            goal_type=goal_type,
-        )
-        # An explicit correction is a bounded interaction signal that the
-        # original answer was not fully useful. It is recorded separately from
-        # correctness and never replaces the owner's own rating.
-        try:
-            result["usefulness_feedback"] = self.record_usefulness_feedback(
-                trace_id=trace_id,
-                signal_type="follow_up_correction",
-                value=0.25,
-                note=f"Correction {result['correction']['correction_id']}",
-            )
-        except Exception as exc:
-            result["usefulness_feedback"] = {
-                "success": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-        return result
-
-    def record_usefulness_feedback(
-        self,
-        *,
-        trace_id: str,
-        signal_type: str = "",
-        value: Optional[float] = None,
-        rating: Optional[int] = None,
-        note: str = "",
-    ) -> Dict[str, Any]:
-        """Record trace-linked usefulness without treating it as correctness."""
-        if rating is not None:
-            feedback = self.usefulness_feedback.record_rating(
-                trace_id=trace_id, rating=rating, note=note,
-            )
-        else:
-            if value is None:
-                raise ValueError("Either rating or value is required")
-            feedback = self.usefulness_feedback.record(
-                trace_id=trace_id,
-                signal_type=signal_type,
-                value=value,
-                source="owner_feedback",
-                note=note,
-            )
-        return {"success": True, "feedback": feedback.to_dict()}
 
     def _integrate_phase_modules(
         self,

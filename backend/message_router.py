@@ -117,10 +117,6 @@ class MessageRouter:
         self._rate_limits: Dict[str, List[float]] = {}  # conversation_id -> timestamps
         self._rate_limit_max = 30  # max messages per minute
         self._rate_limit_window = 60  # seconds
-        # Latest structured runtime result per conversation. The durable trace
-        # remains the source of truth; this cache only lets the active UI bind
-        # the displayed response to its trace for an immediate correction.
-        self._last_cognitive_results: Dict[str, Dict[str, Any]] = {}
 
         # Voice service will be injected after initialization
         self.voice_service = None
@@ -180,7 +176,6 @@ class MessageRouter:
             "voice_settings": self._handle_voice_settings,
             "wake_word_detected": self._handle_wake_word_detected,
             "action_approval": self._handle_action_approval,
-            "owner_correction": self._handle_owner_correction,
             "get_history": self._handle_get_history,
         }
 
@@ -335,7 +330,6 @@ class MessageRouter:
                         "epistemic_presentation": runtime_result.get("epistemic_presentation", {}),
                         "grounding": runtime_result.get("grounding", {}),
                     })
-
                 # Surface the exact pending scope to the owner. This event is only a
                 # request; approval mints a separate short-lived authorization grant.
                 try:
@@ -449,9 +443,6 @@ class MessageRouter:
 
             if not isinstance(result, dict):
                 return "I couldn't produce a response from my cognitive engine."
-
-            if conversation_id:
-                self._last_cognitive_results[conversation_id] = dict(result)
 
             reply = result.get("assistant_reply") or result.get("reply") or ""
             if reply:
@@ -699,53 +690,6 @@ class MessageRouter:
             await self.voice_service.notify_wake_word(conversation_id)
         else:
             app_logger.warning("Voice service not available; wake word ignored")
-
-    async def _handle_owner_correction(self, websocket, message: Dict[str, Any]):
-        """Record explicit owner feedback against a prior cognitive trace."""
-        conversation_id = message.get("conversation_id")
-        trace_id = message.get("trace_id")
-        correction = message.get("correction")
-        if not conversation_id or not trace_id or not correction:
-            if websocket:
-                await ws_manager.send_to_connection(websocket, {
-                    "type": "correction_result",
-                    "success": False,
-                    "error": "conversation_id, trace_id, and correction are required",
-                })
-            return
-
-        try:
-            result = await asyncio.to_thread(
-                self.runtime.handle_user_correction,
-                trace_id=str(trace_id),
-                correction=str(correction),
-                error_type=str(message.get("error_type") or "other"),
-                subject=str(message.get("subject") or ""),
-                predicate=str(message.get("predicate") or ""),
-                corrected_value=message.get("corrected_value"),
-                action_type=str(message.get("action_type") or ""),
-                goal_type=str(message.get("goal_type") or ""),
-            )
-        except KeyError as exc:
-            result = {"success": False, "error": str(exc)}
-        except ValueError as exc:
-            result = {"success": False, "error": str(exc)}
-        except Exception as exc:
-            app_logger.error("Owner correction handling failed", exc_info=True)
-            result = {"success": False, "error": f"{type(exc).__name__}: {exc}"}
-
-        payload = {
-            "type": "correction_result",
-            "conversation_id": conversation_id,
-            **result,
-        }
-        # Send once to the requesting socket when available; the sender is
-        # already joined to the conversation and duplicate delivery would
-        # make the UI render the correction twice.
-        if websocket:
-            await ws_manager.send_to_connection(websocket, payload)
-        else:
-            await ws_manager.send_to_conversation(conversation_id, payload)
 
     async def _handle_action_approval(self, websocket, message: Dict[str, Any]):
         """Handle an owner's approve/deny of a pending Level-3 action."""
