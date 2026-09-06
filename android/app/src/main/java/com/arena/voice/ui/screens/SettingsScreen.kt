@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.arena.voice.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -921,10 +923,11 @@ fun SettingsScreen(
             ) {
                 OutlinedTextField(
                     value = viewModel.directivePriority,
-                    onReadOnlyChange = { },
+                    onValueChange = { },
+                    readOnly = true,
                     label = { Text("Priority") },
                     singleLine = true,
-                    modifier = Modifier.menuAnchor().weight(1f),
+                    modifier = Modifier.fillMaxWidth().menuAnchor(),
                 )
                 DropdownMenu(expanded = priorityExpanded, onDismissRequest = { priorityExpanded = false }) {
                     priorities.forEach { priority ->
@@ -1035,7 +1038,7 @@ fun SettingsScreen(
         // ── Cognition (charter, questions, induced skills) ──
         Text("Cognition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            "Charter revision $charterRevision. Your values inform every cycle; policy gates remain the authority.",
+            "Charter revision ${viewModel.charterRevision}. Your values inform every cycle; policy gates remain the authority.",
             style = MaterialTheme.typography.bodySmall
         )
         OutlinedTextField(

@@ -2,7 +2,7 @@ package com.arena.voice.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Brain
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
@@ -34,7 +34,7 @@ import com.arena.voice.ui.screens.VisionScreen
 enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     BEANIE("beanie", "Beanie", Icons.Default.Person),
     CHAT("chat", "Chat", Icons.Default.Chat),
-    PANSOPHY("pansophy", "Pansophy", Icons.Default.Brain),
+    PANSOPHY("pansophy", "Pansophy", Icons.Default.Psychology),
     FILES("files", "Files", Icons.Default.Folder),
     IMAGES("images", "Images", Icons.Default.Image),
     PROJECTS("projects", "Projects", Icons.Default.Folder),

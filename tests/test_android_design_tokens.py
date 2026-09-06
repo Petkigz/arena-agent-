@@ -362,3 +362,26 @@ def test_android_no_duplicate_imports_in_chat_layer():
         imports = re.findall(r"^import (.+)$", source, flags=re.MULTILINE)
         dupes = {i for i in imports if imports.count(i) > 1}
         assert not dupes, f"{path.name} has duplicate imports: {dupes}"
+
+
+def test_android_icons_are_in_the_classic_set():
+    """Every material icon import must be one verified to exist in
+    material-icons-extended's classic Material Icons set (the Compose icons
+    mirror the classic set, NOT Material Symbols — 'Brain' broke the first
+    real Gradle build). New icons must be verified before extending this list.
+    """
+    verified = {
+        # core set
+        "Add", "CheckCircle", "Error", "KeyboardArrowRight", "Menu", "MoreVert",
+        "Person", "Refresh", "Send", "Settings",
+        # classic extended set (present in 1.5.x)
+        "AttachFile", "Chat", "Folder", "Image", "Mic", "MicOff", "Psychology",
+    }
+    icons_dir = REPO / "android/app/src/main/java/com/arena/voice"
+    for path in sorted(icons_dir.glob("**/*.kt")):
+        for icon in re.findall(r"import androidx\.compose\.material\.icons\.filled\.(\w+)", path.read_text(encoding="utf-8")):
+            assert icon in verified, (
+                f"{path.name}: icon '{icon}' is not on the verified classic-set "
+                f"allowlist — confirm it exists in material-icons-extended 1.5.x "
+                f"and add it to the test before using it"
+            )
