@@ -3,6 +3,7 @@ package com.arena.voice.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,18 +11,29 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arena.voice.ui.chat.ChatViewModel
 import com.arena.voice.ui.chat.ChatMessage
+import com.arena.voice.ui.chat.ToolActivity
 import com.arena.voice.ui.chat.WorkingContext
 import kotlinx.coroutines.launch
 
@@ -39,6 +52,7 @@ import kotlinx.coroutines.launch
  *   composer: + | Message Beanie… | 🎙 | ↑
  *   ☰ opens : conversation drawer (New Chat + history + Settings)
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
@@ -55,6 +69,7 @@ fun ChatScreen(
 
     var input by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
+    var showContextSheet by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -235,7 +250,7 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(messages, key = { it.id }) { msg ->
-                        MessageBubble(msg)
+                        MessageBubble(msg, voiceStatus)
                     }
                 }
             }
@@ -275,7 +290,30 @@ fun ChatScreen(
 
             // ── Inline working-context card (review section 4) ──
             workingContext?.let { context ->
-                WorkingContextCard(context)
+                WorkingContextCard(context, onClick = { showContextSheet = true })
+            }
+            if (showContextSheet && workingContext != null) {
+                // Context as a bottom sheet (review: mobile context is
+                // progressive — tap the card for the full picture).
+                ModalBottomSheet(onDismissRequest = { showContextSheet = false }) {
+                    Text(
+                        "Working context",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    )
+                    workingContext?.project?.let {
+                        ContextSheetRow("Project", it)
+                    }
+                    workingContext?.objective?.let {
+                        ContextSheetRow("Objective", it)
+                    }
+                    workingContext?.let { ctx ->
+                        if (ctx.memories > 0) {
+                            ContextSheetRow("Relevant memories", "${ctx.memories}")
+                        }
+                    }
+                    Spacer(Modifier.height(28.dp))
+                }
             }
 
             // ── Composer: + | Message Beanie… | 🎙 | ↑ ──
@@ -319,7 +357,7 @@ fun ChatScreen(
 }
 
 @Composable
-private fun MessageBubble(msg: ChatMessage) {
+private fun MessageBubble(msg: ChatMessage, voiceStatus: PresenceStatus = PresenceStatus.IDLE) {
     val isUser = msg.role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -328,10 +366,15 @@ private fun MessageBubble(msg: ChatMessage) {
     ) {
         // Beanie's orb beside assistant messages (matches the web BeanieAvatar).
         if (!isUser) {
-            ReactiveBeanieOrb(
-                status = if (msg.isStreaming) PresenceStatus.THINKING else PresenceStatus.IDLE,
-                sizeDp = 28,
-            )
+            // While streaming, the orb follows the LIVE voice state (review:
+            // one continuous interaction — thinking while working, speaking
+            // during TTS) instead of a fixed "thinking" placeholder.
+            val liveStatus = when {
+                !msg.isStreaming -> PresenceStatus.IDLE
+                voiceStatus == PresenceStatus.SPEAKING -> PresenceStatus.SPEAKING
+                else -> PresenceStatus.THINKING
+            }
+            ReactiveBeanieOrb(status = liveStatus, sizeDp = 28)
             Spacer(Modifier.width(8.dp))
         }
         Surface(
@@ -348,13 +391,7 @@ private fun MessageBubble(msg: ChatMessage) {
                 )
                 if (msg.actionSteps.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
-                    msg.actionSteps.takeLast(2).forEach { step ->
-                        Text(
-                            text = "• $step",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                        )
-                    }
+                    ToolActivityCard(msg.actionSteps)
                 }
                 if (msg.isStreaming) {
                     Spacer(Modifier.height(4.dp))
@@ -401,5 +438,99 @@ private fun WorkingContextCard(context: WorkingContext) {
                 )
             }
         }
+    }
+}
+
+
+@Composable
+private fun ContextSheetRow(label: String, value: String) {
+    Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/**
+ * Tool activity rendered as the SAME semantic event the web renders (review:
+ * "Searching files / 3 results / ✓ Completed" — never raw diagnostics):
+ * a compact card with a per-status icon and status-tinted labels.
+ */
+@Composable
+private fun ToolActivityCard(activities: List<ToolActivity>) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(
+            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            activities.takeLast(3).forEach { activity ->
+                ToolActivityRow(activity)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolActivityRow(activity: ToolActivity) {
+    val labelColor = when (activity.status) {
+        "complete" -> MaterialTheme.colorScheme.secondary
+        "in_progress" -> MaterialTheme.colorScheme.primary
+        "error" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        when (activity.status) {
+            "complete" -> Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = activity.status,
+                tint = labelColor,
+                modifier = Modifier.size(16.dp),
+            )
+            "error" -> Icon(
+                Icons.Default.Error,
+                contentDescription = activity.status,
+                tint = labelColor,
+                modifier = Modifier.size(16.dp),
+            )
+            "in_progress" -> {
+                // Spinning indicator — same semantic as the web's Loader2.
+                val transition = rememberInfiniteTransition(label = "tool")
+                val rotation by transition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
+                    label = "rotation",
+                )
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = activity.status,
+                    tint = labelColor,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .graphicsLayer { rotationZ = rotation },
+                )
+            }
+            else -> Box(
+                Modifier
+                    .size(16.dp)
+                    .clip(CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outline)
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(activity.label, fontSize = 12.sp, color = labelColor)
     }
 }

@@ -29,7 +29,15 @@ data class ChatMessage(
     val role: String,        // "user" | "assistant"
     val content: String,
     val isStreaming: Boolean = false,
-    val actionSteps: List<String> = emptyList(),
+    val actionSteps: List<ToolActivity> = emptyList(),
+)
+
+/** One tool/activity step rendered semantically (review: Android must render
+ * the same event desktop/web render — never raw diagnostic output).
+ * Status vocabulary matches the wire: "in_progress" → "complete" (+"error"). */
+data class ToolActivity(
+    val label: String,
+    val status: String,
 )
 
 /** Inline "Working context" card data (design review section 4). Each field is
@@ -295,8 +303,11 @@ class ChatViewModel @Inject constructor(
         val idx = messages.indexOfFirst { it.id == messageId }
         if (idx >= 0) {
             val m = messages[idx]
-            val steps = if (m.actionSteps.any { it.startsWith(label) }) m.actionSteps
-            else m.actionSteps + "$label ($status)"
+            val steps = if (m.actionSteps.any { it.label == label }) {
+                m.actionSteps.map { if (it.label == label) it.copy(status = status) else it }
+            } else {
+                m.actionSteps + ToolActivity(label, status)
+            }
             messages[idx] = m.copy(actionSteps = steps)
         } else {
             // Steps can arrive before the first token — create the bubble.
@@ -306,7 +317,7 @@ class ChatViewModel @Inject constructor(
                     role = "assistant",
                     content = "",
                     isStreaming = true,
-                    actionSteps = listOf("$label ($status)")
+                    actionSteps = listOf(ToolActivity(label, status))
                 )
             )
             streamingMessageId = messageId

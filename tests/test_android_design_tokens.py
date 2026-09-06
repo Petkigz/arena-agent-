@@ -209,3 +209,42 @@ def test_android_motion_tokens_match_canonical():
     assert base and int(base.group(1)) == tokens["motion"]["base_ms"], "BASE_MS drifted from tokens.motion.base_ms"
     # And the NavHost actually uses them.
     assert source.count("MotionTokens.FAST_MS") >= 4  # enter/exit/popEnter/popExit
+
+
+def test_android_tool_activity_is_semantic():
+    """Review idea: tool activity as semantic cards (never raw diagnostics).
+
+    The old rendering was plain "• label (status)" text bullets.
+    """
+    vm_source = (REPO / "android/app/src/main/java/com/arena/voice/ui/chat/ChatViewModel.kt").read_text(encoding="utf-8")
+    assert "data class ToolActivity(" in vm_source
+    assert "actionSteps: List<ToolActivity>" in vm_source
+    # Updates replace by label (no string-prefix matching hack).
+    assert "it.label == label" in vm_source
+
+    chat = CHAT_KT.read_text(encoding="utf-8")
+    assert "ToolActivityCard" in chat
+    assert "• $step" not in chat  # the raw bullet dump is gone
+    # Status vocabulary rendered semantically, like the web's ActionSteps.
+    assert "Icons.Default.CheckCircle" in chat  # complete
+    assert "Icons.Default.Refresh" in chat      # in_progress (spinning)
+    assert "Icons.Default.Error" in chat        # error
+
+
+def test_android_context_sheet():
+    """Review idea: tapping the working-context card opens a bottom sheet."""
+    chat = CHAT_KT.read_text(encoding="utf-8")
+    assert "ModalBottomSheet" in chat
+    assert "ContextSheetRow" in chat
+    assert '"Working context"' in chat
+    assert '"Relevant memories"' in chat
+    # The card is the sheet's entry point.
+    assert "onClick = { showContextSheet = true }" in chat
+
+
+def test_android_voice_is_one_continuous_interaction():
+    """Review idea: the streaming orb follows the LIVE voice state (speaking
+    during TTS) instead of a fixed 'thinking' placeholder."""
+    chat = CHAT_KT.read_text(encoding="utf-8")
+    assert "voiceStatus == PresenceStatus.SPEAKING" in chat
+    assert "MessageBubble(msg, voiceStatus)" in chat

@@ -213,9 +213,21 @@ presentation layer was revived:
   Images, Projects) alongside Conversations and Settings — "only the navigation mechanism
   changes", mirroring the desktop sidebar grouping.
 
+**Phase 3 (round-21i) — DONE in source: the remaining owner ideas.**
+- **Tool activity cards**: raw "• label (status)" bullets replaced with semantic cards —
+  per-status icon (✓ complete/green, spinning ⟳ in_progress/blue, ✗ error/red, ○ pending/
+  muted), status-tinted labels, update-by-label in the model. Same semantic event the web's
+  ActionSteps renders, never raw diagnostics.
+- **Context sheet**: tapping the working-context card opens a `ModalBottomSheet` with the
+  full picture (Project / Objective / Relevant memories) — mobile context is progressive.
+- **Voice as one continuous interaction**: the streaming bubble's orb now follows the LIVE
+  voice state (SPEAKING during TTS, THINKING while working) instead of a fixed placeholder —
+  mic → listening → STT → thinking → streaming → speaking is one visible arc across landing,
+  chat and orb.
+
 Still needing a real build/device loop: Gradle compile verification (no Android SDK in this
-sandbox — Kotlin is source-verified and machine-guarded), voice-flow polish, and the tool
-activity cards. Guards: `tests/test_android_design_tokens.py` (10 tests).
+sandbox — Kotlin is source-verified and machine-guarded). Guards:
+`tests/test_android_design_tokens.py` (14 tests).
 
 ## Phase 6 — DONE (round-21h): polish — token-driven, never random margins
 
