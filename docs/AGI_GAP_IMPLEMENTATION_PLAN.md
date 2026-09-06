@@ -528,9 +528,18 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
   - learning progress;
   - owner-approved exploration;
   - unresolved anomaly investigation.
-- Add simplicity/elegance scoring using complexity, maintainability, reversibility, and minimum-description-length proxies.
-- Add a novelty/surprise detector comparing output against retrieved material, baseline strategies, and prior outputs.
-- Add a distinct aesthetic/aversion classifier only if there is a clear behavior and evaluation set; do not conflate it with safety refusal.
+  **`Phase7PreferenceEngine.assess_curiosity` now reports those signals separately, requires evidence for anomaly promotion, caps each evaluation to one recommendation, and keeps owner-approved exploration explicit. It recommends only; it does not enqueue or execute work.**
+- Add simplicity/elegance scoring using complexity, maintainability, reversibility, and minimum-description-length proxies. **`score_solution` and `choose_solution` now use transparent bounded proxies and permit simplicity to break only a declared comparable-utility tie; the result is advisory and not a quality or safety score.**
+- Add a novelty/surprise detector comparing output against retrieved material, baseline strategies, and prior outputs. **`detect_novelty` now records lexical comparison coverage, novelty, surprise, and an explicit uncertainty status; missing reference material is reported as insufficient evidence rather than novelty. Novelty never implies quality.**
+- Add a distinct aesthetic/aversion classifier only if there is a clear behavior and evaluation set; do not conflate it with safety refusal. **Not implemented: no separate aversion classifier is claimed without a behavior contract and evaluation set.**
+
+### Phase 7 implementation classification
+
+- Functional affect: **implemented and wired** for bounded runtime telemetry, advisory modifiers, outcome measurement, and owner inspection.
+- Curiosity signals: **implemented and wired** into foreground planning traces; owner-approved exploration remains **conditionally working** because it requires explicit owner authorization and is not inferred from a curiosity score.
+- Simplicity/elegance proxy: **implemented and wired** as a non-overriding audit of the action planner's ranked alternatives with persisted trace/evidence records; it does not replace capability-provenance selection or the authorization gate. Whether the preference improves outcomes remains **unverified**.
+- Novelty/surprise proxy: **implemented and wired** for the primary action path and owner inspection; calibration is a transparent reference-coverage proxy, not longitudinal statistical calibration, so transfer quality remains **unverified**.
+- Subjective taste, aesthetic aversion, intrinsic curiosity, and consciousness: **not implemented and not claimed**.
 
 ### Exit criteria
 

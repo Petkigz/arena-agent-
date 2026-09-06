@@ -24,6 +24,14 @@ from .incubation_queue import (
 )
 from .consolidation import ConsolidationCoordinator, ConsolidationError, ConsolidationRun
 from .functional_affect import AffectVector, FunctionalAffectError, FunctionalAffectStore
+from .phase7_preferences import (
+    CuriosityAssessment,
+    NoveltyAssessment,
+    Phase7AssessmentStore,
+    Phase7PreferenceEngine,
+    Phase7PreferenceError,
+    TasteAssessment,
+)
 from .session import CognitiveSession
 from .verified_reflection import (
     VerifiedReflection,
@@ -62,6 +70,12 @@ __all__ = [
     "AffectVector",
     "FunctionalAffectError",
     "FunctionalAffectStore",
+    "CuriosityAssessment",
+    "NoveltyAssessment",
+    "Phase7AssessmentStore",
+    "Phase7PreferenceEngine",
+    "Phase7PreferenceError",
+    "TasteAssessment",
     "CognitiveSession",
     "VerifiedReflection",
     "VerifiedReflectionStore",

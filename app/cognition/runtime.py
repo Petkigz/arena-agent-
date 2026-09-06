@@ -45,6 +45,7 @@ from app.cognition.confidence_calibrator import ConfidenceCalibrator
 from app.cognition.epistemic_presentation import presentation_for_cycle
 from app.cognition.response_grounding import reconcile_response
 from app.cognition.self_model import SelfModel
+from app.cognition.phase7_preferences import Phase7PreferenceEngine
 
 def probe_evidence_str(output: Any, budget: int = 300) -> str:
     """Render a probe's output so the DISCRIMINATING facts stay visible.
@@ -220,6 +221,12 @@ class CognitiveRuntime:
         from app.cognition.functional_affect import FunctionalAffectStore
         self.functional_affect = FunctionalAffectStore(
             str(Path(path).parent / "functional_affect.db") if path else "data/functional_affect.db"
+        )
+        # Phase 7: deterministic curiosity/taste/novelty evaluation. This is
+        # an audit and advisory path only; it cannot enqueue, authorize, or
+        # execute work through any capability.
+        self.phase7_preferences = Phase7PreferenceEngine(
+            str(Path(path).parent / "phase7_preferences.db") if path else "data/phase7_preferences.db"
         )
         self.self_model = SelfModel(outcome_store=self.outcomes, lesson_store=self.lessons)
         from app.cognition.self_knowledge import SelfKnowledgeLedger
@@ -4147,6 +4154,64 @@ class CognitiveRuntime:
             "correction_outcome": "pending_verification",
         })
 
+        # Phase 7 taste is an audit of the planner's already-ranked
+        # alternatives. It must not replace capability-provenance selection,
+        # safety gating, or owner authorization. A disagreement is recorded so
+        # a later benchmark can measure whether a simpler comparable option was
+        # actually chosen, rather than silently changing the action.
+        phase7_taste_evidence = [f"trace:{trace.trace_id}", f"proposal:{proposal.proposal_id}"]
+        try:
+            taste_candidates = [
+                {
+                    "solution_id": str(item.get("branch_id") or item.get("action_type") or "candidate"),
+                    "utility": item.get("utility_score", 0.0),
+                    "description": item.get("reasoning_summary", ""),
+                    "step_count": len(item.get("consequences", {}) or {}),
+                }
+                for item in (proposal.alternatives_considered or [])
+                if isinstance(item, dict)
+            ]
+            if taste_candidates:
+                taste = self.phase7_preferences.choose_solution(
+                    taste_candidates,
+                    trace_id=trace.trace_id,
+                    evidence_ids=phase7_taste_evidence,
+                )
+                planner_selected = next(
+                    (
+                        str(item.get("branch_id"))
+                        for item in (proposal.alternatives_considered or [])
+                        if item.get("recommended")
+                    ),
+                    None,
+                )
+                taste["planner_selected_solution_id"] = planner_selected
+                taste["preference_agrees_with_planner"] = (
+                    planner_selected is not None
+                    and planner_selected == taste.get("selected_solution_id")
+                )
+                trace.resource_allocation["phase7_taste"] = taste
+            else:
+                trace.resource_allocation["phase7_taste"] = {
+                    "status": "insufficient_candidate_comparison",
+                    "result_type": "UNKNOWN",
+                    "trace_id": trace.trace_id,
+                    "evidence_ids": phase7_taste_evidence,
+                    "selection_is_advisory": True,
+                    "authority": "none",
+                }
+        except Exception as exc:
+            app_logger.warning(f"Phase 7 taste evaluation failed: {exc}")
+            trace.resource_allocation["phase7_taste"] = {
+                "status": "unverified",
+                "error": str(exc),
+                "result_type": "UNKNOWN",
+                "trace_id": trace.trace_id,
+                "authority": "none",
+            }
+
+        phase7_taste = trace.resource_allocation.get("phase7_taste")
+
         # Phase 4: apply the value-of-compute policy to the bounded planning
         # allocation. Missing owner-stakes and usefulness evidence remain
         # UNKNOWN; the policy may spend more compute, but never authorizes an
@@ -4207,7 +4272,54 @@ class CognitiveRuntime:
             "classification_reason": budget.classification_reason,
             "value_of_compute_route": compute_assessment.recommended_route,
             "functional_affect": self.functional_affect.advisory_modifiers(),
+            "phase7_taste": phase7_taste,
         }
+        # Phase 7 curiosity is a measured recommendation, not a work loop.
+        # Foreground planning does not imply owner-approved exploration, so
+        # that signal is explicitly false here. Information needs and learning
+        # progress can be inspected without granting activity authority.
+        phase7_evidence = [f"trace:{trace.trace_id}"] + [
+            f"goal_unknown:{str(item)[:80]}"
+            for item in (getattr(goal_rep, "unknowns", []) or [])[:5]
+            if str(item).strip()
+        ]
+        try:
+            from app.cognition.learning_progress import learning_progress_tracker
+            learning_targets = learning_progress_tracker.report(limit=5).get("targets", [])
+            curiosity = self.phase7_preferences.assess_curiosity(
+                information_needs=[
+                    {
+                        "question": str(item),
+                        "target": str(item),
+                        "priority": min(1.0, 0.35 + 0.15 * index),
+                    }
+                    for index, item in enumerate(getattr(goal_rep, "unknowns", []) or [])
+                ],
+                learning_targets=learning_targets,
+                owner_approved_exploration=False,
+                trace_id=trace.trace_id,
+                evidence_ids=phase7_evidence,
+            )
+            trace.resource_allocation["phase7_curiosity"] = curiosity.to_dict()
+            self.blackboard.set(
+                "phase7_curiosity",
+                dict(trace.resource_allocation["phase7_curiosity"]),
+                source="phase7_preference_evaluation",
+                confidence=1.0,
+            )
+        except Exception as exc:
+            # Preserve a visible failure in the trace instead of silently
+            # dropping the evaluation. The action path remains governed by its
+            # existing allocator and gates.
+            app_logger.warning(f"Phase 7 curiosity evaluation failed: {exc}")
+            trace.resource_allocation["phase7_curiosity"] = {
+                "status": "unverified",
+                "error": str(exc),
+                "advisory_only": True,
+                "authority": "none",
+                "result_type": "UNKNOWN",
+                "trace_id": trace.trace_id,
+            }
         self.blackboard.set(
             "resource_allocation",
             dict(trace.resource_allocation),
@@ -4639,6 +4751,47 @@ class CognitiveRuntime:
         )
         assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, action_presentation)
 
+        # Phase 7 novelty is a comparison result only. It flags divergence
+        # against available material and reports reference uncertainty; it does
+        # not score quality, truth, or permission to act.
+        novelty_evidence = [f"trace:{trace.trace_id}"] + [
+            f"memory:{item.get('memory_id')}"
+            for item in trace.retrieved_memories[:5]
+            if item.get("memory_id")
+        ]
+        try:
+            prior_outputs = [
+                str(item.get("content", ""))
+                for item in (conversation_history or [])
+                if str(item.get("role", "")).lower() == "assistant"
+                and str(item.get("content", "")).strip()
+            ][-5:]
+            baseline_strategies = [
+                str(value) for value in (
+                    proposal.recommendation_reason,
+                    proposal.action_type,
+                    trace.strategy_goal_type,
+                ) if str(value).strip()
+            ]
+            novelty = self.phase7_preferences.detect_novelty(
+                assistant_reply,
+                retrieved_material=[memory_context] if memory_context else [],
+                baseline_strategies=baseline_strategies,
+                prior_outputs=prior_outputs,
+                trace_id=trace.trace_id,
+                evidence_ids=novelty_evidence,
+            )
+            trace.resource_allocation["phase7_novelty"] = novelty.to_dict()
+        except Exception as exc:
+            app_logger.warning(f"Phase 7 novelty evaluation failed: {exc}")
+            trace.resource_allocation["phase7_novelty"] = {
+                "status": "unverified",
+                "error": str(exc),
+                "quality_not_inferred": True,
+                "result_type": "UNKNOWN",
+                "trace_id": trace.trace_id,
+            }
+
         latency = (time.time() - start_time) * 1000
         if trace.route_comparison.get("correction_applied"):
             trace.route_comparison.update({
@@ -4868,4 +5021,9 @@ class CognitiveRuntime:
             "route_comparison": dict(trace.route_comparison),
             "hypothesis_state": dict(trace.hypothesis_state),
             "compute_policy": dict(trace.compute_policy),
+            "phase7": {
+                "curiosity": trace.resource_allocation.get("phase7_curiosity"),
+                "taste": trace.resource_allocation.get("phase7_taste"),
+                "novelty": trace.resource_allocation.get("phase7_novelty"),
+            },
         }

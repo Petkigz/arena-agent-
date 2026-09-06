@@ -191,6 +191,19 @@ def get_functional_affect_endpoint(limit: int = Query(100, ge=1, le=1000)):
         "note": "Functional affect is a bounded telemetry signal, not subjective emotion or execution authority.",
     }
 
+@router.get("/owner-control/phase7-preferences")
+def get_phase7_preferences_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "assessments": runtime.phase7_preferences.history(limit),
+        "note": (
+            "Curiosity, simplicity/elegance, and novelty are deterministic advisory evaluations. "
+            "They do not infer subjective taste, treat novelty as quality, or grant execution authority."
+        ),
+    }
+
 @router.get("/owner-control/consolidation")
 def list_consolidation_runs_endpoint(limit: int = Query(100, ge=1, le=1000)):
     from app.cognition.runtime import CognitiveRuntime
