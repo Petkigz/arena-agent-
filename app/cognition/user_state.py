@@ -295,7 +295,3 @@ class UserStateStore:
             source = item["source_type"]
             lines.append(f"{item['key']}={value} [{source}; confidence={item['confidence']:.2f}]")
         return "OWNER STATE (evidence-linked):\n" + "\n".join(lines)[:max_chars] if lines else ""
-
-
-# Shared local-first store for the runtime and owner-control API.
-user_state_store = UserStateStore()

@@ -22,7 +22,7 @@ Implemented in the current branch:
 - `TrainingExampleStore.propose_owner_correction()` now supports durable trace links, measured strategy-outcome linkage, redaction, and the existing owner review/export gate.
 - The isolated Phase 0 runner exercises the approved owner-correction path and conservative response grounding rather than parallel feedback databases.
 - Initial behavioral tests cover unknown preservation, evidence-derived labels, conservative grounding, idempotent rendering, trace persistence, and owner-review boundaries.
-- Initial turn-based prospective memory is now wired through the existing reminder store: explicit session-scoped turn reminders persist delivery conditions, advance with cognitive turns, deliver once, and expose expiry state.
+- Initial turn-based prospective memory is now wired through the existing reminder store: explicit session-scoped turn reminders persist delivery conditions, advance with cognitive turns, deliver once, and expose expiry state through chat and owner-control listing/completion endpoints.
 - Initial versioned `UserState` is now wired to runtime context and owner-control APIs with explicit provenance, evidence IDs, confidence, expiry, append-only history, and owner-stated precedence over inference.
 - Initial bounded social-state records are now wired into runtime context with evidence-linked nesting, expiry, and explicit false-belief comparison; no subjective mind-reading claim is made.
 - Initial temporal queries are now wired into WorldModel for inclusive intervals, strict before/after retrieval, and explicit ordered/unknown observation relations.

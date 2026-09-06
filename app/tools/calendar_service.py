@@ -173,7 +173,6 @@ class CalendarService:
             current_turn = int(data["turn_counters"].get(session_id, 0)) + 1
             data["turn_counters"][session_id] = current_turn
             delivered: List[Dict[str, Any]] = []
-            changed = True
             now = _now_iso()
             for reminder in data["reminders"]:
                 if reminder.get("condition_type") != "conversation_turn":
@@ -193,8 +192,7 @@ class CalendarService:
                     reminder["delivered_at"] = now
                     reminder["delivered_turn"] = current_turn
                     delivered.append(dict(reminder))
-            if changed:
-                cls._save(data)
+            cls._save(data)
         return {"session_id": session_id, "turn": current_turn, "reminders": delivered}
 
     @classmethod

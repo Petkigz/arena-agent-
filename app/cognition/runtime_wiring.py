@@ -108,6 +108,8 @@ def integrate_phase_modules(
                 content=user_text[:100],
                 evidence=[f"user message: {user_text[:80]}"],
                 confidence=0.6,
+                perspective_agent_id="arena",
+                belief_chain=["arena", "owner"],
             )
             # P2 AGI: Infer emotion from text cues (real signal, not just rule-based response)
             # Human intelligence detects frustration, joy, sadness from language
@@ -134,6 +136,8 @@ def integrate_phase_modules(
                         content=f"owner feels {emo_name} (from text)",
                         evidence=[f"keyword in: {user_text[:60]}"],
                         confidence=0.65,
+                        perspective_agent_id="arena",
+                        belief_chain=["arena", "owner"],
                     )
                     break
 

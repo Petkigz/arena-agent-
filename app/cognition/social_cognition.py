@@ -372,13 +372,16 @@ class SocialCognitionEngine:
             raise ValueError("belief_chain cannot contain repeated agents")
         return chain, depth
 
-    @staticmethod
-    def _default_expiry(expires_at: Optional[str]) -> Optional[str]:
+    @classmethod
+    def _default_expiry(cls, expires_at: Optional[str]) -> Optional[str]:
         if expires_at is not None:
             # Validate caller-provided timestamps before persisting them.
             datetime.fromisoformat(str(expires_at))
             return str(expires_at)
-        return (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+        return (
+            datetime.now(timezone.utc)
+            + timedelta(hours=cls.DEFAULT_INFERENCE_TTL_HOURS)
+        ).isoformat()
 
     @staticmethod
     def _is_expired(state: MentalStateModel, now: Optional[datetime] = None) -> bool:

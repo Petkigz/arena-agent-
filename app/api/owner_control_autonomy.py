@@ -408,6 +408,32 @@ def update_user_state_endpoint(req: UserStateUpdateRequest):
     return result
 
 
+@router.get("/owner-control/turn-reminders")
+def list_turn_reminders_endpoint(
+    session_id: Optional[str] = Query(None),
+    include_completed: bool = Query(False),
+):
+    """List durable conversation-turn reminders and their delivery state."""
+    from app.tools.calendar_service import CalendarService
+
+    return {
+        "success": True,
+        "reminders": CalendarService.list_turn_reminders(
+            session_id, include_completed=include_completed
+        ),
+    }
+
+
+@router.post("/owner-control/turn-reminders/{reminder_id}/complete")
+def complete_turn_reminder_endpoint(reminder_id: str):
+    from app.tools.calendar_service import CalendarService
+
+    result = CalendarService.complete_reminder(reminder_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("error", "Reminder not found"))
+    return result
+
+
 @router.get("/owner-control/owner-model")
 def get_owner_model_endpoint():
     from app.cognition.owner_model import owner_model_store

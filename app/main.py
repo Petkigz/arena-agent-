@@ -2913,6 +2913,8 @@ from app.api.owner_control_autonomy import (  # re-exported for existing callers
     get_user_state_endpoint,
     get_user_state_history_endpoint,
     update_user_state_endpoint,
+    list_turn_reminders_endpoint,
+    complete_turn_reminder_endpoint,
 )
 from app.api import owner_control_autonomy as _owner_autonomy  # re-export surface
 app.include_router(router, dependencies=[Depends(_legacy_verify_request)])
