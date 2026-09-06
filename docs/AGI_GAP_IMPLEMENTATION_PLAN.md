@@ -22,6 +22,7 @@ Implemented in the current branch:
 - `TrainingExampleStore.propose_owner_correction()` now supports durable trace links, measured strategy-outcome linkage, redaction, and the existing owner review/export gate.
 - The isolated Phase 0 runner exercises the approved owner-correction path and conservative response grounding rather than parallel feedback databases.
 - Initial behavioral tests cover unknown preservation, evidence-derived labels, conservative grounding, idempotent rendering, trace persistence, and owner-review boundaries.
+- Initial turn-based prospective memory is now wired through the existing reminder store: explicit session-scoped turn reminders persist delivery conditions, advance with cognitive turns, deliver once, and expose expiry state.
 
 Usefulness feedback remains intentionally unimplemented in this slice; it must be added only through an approved existing extension point rather than a parallel store.
 
@@ -356,7 +357,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 - Add a versioned `UserState` with provenance and confidence.
 - Extend `social_cognition.py` with bounded nested mental-state records and false-belief test fixtures.
 - Add temporal state for conversation turns, deadlines, intervals, and before/after queries.
-- Add prospective memory for turn-based and wall-clock reminders.
+- Add prospective memory for turn-based and wall-clock reminders. **Initial turn-based implementation is wired:** explicit `remind me in N turns` requests persist a session-scoped delivery condition, advance with each cognitive turn, deliver once, and expose expiry/delivery state.
 - Connect state retrieval to planning, tone, clarification, and owner-question behavior.
 - Add an explicit distinction between:
   - what Arena knows;

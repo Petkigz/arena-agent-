@@ -2779,6 +2779,113 @@ class CognitiveRuntime:
             "requires_fresh_decision_for_retry": not verification.verified_success,
         }
 
+    def _handle_turn_reminder_request(
+        self,
+        user_text: str,
+        request: Dict[str, Any],
+        complexity: str,
+        session_id: Optional[str],
+    ) -> Dict[str, Any]:
+        """Handle an explicit turn-reminder request through durable evidence.
+
+        This is a state-only productivity operation. It does not execute an OS
+        action, alter authorization policy, or infer a commitment from vague
+        prose. The returned reminder record is the authoritative evidence.
+        """
+        from app.tools.calendar_service import CalendarService
+
+        started = time.time()
+        cycle_session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
+        try:
+            created = CalendarService.add_turn_reminder(
+                request["title"],
+                request["turns"],
+                session_id=session_id or "default",
+            )
+        except Exception as exc:
+            app_logger.error(f"Turn reminder could not be persisted: {exc}")
+            created = {"success": False, "error": f"turn reminder persistence failed: {exc}"}
+
+        if created.get("success"):
+            reminder = created["reminder"]
+            reply = (
+                f"I’ll remind you in {request['turns']} conversation turns: "
+                f"{reminder['title']}."
+            )
+            evidence = [
+                "durable local reminder record created",
+                f"session turn {reminder['created_turn']} → delivery at turn {reminder['due_turn']}",
+            ]
+            presentation = presentation_for_cycle(
+                goal_verified=True,
+                environment_observed=True,
+                evidence_items=evidence,
+                action_type="schedule_turn_reminder",
+                source_count=1,
+            )
+            reply = presentation.append_to(reply)
+            grounding = reconcile_response(
+                reply,
+                authoritative_facts=evidence,
+            )[1]
+            actions = [f"Scheduled turn reminder: {reminder['title']}"]
+            goal_verified = True
+            lifecycle = "achieved"
+        else:
+            reason = str(created.get("error") or "the reminder could not be saved")
+            reply = f"I could not schedule that reminder: {reason}."
+            presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[reason],
+                action_type="schedule_turn_reminder",
+            )
+            reply = presentation.append_to(reply)
+            grounding = reconcile_response(reply)[1]
+            reminder = None
+            actions = []
+            goal_verified = False
+            lifecycle = "failed"
+
+        trace = CognitiveTrace(
+            user_input=user_text,
+            complexity_requested=complexity,
+            session_id=cycle_session_id,
+            model_used="deterministic_local",
+        )
+        trace.finalize(
+            reply=reply,
+            actions=actions,
+            latency=(time.time() - started) * 1000.0,
+            gate_decision="passed" if goal_verified else "failed",
+            goal_verified=goal_verified,
+            goal_lifecycle_state=lifecycle,
+            epistemic_presentation=presentation.to_dict(),
+            grounding_result=grounding.to_dict(),
+        )
+        return {
+            "request_success": goal_verified,
+            "execution_success": goal_verified,
+            "goal_verified": goal_verified,
+            "verification_unknown": not goal_verified,
+            "success": goal_verified,
+            "session_id": cycle_session_id,
+            "trace_id": trace.trace_id,
+            "user_text": user_text,
+            "assistant_reply": reply,
+            "executed_actions": actions,
+            "action_type": "schedule_turn_reminder",
+            "reasoning_action": "schedule_turn_reminder",
+            "decision_stage": "state_update_completed" if goal_verified else "state_update_failed",
+            "goal_lifecycle_state": lifecycle,
+            "model_used": trace.model_used,
+            "latency_ms": trace.latency_ms,
+            "reminder": reminder,
+            "epistemic_presentation": presentation.to_dict(),
+            "grounding": grounding.to_dict(),
+            "reason": None if goal_verified else str(created.get("error")),
+        }
+
     def process_cognitive_cycle(
         self,
         user_text: str,
@@ -2797,17 +2904,65 @@ class CognitiveRuntime:
         requesting max_tokens=8192 under a 2048 budget simply got 8192."""
         from app.llm import reasoning_token_budget
         from app.cognition.reasoning_loop import ReasoningBudget as _RB
+        from app.cognition.prospective_memory import parse_turn_reminder_request
+        from app.tools.calendar_service import CalendarService
+
+        reminder_session_id = session_id or "default"
+        try:
+            turn_state = CalendarService.advance_turn(reminder_session_id)
+            due_reminders = turn_state.get("reminders", [])
+            conversation_turn = turn_state.get("turn", 0)
+            prospective_memory_error = None
+        except Exception as exc:
+            # Prospective memory must not make ordinary requests fail, but the
+            # failure remains visible to the caller instead of becoming a
+            # silent loss of a reminder.
+            app_logger.error(f"Prospective memory turn advance failed: {exc}")
+            due_reminders = []
+            conversation_turn = None
+            prospective_memory_error = str(exc)
+
+        reminder_request = parse_turn_reminder_request(user_text)
         with reasoning_token_budget(_RB.for_complexity(complexity).max_tokens):
-            return self._process_cognitive_cycle_impl(
-                user_text=user_text,
-                complexity=complexity,
-                session_id=session_id,
-                image_path=image_path,
-                audio_path=audio_path,
-                attachments=attachments,
-                recent_user_messages=recent_user_messages,
-                conversation_history=conversation_history,
-            )
+            if reminder_request is not None:
+                result = self._handle_turn_reminder_request(
+                    user_text=user_text,
+                    request=reminder_request,
+                    complexity=complexity,
+                    session_id=session_id,
+                )
+            else:
+                result = self._process_cognitive_cycle_impl(
+                    user_text=user_text,
+                    complexity=complexity,
+                    session_id=session_id,
+                    image_path=image_path,
+                    audio_path=audio_path,
+                    attachments=attachments,
+                    recent_user_messages=recent_user_messages,
+                    conversation_history=conversation_history,
+                )
+
+        if isinstance(result, dict):
+            result = dict(result)
+            result["due_reminders"] = due_reminders
+            result["conversation_turn"] = conversation_turn
+            if due_reminders:
+                notices = "\n".join(
+                    f"Reminder due: {item.get('title', 'untitled reminder')}"
+                    for item in due_reminders
+                )
+                result["assistant_reply"] = (
+                    f"{str(result.get('assistant_reply', '')).rstrip()}\n\n{notices}"
+                ).strip()
+                trace_id = result.get("trace_id")
+                if trace_id:
+                    CognitiveTrace.update_persisted_reply(
+                        str(trace_id), result["assistant_reply"]
+                    )
+            if prospective_memory_error:
+                result["prospective_memory_error"] = prospective_memory_error
+        return result
 
     def _process_cognitive_cycle_impl(
         self,

@@ -123,4 +123,8 @@ class CognitivePipeline:
             "requires_approval": res.get("requires_approval", False),
             "approval_request": res.get("approval_request"),
             "recommendation": res.get("recommendation"),
+            "reminder": res.get("reminder"),
+            "due_reminders": res.get("due_reminders", []),
+            "conversation_turn": res.get("conversation_turn"),
+            "prospective_memory_error": res.get("prospective_memory_error"),
         }

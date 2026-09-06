@@ -70,6 +70,27 @@ class CognitiveTrace:
         self.is_finalized = True
         self._persist_trace_to_db()
 
+    @classmethod
+    def update_persisted_reply(cls, trace_id: str, reply: str) -> bool:
+        """Update only the owner-visible reply for a post-cycle delivery notice.
+
+        Prospective reminders can become due at the turn boundary before the
+        regular cognitive cycle finishes. Keeping this narrow update separate
+        preserves the existing trace fields and does not add private reasoning
+        to the persisted explanation surface.
+        """
+        try:
+            with sqlite3.connect(str(settings.DB_PATH)) as conn:
+                cursor = conn.execute(
+                    "UPDATE cognitive_traces SET assistant_reply=? WHERE trace_id=?",
+                    (str(reply or ""), str(trace_id)),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as exc:
+            app_logger.warning(f"CognitiveTrace reply update notice: {exc}")
+            return False
+
     def _persist_trace_to_db(self):
         """
         P1-G: Persists full cognitive trace telemetry (intermediate states, hardware pressure, model used, actions, latency) to SQLite.

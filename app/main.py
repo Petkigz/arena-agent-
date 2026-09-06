@@ -615,6 +615,10 @@ def chat_with_local_brain(req: ChatRequest):
         "reason": pipeline_res.get("reason"),
         "epistemic_presentation": pipeline_res.get("epistemic_presentation", {}),
         "grounding": pipeline_res.get("grounding", {}),
+        "reminder": pipeline_res.get("reminder"),
+        "due_reminders": pipeline_res.get("due_reminders", []),
+        "conversation_turn": pipeline_res.get("conversation_turn"),
+        "prospective_memory_error": pipeline_res.get("prospective_memory_error"),
         # Owner review P1 #9: when a loaded fallback model answered, the
         # API names both models — disclosure at the boundary the client
         # sees, not just the logs. Absent when the requested model

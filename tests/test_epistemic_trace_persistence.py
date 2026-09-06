@@ -47,3 +47,13 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
     assert grounding["authoritative_facts"] == ["fresh observation"]
     assert trace.epistemic_presentation["evidence_state"] == "verified"
     assert trace.grounding_result["status"] == "verified"
+
+    assert CognitiveTrace.update_persisted_reply(
+        trace.trace_id, "The process is running.\n\nReminder due: check it again"
+    ) is True
+    with sqlite3.connect(db_path) as conn:
+        reply = conn.execute(
+            "SELECT assistant_reply FROM cognitive_traces WHERE trace_id=?",
+            (trace.trace_id,),
+        ).fetchone()[0]
+    assert "Reminder due: check it again" in reply
