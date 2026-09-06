@@ -103,9 +103,34 @@ def reconcile_response(
         or re.search(r"(?<!\d)0\s+(?:hit(?:s)?|result(?:s)?)\b", evidence) is not None
         or re.search(r"\b(?:no matches|no results|nothing found)\b", evidence) is not None
     )
+    normalized_reply = reply.lower()
+    # Negated reports are not positive discoveries. Strip the common negative
+    # constructions before looking for a positive claim so an honest response
+    # such as "I found no matching files" is not rewritten again.
+    normalized_reply = re.sub(
+        r"\b(?:did not|didn't|not|never|no longer)\s+"
+        r"(?:find|found|locate|located|create|created|open|opened|run|running|complete|completed)\b",
+        "",
+        normalized_reply,
+    )
+    normalized_reply = re.sub(
+        r"\b(?:no|none|nothing)\s+(?:was\s+)?(?:found|located|created|opened)\b",
+        "",
+        normalized_reply,
+    )
+    normalized_reply = re.sub(
+        r"\b(?:found|located|created|opened)\s+(?:no|none|nothing)\b",
+        "",
+        normalized_reply,
+    )
+    normalized_reply = re.sub(
+        r"\bthere\s+(?:are|is)\s+no\b",
+        "",
+        normalized_reply,
+    )
     positive_claim = re.search(
         r"\b(found|located|created|opened|there are|there is|running|completed successfully)\b",
-        reply.lower(),
+        normalized_reply,
     ) is not None
     if empty_observation and positive_claim:
         replacement = (

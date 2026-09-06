@@ -53,6 +53,17 @@ def test_nonempty_count_is_not_treated_as_empty_observation():
     assert result.recovery_applied is False
 
 
+def test_honest_negative_discovery_is_not_rewritten():
+    reply, result = reconcile_response(
+        "I found no matching files.",
+        observation_evidence="search_files: []",
+    )
+
+    assert reply == "I found no matching files."
+    assert result.status == "supported"
+    assert result.recovery_applied is False
+
+
 def test_unstructured_prose_is_not_rewritten_without_authoritative_evidence():
     reply, result = reconcile_response("This might be the right explanation.")
 
