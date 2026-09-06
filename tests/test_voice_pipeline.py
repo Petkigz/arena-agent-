@@ -4,8 +4,9 @@ import pytest
 import asyncio
 import numpy as np
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from backend.voice.orchestrator import VoicePipeline, VoiceState
+from backend.voice.orchestrator import VoicePipeline, VoiceState, VoicePipelineStartupError
 from backend.voice.service import VoiceService
+from backend.message_router import MessageRouter
 from backend.voice.wake_word import WakeWordDetector
 from backend.voice.vad import VoiceActivityDetector
 
@@ -67,6 +68,65 @@ class TestVoicePipeline:
 
             await pipeline.stop()
             assert not pipeline.is_running
+
+    @pytest.mark.asyncio
+    async def test_stop_cleans_components_after_partial_start(self, pipeline):
+        audio_capture = MagicMock()
+        pipeline.audio_capture = audio_capture
+        pipeline.is_running = False
+
+        await pipeline.stop()
+
+        audio_capture.stop.assert_called_once()
+        assert pipeline.audio_capture is None
+
+    @pytest.mark.asyncio
+    async def test_start_failure_reports_component_and_cleans_partial_start(self, pipeline):
+        """A later failure must preserve its cause and stop earlier components."""
+        with patch('backend.voice.orchestrator.AudioCaptureService') as mock_audio, \
+             patch('backend.voice.orchestrator.WakeWordDetector') as mock_wake, \
+             patch('backend.voice.orchestrator.VoiceActivityDetector') as mock_vad, \
+             patch('backend.voice.orchestrator.SpeechToTextService') as mock_stt, \
+             patch('backend.voice.orchestrator.TextToSpeechService') as mock_tts:
+            mock_vad.return_value.model = object()
+            mock_wake.return_value.is_running = False
+
+            def wake_start():
+                mock_wake.return_value.is_running = True
+
+            mock_wake.return_value.start.side_effect = wake_start
+            mock_stt.return_value.start.side_effect = RuntimeError("whisper model load failed")
+
+            with pytest.raises(VoicePipelineStartupError) as raised:
+                await pipeline.start()
+
+            error = raised.value
+            assert error.component == "stt"
+            assert "whisper model load failed" in error.reason
+            assert "faster-whisper" in error.remediation
+            mock_wake.return_value.stop.assert_called_once()
+            assert pipeline.is_running is False
+            assert pipeline.audio_capture is None
+            assert pipeline.wake_word is None
+            assert pipeline.stt is None
+            assert pipeline.tts is None
+
+    @pytest.mark.asyncio
+    async def test_runtime_tts_failure_reports_component(self, pipeline):
+        pipeline.is_running = True
+        pipeline.state = VoiceState.SPEAKING
+        pipeline.tts = MagicMock()
+        pipeline.tts.synthesize_async = AsyncMock(return_value=None)
+        pipeline.tts.last_error = "Piper synthesis failed: model load error"
+        pipeline._on_error = AsyncMock()
+
+        await pipeline._synthesize_and_stream("hello")
+
+        pipeline._on_error.assert_awaited_once()
+        error = pipeline._on_error.await_args.args[0]
+        assert error.component == "tts"
+        assert "model load error" in error.reason
+        assert pipeline.state == VoiceState.IDLE
 
     def test_state_transition(self, pipeline):
         """Test state transition callback."""
@@ -147,6 +207,31 @@ class TestVoiceActivityDetector:
             assert len(vad.speech_buffer) > 0
 
 
+class TestVoiceStartReporting:
+    @pytest.mark.asyncio
+    async def test_message_router_sends_component_failure_to_client(self):
+        router = MessageRouter(runtime=Mock())
+        voice_service = AsyncMock()
+        voice_service.start.side_effect = VoicePipelineStartupError(
+            "audio_capture",
+            "PyAudio is not installed",
+            "Install PyAudio and verify an input device.",
+        )
+        router.set_voice_service(voice_service)
+
+        with patch('backend.message_router.ws_manager') as mock_ws:
+            mock_ws.send_to_connection = AsyncMock()
+            await router._handle_voice_start("socket", {"conversation_id": "conv_123"})
+
+            mock_ws.send_to_connection.assert_awaited_once()
+            payload = mock_ws.send_to_connection.await_args.args[1]
+            assert payload["type"] == "voice_status"
+            assert payload["status"] == "error"
+            assert payload["component"] == "audio_capture"
+            assert payload["reason"] == "PyAudio is not installed"
+            assert "PyAudio" in payload["remediation"]
+
+
 class TestVoiceService:
     """Test VoiceService."""
 
@@ -180,6 +265,28 @@ class TestVoiceService:
             assert not service._enabled
             assert service.current_conversation_id is None
             mock_instance.stop.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_start_failure_clears_service_state_and_preserves_error(self, service):
+        error = VoicePipelineStartupError(
+            "stt",
+            "Whisper model load failed",
+            "Install faster-whisper and retry.",
+        )
+        with patch('backend.voice.service.VoicePipeline') as mock_pipeline, \
+             patch('backend.voice.service.get_settings', return_value={}):
+            mock_instance = AsyncMock()
+            mock_instance.start.side_effect = error
+            mock_pipeline.return_value = mock_instance
+
+            with pytest.raises(VoicePipelineStartupError) as raised:
+                await service.start("conv_123")
+
+            assert raised.value is error
+            assert service.pipeline is None
+            assert service.current_conversation_id is None
+            assert not service._enabled
+            mock_instance.stop.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_start_applies_persisted_settings(self, service):
@@ -252,15 +359,7 @@ class TestVoiceService:
              patch('backend.voice.service.ws_manager') as mock_ws, \
              patch('backend.voice.service.asyncio.sleep', new=fake_sleep), \
              patch('backend.voice.service.synthesize_piper', return_value=None), \
-             patch.object(VoiceService, '_synthesize_wav_to_pcm16k',
-                          return_value=None):
-            # _synthesize_wav_to_pcm16k is the piper→OS-TTS fallback
-            # chain. WITHOUT neutralizing it, the test depends on the
-            # MACHINE: on a machine with a working system TTS driver
-            # (owner run 2026-09-02: pyttsx3/SAPI5 synthesized ~1.3s of
-            # audio) the audio-hold sleep adds a second entry to `sleeps`
-            # and the assertion fails. This test asserts the DELAY
-            # contract only; the fallback chain has its own tests.
+             patch('backend.voice.service.get_last_piper_error', return_value="Piper model missing"):
             mock_get.return_value = {"response_delay": 800}
             mock_ws.broadcast_to_conversation = AsyncMock()
             mock_ws.send_audio_to_conversation = AsyncMock()

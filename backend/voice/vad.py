@@ -38,6 +38,7 @@ class VoiceActivityDetector:
         
         self.model = None
         self.is_running = False
+        self.last_error: Optional[str] = None
         
         # State tracking
         self.is_speaking = False
@@ -54,13 +55,19 @@ class VoiceActivityDetector:
         self._load_model()
         
     def _load_model(self):
-        """Load Silero VAD model (gracefully skipped if torch is unavailable or offline).
+        """Load Silero VAD and retain a diagnostic if it is unavailable.
 
-        V1 fix: previously raised on failure, causing VoicePipeline.start() to fail.
-        Now degrades to model=None so pipeline can run without VAD (remote audio path).
+        The standalone object remains constructible for capability inspection,
+        but ``VoicePipeline`` refuses to start without the model.  Remote audio
+        has a separate energy-based path and does not use this component.
         """
+        self.last_error = None
         if torch is None:
-            app_logger.warning("Cannot load Silero VAD model: PyTorch not installed — VAD degraded to no-op")
+            self.last_error = "PyTorch is not installed"
+            app_logger.error(
+                "Cannot load Silero VAD model: PyTorch not installed. "
+                "Install the voice dependencies before starting local voice."
+            )
             self.model = None
             return
         try:
@@ -82,7 +89,8 @@ class VoiceActivityDetector:
             app_logger.info("Silero VAD model loaded")
             
         except Exception as e:
-            app_logger.warning(f"Failed to load Silero VAD model (degrading to no-op): {e}")
+            self.last_error = f"{type(e).__name__}: {e}"
+            app_logger.error(f"Failed to load Silero VAD model: {self.last_error}")
             self.model = None
     
     def start(self):

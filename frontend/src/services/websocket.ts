@@ -41,7 +41,17 @@ export type WebSocketEvent =
   | { type: 'voice_state'; data: { state: VoiceState; conversation_id?: string } }
   | { type: 'voice_transcript'; data: { text: string; is_final: boolean } }
   | { type: 'voice_audio'; data: ArrayBuffer }
-  | { type: 'voice_status'; data: { status: string; conversation_id: string } }
+  | {
+      type: 'voice_status';
+      data: {
+        status: string;
+        conversation_id: string;
+        component?: string;
+        reason?: string;
+        remediation?: string;
+        message?: string;
+      };
+    }
   | { type: 'error'; data: { message: string } };
 
 export type WebSocketEventHandler = (event: WebSocketEvent) => void;

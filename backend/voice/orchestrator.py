@@ -24,6 +24,33 @@ class VoiceState(str, Enum):
     SPEAKING = "speaking"         # Playing TTS audio
 
 
+class VoicePipelineStartupError(RuntimeError):
+    """A required voice component could not start.
+
+    Voice is an explicit capability.  The pipeline must not report itself as
+    running when one of its required pieces silently returned without doing
+    anything.  Keeping the component, cause, and remediation separate lets the
+    WebSocket/API surface tell the owner what failed instead of hiding it behind
+    an empty transcript or a dead microphone.
+    """
+
+    def __init__(self, component: str, reason: str, remediation: str):
+        self.component = component
+        self.reason = reason
+        self.remediation = remediation
+        super().__init__(
+            f"Voice component '{component}' failed to start: {reason}. "
+            f"{remediation}"
+        )
+
+    def as_dict(self) -> dict:
+        return {
+            "component": self.component,
+            "reason": self.reason,
+            "remediation": self.remediation,
+        }
+
+
 class VoicePipeline:
     """
     Orchestrates the voice pipeline with barge-in support:
@@ -50,6 +77,7 @@ class VoicePipeline:
         on_transcript: Optional[Callable[[str, bool], None]] = None,
         on_state_change: Optional[Callable[[VoiceState, VoiceState], None]] = None,
         on_audio_ready: Optional[Callable[[bytes], None]] = None,
+        on_error: Optional[Callable[[VoicePipelineStartupError], object]] = None,
     ):
         self.sample_rate = sample_rate
 
@@ -82,6 +110,7 @@ class VoicePipeline:
         self._on_transcript = on_transcript
         self._on_state_change = on_state_change
         self._on_audio_ready = on_audio_ready
+        self._on_error = on_error
 
     @property
     def on_state_change(self):
@@ -93,15 +122,55 @@ class VoicePipeline:
         """Set the state change callback."""
         self._on_state_change = callback
 
+    @staticmethod
+    def _component_error(component: object, name: str, remediation: str) -> VoicePipelineStartupError:
+        reason = getattr(component, "last_error", None) or (
+            "start() returned without marking the component as running"
+        )
+        return VoicePipelineStartupError(name, str(reason), remediation)
+
+    def _require_model(self, component: object, name: str, remediation: str) -> None:
+        if getattr(component, "model", None) is None:
+            raise self._component_error(component, name, remediation)
+
+    def _start_required(
+        self,
+        component: object,
+        name: str,
+        remediation: str,
+        model_attr: Optional[str] = None,
+    ) -> None:
+        try:
+            component.start()
+        except VoicePipelineStartupError:
+            raise
+        except Exception as exc:
+            raise VoicePipelineStartupError(
+                name,
+                f"{type(exc).__name__}: {exc}",
+                remediation,
+            ) from exc
+        if not bool(getattr(component, "is_running", False)):
+            raise self._component_error(component, name, remediation)
+        if model_attr is not None and getattr(component, model_attr, None) is None:
+            raise self._component_error(component, name, remediation)
+
     async def start(self):
-        """Start all pipeline components."""
+        """Start every required component or report the exact failed component.
+
+        A partially available voice stack is not a working voice stack.  This
+        method deliberately fails closed instead of starting a silent pipeline
+        with a missing microphone, wake-word model, STT model, or TTS model.
+        """
         if self.is_running:
             return
 
         app_logger.info("Starting voice pipeline")
 
         try:
-            # Create components
+            # Create components before touching the microphone.  VAD loads its
+            # model during construction, so its failure can be reported before
+            # any OS audio resource is acquired.
             self.audio_capture = AudioCaptureService(sample_rate=self.sample_rate)
             self.wake_word = WakeWordDetector(
                 wake_word=self._wake_word_name,
@@ -118,29 +187,79 @@ class VoicePipeline:
             self.vad.on_speech_start = self._handle_speech_start
             self.vad.on_speech_end = self._handle_speech_end
 
-            # Start components
-            self.audio_capture.start()
-            self.wake_word.start()
-            self.stt.start()
-            self.tts.start()
+            self._require_model(
+                self.vad,
+                "vad",
+                "Install the voice dependencies and ensure the Silero VAD model "
+                "is available locally before retrying.",
+            )
+            self._start_required(
+                self.wake_word,
+                "wake_word",
+                "Install openwakeword and its model files, then retry voice start.",
+                model_attr="model",
+            )
+            self._start_required(
+                self.stt,
+                "stt",
+                "Install faster-whisper and ensure the selected Whisper model can "
+                "be loaded locally before retrying.",
+                model_attr="model",
+            )
+            self._start_required(
+                self.tts,
+                "tts",
+                "Install Piper and the selected .onnx voice model, then retry voice start.",
+                model_attr="model",
+            )
+            # Start the microphone last so a dependency/model failure cannot
+            # leave an active audio stream behind.
+            self._start_required(
+                self.audio_capture,
+                "audio_capture",
+                "Install PyAudio and verify that an input device is available, "
+                "then retry voice start.",
+            )
 
             self.is_running = True
             self._set_state(VoiceState.IDLE)
-
             app_logger.info("Voice pipeline started successfully")
 
-        except Exception as e:
-            app_logger.error(f"Failed to start voice pipeline: {e}")
+        except VoicePipelineStartupError as exc:
+            app_logger.error(str(exc))
             await self.stop()
             raise
+        except Exception as exc:
+            error = VoicePipelineStartupError(
+                "pipeline",
+                f"{type(exc).__name__}: {exc}",
+                "Inspect the chained startup error and correct it before retrying.",
+            )
+            app_logger.error(str(error))
+            await self.stop()
+            raise error from exc
 
     async def stop(self):
-        """Stop all pipeline components and cancel pending tasks."""
-        if not self.is_running:
+        """Stop all pipeline components and cancel pending tasks.
+
+        Cleanup must also run after a *partial* startup.  ``is_running`` is set
+        only after every component succeeds, so using it as the sole guard leaks
+        whichever resources started before a later component failed.
+        """
+        components_exist = any(
+            component is not None
+            for component in (
+                self.audio_capture,
+                self.wake_word,
+                self.vad,
+                self.stt,
+                self.tts,
+            )
+        )
+        if not self.is_running and not components_exist and not self._tasks:
             return
 
         app_logger.info("Stopping voice pipeline")
-
         self.is_running = False
 
         # Cancel all pending tasks
@@ -150,22 +269,22 @@ class VoicePipeline:
             await asyncio.gather(*self._tasks, return_exceptions=True)
             self._tasks.clear()
 
-        # Stop components
-        if self.audio_capture:
-            self.audio_capture.stop()
-            self.audio_capture = None
-        if self.wake_word:
-            self.wake_word.stop()
-            self.wake_word = None
-        if self.vad:
-            self.vad.stop()
-            self.vad = None
-        if self.stt:
-            self.stt.stop()
-            self.stt = None
-        if self.tts:
-            self.tts.stop()
-            self.tts = None
+        # Stop every constructed component, even if startup failed part-way.
+        for attr_name in ("audio_capture", "wake_word", "vad", "stt", "tts"):
+            component = getattr(self, attr_name)
+            if component is None:
+                continue
+            try:
+                component.stop()
+            except Exception as exc:
+                app_logger.error(
+                    "Failed to stop voice component %s: %s",
+                    attr_name,
+                    exc,
+                    exc_info=True,
+                )
+            finally:
+                setattr(self, attr_name, None)
 
         self._set_state(VoiceState.IDLE)
         app_logger.info("Voice pipeline stopped")
@@ -246,6 +365,17 @@ class VoicePipeline:
         app_logger.info("Speech started")
         self._set_state(VoiceState.RECORDING)
 
+    async def _notify_error(self, error: VoicePipelineStartupError) -> None:
+        """Notify the service/UI about a runtime component failure."""
+        if not self._on_error:
+            return
+        try:
+            result = self._on_error(error)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as callback_error:
+            app_logger.error(f"Voice error callback failed: {callback_error}", exc_info=True)
+
     def _handle_speech_end(self, audio: np.ndarray):
         """Handle speech end - transcribe."""
         app_logger.info(f"Speech ended, transcribing {len(audio)} samples")
@@ -259,8 +389,12 @@ class VoicePipeline:
         """Transcribe audio asynchronously."""
         try:
             if not self.stt:
-                self._set_state(VoiceState.IDLE)
-                return
+                raise VoicePipelineStartupError(
+                    "stt",
+                    "The STT component is not attached to the running pipeline",
+                    "Restart voice so the required STT component is initialized "
+                    "before retrying input.",
+                )
 
             result = await self.stt.transcribe_async(audio, sample_rate=self.sample_rate)
             text = result.get("text", "").strip()
@@ -279,33 +413,60 @@ class VoicePipeline:
         except asyncio.CancelledError:
             app_logger.info("Transcription cancelled")
             raise
-        except Exception as e:
-            app_logger.error(f"Transcription failed: {e}")
+        except Exception as exc:
+            error = VoicePipelineStartupError(
+                "stt",
+                f"{type(exc).__name__}: {exc}",
+                "Inspect the Whisper model/runtime error and correct it before "
+                "retrying voice input.",
+            )
+            app_logger.error("Transcription failed: %s", error)
+            await self._notify_error(error)
             self._set_state(VoiceState.IDLE)
 
     async def _synthesize_and_stream(self, text: str):
         """Synthesize TTS and stream audio via callback."""
         try:
             if not self.tts:
-                return
+                raise VoicePipelineStartupError(
+                    "tts",
+                    "The TTS component is not attached to the running pipeline",
+                    "Restart voice so the required TTS component is initialized "
+                    "before retrying output.",
+                )
 
             audio = await self.tts.synthesize_async(text)
 
-            if audio is not None:
-                # Convert float32 audio to int16 PCM bytes for streaming
-                audio_int16 = (audio * 32767).astype(np.int16)
-                audio_bytes = audio_int16.tobytes()
+            if audio is None:
+                raise VoicePipelineStartupError(
+                    "tts",
+                    getattr(self.tts, "last_error", None) or "TTS returned no audio",
+                    "Inspect the Piper model/runtime error and correct it before "
+                    "retrying voice output.",
+                )
 
-                if self._on_audio_ready:
-                    await self._on_audio_ready(audio_bytes)
-            else:
-                app_logger.error("TTS synthesis returned no audio")
+            # Convert float32 audio to int16 PCM bytes for streaming
+            audio_int16 = (audio * 32767).astype(np.int16)
+            audio_bytes = audio_int16.tobytes()
+
+            if self._on_audio_ready:
+                await self._on_audio_ready(audio_bytes)
 
         except asyncio.CancelledError:
             app_logger.info("TTS synthesis cancelled")
             raise
-        except Exception as e:
-            app_logger.error(f"TTS synthesis failed: {e}")
+        except VoicePipelineStartupError as exc:
+            app_logger.error("TTS synthesis failed: %s", exc)
+            await self._notify_error(exc)
+        except Exception as exc:
+            error = VoicePipelineStartupError(
+                "tts",
+                f"{type(exc).__name__}: {exc}",
+                "Inspect the Piper model/runtime error and correct it before "
+                "retrying voice output.",
+            )
+            app_logger.error("TTS synthesis failed: %s", error)
+            await self._notify_error(error)
         finally:
             if self.state == VoiceState.SPEAKING:
                 self._set_state(VoiceState.IDLE)

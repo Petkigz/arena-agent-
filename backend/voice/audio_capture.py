@@ -48,14 +48,20 @@ class AudioCaptureService:
         self.is_running = False
         self.stream = None
         self.pyaudio_instance = None
+        self.last_error: Optional[str] = None
         
         # Callbacks
         self.on_audio_chunk: Optional[Callable[[np.ndarray], None]] = None
         
     def start(self):
         """Start audio capture."""
+        self.last_error = None
         if not PYAUDIO_AVAILABLE:
-            app_logger.warning("Cannot start audio capture: PyAudio not installed")
+            self.last_error = "PyAudio is not installed"
+            app_logger.error(
+                "Cannot start audio capture: PyAudio not installed. "
+                "Install PyAudio and verify an input device before retrying."
+            )
             return
 
         if self.is_running:
@@ -78,24 +84,39 @@ class AudioCaptureService:
             app_logger.info(f"Audio capture started: {self.sample_rate}Hz, {self.channels}ch")
             
         except Exception as e:
-            app_logger.error(f"Failed to start audio capture: {e}")
+            self.last_error = f"{type(e).__name__}: {e}"
+            app_logger.error(f"Failed to start audio capture: {self.last_error}")
+            # Release a partially-created PyAudio stream/instance before the
+            # orchestrator reports the startup failure.
+            self.stop()
             raise
     
     def stop(self):
-        """Stop audio capture."""
-        if not self.is_running:
+        """Stop audio capture, including a partially-started stream."""
+        if not self.is_running and self.stream is None and self.pyaudio_instance is None:
             return
-            
+
         self.is_running = False
-        
+
         if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-            
+            try:
+                self.stream.stop_stream()
+            except Exception as exc:
+                app_logger.warning(f"Could not stop audio stream cleanly: {exc}")
+            try:
+                self.stream.close()
+            except Exception as exc:
+                app_logger.warning(f"Could not close audio stream cleanly: {exc}")
+            finally:
+                self.stream = None
+
         if self.pyaudio_instance:
-            self.pyaudio_instance.terminate()
-            self.pyaudio_instance = None
+            try:
+                self.pyaudio_instance.terminate()
+            except Exception as exc:
+                app_logger.warning(f"Could not terminate PyAudio cleanly: {exc}")
+            finally:
+                self.pyaudio_instance = None
             
         app_logger.info("Audio capture stopped")
     

@@ -124,16 +124,21 @@ def test_transcribe_routes_transcript_to_cognitive_runtime():
         assert kwargs.get("is_final") is True
 
 
-def test_transcribe_graceful_when_stt_unavailable():
+def test_transcribe_reports_when_stt_unavailable():
     service = VoiceService()
     service.current_conversation_id = "android-voice"
 
     with patch.object(service, "_get_remote_stt", return_value=None), \
-         patch.object(service, "_handle_transcript", new_callable=AsyncMock) as mock_handle:
+         patch.object(service, "_handle_transcript", new_callable=AsyncMock) as mock_handle, \
+         patch("backend.voice.service.ws_manager") as mock_ws:
+        mock_ws.broadcast_to_conversation = AsyncMock()
 
-        # Must not raise and must not route anywhere.
+        # Must not raise or route anywhere, but must expose the component failure.
         asyncio.run(service._transcribe_remote_utterance(np.zeros(1600, dtype=np.float32)))
         mock_handle.assert_not_awaited()
+        payloads = [call.args[1] for call in mock_ws.broadcast_to_conversation.await_args_list]
+        errors = [payload for payload in payloads if payload.get("type") == "voice_status"]
+        assert errors and errors[0]["component"] == "remote_stt"
 
 
 def test_transcribe_skips_empty_text():
