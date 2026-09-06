@@ -180,6 +180,25 @@ def incubation_item_history_endpoint(item_id: str, limit: int = Query(200, ge=1,
         raise HTTPException(status_code=404, detail="Incubation item not found")
     return {"success": True, "item_id": item_id, "events": runtime.incubation_queue.history(item_id, limit)}
 
+@router.get("/owner-control/consolidation")
+def list_consolidation_runs_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "runs": runtime.consolidation.history(limit),
+        "note": "Consolidation telemetry distinguishes conflict replay, derived gists, and calibration refresh; it does not resolve unknown evidence.",
+    }
+
+@router.get("/owner-control/consolidation/{run_id}/events")
+def consolidation_events_endpoint(run_id: str, limit: int = Query(500, ge=1, le=2000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "run_id": run_id,
+        "events": CognitiveRuntime.get_instance().consolidation.events(run_id, limit),
+    }
+
 @router.get("/owner-control/concurrency-budget")
 def get_concurrency_budget_endpoint():
     from app.utils.concurrency_governor import ConcurrencyGovernor

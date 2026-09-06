@@ -213,6 +213,10 @@ class CognitiveRuntime:
         # Phase 5: Meta-Cognition
         self.resource_allocator = ResourceAllocator()
         self.confidence_calibrator = ConfidenceCalibrator(db_path=path)
+        from app.cognition.consolidation import ConsolidationCoordinator
+        self.consolidation = ConsolidationCoordinator(
+            str(Path(path).parent / "consolidation.db") if path else "data/consolidation.db"
+        )
         self.self_model = SelfModel(outcome_store=self.outcomes, lesson_store=self.lessons)
         from app.cognition.self_knowledge import SelfKnowledgeLedger
         self.self_knowledge = SelfKnowledgeLedger(
@@ -885,6 +889,22 @@ class CognitiveRuntime:
             summary["associations_created"] = associations
         except Exception as e:
             app_logger.warning(f"Consolidation: memory association failed: {e}")
+
+        # Phase 6: replay explicit memory conflicts without resolving them,
+        # derive gists only from repeated verified success, and refresh
+        # calibration telemetry from recorded prediction/outcome pairs.
+        try:
+            summary["phase6_consolidation"] = self.consolidation.run(
+                self.memory,
+                calibrator=self.confidence_calibrator,
+                max_tasks=max(10, min(100, episode_batch)),
+            )
+        except Exception as e:
+            summary["phase6_consolidation"] = {
+                "status": "failed",
+                "errors": [str(e)],
+            }
+            app_logger.warning(f"Consolidation: Phase 6 coordinator failed: {e}")
 
         app_logger.info(
             f"Memory consolidation: {summary['beliefs_changed']} beliefs decayed, "

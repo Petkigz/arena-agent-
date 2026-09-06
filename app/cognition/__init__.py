@@ -22,6 +22,7 @@ from .incubation_queue import (
     IncubationQueue,
     IncubationQueueError,
 )
+from .consolidation import ConsolidationCoordinator, ConsolidationError, ConsolidationRun
 from .session import CognitiveSession
 from .verified_reflection import (
     VerifiedReflection,
@@ -54,6 +55,9 @@ __all__ = [
     "IncubationPolicy",
     "IncubationQueue",
     "IncubationQueueError",
+    "ConsolidationCoordinator",
+    "ConsolidationError",
+    "ConsolidationRun",
     "CognitiveSession",
     "VerifiedReflection",
     "VerifiedReflectionStore",
