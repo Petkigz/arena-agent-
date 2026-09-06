@@ -195,6 +195,13 @@ class CognitiveRuntime:
                 if path else "data/intelligence_benchmarks.db"
             )
         )
+        from app.cognition.phase0_evaluation import Phase0EvaluationHistoryStore, Phase0EvaluationSuite
+        self.phase0_evaluations = Phase0EvaluationSuite(
+            Phase0EvaluationHistoryStore(
+                str(Path(path).parent / "phase0_evaluations.db")
+                if path else "data/phase0_evaluations.db"
+            )
+        )
         from app.cognition.execution_control import execution_control_registry
         self.execution_control = execution_control_registry
         # Phase 3: Transfer Learning

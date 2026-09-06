@@ -1111,6 +1111,33 @@ def intelligence_benchmark_history_endpoint(
     }
 
 
+# ── Phase 0 evidence-centered evaluation ────────────────────────────────────
+@router.post("/benchmarks/phase0/run")
+def run_phase0_evaluation_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    report = CognitiveRuntime.get_instance().phase0_evaluations.run()
+    return {"success": True, "report": report.to_dict()}
+
+
+@router.get("/benchmarks/phase0/latest")
+def latest_phase0_evaluation_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    report = CognitiveRuntime.get_instance().phase0_evaluations.history_store.latest()
+    return {"success": True, "report": report.to_dict() if report else None}
+
+
+@router.get("/benchmarks/phase0/history")
+def phase0_evaluation_history_endpoint(
+    limit: int = Query(20, ge=1, le=200),
+):
+    from app.cognition.runtime import CognitiveRuntime
+    reports = CognitiveRuntime.get_instance().phase0_evaluations.history_store.history(limit)
+    return {
+        "success": True,
+        "reports": [report.to_dict() for report in reports],
+    }
+
+
 # ── Shared settings (cross-platform: web / desktop / Android) ────────────────
 @router.get("/settings")
 def get_settings_endpoint(request: Request):
