@@ -647,6 +647,8 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(
     serverUrl: String,
     apiKey: String,
+    wakeWordEnabled: Boolean = false,
+    onToggleWakeWord: (Boolean) -> Unit = {},
     onSaveServerUrl: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
     onSaveTheme: (String) -> Unit,
@@ -687,6 +689,27 @@ fun SettingsScreen(
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Save connection") }
+
+        // Always-on listening is opt-in: it holds the microphone (indicator +
+        // recognizer beeps) until turned off — the owner decides.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Wake word listening")
+                Text(
+                    "Always-on mic for \"Hey Beanie\". Off by default — the mic indicator and beeps only appear while this is on.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = wakeWordEnabled,
+                onCheckedChange = onToggleWakeWord,
+            )
+        }
 
         // ── Owner Control (backend authority, not local preferences) ──
         Divider()

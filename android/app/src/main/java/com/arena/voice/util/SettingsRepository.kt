@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +33,7 @@ class SettingsRepository @Inject constructor(
         private val KEY_SERVER_URL = stringPreferencesKey("server_url")
         private val KEY_API_KEY = stringPreferencesKey("api_key")
         private val KEY_THEME = stringPreferencesKey("theme")
+        private val KEY_WAKE_WORD = booleanPreferencesKey("wake_word_enabled")
 
         /** Emulator default: 10.0.2.2 aliases the host machine's localhost. */
         const val DEFAULT_SERVER_URL = "ws://10.0.2.2:8000/ws"
@@ -45,6 +48,16 @@ class SettingsRepository @Inject constructor(
         prefs[KEY_API_KEY] ?: ""
     }
 
+    /**
+     * Always-on wake-word listening ("Hey Beanie"). OPT-IN, default false: a
+     * foreground mic service holds the microphone (status-bar indicator) and
+     * the recognizer beeps on its idle cycle — the owner decides when that
+     * trade is wanted. The mic button / Settings toggle both write this.
+     */
+    val wakeWordEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WAKE_WORD] ?: false
+    }.distinctUntilChanged()
+
     /** Theme ("dark" | "light" | "system"), cached locally for instant app-level re-skinning. */
     val theme: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_THEME] ?: "dark"
@@ -57,6 +70,10 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setApiKey(key: String) {
         context.dataStore.edit { prefs -> prefs[KEY_API_KEY] = key.trim() }
+    }
+
+    suspend fun setWakeWordEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_WAKE_WORD] = enabled }
     }
 
     suspend fun setTheme(theme: String) {

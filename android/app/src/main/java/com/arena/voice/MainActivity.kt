@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private var apiKey by mutableStateOf("")
     private var theme by mutableStateOf("dark")
     private var isConnected by mutableStateOf(false)
+    private var appliedWakeWord: Boolean? = null
     private var isListening by mutableStateOf(false)
     private var voiceState by mutableStateOf<String?>(null)
 
@@ -79,6 +80,23 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             settings.theme.collect { t -> theme = t }
+        }
+
+        // Always-on wake-word listening is OPT-IN (device run: a foreground mic
+        // service from launch = permanent mic indicator + recognizer beeps).
+        // The setting is the single source of truth; this collector starts and
+        // stops the service (and syncs isListening) whenever it changes.
+        appliedWakeWord = null
+        lifecycleScope.launch {
+            settings.wakeWordEnabled.collect { enabled ->
+                val previous = appliedWakeWord
+                appliedWakeWord = enabled
+                isListening = enabled
+                when {
+                    enabled && previous != false -> startWakeWordService()
+                    !enabled && previous == true -> stopWakeWordService()
+                }
+            }
         }
 
         // Hydrate the theme from the backend's shared settings so a theme change
@@ -138,6 +156,8 @@ class MainActivity : ComponentActivity() {
                         onSaveServerUrl = { url -> saveServerUrl(url) },
                         onSaveApiKey = { key -> saveApiKey(key) },
                         onSaveTheme = { t -> saveTheme(t) },
+                        wakeWordEnabled = isListening,
+                        onToggleWakeWord = { enabled -> saveWakeWord(enabled) },
                     )
                 }
             }
@@ -191,6 +211,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun saveWakeWord(enabled: Boolean) {
+        // Same path as the mic button — one source of truth.
+        lifecycleScope.launch { settings.setWakeWordEnabled(enabled) }
+    }
+
     private fun saveTheme(t: String) {
         lifecycleScope.launch {
             val raw = t.trim().lowercase()
@@ -205,12 +230,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleTalk() {
-        if (isListening) {
-            isListening = false
-            stopWakeWordService()
-        } else {
-            isListening = true
-            startWakeWordService()
+        // Single source of truth: write the setting; the wakeWordEnabled
+        // collector starts/stops the service and syncs isListening.
+        lifecycleScope.launch {
+            settings.setWakeWordEnabled(!isListening)
         }
     }
 
@@ -265,8 +288,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startServices() {
+        // Connection only — the wake-word mic service starts when (and only
+        // when) the wakeWordEnabled setting says so.
         connectToServer()
-        startWakeWordService()
     }
 
     private fun startWakeWordService() {

@@ -424,3 +424,35 @@ def test_android_wake_word_does_not_restart_storm():
     assert "RESTART_DELAY_MS shl exp" in source # exponential, capped
     assert "Recognizer unhealthy — recreating" in source
     assert "createRecognizer()" in source       # creation split from starting
+
+
+def test_android_ws_sends_the_api_key():
+    """The device run's 'IP connection failed': with ARENA_API_KEY set (required
+    to bind 0.0.0.0), the server closes keyless WS upgrades with 4003. The web
+    authenticates via ?api_key=…; the Android WS client must match."""
+    source = (REPO / "android/app/src/main/java/com/arena/voice/websocket/VoiceWebSocketClient.kt").read_text(encoding="utf-8")
+    assert "settings.apiKey.first()" in source   # key read from settings
+    assert 'currentServerUrl + sep + "api_key=" + Uri.encode(currentApiKey)' in source
+    assert "currentApiKey = apiKey" in source
+
+
+def test_android_wake_word_is_opt_in():
+    """The device run: mic indicator + recognizer beeps from app launch because
+    the wake-word foreground service started unconditionally. Now the setting
+    is the single source of truth (default OFF) and drives the service."""
+    repo = (REPO / "android/app/src/main/java/com/arena/voice/util/SettingsRepository.kt").read_text(encoding="utf-8")
+    assert 'booleanPreferencesKey("wake_word_enabled")' in repo
+    assert "prefs[KEY_WAKE_WORD] ?: false" in repo  # OPT-IN: default false
+
+    main = MAIN_KT.read_text(encoding="utf-8")
+    # Launch connects only — no unconditional mic service.
+    start_services = main[main.index("private fun startServices()"):]
+    start_services = start_services[: start_services.index("\n    }")]
+    assert "startWakeWordService()" not in start_services
+    # The setting collector drives the service + isListening.
+    assert "settings.wakeWordEnabled.collect" in main
+    assert "settings.setWakeWordEnabled(!isListening)" in main
+
+    settings = (REPO / "android/app/src/main/java/com/arena/voice/ui/screens/SettingsScreen.kt").read_text(encoding="utf-8")
+    assert '"Wake word listening"' in settings
+    assert "onToggleWakeWord" in settings

@@ -1,5 +1,6 @@
 package com.arena.voice.websocket
 
+import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.flow.first
 import okhttp3.*
@@ -20,6 +21,7 @@ class VoiceWebSocketClient @Inject constructor(
     private var isConnected = false
     private var shouldReconnect = true
     private var reconnectAttempts = 0
+    private var currentApiKey: String = ""
     private var currentServerUrl = SettingsRepository.DEFAULT_SERVER_URL
 
     /**
@@ -30,20 +32,22 @@ class VoiceWebSocketClient @Inject constructor(
 
     private val listeners = mutableListOf<VoiceWebSocketListener>()
 
-    /** Connect using the persisted server URL (DataStore), falling back to the default. */
+    /** Connect using the persisted server URL + API key (DataStore). */
     suspend fun connectToSavedServer() {
         val saved = settings.serverUrl.first()
-        connect(saved)
+        val key = settings.apiKey.first()
+        connect(saved, key)
     }
 
     /** Connect to an explicit URL (used for emulator default and manual overrides). */
-    fun connect(serverUrl: String = SettingsRepository.DEFAULT_SERVER_URL) {
+    fun connect(serverUrl: String = SettingsRepository.DEFAULT_SERVER_URL, apiKey: String = "") {
         if (isConnected) {
             Log.w(TAG, "Already connected")
             return
         }
 
         currentServerUrl = serverUrl
+        currentApiKey = apiKey
         shouldReconnect = true
         reconnectAttempts = 0
 
@@ -57,8 +61,18 @@ class VoiceWebSocketClient @Inject constructor(
             .writeTimeout(10, TimeUnit.SECONDS)
             .build()
 
+        // The server authenticates the WS handshake by QUERY PARAM — the same
+        // contract as the web client (browsers cannot set WS headers, so the
+        // backend reads ?api_key=…; with ARENA_API_KEY set a keyless upgrade is
+        // closed with 4003 "Invalid API key").
+        val url = if (currentApiKey.isNotBlank()) {
+            val sep = if ("?" in currentServerUrl) "&" else "?"
+            currentServerUrl + sep + "api_key=" + Uri.encode(currentApiKey)
+        } else {
+            currentServerUrl
+        }
         val request = Request.Builder()
-            .url(currentServerUrl)
+            .url(url)
             .build()
 
         webSocket = client.newWebSocket(request, webSocketListener)

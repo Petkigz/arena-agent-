@@ -58,6 +58,8 @@ fun AppScaffold(
     onLandingSubmit: (String) -> Unit = {},
     onSaveServerUrl: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
+    wakeWordEnabled: Boolean = false,
+    onToggleWakeWord: (Boolean) -> Unit = {},
     onSaveTheme: (String) -> Unit,
 ) {
     val navController = rememberNavController()
@@ -152,6 +154,8 @@ fun AppScaffold(
             }
             composable(AppTab.SETTINGS.route) {
                 SettingsScreen(
+                    wakeWordEnabled = wakeWordEnabled,
+                    onToggleWakeWord = onToggleWakeWord,
                     serverUrl = serverUrl,
                     apiKey = apiKey,
                     onSaveServerUrl = onSaveServerUrl,
