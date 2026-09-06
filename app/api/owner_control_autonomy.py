@@ -180,6 +180,17 @@ def incubation_item_history_endpoint(item_id: str, limit: int = Query(200, ge=1,
         raise HTTPException(status_code=404, detail="Incubation item not found")
     return {"success": True, "item_id": item_id, "events": runtime.incubation_queue.history(item_id, limit)}
 
+@router.get("/owner-control/functional-affect")
+def get_functional_affect_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "advisory": runtime.functional_affect.advisory_modifiers(),
+        "events": runtime.functional_affect.history(limit),
+        "note": "Functional affect is a bounded telemetry signal, not subjective emotion or execution authority.",
+    }
+
 @router.get("/owner-control/consolidation")
 def list_consolidation_runs_endpoint(limit: int = Query(100, ge=1, le=1000)):
     from app.cognition.runtime import CognitiveRuntime

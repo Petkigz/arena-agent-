@@ -217,6 +217,10 @@ class CognitiveRuntime:
         self.consolidation = ConsolidationCoordinator(
             str(Path(path).parent / "consolidation.db") if path else "data/consolidation.db"
         )
+        from app.cognition.functional_affect import FunctionalAffectStore
+        self.functional_affect = FunctionalAffectStore(
+            str(Path(path).parent / "functional_affect.db") if path else "data/functional_affect.db"
+        )
         self.self_model = SelfModel(outcome_store=self.outcomes, lesson_store=self.lessons)
         from app.cognition.self_knowledge import SelfKnowledgeLedger
         self.self_knowledge = SelfKnowledgeLedger(
@@ -561,6 +565,7 @@ class CognitiveRuntime:
             "ontology_revision": self.ontology_schema.current().revision,
             "scene_revision": self.scene_graph.revision,
             "incubation_enabled": self.incubation_queue.policy().enabled,
+            "functional_affect": self.functional_affect.advisory_modifiers(),
         }
         app_logger.info(
             f"Session start: {beliefs_changed} beliefs recalculated, "
@@ -4201,6 +4206,7 @@ class CognitiveRuntime:
             "timeout_ms": budget.timeout_ms,
             "classification_reason": budget.classification_reason,
             "value_of_compute_route": compute_assessment.recommended_route,
+            "functional_affect": self.functional_affect.advisory_modifiers(),
         }
         self.blackboard.set(
             "resource_allocation",
@@ -4654,6 +4660,34 @@ class CognitiveRuntime:
             )
         except Exception as exc:
             app_logger.warning(f"Resource allocation outcome recording failed: {exc}")
+        try:
+            affect_evidence = [
+                str(item) for item in (
+                    list(verify_res.met_conditions or [])[:2]
+                    if verify_res.verified_success else
+                    list(verify_res.failed_conditions or [])[:2]
+                ) if str(item).strip()
+            ] or [f"trace:{trace.trace_id}"]
+            self.functional_affect.record_outcome(
+                trace_id=trace.trace_id,
+                outcome="verified_success" if verify_res.verified_success else "verified_failure",
+                evidence_ids=affect_evidence,
+            )
+            signal_updates = (
+                (("confidence", 0.05), ("uncertainty", -0.05), ("frustration", -0.03))
+                if verify_res.verified_success else
+                (("confidence", -0.05), ("uncertainty", 0.05), ("frustration", 0.05))
+            )
+            for field_name, delta in signal_updates:
+                self.functional_affect.apply_signal(
+                    field_name,
+                    delta,
+                    source="verified_execution_outcome",
+                    trace_id=trace.trace_id,
+                    evidence_ids=affect_evidence,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Functional affect update failed: {exc}")
         trace.model_used = agent_res.get("model_used", "fast")
         trace.finalize(
             reply=assistant_reply,

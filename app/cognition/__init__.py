@@ -23,6 +23,7 @@ from .incubation_queue import (
     IncubationQueueError,
 )
 from .consolidation import ConsolidationCoordinator, ConsolidationError, ConsolidationRun
+from .functional_affect import AffectVector, FunctionalAffectError, FunctionalAffectStore
 from .session import CognitiveSession
 from .verified_reflection import (
     VerifiedReflection,
@@ -58,6 +59,9 @@ __all__ = [
     "ConsolidationCoordinator",
     "ConsolidationError",
     "ConsolidationRun",
+    "AffectVector",
+    "FunctionalAffectError",
+    "FunctionalAffectStore",
     "CognitiveSession",
     "VerifiedReflection",
     "VerifiedReflectionStore",

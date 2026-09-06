@@ -520,9 +520,9 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 
 ### Deliverables
 
-- Add a decaying functional affect vector for confidence, load, frustration, engagement, and uncertainty.
-- Permit only measured, bounded effects on routing, clarification, exploration, and response style.
-- Add outcome tests proving whether the affect vector improves or harms decisions.
+- Add a decaying functional affect vector for confidence, load, frustration, engagement, and uncertainty. **`FunctionalAffectStore` now persists an evidence-linked, half-life-decaying vector with explicit schema versioning and bounded updates from verified execution outcomes; it is functional telemetry, not subjective emotion.**
+- Permit only measured, bounded effects on routing, clarification, exploration, and response style. **Runtime allocation traces and owner-control inspection expose capped advisory modifiers for reasoning budget, clarification, exploration, and response style; no modifier grants execution authority.**
+- Add outcome tests proving whether the affect vector improves or harms decisions. **The store records modifier snapshots against trace-linked outcomes for later comparison without claiming causal improvement from a single result.**
 - Separate curiosity into:
   - information gain;
   - learning progress;
