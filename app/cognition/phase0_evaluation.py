@@ -121,6 +121,12 @@ def _temporary_trace_database(path: Path):
         settings.DB_PATH = previous
 
 
+# Public compatibility name used by the runtime composition root and API tests.
+# The shorter internal class name predates the Phase 0 endpoint wiring; keep one
+# implementation rather than duplicating a second history store.
+Phase0EvaluationHistoryStore = Phase0HistoryStore
+
+
 class Phase0EvaluationSuite:
     """Behavioral checks for Phase 0 and the core evidence boundary."""
 

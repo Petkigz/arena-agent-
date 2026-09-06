@@ -3042,6 +3042,38 @@ class CognitiveRuntime:
 
         # 3. Blackboard Ingestion & Context Slicing (Retrieves Past Learned Lessons)
         self.blackboard.set("current_user_query", user_text, source=SourceType.USER_INPUT, confidence=1.0)
+        # Phase 3: route the active turn through the canonical typed memory
+        # store.  Each memory kind receives a bounded retrieval quota so a
+        # noisy episodic history cannot crowd out durable lessons or procedures.
+        # Records are explicitly labelled historical in the prompt and remain
+        # separate from current world observations.
+        memory_context = ""
+        try:
+            memory_records = self.memory.retrieve_context_records(user_text, limit=8, per_kind=2)
+            memory_context = self.memory.render_context(memory_records)
+            trace.retrieved_memories = [
+                {
+                    "memory_id": record.memory_id,
+                    "kind": record.kind,
+                    "source": record.source,
+                    "task_id": record.task_id,
+                    "outcome": record.outcome,
+                    "success": record.success,
+                    "created_at": record.created_at,
+                }
+                for record in memory_records
+            ]
+            if memory_context:
+                self.blackboard.set(
+                    "runtime_memory_context",
+                    memory_context,
+                    source="memory_store",
+                    confidence=1.0,
+                )
+        except Exception as exc:
+            # Memory retrieval is useful context, never permission to invent
+            # a result.  The trace keeps the empty retrieval explicit.
+            app_logger.warning(f"Typed runtime memory retrieval unavailable: {exc}")
         # Phase 3: expose the hardware self-model so reasoning can consult the machine state.
         self.blackboard.set("hardware_self_model", self.hardware_self_model, source="hardware_governor")
         # F1.6 Owner Charter + owner model: the owner's values and counted
@@ -3347,7 +3379,12 @@ class CognitiveRuntime:
         # Branch A: ANSWER / Direct Conversational Q&A
         if reasoning_action == ReasoningAction.ANSWER:
             tracker.transition(GoalLifecycleState.EXECUTING, "Formulating direct conversational answer.")
-            system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
+            system_instruction = CoworkerBrain.format_coworker_prompt(
+                user_text,
+                memory_store=self.memory,
+                world_model=self.world,
+                memory_context=memory_context,
+            )
             # Host-state questions get REAL observations, not LLM guesses:
             # deterministic pattern -> Level-0 read-only tool -> answer from
             # evidence. Anything that mutates state still needs the full
@@ -3652,7 +3689,13 @@ class CognitiveRuntime:
                 investigation_summary += ": " + "; ".join(
                 f"{r.tool}: {probe_evidence_str(r.output)}" for r in loop_trace.results)
 
-            system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
+            system_instruction = CoworkerBrain.format_coworker_prompt(
+                user_text,
+                executed_actions=[investigation_summary],
+                memory_store=self.memory,
+                world_model=self.world,
+                memory_context=memory_context,
+            )
             # D7 live regression (2026-09-02): with the probe returning
             # "search_files: []" the live model still replied "Found 3
             # such songs" — an invented count the loop never produced.

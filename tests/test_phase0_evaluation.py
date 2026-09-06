@@ -15,7 +15,7 @@ def test_phase0_suite_runs_isolated_checks_and_persists_history(tmp_path):
     restored = history.latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.total_count == 7
+    assert restored.total_count == 8
 
 
 def test_phase0_history_roundtrips_check_status_for_regression_comparison(tmp_path):
