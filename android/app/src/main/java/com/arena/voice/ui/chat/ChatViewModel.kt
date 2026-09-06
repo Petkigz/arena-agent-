@@ -9,13 +9,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arena.voice.api.ApiClient
 import com.arena.voice.api.UploadClient
 import com.arena.voice.websocket.VoiceWebSocketClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
 
@@ -27,10 +32,19 @@ data class ChatMessage(
     val actionSteps: List<String> = emptyList(),
 )
 
+/** Inline "Working context" card data (design review section 4). Each field is
+ * optional — partial context still renders; offline renders nothing. */
+data class WorkingContext(
+    val project: String? = null,
+    val objective: String? = null,
+    val memories: Int = 0,
+)
+
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val webSocketClient: VoiceWebSocketClient,
     private val uploadClient: UploadClient,
+    private val apiClient: ApiClient,
 ) : ViewModel(), VoiceWebSocketClient.VoiceWebSocketListener {
 
     val messages = mutableStateListOf<ChatMessage>()
@@ -43,6 +57,11 @@ class ChatViewModel @Inject constructor(
 
     private val _isStreaming = MutableStateFlow(false)
     val isStreaming: StateFlow<Boolean> = _isStreaming.asStateFlow()
+
+    /** While Beanie works, the conversation carries a compact context card —
+     * composed from the same contract endpoints the web/desktop panels use. */
+    private val _workingContext = MutableStateFlow<WorkingContext?>(null)
+    val workingContext: StateFlow<WorkingContext?> = _workingContext.asStateFlow()
 
     var conversationId by mutableStateOf(webSocketClient.conversationId)
         private set
@@ -76,7 +95,51 @@ class ChatViewModel @Inject constructor(
 
         // Optimistic user message.
         messages.add(ChatMessage(id = UUID.randomUUID().toString(), role = "user", content = text))
+        fetchWorkingContext()
         webSocketClient.sendUserMessage(conversationId, text)
+    }
+
+    /** Compose the working-context card (review section 4). Every source is
+     * optional; a slow/offline fetch simply leaves the card hidden. */
+    private fun fetchWorkingContext() {
+        viewModelScope.launch {
+            val context = withContext(Dispatchers.Default) {
+                var project: String? = null
+                var objective: String? = null
+                var memories = 0
+                try {
+                    apiClient.getBackendProjectsRaw()?.let { raw ->
+                        val projects = JSONObject(raw).optJSONArray("projects")
+                        if (projects != null && projects.length() > 0) {
+                            val name = projects.optJSONObject(0)?.optString("name", "")?.trim().orEmpty()
+                            if (name.isNotEmpty()) project = name
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+                try {
+                    apiClient.getAutonomousGoals()?.let { raw ->
+                        val goals = JSONObject(raw).optJSONArray("goals")
+                        if (goals != null && goals.length() > 0) {
+                            val title = goals.optJSONObject(0)?.optString("title", "")?.trim().orEmpty()
+                            if (title.isNotEmpty()) objective = title
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+                try {
+                    apiClient.memories()?.let { raw ->
+                        val arr = JSONArray(raw)
+                        memories = arr.length()
+                    }
+                } catch (_: Exception) {
+                }
+                WorkingContext(project = project, objective = objective, memories = memories)
+            }
+            if (context.project != null || context.objective != null || context.memories > 0) {
+                _workingContext.value = context
+            }
+        }
     }
 
     fun newConversation() {
@@ -222,6 +285,7 @@ class ChatViewModel @Inject constructor(
 
         if (done) {
             streamingMessageId = null
+            _workingContext.value = null
         }
     }
 
@@ -251,6 +315,7 @@ class ChatViewModel @Inject constructor(
 
     override fun onChatError(message: String) {
         _isStreaming.value = false
+        _workingContext.value = null
         Log.w(TAG, "Chat error: $message")
     }
 

@@ -202,10 +202,20 @@ presentation layer was revived:
   Beanie states (color + duration), screens stay theme-driven, landing structure pinned —
   parsed from Python, so the guard runs without an Android toolchain.
 
-Next on Android (needs a real build/device loop): the §4 working-context card in the
-conversation, drawer-grouped navigation beyond the 7-tab bottom bar, and voice-flow polish.
-Note: Kotlin changes are source-verified (structure + drift tests) but not compiled here —
-no Android SDK in the sandbox; first Gradle build may surface routine compile fixes.
+**Phase 2 (round-21g) — DONE in source:**
+- The §4 working-context card is in the Android conversation: `ChatViewModel` composes it on
+  a coroutine from the same contract endpoints the web/desktop panels use
+  (`/projects`, `/owner-control/autonomous-goals`, `/memories`), renders it inline above the
+  composer while Beanie works, and clears it on stream completion or error. Partial context
+  renders; offline renders nothing — same rules as desktop.
+- Drawer-grouped navigation: the 7-tab bottom bar is reduced to the conversation core
+  (Beanie, Chat); the chat drawer gained a grouped **Workspace** section (Pansophy, Files,
+  Images, Projects) alongside Conversations and Settings — "only the navigation mechanism
+  changes", mirroring the desktop sidebar grouping.
+
+Still needing a real build/device loop: Gradle compile verification (no Android SDK in this
+sandbox — Kotlin is source-verified and machine-guarded), voice-flow polish, and the tool
+activity cards. Guards: `tests/test_android_design_tokens.py` (10 tests).
 
 ## Phase 6 — Polish last
 

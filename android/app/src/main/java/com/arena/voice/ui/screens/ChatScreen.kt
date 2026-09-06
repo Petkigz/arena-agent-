@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arena.voice.ui.chat.ChatViewModel
 import com.arena.voice.ui.chat.ChatMessage
+import com.arena.voice.ui.chat.WorkingContext
 import kotlinx.coroutines.launch
 
 /**
@@ -43,12 +44,14 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
     onVoiceToggle: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onNavigate: (String) -> Unit = {},
     voiceStatus: PresenceStatus = PresenceStatus.IDLE,
 ) {
     val messages = viewModel.messages
     val conversations = viewModel.conversations
     val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
     val isStreaming by viewModel.isStreaming.collectAsStateWithLifecycle()
+    val workingContext by viewModel.workingContext.collectAsStateWithLifecycle()
 
     var input by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -106,6 +109,33 @@ fun ChatScreen(
                         )
                     }
                 }
+                Divider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+
+                // Workspace (review section 5): full functionality, mobile
+                // navigation — grouped like the desktop sidebar.
+                Text(
+                    "Workspace",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+                listOf(
+                    "Pansophy" to "pansophy",
+                    "Files" to "files",
+                    "Images" to "images",
+                    "Projects" to "projects",
+                ).forEach { (label, route) ->
+                    NavigationDrawerItem(
+                        label = { Text(label) },
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            onNavigate(route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+
                 Divider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                 NavigationDrawerItem(
                     label = { Text("Settings") },
@@ -243,6 +273,11 @@ fun ChatScreen(
                 }
             }
 
+            // ── Inline working-context card (review section 4) ──
+            workingContext?.let { context ->
+                WorkingContextCard(context)
+            }
+
             // ── Composer: + | Message Beanie… | 🎙 | ↑ ──
             Row(
                 modifier = Modifier
@@ -325,6 +360,45 @@ private fun MessageBubble(msg: ChatMessage) {
                     Spacer(Modifier.height(4.dp))
                     Text("▍", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+        }
+    }
+}
+
+
+/**
+ * Inline "Working context" card (design review section 4): while Beanie works,
+ * the conversation itself carries what Beanie is working on — same semantic
+ * card as desktop/web, mobile presentation.
+ */
+@Composable
+private fun WorkingContextCard(context: WorkingContext) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "Working context",
+                fontSize = 12.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            context.project?.let {
+                Text("Project: $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+            }
+            context.objective?.let {
+                Text("Objective: $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+            }
+            if (context.memories > 0) {
+                Text(
+                    "${context.memories} relevant memories",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
     }

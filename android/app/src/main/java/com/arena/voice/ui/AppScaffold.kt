@@ -62,7 +62,9 @@ fun AppScaffold(
         bottomBar = {
             NavigationBar {
                 val currentRoute = navController.currentBackStackEntry?.destination?.route
-                AppTab.entries.forEach { tab ->
+                // Conversation-first: the primary surfaces live on the bar;
+                // workspace/tools/settings open from the chat drawer.
+                listOf(AppTab.BEANIE, AppTab.CHAT).forEach { tab ->
                     NavigationBarItem(
                         selected = currentRoute == tab.route,
                         onClick = {
@@ -110,6 +112,13 @@ fun AppScaffold(
                     onVoiceToggle = onToggleTalk,
                     onOpenSettings = {
                         navController.navigate(AppTab.SETTINGS.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onNavigate = { route ->
+                        navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true

@@ -152,3 +152,48 @@ def test_android_chat_is_theme_driven_and_conforms():
     assert "PresenceStatus.LISTENING.color" in source
     assert "PresenceStatus.THINKING.color" in source
     assert "PresenceStatus.SPEAKING.color" in source
+
+
+# --------------------------------------------------------------------------
+# Android phase 2 (round-21g): working-context card + drawer-grouped navigation
+# --------------------------------------------------------------------------
+
+
+def test_android_working_context_in_viewmodel():
+    """The card composes from the contract endpoints and clears on completion."""
+    source = (REPO / "android/app/src/main/java/com/arena/voice/ui/chat/ChatViewModel.kt").read_text(encoding="utf-8")
+    assert "data class WorkingContext(" in source
+    assert "val workingContext: StateFlow<WorkingContext?>" in source
+    # Same contract endpoints the web/desktop context panels use.
+    for call in ("getBackendProjectsRaw()", "getAutonomousGoals()", "memories()"):
+        assert call in source, f"working-context fetch lost {call}"
+    # Lifecycle: fetched on send, cleared on stream done and on error.
+    assert "fetchWorkingContext()" in source
+    assert source.count("_workingContext.value = null") >= 2
+
+
+def test_android_working_context_card_rendered():
+    """The conversation carries the card (review section 4, mobile presentation)."""
+    source = CHAT_KT.read_text(encoding="utf-8")
+    assert "WorkingContextCard" in source
+    assert '"Working context"' in source
+    assert "relevant memories" in source  # the review's exact wording
+    assert "viewModel.workingContext.collectAsStateWithLifecycle()" in source
+    # Partial context renders: rows are individually optional.
+    assert "context.project?.let" in source
+    assert "context.objective?.let" in source
+
+
+def test_android_navigation_is_conversation_first():
+    """Bottom bar carries the conversation core; workspace opens from the drawer."""
+    scaffold = SCAFFOLD_KT.read_text(encoding="utf-8")
+    assert "listOf(AppTab.BEANIE, AppTab.CHAT).forEach { tab ->" in scaffold
+    assert "AppTab.entries.forEach" not in scaffold  # the 7-tab bar is gone
+    # Drawer entries navigate.
+    assert "onNavigate = { route ->" in scaffold
+
+    chat = CHAT_KT.read_text(encoding="utf-8")
+    # Grouped drawer (mirrors the desktop sidebar sections).
+    assert '"Workspace"' in chat
+    for label in ("Pansophy", "Files", "Images", "Projects"):
+        assert f'"{label}" to "' in chat, f"drawer lost the {label} entry"
