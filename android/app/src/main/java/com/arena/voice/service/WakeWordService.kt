@@ -59,6 +59,7 @@ class WakeWordService : Service() {
     private var detectionThread: Thread? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var restartRunnable: Runnable? = null
+    private var consecutiveErrors = 0
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -114,20 +115,49 @@ class WakeWordService : Service() {
     // ── Keyword spotting (SpeechRecognizer) ─────────────────────────────────
 
     private fun startKeywordDetection() {
+        createRecognizer()
+        startRecognizer()
+    }
+
+    /** Creates the recognizer + listener WITHOUT starting a session. */
+    private fun createRecognizer() {
         val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
         speechRecognizer = recognizer
         recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) {
+                // A healthy session started — the idle streak is not a fault.
+                consecutiveErrors = 0
+            }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
 
             override fun onError(error: Int) {
-                if (isListening) {
-                    Log.d(TAG, "Recognizer error $error — restarting")
-                    scheduleRestart()
+                if (!isListening) return
+                val idle = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                consecutiveErrors += 1
+                if (idle && consecutiveErrors <= 2) {
+                    // Silence + timeout is the NORMAL idle cadence of
+                    // continuous listening — not worth a log line every cycle.
+                    Log.v(TAG, "Recognizer idle (error $error)")
+                } else {
+                    Log.d(TAG, "Recognizer error $error (streak $consecutiveErrors)")
                 }
+                if (consecutiveErrors >= 6) {
+                    // Stacked failures: the recognizer is unhealthy — recreate
+                    // it instead of hammering a dead session forever.
+                    Log.w(TAG, "Recognizer unhealthy — recreating")
+                    try {
+                        speechRecognizer?.destroy()
+                    } catch (_: Exception) {
+                    }
+                    speechRecognizer = null
+                    createRecognizer()
+                    consecutiveErrors = 0
+                }
+                scheduleRestart()
             }
 
             override fun onResults(results: Bundle?) {
@@ -141,7 +171,6 @@ class WakeWordService : Service() {
 
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
-        startRecognizer()
     }
 
     private fun startRecognizer() {
@@ -178,7 +207,15 @@ class WakeWordService : Service() {
         restartRunnable?.let { mainHandler.removeCallbacks(it) }
         val runnable = Runnable { if (isListening) startRecognizer() }
         restartRunnable = runnable
-        mainHandler.postDelayed(runnable, RESTART_DELAY_MS)
+        mainHandler.postDelayed(runnable, restartDelayMs())
+    }
+
+    /** Fast rearm after a normal cycle; exponential backoff (capped) when
+     * errors stack without a single healthy session between them. */
+    private fun restartDelayMs(): Long {
+        if (consecutiveErrors <= 1) return RESTART_DELAY_MS
+        val exp = minOf(consecutiveErrors, 5)
+        return minOf(RESTART_DELAY_MS shl exp, 10_000L)
     }
 
     // ── Energy VAD (offline fallback) ───────────────────────────────────────

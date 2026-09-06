@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Arena is a personal LAN assistant: the backend runs on the owner's own
+  machine and the clients talk to it over plain HTTP/WS on the local network
+  (TLS on the LAN is not part of the deployment model). Without this config
+  Android 9+ blocks every ws:// connection:
+  "CLEARTEXT communication not permitted by network security policy".
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

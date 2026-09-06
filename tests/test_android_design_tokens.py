@@ -385,3 +385,42 @@ def test_android_icons_are_in_the_classic_set():
                 f"allowlist — confirm it exists in material-icons-extended 1.5.x "
                 f"and add it to the test before using it"
             )
+
+
+# --------------------------------------------------------------------------
+# First real-device run (round-21n): connectivity + wake-word behaviour
+# --------------------------------------------------------------------------
+
+
+def test_android_allows_cleartext_to_the_lan_backend():
+    """The first device run died on 'CLEARTEXT communication not permitted':
+    Arena is a personal LAN assistant — plain WS to the owner's own machine is
+    the deployment model, so the network security config must allow it."""
+    nsc = (REPO / "android/app/src/main/res/xml/network_security_config.xml").read_text(encoding="utf-8")
+    assert 'cleartextTrafficPermitted="true"' in nsc
+    manifest = (REPO / "android/app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+    assert 'android:networkSecurityConfig="@xml/network_security_config"' in manifest
+    assert "android.permission.INTERNET" in manifest
+
+
+def test_android_backend_url_is_configurable():
+    """10.0.2.2 is the EMULATOR's host alias — a real phone needs the PC's LAN
+    IP, so the server URL must be user-configurable (Settings screen)."""
+    repo = (REPO / "android/app/src/main/java/com/arena/voice/util/SettingsRepository.kt").read_text(encoding="utf-8")
+    assert 'const val DEFAULT_SERVER_URL = "ws://10.0.2.2:8000/ws"' in repo
+    assert "KEY_SERVER_URL" in repo
+    settings = (REPO / "android/app/src/main/java/com/arena/voice/ui/screens/SettingsScreen.kt").read_text(encoding="utf-8")
+    assert '"Server URL (ws://…)"' in settings  # the field exists in the UI
+
+
+def test_android_wake_word_does_not_restart_storm():
+    """Error 7 (NO_MATCH) every ~6s was the NORMAL idle cadence logged at
+    debug level with a flat 500ms rearm. Now: idle cycles are quiet, stacked
+    errors back off exponentially, and an unhealthy recognizer is recreated."""
+    source = (REPO / "android/app/src/main/java/com/arena/voice/service/WakeWordService.kt").read_text(encoding="utf-8")
+    assert "ERROR_NO_MATCH" in source           # idle errors identified as such
+    assert "consecutiveErrors = 0" in source    # streak resets on healthy sessions
+    assert "restartDelayMs()" in source         # backoff replaces the flat delay
+    assert "RESTART_DELAY_MS shl exp" in source # exponential, capped
+    assert "Recognizer unhealthy — recreating" in source
+    assert "createRecognizer()" in source       # creation split from starting
