@@ -651,19 +651,25 @@ def test_desktop_client_parses_action_steps():
 
 
 def test_web_context_panel_is_the_agents_mind():
-    """Web ContextPanel: Mission / Working on / Memory / Tools — not a metrics
-    sidebar (Statistics / Knowledge Graph / Current Chat removed)."""
+    """Web ContextPanel: Beanie's cognitive dashboard (21t reference IA) —
+    Current Goal / State / Focus / Relevant Memory / Perception / Active Tools
+    / Current Chat / Recent Activity / Beanie insight — still not a metrics
+    sidebar (Statistics / Knowledge Graph stay out)."""
     source = (REPO / "frontend" / "src" / "components" / "layout" / "ContextPanel.tsx").read_text(encoding="utf-8")
-    for section in ("Mission", "Working on", "Memory", "Tools"):
+    for section in (
+        "Current Goal", "State", "Focus", "Relevant Memory", "Perception",
+        "Active Tools", "Current Chat", "Recent Activity", "Beanie insight",
+    ):
         assert section in source, f"ContextPanel lost the {section} section"
-    # Dashboard noise is gone…
+    # Dashboard noise is still gone…
     assert "Statistics" not in source
     assert "Knowledge Graph" not in source
-    assert "Current Chat" not in source
     # …tool activity reuses the semantic ActionSteps renderer…
     assert "ActionSteps" in source
+    # …and the insight is the light at the bottom, not a plain paragraph.
+    assert "bg-beanie-gradient" in source
     test = (REPO / "frontend" / "src" / "test" / "components" / "ContextPanel.test.tsx").read_text(encoding="utf-8")
-    assert "agent-mind sections" in test
+    assert "cognitive-dashboard sections" in test
 
 
 def test_context_vocabulary_is_shared_across_all_three_shells():
@@ -672,12 +678,13 @@ def test_context_vocabulary_is_shared_across_all_three_shells():
     web = (REPO / "frontend" / "src" / "components" / "layout" / "ContextPanel.tsx").read_text(encoding="utf-8")
     desktop = (REPO / "desktop" / "widgets" / "context.py").read_text(encoding="utf-8")
     android = (REPO / "android" / "app" / "src" / "main" / "java" / "com" / "arena" / "voice" / "ui" / "components" / "WorkingContext.kt").read_text(encoding="utf-8")
-    # Mission / goal
-    assert ("Mission" in web) and ("MISSION" in desktop) and ("objective" in android)
+    # Goal (web carries the 21t cognitive-dashboard name; the other shells
+    # mirror the same concept at their own density)
+    assert ("Current Goal" in web) and ("MISSION" in desktop) and ("objective" in android)
     # Working on / project
-    assert ("Working on" in web) and ("WORKING ON" in desktop) and ("project" in android)
+    assert ("WORKING ON" in desktop) and ("project" in android)
     # Memory
-    assert ("Memory" in web) and ("MEMORY" in desktop) and ("memories" in android)
+    assert ("Relevant Memory" in web) and ("MEMORY" in desktop) and ("memories" in android)
     # Tools / activity
-    assert ("Tools" in web) and ("TOOLS" in desktop)
+    assert ("Active Tools" in web) and ("TOOLS" in desktop)
     assert "ToolActivityTimeline" in (REPO / "android" / "app" / "src" / "main" / "java" / "com" / "arena" / "voice" / "ui" / "components" / "ToolActivity.kt").read_text(encoding="utf-8")
