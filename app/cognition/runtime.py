@@ -3108,6 +3108,14 @@ class CognitiveRuntime:
             session_id=session_id
         )
         trace.ontology_revision = self.ontology_schema.current().revision
+        try:
+            self.identity_adaptation.record_style_observation(
+                trace_id=trace.trace_id,
+                evidence_ids=[f"trace:{trace.trace_id}", "style:runtime_exposure"],
+                feedback="unknown",
+            )
+        except Exception as exc:
+            app_logger.warning(f"Interaction style exposure metric unavailable: {exc}")
 
         try:
             hw = HardwareMonitor.get_hardware_stats()

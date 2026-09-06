@@ -80,6 +80,11 @@ class IdentityStyleProposalRequest(BaseModel):
 class IdentityStyleDecisionRequest(BaseModel):
     owner_decision_id: str = Field(min_length=1)
 
+class IdentityStyleFeedbackRequest(BaseModel):
+    feedback: str = Field(default="unknown", min_length=1, max_length=40)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
 class PurposeProposalRequest(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     description: str = Field(min_length=1, max_length=2000)
@@ -589,6 +594,29 @@ def list_identity_style_proposals_endpoint(status: Optional[str] = Query(None), 
         "interaction_style": CognitiveRuntime.get_instance().identity_adaptation.style().to_dict(),
         "proposals": [item.to_dict() for item in CognitiveRuntime.get_instance().identity_adaptation.style_proposals(status, limit)],
     }
+
+@router.get("/owner-control/identity-style/metrics")
+def get_identity_style_metrics_endpoint(limit: int = Query(1000, ge=1, le=5000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "metrics": runtime.identity_adaptation.style_metrics(limit),
+        "note": "Unknown feedback is exposure telemetry only; metrics do not claim style quality or trigger automatic adaptation.",
+    }
+
+@router.post("/owner-control/identity-style/feedback")
+def record_identity_style_feedback_endpoint(req: IdentityStyleFeedbackRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        observation = CognitiveRuntime.get_instance().identity_adaptation.record_style_observation(
+            trace_id=req.trace_id,
+            evidence_ids=req.evidence_ids,
+            feedback=req.feedback,
+        )
+        return {"success": True, "observation": observation, "adaptation_automatic": False}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @router.post("/owner-control/identity-style/proposals/{proposal_id}/adopt")
 def adopt_identity_style_endpoint(proposal_id: str, req: IdentityStyleDecisionRequest):

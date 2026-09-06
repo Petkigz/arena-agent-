@@ -72,6 +72,28 @@ def test_style_changes_require_evidence_owner_decision_and_valid_values(tmp_path
     assert decisions.calls[-1]["consume"] is True
 
 
+def test_style_exposure_and_feedback_are_measurable_without_automatic_adaptation(tmp_path):
+    store = IdentityAdaptationStore(tmp_path / "identity.db", owner_decisions=FakeOwnerDecisions())
+    store.record_style_observation(
+        trace_id="trace-exposure", evidence_ids=["style:exposure"], feedback="unknown"
+    )
+    store.record_style_observation(
+        trace_id="trace-feedback", evidence_ids=["feedback:owner"], feedback="helpful"
+    )
+    metrics = store.style_metrics()
+    assert metrics["total_observations"] == 2
+    assert metrics["known_feedback_count"] == 1
+    assert metrics["helpful_rate"] == 1.0
+    assert metrics["measurement_status"] == "measured_with_explicit_feedback"
+    assert metrics["adaptation_automatic"] is False
+    assert metrics["quality_claim"] == "none"
+
+    with pytest.raises(IdentityAdaptationError, match="unsupported style feedback"):
+        store.record_style_observation(
+            trace_id="trace-invalid-feedback", evidence_ids=["e"], feedback="excellent"
+        )
+
+
 def test_stable_profile_update_cannot_change_root_policy_and_requires_owner(tmp_path):
     store = IdentityAdaptationStore(tmp_path / "identity.db", owner_decisions=FakeOwnerDecisions())
     with pytest.raises(IdentityAdaptationError, match="root policy"):

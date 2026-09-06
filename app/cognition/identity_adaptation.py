@@ -252,6 +252,19 @@ class IdentityAdaptationStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS style_observations (
+                    observation_id TEXT PRIMARY KEY,
+                    style_revision INTEGER NOT NULL,
+                    style_json TEXT NOT NULL,
+                    trace_id TEXT NOT NULL,
+                    evidence_json TEXT NOT NULL,
+                    feedback TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
             conn.commit()
 
     def _meta(self) -> tuple[StableIdentityProfile, InteractionStyleState]:
@@ -695,6 +708,92 @@ class IdentityAdaptationStore:
         with sqlite3.connect(self.db_path) as conn:
             ids = [row[0] for row in conn.execute(query, params).fetchall()]
         return [item for item in (self._get_purpose(item_id) for item_id in ids) if item is not None]
+
+    def record_style_observation(
+        self,
+        *,
+        trace_id: str,
+        evidence_ids: Iterable[Any],
+        feedback: str = "unknown",
+    ) -> Dict[str, Any]:
+        """Record style exposure or explicit usefulness feedback.
+
+        ``unknown`` is a valid outcome: style usage is measurable even when no
+        usefulness judgment exists, but unknown feedback never counts as a
+        success or failure and never triggers automatic adaptation.
+        """
+        trace = _trace_id(trace_id)
+        evidence = _evidence_ids(evidence_ids)
+        normalized_feedback = str(feedback or "unknown").strip().lower()
+        allowed_feedback = {"helpful", "partially_helpful", "not_helpful", "unknown"}
+        if normalized_feedback not in allowed_feedback:
+            raise IdentityAdaptationError(
+                f"unsupported style feedback: {normalized_feedback}; supported values are {sorted(allowed_feedback)}"
+            )
+        with self._lock:
+            state = self.style()
+            observation = {
+                "observation_id": f"style_observation_{uuid4().hex[:16]}",
+                "style_revision": state.revision,
+                "style": dict(state.style),
+                "trace_id": trace,
+                "evidence_ids": evidence,
+                "feedback": normalized_feedback,
+                "created_at": _now(),
+            }
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT INTO style_observations VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        observation["observation_id"], observation["style_revision"],
+                        json.dumps(observation["style"], sort_keys=True), observation["trace_id"],
+                        json.dumps(evidence), normalized_feedback, observation["created_at"],
+                    ),
+                )
+                conn.commit()
+            self._event(
+                "style_observed",
+                observation,
+                trace_id=trace,
+                evidence_ids=evidence,
+                result_type="new_observation" if normalized_feedback != "unknown" else "UNKNOWN",
+            )
+            return observation
+
+    def style_metrics(self, limit: int = 1000) -> Dict[str, Any]:
+        with self._lock, sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT feedback, COUNT(*) FROM style_observations GROUP BY feedback"
+            ).fetchall()
+            revisions = conn.execute(
+                "SELECT style_revision, COUNT(*) FROM style_observations GROUP BY style_revision ORDER BY style_revision"
+            ).fetchall()
+            recent = conn.execute(
+                "SELECT observation_id, style_revision, trace_id, feedback, created_at FROM style_observations ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(int(limit), 1000)),),
+            ).fetchall()
+        counts = {str(feedback): int(count) for feedback, count in rows}
+        known = sum(count for feedback, count in counts.items() if feedback != "unknown")
+        positive = counts.get("helpful", 0)
+        partial = counts.get("partially_helpful", 0)
+        metrics = {
+            "total_observations": sum(counts.values()),
+            "feedback_counts": counts,
+            "known_feedback_count": known,
+            "helpful_rate": round((positive + 0.5 * partial) / known, 4) if known else None,
+            "measurement_status": "measured_with_explicit_feedback" if known else "exposure_only_no_feedback",
+            "by_style_revision": {str(revision): int(count) for revision, count in revisions},
+            "recent": [
+                {
+                    "observation_id": row[0], "style_revision": row[1],
+                    "trace_id": row[2], "feedback": row[3], "created_at": row[4],
+                }
+                for row in recent
+            ],
+            "adaptation_automatic": False,
+            "quality_claim": "none",
+        }
+        return metrics
 
     def style_proposals(self, status: Optional[str] = None, limit: int = 100) -> List[StyleAdaptationProposal]:
         query = "SELECT proposal_id FROM style_adaptation_proposals"

@@ -572,7 +572,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 ### Phase 8 implementation classification
 
 - Stable identity profile versus adaptive interaction style: **implemented and wired** through `IdentityAdaptationStore`; the adopted style is exposed in the runtime blackboard and bounded presentation guidance, while stable constraints remain separate.
-- Evidence-backed style adaptation: **conditionally working**. Style changes require a trace, evidence IDs, a visible proposal, and a single-use owner decision; adoption is reversible and stale proposals fail closed. Automatic longitudinal proposal generation from usefulness feedback remains **partial**.
+- Evidence-backed style adaptation: **conditionally working**. Style changes require a trace, evidence IDs, a visible proposal, and a single-use owner decision; adoption is reversible and stale proposals fail closed. Longitudinal exposure/feedback metrics are now recorded, while automatic proposal generation from those metrics remains **partial**.
 - Purpose and goal proposals: **implemented and wired** as owner-visible, provenance-typed records. Adoption requires an owner decision and leaves execution authority at `none`; existing goal planning and action gates remain separate.
 - Sandboxed novel subgoals: **implemented and wired** as records with `sandbox=true`, `root_policy_mutation=false`, and no execution authority. Transfer into an executable goal still requires the existing goal and authorization paths and is **conditionally working**.
 - Restart continuity: **implemented and wired** through the existing identity-continuity ledger and the new functional profile/style state; this is state continuity, not subjective identity persistence.
