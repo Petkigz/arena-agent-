@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QScro
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS
 from desktop.styles import _button_style, _composer_style
+from desktop.widgets.working_context import WorkingContextCard
 from desktop.pages.message_bubble import MessageBubble
 from desktop.widgets.orb import PresenceOrbWidget
 
@@ -54,6 +55,12 @@ class ChatPage(QWidget):
         self.voice_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.voice_banner.hide()
         right.addWidget(self.voice_banner)
+
+        # Inline working-context card (design review section 4): while Beanie
+        # works, the conversation itself carries the context — no permanent
+        # side column. Hidden collapses out of the layout entirely.
+        self.working_card = WorkingContextCard()
+        right.addWidget(self.working_card)
 
         composer = QHBoxLayout()
         self.input = QLineEdit()
@@ -124,10 +131,18 @@ class ChatPage(QWidget):
         self.input.setStyleSheet(_composer_style())
         self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
+        self.working_card.refresh_theme()
         for bubble in self._bubbles:
             bubble.refresh_theme()
         if self._streaming_bubble is not None:
             self._streaming_bubble.refresh_theme()
+
+    def show_working_context(self, context: dict) -> None:
+        """Show the inline working-context card (partial context is fine)."""
+        self.working_card.set_context(context or {})
+
+    def hide_working_context(self) -> None:
+        self.working_card.clear()
 
     def set_voice_status(self, status: str) -> None:
         """Show/hide the floating voice-state banner."""

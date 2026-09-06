@@ -6,6 +6,7 @@ skip automatically where no Qt GUI runtime exists, so clean CI is unaffected.
 """
 
 import pytest
+from pathlib import Path
 
 
 def _import_styles():
@@ -213,3 +214,89 @@ def test_sidebar_groups_navigation(qapp):
         ]
     finally:
         sidebar.deleteLater()
+
+
+# ── Working-context card (review section 4) ──────────────────────────────────
+
+
+def test_working_context_card_shows_partial_context(qapp):
+    from desktop.widgets.working_context import WorkingContextCard
+
+    card = WorkingContextCard()
+    try:
+        assert card.isHidden()  # hidden until context exists
+        card.set_context({"project": "Arena", "objective": "Improve autonomy", "memories": 42})
+        assert not card.isHidden()
+        card.set_context({"objective": "Improve autonomy"})  # partial context still renders
+        assert not card.isHidden()
+        card.clear()
+        assert card.isHidden()
+        card.set_context({})  # empty never shows
+        assert card.isHidden()
+    finally:
+        card.deleteLater()
+
+
+def test_chat_page_hosts_working_context(qapp):
+    from desktop.pages.chat import ChatPage
+
+    page = ChatPage(on_send=lambda text: None, on_voice=lambda: None)
+    try:
+        assert page.working_card.isHidden()
+        page.show_working_context({"project": "Arena", "objective": "Ship round 21"})
+        assert not page.working_card.isHidden()
+        page.hide_working_context()
+        assert page.working_card.isHidden()
+    finally:
+        page.deleteLater()
+
+
+class _FakeContextClient:
+    def autonomous_goals(self, limit=100):
+        return {"goals": [{"goal_id": "g1", "title": "Improve autonomy", "status": "active"}]}
+
+    def list_projects(self, offset=0, limit=50, status=""):
+        return {"projects": [{"name": "Arena", "status": "active"}]}
+
+    def list_memories(self, category=None):
+        return [{"id": "m1"}, {"id": "m2"}]
+
+
+class _OfflineContextClient:
+    def autonomous_goals(self, limit=100):
+        raise RuntimeError("offline")
+
+    def list_projects(self, offset=0, limit=50, status=""):
+        raise RuntimeError("offline")
+
+    def list_memories(self, category=None):
+        raise RuntimeError("offline")
+
+
+def test_working_context_worker_composes_from_contract(qapp):
+    from desktop.workers import WorkingContextWorker
+
+    results = []
+    worker = WorkingContextWorker(_FakeContextClient())
+    worker.result.connect(results.append)
+    worker.run()  # synchronous call (no thread needed for the test)
+    assert results == [{"objective": "Improve autonomy", "project": "Arena", "memories": 2}]
+
+
+def test_working_context_worker_offline_renders_nothing(qapp):
+    from desktop.workers import WorkingContextWorker
+
+    results = []
+    worker = WorkingContextWorker(_OfflineContextClient())
+    worker.result.connect(results.append)
+    worker.run()
+    assert results == [{}]
+
+
+def test_app_wires_working_context_lifecycle():
+    """Send → fetch; stream done / error → hide (headless source check)."""
+    source = (Path(__file__).resolve().parents[1] / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert "_fetch_working_context()" in source
+    assert "_handle_working_context" in source
+    assert "_beanie_working" in source  # late fetch after the stream finished must not show
+    assert "hide_working_context()" in source

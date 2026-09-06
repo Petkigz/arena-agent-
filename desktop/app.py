@@ -77,7 +77,7 @@ from desktop.pages.owner_control import OwnerControlPage
 # For backward compatibility, re-export theme globals and helpers that old code might import from desktop.app
 from desktop.theme import THEME_COLORS, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten, _is_system_dark, _resolved_theme_name
 from desktop.styles import _input_style, _textarea_style
-from desktop.workers import ChatWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
+from desktop.workers import ChatWorker, LocationWorker, VisionWorker, CameraThread, WorkingContextWorker, CV2_AVAILABLE
 from desktop.pages.message_bubble import MessageBubble
 
 
@@ -438,6 +438,7 @@ class MainWindow(QMainWindow):
         self._set_status("thinking")
         self.chat.set_voice_status("thinking")
         self.beanie.set_message("Thinking…")
+        self._fetch_working_context()
         self.chat_client.send_user_message(self.current_conv_id, content)
 
     @Slot(str, bool)
@@ -446,6 +447,8 @@ class MainWindow(QMainWindow):
         if done:
             self._set_status("idle")
             self.chat.set_voice_status("idle")
+            self._beanie_working = False
+            self.chat.hide_working_context()
             self.beanie.set_message("What are we working on today?")
 
     @Slot(str, str)
@@ -490,7 +493,29 @@ class MainWindow(QMainWindow):
     def _handle_chat_error(self, err: str) -> None:
         self.chat.append_message("assistant", f"⚠ {err}")
         self._set_status("offline")
+        self._beanie_working = False
+        self.chat.hide_working_context()
         self.beanie.set_message("Connection error.")
+
+    def _fetch_working_context(self) -> None:
+        """While Beanie works, compose the inline working-context card (review
+        section 4) from the same endpoints the web context panels use. Runs on
+        a worker thread; a slow/offline fetch simply leaves the card hidden."""
+        self._beanie_working = True
+        try:
+            previous = getattr(self, "_context_worker", None)
+            if previous is not None and previous.isRunning():
+                return  # a fetch is already in flight; its context is still valid
+            self._context_worker = WorkingContextWorker(self.client)
+            self._context_worker.result.connect(self._handle_working_context)
+            self._context_worker.start()
+        except Exception:
+            self._context_worker = None
+
+    @Slot(dict)
+    def _handle_working_context(self, context: dict) -> None:
+        if getattr(self, "_beanie_working", False):
+            self.chat.show_working_context(context)
 
     def _landing_submit(self, text: str) -> None:
         """Landing composer: the conversation is the primary surface — hand the

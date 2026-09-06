@@ -200,3 +200,51 @@ class CameraThread(QThread):
     def stop(self) -> None:
         self._running = False
 
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Working context (design review section 4)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class WorkingContextWorker(QThread):
+    """Compose the inline working-context card from existing backend endpoints.
+
+    Same API contract the web context panels use (goals, projects, memories);
+    each source is optional — a partial context still renders, an offline
+    backend renders nothing (the card simply stays hidden).
+    """
+
+    result = Signal(dict)
+
+    def __init__(self, client, parent=None):
+        super().__init__(parent)
+        self._client = client
+
+    def run(self) -> None:
+        context: dict = {}
+        try:
+            goals = self._client.autonomous_goals(limit=5).get("goals", [])
+            goal = goals[0] if goals else None
+            if goal is not None:
+                title = str(goal.get("title", "")).strip()
+                if title:
+                    context["objective"] = title
+        except Exception:
+            pass
+        try:
+            projects = self._client.list_projects(limit=5).get("projects", [])
+            project = projects[0] if projects else None
+            if project is not None:
+                name = str(project.get("name", "")).strip()
+                if name:
+                    context["project"] = name
+        except Exception:
+            pass
+        try:
+            memories = self._client.list_memories()
+            if isinstance(memories, list) and memories:
+                context["memories"] = len(memories)
+        except Exception:
+            pass
+        self.result.emit(context)

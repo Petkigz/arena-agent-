@@ -155,11 +155,23 @@ reuse `styles.py` helpers; do NOT tweak margins ad hoc — spacing/radius tokens
 that used to live here is fixed — see Phase 1.5 — but pages still rebuild stylesheets in
 `refresh_theme()` one by one; folding that into a single restyle pass belongs in this phase.)
 
-## Phase 4 — API contracts formalized
+## Phase 4 — DONE (round-21e): API contracts formalized + the §4 working-context card
 
-Both clients already share the HTTP backend (`desktop/backend_client.py`). Formalize the
-contract: document the endpoints the UI depends on (chat, presence, autonomy, files) in one
-place so a future mobile client codes against the document, not against the web's fetch calls.
+- `docs/UI_API_CONTRACT.md` — the UI-facing contract, grounded in the REAL route table
+  (`app.server`): the `/ws` message protocol (both directions, matching what
+  `desktop/chat_client.py` actually speaks), the HTTP surface (core + owner/autonomy), the
+  UX compositions built on it, and the client rules (echo suppression, cross-device follow).
+- `tests/test_ui_api_contract.py` pins the document against the live app: every documented
+  endpoint must exist on the server, and every WS message type the desktop client
+  handles/sends must be documented. (The test caught three stale paths in the doc's first
+  draft — exactly the drift class it exists to prevent.) A future Android client codes
+  against this document, not against the web's fetch calls.
+- **The review §4 working-context card is implemented**: while a turn streams, the
+  conversation itself carries a compact "Working context" card (Project / Objective /
+  Memories), composed on a worker thread from the same contract endpoints the web context
+  panels use (`desktop/widgets/working_context.py`, `WorkingContextWorker`, wired in
+  app.py with a still-working guard so a late fetch never shows a stale card; hidden on
+  completion/error; partial context renders, offline renders nothing).
 
 ## Phase 5 — Mobile shell (future)
 
