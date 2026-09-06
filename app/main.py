@@ -614,6 +614,7 @@ def chat_with_local_brain(req: ChatRequest):
         "goal_lifecycle_state": pipeline_res.get("goal_lifecycle_state"),
         "reason": pipeline_res.get("reason"),
         "epistemic_presentation": pipeline_res.get("epistemic_presentation", {}),
+        "grounding": pipeline_res.get("grounding", {}),
         # Owner review P1 #9: when a loaded fallback model answered, the
         # API names both models — disclosure at the boundary the client
         # sees, not just the logs. Absent when the requested model
@@ -1972,6 +1973,7 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
         "assistant_text": assistant_text,
         "audio_url": tts_res.get("audio_url", ""),
         "model_used": pipeline_res.get("model_used", ""),
+        "grounding": pipeline_res.get("grounding", {}),
         "executed_actions": pipeline_res.get("executed_actions", []),
         "speaker_verified": speaker_check.get("verified", False),
         "speaker_verification": speaker_check,

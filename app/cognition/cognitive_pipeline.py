@@ -5,6 +5,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 from app.cognition.runtime import CognitiveRuntime
 from app.cognition.epistemic_presentation import presentation_for_cycle
+from app.cognition.response_grounding import ResponseGrounding
 from app.utils.logger import app_logger
 
 class CognitivePipeline:
@@ -43,6 +44,11 @@ class CognitivePipeline:
                 "reason": f"runtime exception: {exc}",
                 "executed_actions": [],
                 "epistemic_presentation": failure_presentation.to_dict(),
+                "grounding": ResponseGrounding(
+                    status="unknown",
+                    supported=False,
+                    unsupported_claims=["the cognitive runtime did not produce a response"],
+                ).to_dict(),
             }
         if not isinstance(res, dict):
             app_logger.error(f"CognitiveRuntime returned a non-dict result ({type(res).__name__}).")
@@ -61,6 +67,11 @@ class CognitivePipeline:
                 ),
                 "executed_actions": [],
                 "epistemic_presentation": failure_presentation.to_dict(),
+                "grounding": ResponseGrounding(
+                    status="unknown",
+                    supported=False,
+                    unsupported_claims=["the cognitive runtime returned no structured response"],
+                ).to_dict(),
             }
 
         success = bool(res.get("success"))
@@ -98,6 +109,7 @@ class CognitivePipeline:
             "latency_ms": res.get("latency_ms", 0.0),
             "model_used": res.get("model_used", "fast"),
             "epistemic_presentation": res.get("epistemic_presentation", {}),
+            "grounding": res.get("grounding", {}),
             # Owner review P1 #9: when a loaded FALLBACK model answered
             # (requested model not loaded), the runtime names both models
             # — pass it through so the disclosure survives the bridge.

@@ -43,6 +43,7 @@ from app.cognition.goal_replanner import GoalReplanner
 from app.cognition.resource_allocator import ResourceAllocator
 from app.cognition.confidence_calibrator import ConfidenceCalibrator
 from app.cognition.epistemic_presentation import presentation_for_cycle
+from app.cognition.response_grounding import reconcile_response
 from app.cognition.self_model import SelfModel
 
 def probe_evidence_str(output: Any, budget: int = 300) -> str:
@@ -2382,6 +2383,8 @@ class CognitiveRuntime:
         trace.gate_decision = gate.gate_name
         if not gate.allowed:
             tracker.transition(GoalLifecycleState.BLOCKED, gate.reason)
+            _, blocked_grounding = reconcile_response(gate.reason, observation_evidence="")
+            trace.grounding_result = blocked_grounding.to_dict()
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=gate.reason,
@@ -2407,6 +2410,7 @@ class CognitiveRuntime:
                 "authorization_id": proposal.authorization_id,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
+                "grounding": blocked_grounding.to_dict(),
             }
 
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
@@ -2427,6 +2431,10 @@ class CognitiveRuntime:
                 else "Owner-delegated execution authority passed the gate"
             )
             message = f"{authority_note}, but goal interpretation failed: {exc}"
+            _, interpretation_grounding = reconcile_response(
+                message, observation_evidence=""
+            )
+            trace.grounding_result = interpretation_grounding.to_dict()
             trace.finalize(
                 reply=message,
                 actions=[],
@@ -2453,6 +2461,7 @@ class CognitiveRuntime:
                 "requires_fresh_decision_for_retry": True,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
+                "grounding": interpretation_grounding.to_dict(),
             }
         if success_criteria_override:
             goal_rep.success_conditions = [
@@ -2530,6 +2539,15 @@ class CognitiveRuntime:
             failed_payload=proposal.payload,
         )
         trace.goal_verified = verification.verified_success
+        assistant_reply, execution_grounding = reconcile_response(
+            assistant_reply,
+            observation_evidence=(
+                "; ".join(verification.met_conditions or [])
+                or "verified action outcome"
+                if verification.verified_success else ""
+            ),
+        )
+        trace.grounding_result = execution_grounding.to_dict()
         try:
             agency_evidence = list(verification.met_conditions or [])
             if observation_error:
@@ -2758,6 +2776,7 @@ class CognitiveRuntime:
             gate_decision=gate.gate_name,
             goal_verified=verification.verified_success,
             goal_lifecycle_state=tracker.current_state.value,
+            grounding_result=execution_grounding.to_dict(),
         )
 
         verification_unknown = tracker.current_state == GoalLifecycleState.WAITING_FOR_EVIDENCE
@@ -2787,6 +2806,7 @@ class CognitiveRuntime:
             "trace_id": trace.trace_id,
             "session_id": session_id,
             "model_used": trace.model_used,
+            "grounding": execution_grounding.to_dict(),
             "controlled_execution_id": execution.get("controlled_execution_id"),
             "cancel_requested": execution.get("cancel_requested", False),
             "cancellation_observed": execution.get("cancellation_observed", False),
@@ -3334,6 +3354,11 @@ class CognitiveRuntime:
                     unknown=True,
                     evidence_items=["the local language model was unavailable; no answer was generated"],
                 )
+                assistant_reply, simulated_grounding = reconcile_response(
+                    assistant_reply,
+                    observation_evidence="",
+                )
+                trace.grounding_result = simulated_grounding.to_dict()
                 assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, presentation)
                 latency = (time.time() - start_time) * 1000
                 trace.finalize(
@@ -3362,6 +3387,7 @@ class CognitiveRuntime:
                     "prediction_surprisal": 0.0,
                     "latency_ms": round(latency, 2),
                     "model_used": llm_res.get("model", "fast"),
+                    "grounding": simulated_grounding.to_dict(),
                     "epistemic_presentation": presentation.to_dict(),
                     "llm_available": False,
                 }
@@ -3379,7 +3405,15 @@ class CognitiveRuntime:
                 truth = obs_state.get("execution_truth")
                 if isinstance(truth, dict):
                     truth["results"] = deterministic_answers
-            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)
+            assistant_reply, answer_grounding = reconcile_response(
+                assistant_reply,
+                deterministic_answers=deterministic_answers,
+                observation_evidence=observation_evidence,
+            )
+            trace.grounding_result = answer_grounding.to_dict()
+            verify_res = GoalVerifier.verify_goal_achievement(
+                goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state
+            )
             trace.goal_verified = verify_res.verified_success
             try:
                 self.learning.record_verified_episode(
@@ -3448,6 +3482,7 @@ class CognitiveRuntime:
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast"),
+                "grounding": answer_grounding.to_dict(),
                 "epistemic_presentation": answer_presentation.to_dict(),
                 # Owner review P1 #9: 'observable, never silent' must
                 # hold at the boundary the consumer sees. When a loaded
@@ -3503,7 +3538,18 @@ class CognitiveRuntime:
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
             obs_state = self.capture_observed_world_state([investigation_summary], assistant_reply, goal_rep)
-            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [investigation_summary], assistant_reply, tracker=tracker, observed_state=obs_state)
+            assistant_reply, investigation_grounding = reconcile_response(
+                assistant_reply,
+                observation_evidence=investigation_summary if loop_trace.results else "no results",
+            )
+            trace.grounding_result = investigation_grounding.to_dict()
+            verify_res = GoalVerifier.verify_goal_achievement(
+                goal_rep,
+                [investigation_summary],
+                assistant_reply,
+                tracker=tracker,
+                observed_state=obs_state,
+            )
             trace.goal_verified = verify_res.verified_success
             try:
                 self.learning.record_verified_episode(
@@ -3589,6 +3635,7 @@ class CognitiveRuntime:
                 "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast"),
+                "grounding": investigation_grounding.to_dict(),
                 "epistemic_presentation": investigation_presentation.to_dict(),
                 # Owner review P1 #9: fallback disclosure at the boundary
                 # (same contract as the ANSWER branch above).
@@ -3653,6 +3700,11 @@ class CognitiveRuntime:
                 evidence_items=[reason],
                 action_type="defer",
             )
+            defer_msg, defer_grounding = reconcile_response(
+                defer_msg,
+                observation_evidence="",
+            )
+            trace.grounding_result = defer_grounding.to_dict()
             defer_msg = _apply_epistemic_presentation(trace, defer_msg, defer_presentation)
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -3689,6 +3741,7 @@ class CognitiveRuntime:
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": "ReasoningCycle",
+                "grounding": defer_grounding.to_dict(),
                 "epistemic_presentation": defer_presentation.to_dict(),
             }
 
@@ -3808,6 +3861,11 @@ class CognitiveRuntime:
                 evidence_items=[f"the action gate blocked {proposal.action_type}: {gate_res.reason}"],
                 action_type=proposal.action_type,
             )
+            blocked_msg, blocked_grounding = reconcile_response(
+                blocked_msg,
+                observation_evidence="",
+            )
+            trace.grounding_result = blocked_grounding.to_dict()
             blocked_msg = _apply_epistemic_presentation(trace, blocked_msg, blocked_presentation)
             trace.finalize(
                 reply=blocked_msg,
@@ -3850,6 +3908,7 @@ class CognitiveRuntime:
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": "ActionGate",
+                "grounding": blocked_grounding.to_dict(),
                 "epistemic_presentation": blocked_presentation.to_dict(),
             }
 
@@ -3877,6 +3936,15 @@ class CognitiveRuntime:
             goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker, observed_state=obs_state, failed_payload=proposal.payload
         )
         trace.goal_verified = verify_res.verified_success
+        assistant_reply, action_grounding = reconcile_response(
+            assistant_reply,
+            observation_evidence=(
+                "; ".join(verify_res.met_conditions or [])
+                or "verified action outcome"
+                if verify_res.verified_success else ""
+            ),
+        )
+        trace.grounding_result = action_grounding.to_dict()
         try:
             evidence = list(verify_res.met_conditions or [])
             agent_res["agency_attribution"] = self.self_knowledge.attribute_change(
@@ -4056,6 +4124,19 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"EventBus sync warning: {e}")
 
+        # Reconcile the final reply after any bounded Plan B attempt. This is
+        # intentionally conservative: it only repairs deterministic or explicit
+        # empty-observation contradictions and otherwise leaves model prose intact.
+        assistant_reply, action_grounding = reconcile_response(
+            assistant_reply,
+            observation_evidence=(
+                "; ".join(verify_res.met_conditions or [])
+                or "verified action outcome"
+                if verify_res.verified_success else ""
+            ),
+        )
+        trace.grounding_result = action_grounding.to_dict()
+
         # Preserve the same conservative observation test used at the response
         # boundary: a non-empty wrapper or the model's prose is not proof that
         # the environment was observed.
@@ -4083,6 +4164,7 @@ class CognitiveRuntime:
         assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, action_presentation)
 
         latency = (time.time() - start_time) * 1000
+        trace.model_used = agent_res.get("model_used", "fast")
         trace.finalize(
             reply=assistant_reply,
             actions=executed_actions,
@@ -4092,8 +4174,8 @@ class CognitiveRuntime:
             gate_decision=gate_res.gate_name,
             goal_verified=verify_res.verified_success,
             goal_lifecycle_state=tracker.current_state.value,
+            grounding_result=action_grounding.to_dict(),
         )
-        trace.model_used = agent_res.get("model_used", "fast")
 
         app_logger.info(
             f"COGNITIVE RUNTIME TRACE [{trace.trace_id[:8]}] | Session: {session_id} | "
@@ -4256,5 +4338,6 @@ class CognitiveRuntime:
             "boundary_event": agent_res.get("boundary_event"),
             "os_grounding": agent_res.get("os_grounding"),
             "model_used": trace.model_used,
+            "grounding": action_grounding.to_dict(),
             "epistemic_presentation": action_presentation.to_dict()
         }

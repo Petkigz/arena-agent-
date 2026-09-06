@@ -333,6 +333,7 @@ class MessageRouter:
                         "conversation_id": conversation_id,
                         "trace_id": runtime_result.get("trace_id"),
                         "epistemic_presentation": runtime_result.get("epistemic_presentation", {}),
+                        "grounding": runtime_result.get("grounding", {}),
                     })
 
                 # Surface the exact pending scope to the owner. This event is only a

@@ -194,9 +194,15 @@ class GroundedIntrospection:
                 # it whenever a new runtime trace provides it.
                 columns = {item[1] for item in conn.execute("PRAGMA table_info(cognitive_traces)").fetchall()}
                 presentation_row = None
+                grounding_row = None
                 if "epistemic_presentation_json" in columns:
                     presentation_row = conn.execute(
                         "SELECT epistemic_presentation_json FROM cognitive_traces WHERE trace_id=?",
+                        (trace_id,),
+                    ).fetchone()
+                if "grounding_result_json" in columns:
+                    grounding_row = conn.execute(
+                        "SELECT grounding_result_json FROM cognitive_traces WHERE trace_id=?",
                         (trace_id,),
                     ).fetchone()
             except sqlite3.Error as exc:
@@ -212,6 +218,14 @@ class GroundedIntrospection:
                     epistemic_presentation = parsed
             except (TypeError, ValueError):
                 epistemic_presentation = {}
+        grounding: Dict[str, Any] = {}
+        if grounding_row and grounding_row[0]:
+            try:
+                parsed = json.loads(grounding_row[0])
+                if isinstance(parsed, dict):
+                    grounding = parsed
+            except (TypeError, ValueError):
+                grounding = {}
         facts = {
             "trace_id": row[0], "session_id": row[1], "request": row[2],
             "actions": actions, "model_used": row[4], "gate_decision": row[5],
@@ -235,10 +249,21 @@ class GroundedIntrospection:
             explanation.append(f"User-facing epistemic status: {label}.")
             if basis:
                 explanation.append(f"Recorded evidence basis: {basis[0]}")
+        if grounding:
+            facts["grounding"] = grounding
+            grounding_status = grounding.get("status", "unknown")
+            explanation.append(f"Response grounding status: {grounding_status}.")
+            for fact in grounding.get("authoritative_facts") or []:
+                explanation.append(f"Authoritative response evidence: {fact}")
+            if grounding.get("recovery_applied"):
+                explanation.append(
+                    "The response was conservatively corrected to match authoritative evidence."
+                )
         return {
             "success": True,
             "facts": facts,
             "epistemic_presentation": epistemic_presentation,
+            "grounding": grounding,
             "explanation": explanation,
             "unknowns": [
                 "Private chain-of-thought is not available or claimed.",
