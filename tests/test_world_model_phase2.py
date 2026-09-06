@@ -230,6 +230,31 @@ class TestTemporalReasoning:
         firefox_stale = [o for o in stale if o.subject == "firefox"]
         assert len(firefox_stale) == 0
 
+    def test_entity_state_status_distinguishes_current_stale_and_unknown(self, tmp_path):
+        wm = WorldModel(str(tmp_path / "wm.db"))
+        now = datetime.now(timezone.utc)
+        wm.observe(Observation(
+            id="obs_current", subject="current", predicate="status",
+            value="running", source="probe",
+            observed_at=(now - timedelta(minutes=5)).isoformat(),
+        ))
+        wm.observe(Observation(
+            id="obs_stale", subject="old", predicate="status",
+            value="running", source="probe",
+            observed_at=(now - timedelta(hours=72)).isoformat(),
+        ))
+
+        current = wm.entity_state_status("current", now=now)
+        stale = wm.entity_state_status("old", now=now)
+        unknown = wm.entity_state_status("missing", now=now)
+
+        assert current["status"] == "current"
+        assert current["is_stale"] is False
+        assert stale["status"] == "stale"
+        assert stale["currently_unobserved"] is True
+        assert unknown["status"] == "unknown"
+        assert unknown["currently_unobserved"] is True
+
 
 # ── 2D: Contradiction Detection ──────────────────────────────────────
 

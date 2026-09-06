@@ -352,7 +352,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 ### Deliverables
 
 - Extend `WorldModel` into a typed entity/relation/state-history layer.
-- Add observation freshness and `currently_unobserved` semantics.
+- Add observation freshness and `currently_unobserved` semantics. **Implemented for WorldModel state reads and runtime capture:** current observations are eligible evidence, stale observations remain queryable history but surface as `UNKNOWN`/`currently_unobserved`.
 - Add a versioned `UserState` with provenance and confidence.
 - Extend `social_cognition.py` with bounded nested mental-state records and false-belief test fixtures.
 - Add temporal state for conversation turns, deadlines, intervals, and before/after queries.

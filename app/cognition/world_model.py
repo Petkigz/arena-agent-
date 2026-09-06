@@ -79,6 +79,7 @@ class WorldModel:
     # Keys that represent environmental state and must NOT appear in entity attributes.
     # These belong exclusively in Observations where provenance is enforced.
     ENTITY_STATE_KEYS = frozenset({"status", "source", "observation_type"})
+    DEFAULT_OBSERVATION_MAX_AGE_HOURS = 48.0
 
     def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = db_path or str(settings.DB_PATH)
@@ -180,25 +181,70 @@ class WorldModel:
         return self._entity(row) if row else None
 
     def get_entity_state(self, entity_name: str,
-                          predicate: str = "status") -> Optional[Dict[str, Any]]:
+                          predicate: str = "status",
+                          max_age_hours: Optional[float] = None,
+                          now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
         """
         Derive entity state from the latest Observation, not from entity attributes.
 
         This is the authoritative way to read environmental state for an entity.
-        Returns None if no observation exists (state is unknown).
+        Returns None if no observation exists (state is unknown). When
+        ``max_age_hours`` is supplied, freshness is explicit in the result;
+        stale observations remain available for history but are not current
+        environmental evidence.
 
         Returns dict with: value, source, confidence, observation_type, observed_at
+        and, when freshness is requested, age_seconds, is_stale, and
+        currently_unobserved.
         """
         obs = self.latest_observation(entity_name, predicate)
         if obs is None:
             return None
-        return {
+        state = {
             "value": obs.value,
             "source": obs.source,
             "confidence": obs.confidence,
             "observation_type": obs.observation_type,
             "observed_at": obs.observed_at,
         }
+        if max_age_hours is not None:
+            if max_age_hours < 0:
+                raise ValueError("max_age_hours must be non-negative")
+            current = now or datetime.now(timezone.utc)
+            if current.tzinfo is None:
+                current = current.replace(tzinfo=timezone.utc)
+            try:
+                observed_at = datetime.fromisoformat(str(obs.observed_at))
+                if observed_at.tzinfo is None:
+                    observed_at = observed_at.replace(tzinfo=timezone.utc)
+                age_seconds = max(0.0, (current - observed_at).total_seconds())
+                is_stale = age_seconds > float(max_age_hours) * 3600.0
+            except (TypeError, ValueError, OverflowError):
+                age_seconds = None
+                is_stale = True
+            state.update({
+                "age_seconds": age_seconds,
+                "is_stale": is_stale,
+                "currently_unobserved": is_stale,
+            })
+        return state
+
+    def entity_state_status(self, entity_name: str,
+                            predicate: str = "status",
+                            max_age_hours: float = DEFAULT_OBSERVATION_MAX_AGE_HOURS,
+                            now: Optional[datetime] = None) -> Dict[str, Any]:
+        """Return an explicit current/stale/unknown state classification."""
+        state = self.get_entity_state(
+            entity_name, predicate, max_age_hours=max_age_hours, now=now
+        )
+        if state is None:
+            return {
+                "status": "unknown",
+                "currently_unobserved": True,
+                "is_stale": False,
+            }
+        state["status"] = "stale" if state.get("is_stale") else "current"
+        return state
 
     def find_entities(self, name: Optional[str] = None, entity_type: Optional[str] = None) -> List[Entity]:
         query, params = "SELECT * FROM world_entities WHERE 1=1", []
@@ -374,7 +420,7 @@ class WorldModel:
                                                curr.observed_at, curr.source, curr.confidence, curr.id))
         return changes[:limit]
 
-    def stale_observations(self, max_age_hours: float = 48.0,
+    def stale_observations(self, max_age_hours: float = DEFAULT_OBSERVATION_MAX_AGE_HOURS,
                            subject: Optional[str] = None) -> List[Observation]:
         """Find observations whose latest value is older than max_age_hours."""
         now = datetime.now(timezone.utc)

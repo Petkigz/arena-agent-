@@ -1817,16 +1817,42 @@ class CognitiveRuntime:
         so GoalVerifier can enforce universal provenance validation.
         """
         entities_data = []
+        freshness_window_hours = getattr(
+            self.world, "DEFAULT_OBSERVATION_MAX_AGE_HOURS", 48.0
+        )
+
+        def _fresh_entity_state(entity_name: str) -> Optional[Dict[str, Any]]:
+            """Return only current observations; stale state stays UNKNOWN."""
+            states = []
+            for predicate in ("status", "process_status"):
+                state = self.world.get_entity_state(
+                    entity_name,
+                    predicate,
+                    max_age_hours=freshness_window_hours,
+                )
+                if state is not None:
+                    states.append(state)
+                    if not state.get("is_stale"):
+                        return state
+            return states[0] if states else None
+
         try:
             entities = self.world.find_entities()[:15]
             for ent in entities:
-                latest_obs = self.world.latest_observation(ent.name, "status") or self.world.latest_observation(ent.name, "process_status")
-                if latest_obs:
-                    # Authoritative: use the structured observation record
-                    real_status = str(latest_obs.value)
-                    obs_source = latest_obs.source
-                    obs_type = getattr(latest_obs, "observation_type", "direct")
-                    obs_conf = latest_obs.confidence
+                observed_state = _fresh_entity_state(ent.name)
+                if observed_state and not observed_state.get("is_stale"):
+                    # Authoritative: use the structured, fresh observation.
+                    real_status = str(observed_state["value"])
+                    obs_source = observed_state["source"]
+                    obs_type = observed_state.get("observation_type", "direct")
+                    obs_conf = observed_state["confidence"]
+                elif observed_state:
+                    # Historical data remains available, but stale state is
+                    # not current environmental evidence.
+                    real_status = "unknown"
+                    obs_source = "stale_observation"
+                    obs_type = "unknown"
+                    obs_conf = 0.0
                 else:
                     # No observation exists for this entity — state is UNKNOWN.
                     # Do NOT inherit entity attributes as provenance. Entity attributes
@@ -1851,12 +1877,17 @@ class CognitiveRuntime:
 
         if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
             for e in goal_rep.entities:
-                latest_obs = self.world.latest_observation(e, "status") or self.world.latest_observation(e, "process_status")
-                if latest_obs:
-                    ent_status = str(latest_obs.value)
-                    obs_source = latest_obs.source
-                    obs_type = getattr(latest_obs, "observation_type", "direct")
-                    obs_conf = latest_obs.confidence
+                observed_state = _fresh_entity_state(e)
+                if observed_state and not observed_state.get("is_stale"):
+                    ent_status = str(observed_state["value"])
+                    obs_source = observed_state["source"]
+                    obs_type = observed_state.get("observation_type", "direct")
+                    obs_conf = observed_state["confidence"]
+                elif observed_state:
+                    ent_status = "unknown"
+                    obs_source = "stale_observation"
+                    obs_type = "unknown"
+                    obs_conf = 0.0
                 else:
                     ent_status = "unknown"
                     obs_source = "not_observed"
@@ -1876,6 +1907,16 @@ class CognitiveRuntime:
         try:
             obs = self.world.recent_observations(limit=25)
             for o in obs:
+                state = self.world.get_entity_state(
+                    o.subject,
+                    o.predicate,
+                    max_age_hours=freshness_window_hours,
+                )
+                # Only the latest fresh observation may enter verification
+                # evidence. Historical/stale rows remain queryable through
+                # WorldModel history but cannot satisfy current conditions.
+                if not state or state.get("is_stale") or state.get("observed_at") != o.observed_at:
+                    continue
                 key = f"{o.subject}.{o.predicate}"
                 if key not in obs_data:
                     obs_data[key] = {
