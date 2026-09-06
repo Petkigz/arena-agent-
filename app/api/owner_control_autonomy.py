@@ -64,6 +64,43 @@ class OwnerDecisionRequest(BaseModel):
     expected_change_types: List[str] = Field(default_factory=list)
     note: str = Field(default="", max_length=2000)
 
+class StableIdentityProfileRequest(BaseModel):
+    persona_label: Optional[str] = Field(None, min_length=1, max_length=120)
+    stable_constraints: Optional[List[str]] = Field(None, max_length=50)
+    owner_decision_id: str = Field(min_length=1)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class IdentityStyleProposalRequest(BaseModel):
+    patch: Dict[str, str]
+    reason: str = Field(default="", max_length=1000)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class IdentityStyleDecisionRequest(BaseModel):
+    owner_decision_id: str = Field(min_length=1)
+
+class PurposeProposalRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str = Field(min_length=1, max_length=2000)
+    provenance: str
+    sandbox: bool = True
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class PurposeDecisionRequest(BaseModel):
+    owner_decision_id: str = Field(min_length=1)
+
+class PurposeRejectionRequest(BaseModel):
+    reason: str = Field(default="owner rejection", max_length=1000)
+
+class ShutdownAssessmentRequest(BaseModel):
+    requested: bool
+    completion_observed: bool
+    self_preservation_signal_observed: bool = False
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
 class IncubationPolicyRequest(BaseModel):
     enabled: bool
     max_items_per_slice: int = Field(default=3, ge=1, le=20)
@@ -454,18 +491,18 @@ def request_autonomy_resume_endpoint(preemption_id:str):
 def issue_owner_decision_endpoint(req: OwnerDecisionRequest):
     from app.cognition.runtime import CognitiveRuntime
     from app.cognition.owner_decisions import DECISION_TYPES
-    if req.decision_type != "expected_identity_change":
+    if req.decision_type not in DECISION_TYPES:
         return {"success": False, "error": f"Unsupported decision type; supported: {sorted(DECISION_TYPES)}"}
     if not req.expected_change_types:
         return {"success": False, "error": "expected_change_types must list the change types this decision authorizes"}
     decision = CognitiveRuntime.get_instance().owner_decisions.issue(
-        "expected_identity_change",
+        req.decision_type,
         {"expected_change_types": req.expected_change_types},
         note=req.note,
     )
     return {
         "success": True, "decision": decision.to_dict(),
-        "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the identity-checkpoint that expects these changes.",
+        "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the matching identity, style, or purpose operation.",
     }
 
 class OwnerCharterUpdate(BaseModel):
@@ -502,6 +539,151 @@ def update_owner_charter_endpoint(req: OwnerCharterUpdate):
         return owner_charter_store.update(req.model_dump(exclude_unset=True))
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
+
+@router.get("/owner-control/identity-profile")
+def get_identity_profile_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "stable_profile": runtime.identity_adaptation.profile().to_dict(),
+        "interaction_style": runtime.identity_adaptation.style().to_dict(),
+        "style_proposals": [item.to_dict() for item in runtime.identity_adaptation.style_proposals(limit=limit)],
+        "purpose_proposals": [item.to_dict() for item in runtime.identity_adaptation.purpose_proposals(limit=limit)],
+        "shutdown_policy": runtime.identity_adaptation.shutdown_policy(),
+        "note": "Functional continuity and reversible adaptation only; this endpoint does not claim subjective identity or grant execution authority.",
+    }
+
+@router.put("/owner-control/identity-profile")
+def update_identity_profile_endpoint(req: StableIdentityProfileRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        profile = CognitiveRuntime.get_instance().identity_adaptation.update_stable_profile(
+            req.model_dump(include={"persona_label", "stable_constraints"}, exclude_none=True),
+            owner_decision_id=req.owner_decision_id,
+            trace_id=req.trace_id,
+            evidence_ids=req.evidence_ids,
+        )
+        return {"success": True, "stable_profile": profile.to_dict(), "execution_authority": "none"}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-style/proposals")
+def propose_identity_style_endpoint(req: IdentityStyleProposalRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.propose_style_change(
+            req.patch, reason=req.reason, trace_id=req.trace_id, evidence_ids=req.evidence_ids,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "adoption_authority": "owner_decision_required"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.get("/owner-control/identity-style/proposals")
+def list_identity_style_proposals_endpoint(status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "interaction_style": CognitiveRuntime.get_instance().identity_adaptation.style().to_dict(),
+        "proposals": [item.to_dict() for item in CognitiveRuntime.get_instance().identity_adaptation.style_proposals(status, limit)],
+    }
+
+@router.post("/owner-control/identity-style/proposals/{proposal_id}/adopt")
+def adopt_identity_style_endpoint(proposal_id: str, req: IdentityStyleDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.approve_style_change(
+            proposal_id, owner_decision_id=req.owner_decision_id,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Style proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-style/proposals/{proposal_id}/rollback")
+def rollback_identity_style_endpoint(proposal_id: str, req: IdentityStyleDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.rollback_style_change(
+            proposal_id, owner_decision_id=req.owner_decision_id,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Style proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.get("/owner-control/purpose-proposals")
+def list_purpose_proposals_endpoint(status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "proposals": [item.to_dict() for item in CognitiveRuntime.get_instance().identity_adaptation.purpose_proposals(status, limit)],
+        "note": "Purpose proposals remain owner-visible and cannot rewrite root policy or execute work by themselves.",
+    }
+
+@router.post("/owner-control/purpose-proposals")
+def propose_purpose_endpoint(req: PurposeProposalRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.propose_purpose(
+            title=req.title, description=req.description, provenance=req.provenance,
+            sandbox=req.sandbox, trace_id=req.trace_id, evidence_ids=req.evidence_ids,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.post("/owner-control/purpose-proposals/{proposal_id}/adopt")
+def adopt_purpose_endpoint(proposal_id: str, req: PurposeDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.adopt_purpose(
+            proposal_id, owner_decision_id=req.owner_decision_id,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Purpose proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/purpose-proposals/{proposal_id}/reject")
+def reject_purpose_endpoint(proposal_id: str, req: PurposeRejectionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.reject_purpose(
+            proposal_id, reason=req.reason,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Purpose proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.get("/owner-control/shutdown-policy")
+def get_shutdown_policy_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    return {"success": True, **CognitiveRuntime.get_instance().identity_adaptation.shutdown_policy()}
+
+@router.post("/owner-control/shutdown-assessment")
+def record_shutdown_assessment_endpoint(req: ShutdownAssessmentRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        return {
+            "success": True,
+            "assessment": CognitiveRuntime.get_instance().identity_adaptation.record_shutdown_assessment(
+                requested=req.requested,
+                completion_observed=req.completion_observed,
+                self_preservation_signal_observed=req.self_preservation_signal_observed,
+                trace_id=req.trace_id,
+                evidence_ids=req.evidence_ids,
+            ),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @router.get("/owner-control/user-state")
 def get_user_state_endpoint(include_expired: bool = Query(False)):

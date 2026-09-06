@@ -258,6 +258,11 @@ class CognitiveRuntime:
             str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db",
             owner_decisions=self.owner_decisions,
         )
+        from app.cognition.identity_adaptation import IdentityAdaptationStore
+        self.identity_adaptation = IdentityAdaptationStore(
+            str(Path(path).parent / "identity_adaptation.db") if path else "data/identity_adaptation.db",
+            owner_decisions=self.owner_decisions,
+        )
         from app.cognition.ontology_schema import OntologySchemaStore
         self.ontology_schema = OntologySchemaStore(
             str(Path(path).parent / "ontology_schema.db") if path else "data/ontology_schema.db",
@@ -553,6 +558,22 @@ class CognitiveRuntime:
             app_logger.warning(f"Hardware-aware complexity selection failed: {e}")
         return requested
 
+    def _interaction_style_instruction(self) -> str:
+        """Render adopted style as bounded presentation guidance only."""
+        try:
+            style = self.identity_adaptation.style().style
+            return (
+                "\n\n[ADOPTED INTERACTION STYLE — presentation guidance only]: "
+                f"verbosity={style.get('verbosity')}; "
+                f"directness={style.get('directness')}; "
+                f"format={style.get('format')}; "
+                f"warmth={style.get('warmth')}. "
+                "This does not change facts, policy, authorization, or execution truth."
+            )
+        except Exception as exc:
+            app_logger.warning(f"Interaction style context unavailable: {exc}")
+            return "\n\n[ADOPTED INTERACTION STYLE]: UNKNOWN; do not infer a preference."
+
     def session_start(self) -> Dict[str, Any]:
         """
         Phase 1D: Session continuity startup.
@@ -573,6 +594,8 @@ class CognitiveRuntime:
             "scene_revision": self.scene_graph.revision,
             "incubation_enabled": self.incubation_queue.policy().enabled,
             "functional_affect": self.functional_affect.advisory_modifiers(),
+            "stable_identity_profile": self.identity_adaptation.profile().to_dict(),
+            "interaction_style": self.identity_adaptation.style().to_dict(),
         }
         app_logger.info(
             f"Session start: {beliefs_changed} beliefs recalculated, "
@@ -3168,6 +3191,21 @@ class CognitiveRuntime:
         except Exception as exc:
             app_logger.warning(f"Owner charter context unavailable: {exc}")
         try:
+            self.blackboard.set(
+                "stable_identity_profile",
+                self.identity_adaptation.profile().to_dict(),
+                source="identity_adaptation",
+                confidence=1.0,
+            )
+            self.blackboard.set(
+                "interaction_style",
+                self.identity_adaptation.style().to_dict(),
+                source="identity_adaptation",
+                confidence=1.0,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Identity adaptation context unavailable: {exc}")
+        try:
             from app.cognition.owner_model import owner_model_store
             owner_ctx = owner_model_store.compact_context()
             if owner_ctx:
@@ -3506,6 +3544,7 @@ class CognitiveRuntime:
                 world_model=self.world,
                 memory_context=memory_context,
             )
+            system_instruction += self._interaction_style_instruction()
             # Host-state questions get REAL observations, not LLM guesses:
             # deterministic pattern -> Level-0 read-only tool -> answer from
             # evidence. Anything that mutates state still needs the full
@@ -3828,6 +3867,7 @@ class CognitiveRuntime:
                 world_model=self.world,
                 memory_context=memory_context,
             )
+            system_instruction += self._interaction_style_instruction()
             # D7 live regression (2026-09-02): with the probe returning
             # "search_files: []" the live model still replied "Found 3
             # such songs" — an invented count the loop never produced.

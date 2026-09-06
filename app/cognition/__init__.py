@@ -24,6 +24,14 @@ from .incubation_queue import (
 )
 from .consolidation import ConsolidationCoordinator, ConsolidationError, ConsolidationRun
 from .functional_affect import AffectVector, FunctionalAffectError, FunctionalAffectStore
+from .identity_adaptation import (
+    IdentityAdaptationError,
+    IdentityAdaptationStore,
+    InteractionStyleState,
+    PurposeProposal,
+    StableIdentityProfile,
+    StyleAdaptationProposal,
+)
 from .phase7_preferences import (
     CuriosityAssessment,
     NoveltyAssessment,
@@ -70,6 +78,12 @@ __all__ = [
     "AffectVector",
     "FunctionalAffectError",
     "FunctionalAffectStore",
+    "IdentityAdaptationError",
+    "IdentityAdaptationStore",
+    "InteractionStyleState",
+    "PurposeProposal",
+    "StableIdentityProfile",
+    "StyleAdaptationProposal",
     "CuriosityAssessment",
     "NoveltyAssessment",
     "Phase7AssessmentStore",
