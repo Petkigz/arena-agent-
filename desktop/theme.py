@@ -1,20 +1,36 @@
-"""Theme — mirrors frontend index.css dark + light palettes.
+"""Theme — the desktop client's palette and Beanie presence states.
 
-Extracted from desktop/app.py monolith (P2 code-quality fix).
+Colors and presence states come from the shared design system
+(design/tokens.json) via desktop.design_tokens — the SAME file the web client
+(frontend/src/design/tokens.ts) imports — so the two clients cannot drift
+apart. The embedded fallbacks below exist only so a packaged/frozen desktop
+binary still starts if the JSON cannot be located; tests/test_design_tokens.py
+pins the fallbacks to the canonical values so even that path cannot rot.
+
+Canonical values (round-21, owner directive): the WEB client is the visual
+reference. Two historical desktop drifts are intentionally corrected here:
+dark TEXT_SECONDARY/TEXT_MUTED were one shade lighter than the web palette,
+and the light theme carried an accent override the web does not have.
 """
 
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtGui import QColor
 
-THEME_COLORS = {
+logger = logging.getLogger(__name__)
+
+# Last-resort fallbacks for when design/tokens.json is unavailable (packaged
+# binary). MUST equal the canonical tokens — enforced by tests.
+_FALLBACK_THEME_COLORS = {
     "dark": {
         "BG_PRIMARY": "#0F172A",
         "BG_SECONDARY": "#1E293B",
         "BG_SURFACE": "#334155",
         "TEXT_PRIMARY": "#F1F5F9",
-        "TEXT_SECONDARY": "#CBD5E1",
-        "TEXT_MUTED": "#94A3B8",
+        "TEXT_SECONDARY": "#94A3B8",
+        "TEXT_MUTED": "#64748B",
         "ACCENT": "#3B82F6",
     },
     "light": {
@@ -24,9 +40,49 @@ THEME_COLORS = {
         "TEXT_PRIMARY": "#1E293B",
         "TEXT_SECONDARY": "#475569",
         "TEXT_MUTED": "#64748B",
-        "ACCENT": "#2563EB",
+        "ACCENT": "#3B82F6",
     },
 }
+_FALLBACK_PRESENCE_COLORS = {
+    "idle": "#3B82F6",
+    "working": "#F59E0B",
+    "listening": "#10B981",
+    "speaking": "#8B5CF6",
+    "offline": "#334155",
+    "thinking": "#F59E0B",
+    "acting": "#38BDF8",
+    "observing": "#38BDF8",
+    "success": "#10B981",
+    "error": "#EF4444",
+    "sleeping": "#334155",
+}
+_FALLBACK_PRESENCE_DURATIONS = {
+    "idle": 3400,
+    "working": 1600,
+    "listening": 1200,
+    "speaking": 1050,
+    "offline": 0,
+    "thinking": 1600,
+    "acting": 2000,
+    "observing": 2000,
+    "success": 2000,
+    "error": 400,
+    "sleeping": 5000,
+}
+
+try:
+    from desktop.design_tokens import PRESENCE_COLORS, PRESENCE_DURATIONS, THEME_COLORS
+
+    _TOKENS_LOADED = True
+except Exception:  # pragma: no cover - packaged binary without design/tokens.json
+    logger.warning(
+        "design/tokens.json unavailable; using embedded fallback palette "
+        "(should only happen in packaged builds — run from the repo to pick up the shared design system)"
+    )
+    THEME_COLORS = _FALLBACK_THEME_COLORS
+    PRESENCE_COLORS = _FALLBACK_PRESENCE_COLORS
+    PRESENCE_DURATIONS = _FALLBACK_PRESENCE_DURATIONS
+    _TOKENS_LOADED = False
 
 BG_PRIMARY = THEME_COLORS["dark"]["BG_PRIMARY"]
 BG_SECONDARY = THEME_COLORS["dark"]["BG_SECONDARY"]
@@ -83,34 +139,6 @@ def _resolved_theme_name(name: str) -> str:
     if n in ("system", "auto"):
         return "dark" if _is_system_dark() else "light"
     return n if n in THEME_COLORS else "dark"
-
-
-PRESENCE_COLORS = {
-    "idle": "#3B82F6",
-    "working": "#F59E0B",
-    "listening": "#10B981",
-    "speaking": "#8B5CF6",
-    "offline": "#334155",
-    "thinking": "#F59E0B",
-    "acting": "#38BDF8",
-    "observing": "#38BDF8",
-    "success": "#10B981",
-    "error": "#EF4444",
-    "sleeping": "#334155",
-}
-PRESENCE_DURATIONS = {
-    "idle": 3400,
-    "working": 1600,
-    "listening": 1200,
-    "speaking": 1050,
-    "offline": 0,
-    "thinking": 1600,
-    "acting": 2000,
-    "observing": 2000,
-    "success": 2000,
-    "error": 400,
-    "sleeping": 5000,
-}
 
 
 def _lighten(hex_color: str, factor: float = 0.6) -> QColor:

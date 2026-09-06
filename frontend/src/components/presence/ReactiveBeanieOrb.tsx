@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from 'react';
 import { cn } from '../../utils/cn';
-import type { PresenceStatus } from '../../types/presence';
+import { BEANIE_STATES, type BeanieOrbStatus } from '../../design/tokens';
+
+export type { BeanieOrbStatus };
 
 /**
  * Extended cognitive/voice states beyond the wire `PresenceStatus`. The orb is
@@ -8,29 +10,10 @@ import type { PresenceStatus } from '../../types/presence';
  * idle breathing, listening (mic-reactive), thinking (circulating), acting
  * (directional sweep), observing (scan), speaking (outward TTS waves), success
  * (ripple), error (disturbance), sleeping (dim).
+ *
+ * Colors come from the shared design system (design/tokens.json) — the same
+ * file the desktop client reads — so the presence palette cannot drift.
  */
-export type BeanieOrbStatus =
-  | PresenceStatus
-  | 'thinking'
-  | 'acting'
-  | 'observing'
-  | 'success'
-  | 'error'
-  | 'sleeping';
-
-const COLORS: Record<BeanieOrbStatus, string> = {
-  idle: '#3B82F6', // blue — slow breath
-  working: '#F59E0B', // amber — fast pulse
-  listening: '#10B981', // green — mic reactive
-  speaking: '#8B5CF6', // purple — outward TTS waves
-  offline: '#334155', // gray — inert
-  thinking: '#F59E0B', // amber — circulating layers
-  acting: '#38BDF8', // sky — directional sweep (tool use)
-  observing: '#38BDF8', // sky — scanning (vision)
-  success: '#10B981', // green — ripple
-  error: '#EF4444', // red — disturbance
-  sleeping: '#334155', // gray — almost still
-};
 
 // Base radii in the 120×120 viewBox (center 60,60). Core sits inside ring 0.
 const CORE_R = 24;
@@ -73,7 +56,7 @@ export function ReactiveBeanieOrb({
   const gradCore = 'core-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const gradHalo = 'halo-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
-  const color = COLORS[status] ?? COLORS.idle;
+  const color = BEANIE_STATES[status]?.color ?? BEANIE_STATES.idle.color;
   const full = showField ?? size !== 'sm';
 
   const levelRef = useRef(level);

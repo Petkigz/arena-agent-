@@ -1,4 +1,16 @@
 /** @type {import('tailwindcss').Config} */
+// Design tokens: design/tokens.json is the SINGLE SOURCE OF TRUTH shared with
+// the desktop client (desktop/design_tokens.py). Never hardcode hex colors
+// here — derive them from the tokens so the two clients cannot drift.
+import tokens from '../design/tokens.json';
+
+// Full 11-state Beanie presence palette (previously only 4 states existed here).
+const presenceColors = Object.fromEntries(
+  Object.entries(tokens.beanie.states).map(([state, spec]) => [state, spec.color]),
+);
+const accentColors = tokens.color.accent;
+const darkBackground = tokens.color.themes.dark.background;
+
 export default {
   content: [
     "./index.html",
@@ -27,24 +39,10 @@ export default {
           secondary: 'var(--color-text-secondary)',
           muted: 'var(--color-text-muted)',
         },
-        accent: {
-          primary: '#3B82F6',    // blue (same in both themes)
-          success: '#10B981',    // green
-          warning: '#F59E0B',    // amber
-          error: '#EF4444',      // red
-        },
-        presence: {
-          idle: '#3B82F6',       // blue, slow pulse
-          working: '#F59E0B',    // amber, fast pulse
-          listening: '#10B981',  // green, pulsing
-          speaking: '#8B5CF6',   // purple, pulsing
-        },
+        accent: accentColors,
+        presence: presenceColors,
         // Legacy dark-only colors for backward compatibility
-        'background-dark': {
-          primary: '#0F172A',
-          secondary: '#1E293B',
-          surface: '#334155',
-        },
+        'background-dark': darkBackground,
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
