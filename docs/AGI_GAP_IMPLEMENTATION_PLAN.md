@@ -6,6 +6,21 @@
 
 This document replaces optimistic phase labels with an implementation plan tied to observable behavior. It does not claim consciousness, human-level AGI, or subjective experience.
 
+## Implementation status
+
+**First slice started:** Phase 0 + core Phase 1.
+
+Implemented in the current branch:
+
+- A user-facing epistemic presentation contract with conservative labels: highly confident, moderately confident, tentative, and unknown.
+- Epistemic presentation persistence inside `CognitiveTrace` with backward-compatible SQLite migration.
+- Main cognitive-cycle responses now carry and display an epistemic status for answer, investigation, defer, blocked-action, unavailable-model, and executed-action paths.
+- Existing grounded introspection now reports the persisted epistemic status when available.
+- Pipeline and `/chat` response metadata expose the structured presentation.
+- Initial behavioral tests cover unknown preservation, evidence-derived labels, idempotent rendering, and trace persistence.
+
+The full measurement runner, user correction learning loop, and usefulness feedback store remain the next slices; they are not claimed complete by this status update.
+
 ---
 
 ## 1. Executive summary

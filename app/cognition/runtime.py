@@ -42,6 +42,7 @@ from app.cognition.execution_truth import ExecutionTruth
 from app.cognition.goal_replanner import GoalReplanner
 from app.cognition.resource_allocator import ResourceAllocator
 from app.cognition.confidence_calibrator import ConfidenceCalibrator
+from app.cognition.epistemic_presentation import presentation_for_cycle
 from app.cognition.self_model import SelfModel
 
 def probe_evidence_str(output: Any, budget: int = 300) -> str:
@@ -67,6 +68,12 @@ def probe_evidence_str(output: Any, budget: int = 300) -> str:
             return head[:budget]
         return "; ".join(str(o)[:80] for o in output[:5])[:budget]
     return str(output)[:budget]
+
+
+def _apply_epistemic_presentation(trace: CognitiveTrace, reply: str, presentation: Any) -> str:
+    """Bind a user-facing epistemic summary to the persisted cycle trace."""
+    trace.epistemic_presentation = presentation.to_dict()
+    return presentation.append_to(reply)
 
 
 class CognitiveRuntime:
@@ -3233,6 +3240,12 @@ class CognitiveRuntime:
                     GoalLifecycleState.DEFERRED,
                     "Local language model unavailable; no conversational answer was generated.",
                 )
+                presentation = presentation_for_cycle(
+                    goal_verified=False,
+                    unknown=True,
+                    evidence_items=["the local language model was unavailable; no answer was generated"],
+                )
+                assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, presentation)
                 latency = (time.time() - start_time) * 1000
                 trace.finalize(
                     reply=assistant_reply,
@@ -3260,6 +3273,7 @@ class CognitiveRuntime:
                     "prediction_surprisal": 0.0,
                     "latency_ms": round(latency, 2),
                     "model_used": llm_res.get("model", "fast"),
+                    "epistemic_presentation": presentation.to_dict(),
                     "llm_available": False,
                 }
 
@@ -3296,6 +3310,19 @@ class CognitiveRuntime:
                 session_id=session_id,
                 trace_id=trace.trace_id,
             )
+            answer_presentation = presentation_for_cycle(
+                goal_verified=verify_res.verified_success,
+                environment_observed=bool(observation_evidence),
+                evidence_items=(
+                    ["a direct observation or deterministic result was supplied to the answer"]
+                    if observation_evidence else
+                    ["the answer was generated from the available conversation and memory context"]
+                ),
+                failed=not verify_res.verified_success,
+                unknown=not verify_res.verified_success and not observation_evidence,
+                action_type="formulate_answer",
+            )
+            assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, answer_presentation)
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -3332,6 +3359,7 @@ class CognitiveRuntime:
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast"),
+                "epistemic_presentation": answer_presentation.to_dict(),
                 # Owner review P1 #9: 'observable, never silent' must
                 # hold at the boundary the consumer sees. When a loaded
                 # FALLBACK model answered (the requested model was not
@@ -3418,6 +3446,20 @@ class CognitiveRuntime:
             except Exception as e:
                 app_logger.warning(f"Investigation reflection notice: {e}")
 
+            investigation_presentation = presentation_for_cycle(
+                goal_verified=verify_res.verified_success,
+                environment_observed=bool(loop_trace.results),
+                evidence_items=(
+                    [f"{len(loop_trace.results)} probe result(s) were returned"]
+                    if loop_trace.results else
+                    ["the bounded investigation returned no probe results"]
+                ),
+                failed=not verify_res.verified_success,
+                unknown=not loop_trace.results,
+                action_type="investigate",
+            )
+            assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, investigation_presentation)
+
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=assistant_reply,
@@ -3458,6 +3500,7 @@ class CognitiveRuntime:
                 "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast"),
+                "epistemic_presentation": investigation_presentation.to_dict(),
                 # Owner review P1 #9: fallback disclosure at the boundary
                 # (same contract as the ANSWER branch above).
                 **({"model_fallback": dict(llm_res["model_fallback"])}
@@ -3515,6 +3558,13 @@ class CognitiveRuntime:
                 "wrong domain (e.g. you meant your PC, not your phone), rephrase "
                 "and I'll take another pass."
             )
+            defer_presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[reason],
+                action_type="defer",
+            )
+            defer_msg = _apply_epistemic_presentation(trace, defer_msg, defer_presentation)
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=defer_msg,
@@ -3549,7 +3599,8 @@ class CognitiveRuntime:
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
-                "model_used": "ReasoningCycle"
+                "model_used": "ReasoningCycle",
+                "epistemic_presentation": defer_presentation.to_dict(),
             }
 
         # Branch D: ACT / Action Strategy Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Execution
@@ -3662,6 +3713,13 @@ class CognitiveRuntime:
 
             latency = (time.time() - start_time) * 1000
             blocked_msg = f"Action blocked by {gate_res.gate_name}: {gate_res.reason}"
+            blocked_presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[f"the action gate blocked {proposal.action_type}: {gate_res.reason}"],
+                action_type=proposal.action_type,
+            )
+            blocked_msg = _apply_epistemic_presentation(trace, blocked_msg, blocked_presentation)
             trace.finalize(
                 reply=blocked_msg,
                 actions=[],
@@ -3702,7 +3760,8 @@ class CognitiveRuntime:
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
-                "model_used": "ActionGate"
+                "model_used": "ActionGate",
+                "epistemic_presentation": blocked_presentation.to_dict(),
             }
 
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
@@ -3908,6 +3967,32 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"EventBus sync warning: {e}")
 
+        # Preserve the same conservative observation test used at the response
+        # boundary: a non-empty wrapper or the model's prose is not proof that
+        # the environment was observed.
+        _action_observations = dict((obs_state or {}).get("observations") or {})
+        _action_entity_states = dict((obs_state or {}).get("verified_entity_states") or {})
+        _action_environment_observed = (
+            bool(_action_observations)
+            and _action_observations.get("evidence_source") != "not_observed"
+        ) or any(
+            bool(state) and state != "unknown" for state in _action_entity_states.values()
+        ) or bool(agent_res.get("os_grounding"))
+        action_presentation = presentation_for_cycle(
+            goal_verified=verify_res.verified_success,
+            environment_observed=_action_environment_observed,
+            evidence_items=(
+                list(verify_res.met_conditions or [])[:2]
+                if verify_res.verified_success else
+                list(verify_res.failed_conditions or [])[:2]
+            ),
+            failed=not verify_res.verified_success,
+            unknown=not verify_res.verified_success and not _action_environment_observed,
+            confidence_score=pred.confidence,
+            action_type=final_action_type,
+        )
+        assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, action_presentation)
+
         latency = (time.time() - start_time) * 1000
         trace.finalize(
             reply=assistant_reply,
@@ -4081,5 +4166,6 @@ class CognitiveRuntime:
             "agency_attribution": agent_res.get("agency_attribution"),
             "boundary_event": agent_res.get("boundary_event"),
             "os_grounding": agent_res.get("os_grounding"),
-            "model_used": trace.model_used
+            "model_used": trace.model_used,
+            "epistemic_presentation": action_presentation.to_dict()
         }

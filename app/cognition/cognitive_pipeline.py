@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import Dict, Any, List, Optional
 from app.cognition.runtime import CognitiveRuntime
+from app.cognition.epistemic_presentation import presentation_for_cycle
 from app.utils.logger import app_logger
 
 class CognitivePipeline:
@@ -25,24 +26,41 @@ class CognitivePipeline:
             # The bridge must never manufacture success — a runtime crash is
             # an honest failure with a reason, not a 500 or a fake 'True'.
             app_logger.error(f"CognitiveRuntime raised during process_cognitive_cycle: {exc}")
+            failure_presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[f"the cognitive runtime raised an exception: {type(exc).__name__}"],
+            )
             res = {
                 "request_success": False,
                 "success": False,
                 "execution_success": False,
                 "goal_verified": False,
                 "goal_lifecycle_state": "failed",
-                "assistant_reply": "The cognitive engine failed to process this request.",
+                "assistant_reply": failure_presentation.append_to(
+                    "The cognitive engine failed to process this request."
+                ),
                 "reason": f"runtime exception: {exc}",
                 "executed_actions": [],
+                "epistemic_presentation": failure_presentation.to_dict(),
             }
         if not isinstance(res, dict):
             app_logger.error(f"CognitiveRuntime returned a non-dict result ({type(res).__name__}).")
+            failure_presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=["the cognitive runtime returned no structured result"],
+            )
             res = {
                 "request_success": False,
                 "success": False,
                 "goal_lifecycle_state": "failed",
                 "reason": f"runtime returned {type(res).__name__}, expected dict",
+                "assistant_reply": failure_presentation.append_to(
+                    "The cognitive engine returned an invalid result."
+                ),
                 "executed_actions": [],
+                "epistemic_presentation": failure_presentation.to_dict(),
             }
 
         success = bool(res.get("success"))
@@ -79,6 +97,7 @@ class CognitivePipeline:
             "executed_actions": res.get("executed_actions", []),
             "latency_ms": res.get("latency_ms", 0.0),
             "model_used": res.get("model_used", "fast"),
+            "epistemic_presentation": res.get("epistemic_presentation", {}),
             # Owner review P1 #9: when a loaded FALLBACK model answered
             # (requested model not loaded), the runtime names both models
             # — pass it through so the disclosure survives the bridge.

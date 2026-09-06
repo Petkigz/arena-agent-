@@ -93,7 +93,9 @@ def test_answer_branch_uses_observation_evidence(tmp_path, monkeypatch):
         })
 
     result = runtime.process_cognitive_cycle("how many icons do i have on my desktop?")
-    assert result["assistant_reply"] == "7 icons"
+    assert result["assistant_reply"].startswith("7 icons")
+    assert result["epistemic_presentation"]["confidence_label"] in {"Highly confident", "Moderately confident"}
+    assert "Epistemic status:" in result["assistant_reply"]
     system_prompt = sent_messages[0][0]["content"]
     assert "OBSERVED HOST EVIDENCE" in system_prompt
     assert "7 total desktop entries" in system_prompt  # from the tool, not imagination

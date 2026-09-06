@@ -34,6 +34,7 @@ class CognitiveTrace:
     reflection_lesson: str = ""
     goal_verified: bool = True
     goal_lifecycle_state: str = ""  # e.g. 'achieved', 'waiting_for_evidence', 'deferred'
+    epistemic_presentation: Dict[str, Any] = field(default_factory=dict)
     model_used: str = "fast"
     latency_ms: float = 0.0
     is_finalized: bool = False
@@ -49,6 +50,7 @@ class CognitiveTrace:
         gate_decision: str = "passed",
         goal_verified: bool = True,
         goal_lifecycle_state: str = "",
+        epistemic_presentation: Optional[Dict[str, Any]] = None,
     ):
         self.assistant_reply = reply
         self.actions_executed = actions
@@ -59,6 +61,8 @@ class CognitiveTrace:
         self.goal_verified = goal_verified
         if goal_lifecycle_state:
             self.goal_lifecycle_state = goal_lifecycle_state
+        if epistemic_presentation is not None:
+            self.epistemic_presentation = dict(epistemic_presentation)
         self.is_finalized = True
         self._persist_trace_to_db()
 
@@ -87,6 +91,7 @@ class CognitiveTrace:
                     reflection_lesson TEXT,
                     goal_verified INTEGER,
                     goal_lifecycle_state TEXT,
+                    epistemic_presentation_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL
                 )
             """)
@@ -101,13 +106,14 @@ class CognitiveTrace:
                 ("reflection_lesson", "TEXT"),
                 ("goal_verified", "INTEGER"),
                 ("goal_lifecycle_state", "TEXT"),
+                ("epistemic_presentation_json", "TEXT NOT NULL DEFAULT '{}'"),
             ):
                 if column not in cols:
                     cursor.execute(f"ALTER TABLE cognitive_traces ADD COLUMN {column} {ddl}")
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
-                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trace_id,
                 self.session_id or "default",
@@ -125,6 +131,7 @@ class CognitiveTrace:
                 self.reflection_lesson,
                 1 if self.goal_verified else 0,
                 self.goal_lifecycle_state,
+                json.dumps(self.epistemic_presentation, default=str),
                 self.created_at
             ))
             conn.commit()
