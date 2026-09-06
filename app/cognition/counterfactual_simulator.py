@@ -256,8 +256,20 @@ class CounterfactualSimulator:
         except Exception:
             resource_adj = 1.0
 
-        # Combined adjustment: outcome history × lessons × skill transfer × resources
-        combined_adj = history_adj * lesson_adj * skill_adj * resource_adj
+        # Phase 3: structural analogical evidence is advisory and bounded. It
+        # is deliberately carried outside the executable payload so it cannot
+        # become an authorization or execution claim.
+        analogical_adj = 1.0
+        try:
+            analogical_adj = max(
+                0.88,
+                min(1.12, float(act.get("_analogical_adjustment", 1.0))),
+            )
+        except Exception:
+            analogical_adj = 1.0
+
+        # Combined adjustment: outcome history × lessons × skill transfer × resources × analogies
+        combined_adj = history_adj * lesson_adj * skill_adj * resource_adj * analogical_adj
 
         # 5. Honest surprisal (P0 #14): evidence-derived uncertainty that
         # actually discriminates branches — consistent verified outcomes are
@@ -270,7 +282,14 @@ class CounterfactualSimulator:
         base_utility = 0.5 * goal_fit + 0.3 * (1.0 - risk) + 0.2 * (1.0 - surprisal)
         utility = round(base_utility * combined_adj, 4)
 
-        history_note = f", HistoryAdj={combined_adj:.2f}" if combined_adj != 1.0 else ""
+        history_note = ""
+        if combined_adj != 1.0:
+            history_note = f", HistoryAdj={combined_adj:.2f}"
+        if analogical_adj != 1.0:
+            history_note += f", AnalogyAdj={analogical_adj:.2f}"
+            analogy_reason = str(act.get("_analogical_reason", "")).strip()
+            if analogy_reason:
+                history_note += f" [{analogy_reason}]"
 
         # Classify the authorization requirement without invoking the gate.
         # Simulation/consideration must be side-effect free: even sensitive

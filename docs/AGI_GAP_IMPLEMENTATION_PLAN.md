@@ -27,6 +27,7 @@ Implemented in the current branch:
 - Initial bounded social-state records are now wired into runtime context with evidence-linked nesting, expiry, and explicit false-belief comparison; no subjective mind-reading claim is made.
 - Initial temporal queries are now wired into WorldModel for inclusive intervals, strict before/after retrieval, and explicit ordered/unknown observation relations.
 - Initial Phase 3 retrieval routing is now wired through the active runtime `MemoryStore`: bounded per-kind retrieval keeps episodic, semantic, procedural, and lesson records visible; prompt context labels them as historical evidence; retrieved record metadata is persisted in the cognitive trace. The legacy global RAG adapter remains only for compatibility callers that do not have a runtime store.
+- Structural analogical memory now reaches the active action planner: verified outcomes from similar task signatures apply a small bounded utility adjustment to matching candidates, while approval, execution-truth, and observation gates remain unchanged.
 
 Usefulness feedback remains intentionally unimplemented in this slice; it must be added only through an approved existing extension point rather than a parallel store.
 
@@ -397,7 +398,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 ### Deliverables
 
 - Add retrieval routing across episodic, semantic, procedural, causal, and social memory. **Initial typed routing is implemented for episodic, semantic, procedural, and lesson records through the active runtime store; causal/social retrieval remain separate explicit state paths.**
-- Trigger episodic retrieval from structural similarity, not only lexical overlap. **Initial structural task retrieval remains available through `AnalogicalMemory`; it is not yet fused into the normal prompt context.**
+- Trigger episodic retrieval from structural similarity, not only lexical overlap. **Structural task retrieval now influences action-candidate utility through bounded analogical guidance; it remains advisory and is not execution evidence.**
 - Preserve emotionally relevant outcomes as functional metadata while avoiding claims of felt emotion.
 - Strengthen consolidation:
   - episode → evidence-linked gist;

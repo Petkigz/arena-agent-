@@ -556,6 +556,7 @@ class CognitiveRuntime:
             user_text, complexity=complexity, goal_rep=goal_rep,
             memory_store=self.memory, world_model=self.world, tool_registry=self.registry,
             outcome_store=self.outcomes, lesson_store=self.lessons,
+            analogical_memory=self.analogies,
             hardware_self_model=self.hardware_self_model,
             resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
         )
@@ -4169,6 +4170,7 @@ class CognitiveRuntime:
                 user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory,
                 world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload,
                 lesson_store=self.lessons, outcome_store=self.outcomes,
+                analogical_memory=self.analogies,
                 hardware_self_model=self.hardware_self_model,
                 resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
             )
