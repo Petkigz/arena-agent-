@@ -239,6 +239,9 @@ The phases below are ordered by leverage and safety, not by how impressive the f
   - Compute spent versus task value.
   - Prospective reminder delivery accuracy.
   - Long-horizon project completion and recovery.
+  - User-reported usefulness, both explicit ratings and carefully bounded implicit signals such as follow-up corrections, task completion, abandonment, or requests for clarification.
+  - Correlation between usefulness and answer characteristics such as evidence freshness, confidence label, retrieval choices, latency, and response completeness.
+- Define a feedback event contract so usefulness signals are not confused with correctness: a correct answer can be unhelpful, and a useful answer can be incomplete but appropriately scoped.
 - Keep all probes isolated from the live brain, as the existing measurement isolation work requires.
 
 ### Exit criteria
@@ -272,6 +275,13 @@ The phases below are ordered by leverage and safety, not by how impressive the f
   5. ask, probe, or qualify rather than fabricate synthesis.
 - Add stale-state and hidden-state handling to `WorldModel`.
 - Make hallucination recovery work for answers, tool claims, progress reports, and proactive notifications.
+- Add a user-facing epistemic output contract. Every final answer, recommendation, or action proposal must expose a calibrated uncertainty label unless an explicit safety or interaction policy says otherwise. Labels should be derived from evidence state and calibration data, for example:
+  - **Highly confident** — directly verified or supported by multiple independent reliable observations.
+  - **Moderately confident** — supported by limited or indirect evidence.
+  - **Tentative/speculative** — inferred, simulated, or dependent on unverified assumptions.
+  - **Unknown** — the required evidence is unavailable or contradictory.
+- Keep the numeric confidence or calibration details available in the trace, but present a human-readable explanation to the user rather than an unexplained decimal.
+- Add a user-facing explanation endpoint or response mode that can summarize the evidence, assumptions, relevant memories, alternatives considered, and reason for the decision without exposing hidden chain-of-thought.
 
 ### Exit criteria
 
@@ -279,7 +289,40 @@ The phases below are ordered by leverage and safety, not by how impressive the f
 - A missing observation remains `UNKNOWN`.
 - Contradictory evidence produces a visible revision rather than silent replacement.
 - A generated answer cannot be promoted to verified episodic memory without evidence.
+- Every externally meaningful answer has an appropriately calibrated uncertainty label or an explicit reason why it is omitted.
+- On demand, the user can receive a concise evidence-and-reason explanation for an answer or action proposal.
 - Adversarial tests cover stale, hidden, unavailable, and conflicting states.
+
+---
+
+## Phase 1.b — User-facing epistemic humility and explanations
+
+**Objective:** Turn internal evidence discipline into externally visible trustworthiness.
+
+This is related to Phase 1 but deserves its own acceptance criteria. An internal confidence value is not enough if the user cannot tell whether an answer is verified, inferred, or speculative.
+
+### Deliverables
+
+- Add a response-level `EpistemicPresentation` record containing:
+  - qualitative uncertainty label;
+  - evidence basis;
+  - freshness and source count;
+  - key assumptions;
+  - what would change the conclusion;
+  - whether the response is observed, recalled, inferred, simulated, or unknown.
+- Derive labels from calibrated evidence and task class rather than arbitrary wording rules.
+- Show the label in normal user-facing responses by default, with concise language appropriate to the interaction.
+- Add an on-demand explanation mode such as `Why do you think that?` or `What evidence did you use?`
+- Generate a concise explanation from trace facts, retrieved memories, tool observations, belief revisions, and decision outcomes. Do not expose hidden chain-of-thought or private intermediate reasoning.
+- Support policy-controlled presentation for cases where showing detailed uncertainty would reveal sensitive information, create a security issue, or be inappropriate for a simple low-risk response. The omission itself should be auditable.
+- Measure whether uncertainty labels improve correction speed, trust calibration, and task usefulness rather than merely increasing verbosity.
+
+### Exit criteria
+
+- Users can distinguish verified facts, owner-provided facts, inferences, simulations, and unknowns from the response itself.
+- The system does not call a single weak source “highly confident.”
+- Explanation responses cite concrete evidence and assumptions without fabricating hidden reasoning.
+- A user correction can be traced from the original answer to the revised belief and future strategy behavior.
 
 ---
 
@@ -301,6 +344,15 @@ The phases below are ordered by leverage and safety, not by how impressive the f
   - what Arena thinks the owner knows;
   - what Arena thinks the owner believes;
   - what is merely inferred.
+- Implement a first-class user correction handler for explicit feedback such as “that is wrong,” “I meant X,” or “do not do it that way.” The handler must:
+  1. preserve the original answer and evidence;
+  2. record the correction as owner-provided evidence;
+  3. revise or invalidate the affected belief, interpretation, or plan;
+  4. identify whether the failure was factual, intent-related, retrieval-related, routing-related, or procedural;
+  5. create a structured learning event;
+  6. update the relevant strategy or ambiguity-resolution policy for similar future cases;
+  7. expose the correction and its expected future effect to the owner.
+- Separate a one-off fact correction from a generalization. A correction should not globally rewrite behavior unless repeated evidence or explicit owner instruction supports that change.
 
 ### Exit criteria
 
@@ -309,6 +361,8 @@ The phases below are ordered by leverage and safety, not by how impressive the f
 - A false-belief scenario produces a different answer from a true-belief scenario.
 - Owner-stated preferences override weakly inferred preferences.
 - Social inferences expire or are revised when evidence becomes stale.
+- An explicit user correction changes the immediate state and produces a traceable learning event.
+- Repeated corrections to the same ambiguity change future strategy selection on a held-out example, while a single correction does not cause unsafe overgeneralization.
 
 ---
 
@@ -353,9 +407,10 @@ The phases below are ordered by leverage and safety, not by how impressive the f
   - false confidence;
   - latency and token cost;
   - cases where deliberation worsens a correct fast answer.
-- Add a value-of-compute policy using risk, reversibility, uncertainty, novelty, owner stakes, and expected information gain.
+- Add a value-of-compute policy using risk, reversibility, uncertainty, novelty, owner stakes, expected information gain, and predicted user usefulness.
 - Add a criticality-triggered adversarial review for high-risk, novel, contradictory, or overconfident conclusions.
 - Add bounded hypothesis sets so the system can preserve competing explanations without premature synthesis.
+- Feed validated usefulness feedback into strategy selection only after separating it from correctness, politeness, and user preference effects.
 - Version ontology/schema changes separately from ordinary belief updates.
 - Add migration and rollback for ontology revisions.
 
@@ -366,6 +421,7 @@ The phases below are ordered by leverage and safety, not by how impressive the f
 - Critic invocation is measurable and improves disconfirmation on the target benchmark.
 - The system can maintain two incompatible hypotheses and request evidence instead of inventing a compromise.
 - Schema changes are versioned, testable, and reversible.
+- Helpfulness improves on a held-out task set without increasing unsupported claims, overconfidence, or unnecessary verbosity.
 
 ---
 
@@ -546,6 +602,8 @@ The milestone is complete when the following end-to-end scenarios pass:
 - Conflicting owner and tool evidence creates a revision rather than silent overwrite.
 - A hallucinated action claim cannot enter verified memory.
 - A low-confidence answer either asks, probes, or qualifies itself.
+- The user sees a calibrated uncertainty label on important answers and can request a concise evidence-based explanation.
+- An explicit user correction updates the immediate belief/interpretation and creates a traceable learning event.
 - The trace shows the complete evidence path without exposing hidden chain-of-thought.
 
 After that milestone, implement explicit user/social/world/temporal state before adding more autonomous behavior.
