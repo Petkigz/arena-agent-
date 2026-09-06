@@ -6,6 +6,16 @@ from .events import CognitiveEvent
 from .event_bus import EventBus
 from .checkpoint import CheckpointSchemaError, CognitiveCheckpointStore
 from .ontology_schema import OntologyRevision, OntologySchemaError, OntologySchemaStore
+from .scene_graph import (
+    PhysicsPrediction,
+    PhysicsSimulator,
+    SceneGraph,
+    SceneGraphError,
+    SceneGraphStore,
+    SceneObject,
+    SceneRelation,
+)
+from .scene_causal import SceneCausalReplay, SceneCounterfactual
 from .session import CognitiveSession
 from .verified_reflection import (
     VerifiedReflection,
@@ -25,6 +35,15 @@ __all__ = [
     "OntologyRevision",
     "OntologySchemaError",
     "OntologySchemaStore",
+    "PhysicsPrediction",
+    "PhysicsSimulator",
+    "SceneGraph",
+    "SceneGraphError",
+    "SceneGraphStore",
+    "SceneObject",
+    "SceneRelation",
+    "SceneCausalReplay",
+    "SceneCounterfactual",
     "CognitiveSession",
     "VerifiedReflection",
     "VerifiedReflectionStore",

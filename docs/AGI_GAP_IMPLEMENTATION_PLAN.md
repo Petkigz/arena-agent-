@@ -469,9 +469,10 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
   - ownership and containment;
   - visibility/occlusion;
   - motion and state transitions.
-- Add a lightweight 2D physics layer for supported tasks: gravity, collision, weight, balance, support, and basic friction.
-- Add object permanence tests with hidden objects and partial observations.
-- Connect the causal model to intervention and counterfactual replay.
+  **An initial bounded `SceneGraph`/`SceneGraphStore` is now wired into the runtime with versioned SQLite snapshots, deterministic digests, evidence IDs, support relations, and visible/occluded/unknown states; partial observations never delete omitted objects.**
+- Add a lightweight 2D physics layer for supported tasks: gravity, collision, weight, balance, support, and basic friction. **`PhysicsSimulator` now provides deterministic fixed-step gravity, contact, collision, and support/stability predictions for supported 2D scenes; it is simulation-only and requires observation for real-world claims.**
+- Add object permanence tests with hidden objects and partial observations. **Regression coverage verifies occluded objects remain queryable and unobserved omission becomes `unknown`, not absent.**
+- Connect the causal model to intervention and counterfactual replay. **`SceneCausalReplay` builds support links through the existing causal graph and replays explicit interventions without mutating the baseline scene; outputs are labeled `PREDICTED` and never execution evidence.**
 - Keep the simulator separate from claims about the real environment; simulated results remain simulated until observed.
 - Use existing causal learning and surprisal paths rather than creating a second causal database.
 
