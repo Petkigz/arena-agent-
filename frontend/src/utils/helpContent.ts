@@ -37,7 +37,7 @@ export const mainTutorialSteps: TutorialStep[] = [
     id: 'conversation-list',
     target: '[data-tutorial="conversation-list"]',
     title: 'Your Conversations',
-    content: 'All your conversations are listed here. Click any conversation to open it, or create a new one with the button above.',
+    content: 'Your conversation history, grouped by recency — Today, Yesterday, the previous 7 days, and Older. Click any conversation to open it, or start a new one with the button above.',
     position: 'right',
   },
   {

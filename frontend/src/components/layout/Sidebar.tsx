@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { MessageCircle, Brain, Settings, Plus, File, Code, Image, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Brain, Settings, Plus, File, Code, Image, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/Button';
 import { ConversationFilters } from '../chat/ConversationFilters';
-import { ConversationItem } from '../chat/ConversationItem';
+import { ConversationGroups } from '../chat/ConversationGroups';
+import { BEANIE_STATES } from '../../design/tokens';
 import { useConversationStore, useLayoutStore, usePresenceStore } from '../../stores';
 import { webSocketService } from '../../services/websocket';
 import { ReactiveBeanieOrb } from '../presence/ReactiveBeanieOrb';
@@ -58,12 +59,13 @@ export function Sidebar() {
     removeConversation(id);
   }, [removeConversation]);
 
+  // The tool nav below the history divider (21s reference IA). 'Chats' is not
+  // here on purpose: the conversation history IS the chat navigation.
   const links = useMemo(() => [
-    { to: '/chat', icon: MessageCircle, label: 'Chats' },
     { to: '/pansophy', icon: Brain, label: 'Pansophy' },
+    { to: '/images', icon: Image, label: 'Images' },
     { to: '/files', icon: File, label: 'Files' },
     { to: '/code', icon: Code, label: 'Code' },
-    { to: '/images', icon: Image, label: 'Images' },
     { to: '/settings', icon: Settings, label: 'Settings' },
   ], []);
 
@@ -80,8 +82,11 @@ export function Sidebar() {
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Beanie presence orb with real connection status */}
+      {/* Brand + Beanie presence orb with real connection status */}
       <div className="p-4 border-b border-border-subtle" data-tutorial="presence-orb">
+        {!sidebarCollapsed && (
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-[0.25em] mb-3">Arena</p>
+        )}
         <div className="flex items-center gap-3">
           <ReactiveBeanieOrb
             status={connectionStatus === 'disconnected' ? 'offline' : presence.status}
@@ -108,10 +113,10 @@ export function Sidebar() {
           className={cn('w-full', sidebarCollapsed && 'px-2')}
           variant="primary"
           onClick={handleNewConversation}
-          aria-label={sidebarCollapsed ? 'New conversation' : undefined}
+          aria-label={sidebarCollapsed ? 'New chat' : undefined}
         >
           <Plus className="w-4 h-4" aria-hidden="true" />
-          {!sidebarCollapsed && <span className="ml-2">New Conversation</span>}
+          {!sidebarCollapsed && <span className="ml-2">New Chat</span>}
         </Button>
 
         {/* Filters toggle */}
@@ -134,38 +139,36 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Conversation list */}
-      {!sidebarCollapsed && conversations.length > 0 && (
-        <div className="px-2 mb-2" data-tutorial="conversation-list" role="region" aria-label="Conversations">
-          <h3 className="px-3 text-xs font-medium text-text-muted uppercase tracking-wide mb-1" id="conversations-heading">
-            Conversations
-          </h3>
-          <ul className="space-y-0.5 max-h-48 overflow-y-auto" role="list" aria-labelledby="conversations-heading">
-            <AnimatePresence>
-              {conversations.map((conv) => (
-                <li key={conv.id} role="listitem">
-                  <ConversationItem
-                    conversation={conv}
-                    isActive={currentConversation?.id === conv.id}
-                    onSelect={handleSelectConversation}
-                    onDelete={handleDeleteConversation}
-                  />
-                </li>
-              ))}
-            </AnimatePresence>
-          </ul>
+      {/* Conversation history — the primary navigation experience (21s) */}
+      {!sidebarCollapsed && (
+        <div className="flex-1 overflow-y-auto px-2 py-2" data-tutorial="conversation-list" role="region" aria-label="Conversation history">
+          {conversations.length > 0 ? (
+            <ConversationGroups
+              conversations={conversations}
+              currentId={currentConversation?.id}
+              onSelect={handleSelectConversation}
+              onDelete={handleDeleteConversation}
+            />
+          ) : (
+            <p className="px-3 py-6 text-sm text-text-muted" role="status">
+              No conversations yet — start one above.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Navigation links */}
-      <nav className={cn('flex-1 overflow-y-auto px-2', sidebarCollapsed && 'px-1')} aria-label="Main navigation">
+      {/* Tool navigation — compact, below the history divider */}
+      <nav
+        className={cn('px-2 pt-2 border-t border-border-subtle', sidebarCollapsed && 'px-1')}
+        aria-label="Main navigation"
+      >
         <ul className="list-none p-0 m-0" role="list">
-          {links.map(({ to, icon: Icon, label }, index) => (
+          {links.map(({ to, icon: Icon, label }) => (
             <motion.li
               key={to}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
+              transition={{ duration: 0.2 }}
               role="listitem"
             >
               <NavLink
@@ -189,6 +192,26 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+
+      {/* Beanie presence card */}
+      {!sidebarCollapsed && (
+        <div
+          className="mx-2 mb-2 p-3 rounded-xl bg-background-panel border border-border-subtle flex items-center gap-3"
+          role="status"
+          aria-label="Beanie presence"
+        >
+          <ReactiveBeanieOrb
+            status={connectionStatus === 'disconnected' ? 'offline' : presence.status}
+            size="sm"
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-text-primary">
+              {BEANIE_STATES[presence.status]?.label ?? 'Idle'}
+            </p>
+            <p className="text-xs text-text-muted truncate">{presence.message}</p>
+          </div>
+        </div>
+      )}
 
       {/* Collapse toggle */}
       <div className="p-2 border-t border-border-subtle">
