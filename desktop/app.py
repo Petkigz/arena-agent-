@@ -232,8 +232,11 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.owner_control_page)  # index 10
         self.stack.setCurrentIndex(0)
 
-        # Right context panel
-        self.context = ContextPanel()
+        # Right context panel — progressive: collapsible, choice persisted.
+        self.context = ContextPanel(
+            collapsed=bool(self.settings.get("context_collapsed")),
+            on_collapsed=lambda collapsed: self.settings.set("context_collapsed", bool(collapsed)),
+        )
 
         # Three-column ChatGPT-style layout
         central = QWidget()

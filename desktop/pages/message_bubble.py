@@ -39,16 +39,16 @@ class MessageBubble(QWidget):
 
         if role == "user":
             self.label.setStyleSheet(
-                f"background: {ACCENT}; color: #FFFFFF; padding: 10px 14px;"
-                f" border-radius: 14px; font-size: 14px;"
+                f"background: {ACCENT}; color: #FFFFFF; padding: 10px 16px;"
+                f" border-radius: 16px; font-size: 14px;"
             )
             row.addStretch(1)
             row.addWidget(self.label)
         else:
             self._orb = PresenceOrbWidget(diameter=30)
             self.label.setStyleSheet(
-                f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 14px;"
-                f" border: 1px solid {BG_SURFACE}; border-radius: 14px; font-size: 14px;"
+                f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 16px;"
+                f" border: 1px solid {BG_SURFACE}; border-radius: 16px; font-size: 14px;"
             )
             row.addWidget(self._orb, alignment=Qt.AlignmentFlag.AlignTop)
             row.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignTop)
@@ -66,12 +66,12 @@ class MessageBubble(QWidget):
     def refresh_theme(self) -> None:
         if self._role == "user":
             self.label.setStyleSheet(
-                f"background: {ACCENT}; color: #FFFFFF; padding: 10px 14px;"
-                f" border-radius: 14px; font-size: 14px;"
+                f"background: {ACCENT}; color: #FFFFFF; padding: 10px 16px;"
+                f" border-radius: 16px; font-size: 14px;"
             )
         else:
             self.label.setStyleSheet(
-                f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 14px;"
-                f" border: 1px solid {BG_SURFACE}; border-radius: 14px; font-size: 14px;"
+                f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 16px;"
+                f" border: 1px solid {BG_SURFACE}; border-radius: 16px; font-size: 14px;"
             )
 

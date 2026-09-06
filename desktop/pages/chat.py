@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QScro
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS
-from desktop.styles import _button_style, _input_style
+from desktop.styles import _button_style, _composer_style
 from desktop.pages.message_bubble import MessageBubble
 from desktop.widgets.orb import PresenceOrbWidget
 
@@ -58,7 +58,7 @@ class ChatPage(QWidget):
         composer = QHBoxLayout()
         self.input = QLineEdit()
         self.input.setPlaceholderText("Message Beanie…")
-        self.input.setStyleSheet(_input_style())
+        self.input.setStyleSheet(_composer_style())
         self.input.returnPressed.connect(self._submit)
         composer.addWidget(self.input, stretch=1)
 
@@ -119,7 +119,7 @@ class ChatPage(QWidget):
     def refresh_theme(self) -> None:
         self.scroll.setStyleSheet(f"background: {BG_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
         self.container.setStyleSheet(f"background: {BG_PRIMARY};")
-        self.input.setStyleSheet(_input_style())
+        self.input.setStyleSheet(_composer_style())
         self.mic_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.send_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
         for bubble in self._bubbles:
@@ -151,7 +151,7 @@ class ChatPage(QWidget):
         self.voice_banner.setText(f'<span style="color:{color};">●</span>  {label}')
         self.voice_banner.setStyleSheet(
             f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
-            f" border: 1px solid {BG_SURFACE}; border-radius: 16px; padding: 6px 14px;"
+            f" border: 1px solid {BG_SURFACE}; border-radius: 9999px; padding: 8px 16px;"
         )
         self.voice_banner.show()
 

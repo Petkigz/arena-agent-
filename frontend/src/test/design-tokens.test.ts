@@ -12,9 +12,16 @@ import {
   ACCENT,
   BEANIE_ORB_STATUSES,
   BEANIE_STATES,
+  FOCUS_RING_WIDTH_PX,
+  FONT_WEIGHTS,
   KNOWLEDGE_NODE_TYPE_COLORS,
   MEMORY_TYPE_COLORS,
+  MOTION,
+  RADIUS,
+  SHADOWS,
+  SPACING,
   THEMES,
+  TYPE_SCALE,
   beanieColor,
 } from '../design/tokens';
 
@@ -78,5 +85,16 @@ describe('design tokens (shared source of truth)', () => {
     for (const key of ['episodic', 'semantic', 'procedural', 'conversation', 'empty']) {
       expect(MEMORY_TYPE_COLORS[key]).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
+  });
+
+  it('exposes the fine-tune scales (radius, spacing, typography, shadow, motion, focus)', () => {
+    expect(RADIUS).toMatchObject({ sm_px: 4, md_px: 6, lg_px: 8, xl_px: 12, xxl_px: 16, full_px: 9999 });
+    expect(SPACING.unit_px).toBe(4);
+    expect(SPACING.control_padding_x_px).toBe(16);
+    expect(TYPE_SCALE).toMatchObject({ caption: 12, body: 14, subtitle: 16, title: 18, display: 30 });
+    expect(FONT_WEIGHTS.semibold).toBe(600);
+    expect(SHADOWS['2xl']).toContain('rgba');
+    expect(MOTION.base_ms).toBeGreaterThan(0);
+    expect(FOCUS_RING_WIDTH_PX).toBe(2);
   });
 });

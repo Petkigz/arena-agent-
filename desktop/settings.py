@@ -18,6 +18,7 @@ DEFAULTS: Dict[str, Any] = {
     "theme": "dark",
     "minimize_to_tray": True,
     "notifications_enabled": True,
+    "context_collapsed": False,
 }
 
 

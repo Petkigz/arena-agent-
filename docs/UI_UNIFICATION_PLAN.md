@@ -74,6 +74,37 @@ The desktop chat voice banner's hand-copied presence hexes now read `PRESENCE_CO
 Remaining intentional hex literals: the orb's internal white highlights, the
 ScreenshotAnnotator user pen palette (data, not theming), and one graph-edge default stroke.
 
+## Phase 1.6 — DONE (round-21c): fine-tunes & professional-grade layer
+
+The review's fine-tune directives, implemented as canonical scales (values grounded in what the
+web already compiles to — this is canonicalization, not a redesign):
+
+- **Token scales added** to `design/tokens.json`: radius (4/6/8/12/16/full — exactly the
+  Tailwind v4 defaults the web ships), spacing (4px grid + component paddings from the web's
+  `py-2 px-4` buttons and `px-4 py-2.5` bubbles), typography scale (caption 12 / body 14 /
+  subtitle 16 / title 18 / display 30) + weights, elevation (the web's shadow set), motion
+  (150/300ms, pulse cadences, shared easing), focus ring (2px accent).
+- **Desktop normalized onto the scales**: message bubbles 14px→16px radius and 10×14→10×16
+  padding (web's `rounded-2xl px-4 py-2.5`); buttons 10px→8px radius, `10px 14px`→`8px 16px`
+  padding (web's `py-2 px-4`); inputs `8px 10px`→`8px 12px`; voice banner now a true pill
+  (9999px); odd font sizes 13/15px eliminated (scale was 12/13/14/15/16/18/30 → now exactly
+  12/14/16/18/30).
+- **Professional interaction states**: QSS helpers gained `:pressed` (darkened), `:focus`
+  (accent ring, padding-compensated so text doesn't shift — the web's `focus:ring-2`), and
+  `:disabled` styling; previously only `:hover` existed anywhere.
+- **Chat composer** mirrors the web composer (`rounded-2xl`, generous padding) via a new
+  `_composer_style()`.
+- **Progressive context**: `ContextPanel` is now collapsible (chevron toggle → slim 36px rail;
+  choice persisted in settings). Context is on demand, not a permanent third column.
+- **Guards**: QSS normalization lints — every `border-radius`/`font-size` anywhere in
+  `desktop/` must be a token value (fails CI on the next off-scale one-off); QSS state
+  coverage test; bubble-geometry test; collapse widget tests; web shadow-scale token wiring
+  test. QSS helper tests run headless (Qt stubbed), so CI without a GL runtime still guards
+  them.
+
+Remaining for the fine-tune track: web `transition-all` usages could narrow to specific
+properties (repaint hygiene); sidebar collapse-to-icon-rail (needs design iteration → Phase 3).
+
 ## Phase 2 — Beanie state machine as a shared specification
 
 Largely DONE by Phase 1's plumbing: `desktop/pages/beanie.py` already imports

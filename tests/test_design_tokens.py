@@ -94,6 +94,19 @@ def test_tokens_json_schema():
         palette = tokens["color"][group]
         for key in keys:
             assert re.fullmatch(r"#[0-9A-Fa-f]{6}", palette[key]), (group, key)
+    for name in ("sm_px", "md_px", "lg_px", "xl_px", "xxl_px", "full_px"):
+        assert isinstance(tokens["radius"][name], int) and tokens["radius"][name] >= 0, name
+    radius_tokens = {k: v for k, v in tokens["radius"].items() if k.endswith("_px")}
+    assert radius_tokens == {"sm_px": 4, "md_px": 6, "lg_px": 8, "xl_px": 12, "xxl_px": 16, "full_px": 9999}
+    assert tokens["spacing"]["unit_px"] == 4
+    for name in ("caption", "body", "subtitle", "title", "display"):
+        assert isinstance(tokens["typography"]["scale_px"][name], int), name
+    for name in ("regular", "semibold", "bold"):
+        assert tokens["typography"]["weights"][name] in (400, 500, 600, 700, 800), name
+    for name in ("sm", "DEFAULT", "md", "lg", "xl", "2xl", "inner"):
+        assert isinstance(tokens["shadow"][name], str) and tokens["shadow"][name], name
+    assert isinstance(tokens["motion"]["base_ms"], int) and tokens["motion"]["base_ms"] > 0
+    assert isinstance(tokens["focus"]["ring_width_px"], int) and tokens["focus"]["ring_width_px"] > 0
     assert tokens["typography"]["base_font_size_px"] > 0
     assert "Inter" in tokens["typography"]["font_family"]
 
@@ -362,3 +375,75 @@ def test_web_semantic_palettes_consumed_from_tokens():
         assert "concept: '#8B5CF6'" not in source
     learning_source = (REPO / "frontend/src/components/exploration/LearningPatterns.tsx").read_text(encoding="utf-8")
     assert "episodic: '#8B5CF6'" not in learning_source
+
+
+# --------------------------------------------------------------------------
+# Fine-tune layer (round-21c): desktop QSS must stay on the canonical scales
+# --------------------------------------------------------------------------
+
+_RADIUS_RE = re.compile(r"border-radius:\s*(\d+)px")
+_FONT_RE = re.compile(r"font-size:\s*(\d+)px")
+
+
+def _desktop_sources():
+    return list((REPO / "desktop").rglob("*.py"))
+
+
+def test_desktop_qss_radius_on_token_scale():
+    """Every border-radius in desktop QSS must be a canonical radius token value."""
+    tokens = _tokens()
+    allowed = {tokens["radius"][name] for name in ("sm_px", "md_px", "lg_px", "xl_px", "xxl_px", "full_px")}
+    for path in _desktop_sources():
+        for match in _RADIUS_RE.finditer(path.read_text(encoding="utf-8")):
+            value = int(match.group(1))
+            assert value in allowed, f"{path.name}: border-radius {value}px is off the token scale {sorted(allowed)}"
+
+
+def test_desktop_qss_font_sizes_on_token_scale():
+    """Every font-size in desktop QSS must be a canonical type-scale step."""
+    tokens = _tokens()
+    allowed = set(tokens["typography"]["scale_px"].values())
+    for path in _desktop_sources():
+        for match in _FONT_RE.finditer(path.read_text(encoding="utf-8")):
+            value = int(match.group(1))
+            assert value in allowed, f"{path.name}: font-size {value}px is off the type scale {sorted(allowed)}"
+
+
+def test_desktop_styles_have_professional_states():
+    """QSS helpers must cover hover/pressed/focus/disabled like the web baseline."""
+    styles_source = (REPO / "desktop" / "styles.py").read_text(encoding="utf-8")
+    for state in (":hover", ":pressed", ":focus", ":disabled"):
+        assert state in styles_source, f"styles.py lost the {state} state"
+    # Values come from tokens, not literals.
+    assert "RADIUS" in styles_source and "SPACING" in styles_source and "FOCUS_RING_WIDTH_PX" in styles_source
+    assert "border-radius: 10px" not in styles_source  # old off-scale button radius
+
+
+def test_desktop_bubbles_match_web_composer_baseline():
+    """Message bubbles use the web bubble geometry (rounded-2xl, px-4 py-2.5)."""
+    bubble_source = (REPO / "desktop" / "pages" / "message_bubble.py").read_text(encoding="utf-8")
+    assert "border-radius: 16px" in bubble_source
+    assert "padding: 10px 16px" in bubble_source
+    assert "border-radius: 14px" not in bubble_source  # old off-scale radius
+
+    chat_source = (REPO / "desktop" / "pages" / "chat.py").read_text(encoding="utf-8")
+    assert "_composer_style()" in chat_source  # composer mirrors web rounded-2xl
+    assert "border-radius: 9999px" in chat_source  # voice banner is a true pill
+
+
+def test_context_panel_is_progressive():
+    """The context panel must be collapsible (progressive, not permanent)."""
+    context_source = (REPO / "desktop" / "widgets" / "context.py").read_text(encoding="utf-8")
+    assert "def set_collapsed" in context_source
+    assert "def toggle_collapsed" in context_source
+    app_source = (REPO / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert 'context_collapsed' in app_source  # choice persisted
+    settings_source = (REPO / "desktop" / "settings.py").read_text(encoding="utf-8")
+    assert '"context_collapsed": False' in settings_source  # registered default (bool-normalized)
+
+
+def test_web_shadow_scale_consumes_tokens():
+    config_source = TAILWIND_CONFIG.read_text(encoding="utf-8")
+    assert "tokens.shadow" in config_source
+    # The hardcoded shadow literals must not return.
+    assert "0 25px 50px -12px rgba(0, 0, 0, 0.25)" not in config_source

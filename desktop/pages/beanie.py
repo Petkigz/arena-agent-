@@ -71,12 +71,12 @@ class BeaniePage(QWidget):
 
         self._subtitle = QLabel("Personal AI")
         self._subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._subtitle.setStyleSheet(f"font-size: 15px; color: {TEXT_SECONDARY};")
+        self._subtitle.setStyleSheet(f"font-size: 16px; color: {TEXT_SECONDARY};")
         layout.addWidget(self._subtitle)
 
         self.message = QLabel("I'm here.")
         self.message.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.message.setStyleSheet(f"font-size: 13px; color: {TEXT_MUTED}; font-style: italic;")
+        self.message.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED}; font-style: italic;")
         layout.addWidget(self.message)
 
         layout.addSpacing(12)
@@ -120,8 +120,8 @@ class BeaniePage(QWidget):
 
     def refresh_theme(self) -> None:
         self._title.setStyleSheet(f"font-size: 30px; font-weight: 800; color: {TEXT_PRIMARY};")
-        self._subtitle.setStyleSheet(f"font-size: 15px; color: {TEXT_SECONDARY};")
-        self.message.setStyleSheet(f"font-size: 13px; color: {TEXT_MUTED}; font-style: italic;")
+        self._subtitle.setStyleSheet(f"font-size: 16px; color: {TEXT_SECONDARY};")
+        self.message.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTED}; font-style: italic;")
         for btn in self._quick_buttons:
             btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self._talk_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))

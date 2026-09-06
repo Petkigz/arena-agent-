@@ -30,6 +30,13 @@ __all__ = [
     "PRESENCE_LABELS",
     "FONT_FAMILY",
     "BASE_FONT_SIZE_PX",
+    "TYPE_SCALE",
+    "FONT_WEIGHTS",
+    "RADIUS",
+    "SPACING",
+    "SHADOWS",
+    "MOTION",
+    "FOCUS_RING_WIDTH_PX",
     "load_tokens",
     "tokens_path",
 ]
@@ -116,6 +123,40 @@ def _validate(tokens: dict) -> None:
     family = _require(typography, "font_family", "typography")
     if not isinstance(family, str) or not family:
         raise DesignTokenError("design tokens: typography.font_family must be a non-empty string")
+    scale = _require(typography, "scale_px", "typography")
+    for name in ("caption", "body", "subtitle", "title", "display"):
+        value = _require(scale, name, "typography.scale_px")
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise DesignTokenError(f"design tokens: typography.scale_px.{name} must be a positive int")
+    weights = _require(typography, "weights", "typography")
+    for name in ("regular", "semibold", "bold"):
+        value = _require(weights, name, f"typography.weights.{name}")
+        if not isinstance(value, int) or value not in (400, 500, 600, 700, 800):
+            raise DesignTokenError(f"design tokens: typography.weights.{name} must be a standard CSS weight")
+
+    radius = _require(tokens, "radius", "root")
+    for name in ("sm_px", "md_px", "lg_px", "xl_px", "xxl_px", "full_px"):
+        value = _require(radius, name, f"radius.{name}")
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise DesignTokenError(f"design tokens: radius.{name} must be a non-negative int")
+
+    spacing = _require(tokens, "spacing", "root")
+    unit = _require(spacing, "unit_px", "spacing.unit_px")
+    if not isinstance(unit, int) or unit <= 0:
+        raise DesignTokenError("design tokens: spacing.unit_px must be a positive int")
+    for name in ("control_padding_x_px", "control_padding_y_px", "field_padding_x_px", "field_padding_y_px", "bubble_padding_x_px", "bubble_padding_y_px"):
+        value = _require(spacing, name, f"spacing.{name}")
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise DesignTokenError(f"design tokens: spacing.{name} must be a positive int")
+
+    for group in ("shadow", "motion"):
+        mapping = _require(tokens, group, "root")
+        if not isinstance(mapping, dict) or not mapping:
+            raise DesignTokenError(f"design tokens: {group} must be a non-empty object")
+    focus = _require(tokens, "focus", "root")
+    ring = _require(focus, "ring_width_px", "focus.ring_width_px")
+    if not isinstance(ring, int) or ring <= 0:
+        raise DesignTokenError("design tokens: focus.ring_width_px must be a positive int")
 
 
 def load_tokens(path: str | Path | None = None) -> dict:
@@ -177,6 +218,13 @@ PRESENCE_DURATIONS: dict = presence_durations(TOKENS)
 PRESENCE_LABELS: dict = presence_labels(TOKENS)
 FONT_FAMILY: str = TOKENS["typography"]["font_family"]
 BASE_FONT_SIZE_PX: int = TOKENS["typography"]["base_font_size_px"]
+TYPE_SCALE: dict = TOKENS["typography"]["scale_px"]
+FONT_WEIGHTS: dict = TOKENS["typography"]["weights"]
+RADIUS: dict = TOKENS["radius"]
+SPACING: dict = TOKENS["spacing"]
+SHADOWS: dict = TOKENS["shadow"]
+MOTION: dict = TOKENS["motion"]
+FOCUS_RING_WIDTH_PX: int = TOKENS["focus"]["ring_width_px"]
 
 # Static shape check: THEME_COLORS keys must stay compatible with theme.apply_theme,
 # which does `for key, value in THEME_COLORS[name].items(): globals()[key] = value`.

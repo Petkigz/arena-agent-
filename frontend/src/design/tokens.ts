@@ -52,3 +52,28 @@ export function beanieColor(status: string): string {
 /** Base typography tokens (see index.css --arena-font-* variables). */
 export const FONT_FAMILY: string = tokens.typography.font_family;
 export const BASE_FONT_SIZE_PX: number = tokens.typography.base_font_size_px;
+
+/** Type scale (px) — caption/body/subtitle/title/display. */
+export const TYPE_SCALE: Record<string, number> = tokens.typography.scale_px;
+
+/** Font weights. */
+export const FONT_WEIGHTS: Record<string, number> = tokens.typography.weights;
+
+/** Radius scale (px) — matches the Tailwind defaults the web compiles to. */
+export const RADIUS: Record<string, number> = Object.fromEntries(
+  Object.entries(tokens.radius).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+);
+
+/** Spacing scale (px, 4px grid) + component paddings. */
+export const SPACING: Record<string, number> = Object.fromEntries(
+  Object.entries(tokens.spacing).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+);
+
+/** Elevation scale. */
+export const SHADOWS: Record<string, string> = tokens.shadow;
+
+/** Motion durations (ms) + shared easing. */
+export const MOTION: Record<string, number | string> = tokens.motion;
+
+/** Focus ring width (px); ring color is ACCENT.primary. */
+export const FOCUS_RING_WIDTH_PX: number = tokens.focus.ring_width_px;
