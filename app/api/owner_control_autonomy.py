@@ -64,6 +64,22 @@ class OwnerDecisionRequest(BaseModel):
     expected_change_types: List[str] = Field(default_factory=list)
     note: str = Field(default="", max_length=2000)
 
+class IncubationPolicyRequest(BaseModel):
+    enabled: bool
+    max_items_per_slice: int = Field(default=3, ge=1, le=20)
+    max_seconds_per_slice: int = Field(default=30, ge=1, le=300)
+    owner_decision_id: Optional[str] = None
+
+class IncubationItemRequest(BaseModel):
+    kind: str
+    title: str = Field(min_length=1, max_length=300)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=0, ge=-10, le=10)
+    owner_decision_id: Optional[str] = None
+
+class IncubationCancelRequest(BaseModel):
+    reason: str = Field(default="owner cancellation", max_length=500)
+
 
 class QuestionAnswerRequest(BaseModel):
     answer: str = Field(min_length=1, max_length=20)  # approve | deny | observe
@@ -81,6 +97,88 @@ def update_autonomy_envelope_endpoint(req: AutonomyEnvelopeUpdate):
     from app.cognition.runtime import CognitiveRuntime
     policy=CognitiveRuntime.get_instance().autonomy_envelope.update(req.model_dump(exclude_none=True))
     return {"success": True, "envelope": policy.to_dict(), "note": "Limits constrain future cycles and grant no new authority."}
+
+@router.get("/owner-control/incubation")
+def get_incubation_queue_endpoint(status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        items = runtime.incubation_queue.list(status=status, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "policy": runtime.incubation_queue.policy().to_dict(),
+        "items": [item.to_dict() for item in items],
+        "note": "Incubation is low-priority reasoning only; queued work cannot authorize or execute actions.",
+    }
+
+@router.put("/owner-control/incubation/policy")
+def update_incubation_policy_endpoint(req: IncubationPolicyRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        policy = runtime.incubation_queue.set_policy(
+            enabled=req.enabled,
+            max_items_per_slice=req.max_items_per_slice,
+            max_seconds_per_slice=req.max_seconds_per_slice,
+            owner_decision_id=req.owner_decision_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "policy": policy.to_dict(),
+        "execution_authorized": False,
+    }
+
+@router.post("/owner-control/incubation/items")
+def enqueue_incubation_item_endpoint(req: IncubationItemRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        item = runtime.incubation_queue.enqueue(
+            req.kind,
+            req.title,
+            req.payload,
+            priority=req.priority,
+            owner_decision_id=req.owner_decision_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "item": item.to_dict(), "execution_authorized": False}
+
+@router.post("/owner-control/incubation/items/{item_id}/cancel")
+def cancel_incubation_item_endpoint(item_id: str, req: IncubationCancelRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        item = CognitiveRuntime.get_instance().incubation_queue.cancel(item_id, reason=req.reason)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incubation item not found") from exc
+    return {"success": True, "item": item.to_dict()}
+
+@router.post("/owner-control/incubation/items/{item_id}/resume")
+def resume_incubation_item_endpoint(item_id: str):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        item = CognitiveRuntime.get_instance().incubation_queue.resume(item_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incubation item not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, "item": item.to_dict()}
+
+@router.get("/owner-control/incubation/items/{item_id}/history")
+def incubation_item_history_endpoint(item_id: str, limit: int = Query(200, ge=1, le=2000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    if runtime.incubation_queue.get(item_id) is None:
+        raise HTTPException(status_code=404, detail="Incubation item not found")
+    return {"success": True, "item_id": item_id, "events": runtime.incubation_queue.history(item_id, limit)}
 
 @router.get("/owner-control/concurrency-budget")
 def get_concurrency_budget_endpoint():

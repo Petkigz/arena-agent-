@@ -16,6 +16,12 @@ from .scene_graph import (
     SceneRelation,
 )
 from .scene_causal import SceneCausalReplay, SceneCounterfactual
+from .incubation_queue import (
+    IncubationItem,
+    IncubationPolicy,
+    IncubationQueue,
+    IncubationQueueError,
+)
 from .session import CognitiveSession
 from .verified_reflection import (
     VerifiedReflection,
@@ -44,6 +50,10 @@ __all__ = [
     "SceneRelation",
     "SceneCausalReplay",
     "SceneCounterfactual",
+    "IncubationItem",
+    "IncubationPolicy",
+    "IncubationQueue",
+    "IncubationQueueError",
     "CognitiveSession",
     "VerifiedReflection",
     "VerifiedReflectionStore",

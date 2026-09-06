@@ -253,6 +253,11 @@ class CognitiveRuntime:
             str(Path(path).parent / "scene_graph.db") if path else "data/scene_graph.db"
         )
         self.scene_graph = self.scene_graph_store.load_latest()
+        from app.cognition.incubation_queue import IncubationQueue
+        self.incubation_queue = IncubationQueue(
+            str(Path(path).parent / "incubation.db") if path else "data/incubation.db",
+            owner_decisions=self.owner_decisions,
+        )
         from app.cognition.self_recovery import SelfRecoveryStore
         self.self_recovery = SelfRecoveryStore(
             str(Path(path).parent / "self_recovery.db") if path else "data/self_recovery.db"
@@ -551,6 +556,7 @@ class CognitiveRuntime:
             "total_lessons": self.lessons.total_lessons(),
             "ontology_revision": self.ontology_schema.current().revision,
             "scene_revision": self.scene_graph.revision,
+            "incubation_enabled": self.incubation_queue.policy().enabled,
         }
         app_logger.info(
             f"Session start: {beliefs_changed} beliefs recalculated, "
@@ -748,6 +754,15 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Failed to get recommendations: {e}")
             return []
+
+    def run_incubation_slice(self, processor) -> Dict[str, Any]:
+        """Run a bounded, owner-enabled incubation processor.
+
+        The processor receives an ``IncubationItem`` and must return a result
+        type, trace ID, and evidence IDs. This path never invokes executable
+        tools; real actions remain on the foreground ActionGate path.
+        """
+        return self.incubation_queue.run_slice(processor)
 
     def consolidate_memory(self) -> Dict[str, Any]:
         """

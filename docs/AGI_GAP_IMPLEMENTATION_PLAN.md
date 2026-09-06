@@ -492,7 +492,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 
 ### Deliverables
 
-- Add an owner-visible incubation queue for unresolved problems.
+- Add an owner-visible incubation queue for unresolved problems. **`IncubationQueue` now provides persistent owner-visible items for unresolved hypotheses, stale beliefs, failed strategies, and owner questions, with status/event history and owner-control endpoints.**
 - Incubation must be:
   - explicitly enabled or owner-authorized;
   - low priority;
@@ -500,9 +500,10 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
   - cancellable;
   - isolated from foreground latency;
   - resumable with evidence and a trace.
-- Let the queue revisit unresolved hypotheses, stale beliefs, failed strategies, and pending owner questions.
-- Expand the existing consolidation pass into conflict replay, gist improvement, and calibration updates.
-- Keep scheduled proactive work distinct from continuous inner monologue in both code and documentation.
+  **The queue is disabled by default, requires a single-use owner authorization to configure while disabled, enforces item/time budgets, supports cancellation and resume tokens, and requires trace/evidence links for completed or failed results.**
+- Let the queue revisit unresolved hypotheses, stale beliefs, failed strategies, and pending owner questions. **A bounded processor contract is available through `CognitiveRuntime.run_incubation_slice`; processors cannot execute actions through this queue, and results remain typed as observations, revised beliefs, hypotheses, no-change, or `UNKNOWN`.**
+- Expand the existing consolidation pass into conflict replay, gist improvement, and calibration updates. **The existing foreground consolidation pass remains separate; automatic background consolidation is not claimed by this slice.**
+- Keep scheduled proactive work distinct from continuous inner monologue in both code and documentation. **Incubation is documented and persisted as scheduled bounded reasoning, not inner thought or consciousness.**
 
 ### Exit criteria
 
