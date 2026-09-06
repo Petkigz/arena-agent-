@@ -59,6 +59,11 @@ class VoiceWebSocketClient @Inject constructor(
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MINUTES)  // No timeout for WebSocket
             .writeTimeout(10, TimeUnit.SECONDS)
+            // Keepalive: phone Wi-Fi power-save silently drops idle sockets —
+            // the server then finds a dead connection when it tries to send
+            // the reply ("Failed to send to WebSocket"). A client-side ping
+            // every 30s keeps the socket warm and detects loss quickly.
+            .pingInterval(30, TimeUnit.SECONDS)
             .build()
 
         // The server authenticates the WS handshake by QUERY PARAM — the same

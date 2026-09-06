@@ -17,6 +17,21 @@ class BackendConnectionError(Exception):
     """Raised when the backend cannot be reached or returns an unexpected shape."""
 
 
+def authed_ws_url(ws_url: str, api_key: str) -> str:
+    """Append ?api_key=… to a WebSocket URL.
+
+    The server authenticates WS upgrades by QUERY PARAM (the same contract the
+    web and Android clients use — browsers cannot set WS headers, so the
+    backend reads ?api_key=…). With ARENA_API_KEY set, a keyless upgrade is
+    closed with 403/4003.
+    """
+    key = (api_key or "").strip()
+    if not key:
+        return ws_url
+    sep = "&" if "?" in ws_url else "?"
+    return f"{ws_url}{sep}api_key={quote(key)}"
+
+
 class ArenaBackendClient:
     """Synchronous HTTP client for the unified Arena server (app.server:app)."""
 

@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import json
 import threading
+
+from desktop.backend_client import authed_ws_url
 from typing import Callable, List, Optional, Tuple
 
 
 class DesktopChatClient:
-    def __init__(self, ws_url: str = "ws://localhost:8000/ws", conversation_id: str = "desktop-chat"):
+    def __init__(self, ws_url: str = "ws://localhost:8000/ws", conversation_id: str = "desktop-chat", api_key: str = ""):
         self.ws_url = ws_url
+        self.api_key = (api_key or "").strip()
         self.conversation_id = conversation_id
         self._ws = None
         self._connected = False
@@ -57,18 +60,18 @@ class DesktopChatClient:
             # Try websockets.sync.client (websockets >=12, preferred)
             try:
                 from websockets.sync.client import connect as ws_connect  # type: ignore
-                self._ws = ws_connect(self.ws_url)
+                self._ws = ws_connect(authed_ws_url(self.ws_url, self.api_key))
                 self._connected = True
             except ImportError:
                 # Try websocket-client library (sync, alternative)
                 try:
                     import websocket  # type: ignore
-                    self._ws = websocket.create_connection(self.ws_url)
+                    self._ws = websocket.create_connection(authed_ws_url(self.ws_url, self.api_key))
                     self._connected = True
                 except ImportError:
                     # Fallback: legacy websockets <14 with __enter__
                     import websockets  # type: ignore
-                    self._ws = websockets.connect(self.ws_url).__enter__()
+                    self._ws = websockets.connect(authed_ws_url(self.ws_url, self.api_key)).__enter__()
                     self._connected = True
 
             if self._connected:
@@ -187,6 +190,17 @@ class DesktopChatClient:
         elif t == "error":
             if self.on_error:
                 self.on_error(data.get("message", "Chat error"))
+
+    def set_api_key(self, api_key: str) -> None:
+        """Update the WS auth key (applies on the next connect/reconnect)."""
+        self.api_key = (api_key or "").strip()
+
+    def reconnect(self) -> bool:
+        """Close and re-open the socket — picks up URL/API-key changes live."""
+        self.close()
+        self._should_reconnect = True
+        self._reconnect_attempts = 0
+        return self.connect()
 
     def close(self) -> None:
         self._connected = False

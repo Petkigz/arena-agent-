@@ -15,6 +15,8 @@ import json
 import math
 import queue
 import threading
+
+from desktop.backend_client import authed_ws_url
 from typing import Callable, Optional
 
 try:
@@ -47,8 +49,9 @@ def accumulate_tokens(event: dict, parts: list) -> Optional[str]:
 
 
 class DesktopVoiceClient:
-    def __init__(self, ws_url: str = "ws://localhost:8000/ws", conversation_id: str = "desktop-voice"):
+    def __init__(self, ws_url: str = "ws://localhost:8000/ws", conversation_id: str = "desktop-voice", api_key: str = ""):
         self.ws_url = ws_url
+        self.api_key = (api_key or "").strip()
         self.conversation_id = conversation_id
         self._ws = None
         self._capturing = False
@@ -69,6 +72,10 @@ class DesktopVoiceClient:
         #: Called with an error string.
         self.on_error: Optional[Callable[[str], None]] = None
 
+    def set_api_key(self, api_key: str) -> None:
+        """Update the WS auth key (applies on the next start/reconnect)."""
+        self.api_key = (api_key or "").strip()
+
     @property
     def available(self) -> bool:
         return PYAUDIO_AVAILABLE
@@ -86,14 +93,14 @@ class DesktopVoiceClient:
             # B12 fix: multi-version WS support (sync client for websockets>=14)
             try:
                 from websockets.sync.client import connect as ws_connect  # type: ignore
-                self._ws = ws_connect(self.ws_url)
+                self._ws = ws_connect(authed_ws_url(self.ws_url, self.api_key))
             except ImportError:
                 try:
                     import websocket  # type: ignore
-                    self._ws = websocket.create_connection(self.ws_url)
+                    self._ws = websocket.create_connection(authed_ws_url(self.ws_url, self.api_key))
                 except ImportError:
                     import websockets  # type: ignore
-                    self._ws = websockets.connect(self.ws_url).__enter__()
+                    self._ws = websockets.connect(authed_ws_url(self.ws_url, self.api_key)).__enter__()
 
             self._send({"type": "join_conversation", "conversation_id": self.conversation_id})
             # Tell the backend to start the voice pipeline so the streamed PCM
@@ -245,6 +252,10 @@ class DesktopAudioPlayer:
         self._queue: "queue.Queue[bytes]" = queue.Queue()
         self._thread: Optional[threading.Thread] = None
         self._running = False
+
+    def set_api_key(self, api_key: str) -> None:
+        """Update the WS auth key (applies on the next start/reconnect)."""
+        self.api_key = (api_key or "").strip()
 
     @property
     def available(self) -> bool:

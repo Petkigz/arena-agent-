@@ -141,7 +141,11 @@ class MainWindow(QMainWindow):
         # which caused double speech). Created before the voice client so its
         # push() can be wired directly as the audio callback.
         self.audio_player = DesktopAudioPlayer()
-        self.voice = DesktopVoiceClient(ws_url=ws_url, conversation_id="desktop-voice")
+        self.voice = DesktopVoiceClient(
+            ws_url=ws_url,
+            conversation_id="desktop-voice",
+            api_key=str(self.settings.get("api_key") or ""),
+        )
         self.voice.on_reply = lambda text: self._voice_reply_signal.emit(text)
         self.voice.on_transcript = lambda text, final: self._voice_transcript_signal.emit(text, final)
         self.voice.on_error = lambda err: self._voice_error_signal.emit(err)
@@ -158,7 +162,11 @@ class MainWindow(QMainWindow):
         # a private room when none exists or the server is unreachable.
         from desktop.chat_client import pick_shared_conversation
         conversation_id = pick_shared_conversation(self.client, self.settings) or "desktop-chat"
-        self.chat_client = DesktopChatClient(ws_url=ws_url, conversation_id=conversation_id)
+        self.chat_client = DesktopChatClient(
+            ws_url=ws_url,
+            conversation_id=conversation_id,
+            api_key=str(self.settings.get("api_key") or ""),
+        )
         self.chat_client.on_connected = self._on_chat_connected
         self.chat_client.on_token = lambda t, d: self._chat_token_signal.emit(t, d)
         self.chat_client.on_action_step = lambda l, st: self._chat_action_signal.emit(l, st)
@@ -330,8 +338,17 @@ class MainWindow(QMainWindow):
             self.owner_control_page.refresh()
 
     def _on_save_server_url(self, url: str) -> None:
+        # Live reconnect: the settings page already updated the HTTP client's
+        # key; bring both WebSocket clients along (they authenticate via
+        # ?api_key=… on connect, like the web/Android clients).
+        api_key = str(self.settings.get("api_key") or "")
+        self.chat_client.set_api_key(api_key)
+        self.voice.set_api_key(api_key)
+        reconnected = self.chat_client.reconnect()
         self.tray.showMessage(
-            "Beanie", f"Server URL saved: {url}\nRestart the app to reconnect.",
+            "Beanie",
+            "Connection saved — chat reconnected." if reconnected
+            else f"Connection saved: {url}\nChat will keep retrying in the background.",
             QSystemTrayIcon.MessageIcon.Information, 3000,
         )
 

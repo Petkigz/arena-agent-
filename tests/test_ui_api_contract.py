@@ -109,3 +109,49 @@ def test_working_context_composition_uses_contract_endpoints():
     assert "Working-context card" in text
     for endpoint in ("GET /projects", "GET /owner-control/autonomous-goals", "GET /memories"):
         assert f"`{endpoint}`" in text
+
+
+# --------------------------------------------------------------------------
+# Round-21p: desktop WS clients authenticate like the web/Android (?api_key=)
+# --------------------------------------------------------------------------
+
+def test_authed_ws_url_appends_the_key():
+    """The server authenticates WS upgrades by query param; the desktop's two
+    WS clients (chat + voice) must append ?api_key= like the web does."""
+    from desktop.backend_client import authed_ws_url
+
+    assert authed_ws_url("ws://localhost:8000/ws", "") == "ws://localhost:8000/ws"
+    assert authed_ws_url("ws://localhost:8000/ws", "  ") == "ws://localhost:8000/ws"
+    assert (
+        authed_ws_url("ws://192.168.1.2:8000/ws", "beanie-test-key")
+        == "ws://192.168.1.2:8000/ws?api_key=beanie-test-key"
+    )
+    # Existing query params are preserved (joins with &).
+    assert (
+        authed_ws_url("ws://h/ws?x=1", "k")
+        == "ws://h/ws?x=1&api_key=k"
+    )
+    # The key is URL-encoded (spaces, & etc. cannot break the query).
+    assert authed_ws_url("ws://h/ws", "k 1&2").endswith("api_key=k%201%262")
+
+
+def test_desktop_ws_clients_use_the_authed_url():
+    """Both WS clients take an api_key and connect through authed_ws_url."""
+    chat_src = (REPO / "desktop" / "chat_client.py").read_text(encoding="utf-8")
+    voice_src = (REPO / "desktop" / "voice_client.py").read_text(encoding="utf-8")
+    for source, name in ((chat_src, "chat_client"), (voice_src, "voice_client")):
+        assert "api_key: str = \"\"" in source, f"{name} lost the api_key parameter"
+        assert source.count("authed_ws_url(self.ws_url, self.api_key)") >= 3  # all connect paths
+        assert "def set_api_key" in source
+    # Chat also reconnects live on settings save.
+    assert "def reconnect" in chat_src
+
+    app_src = (REPO / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert 'api_key=str(self.settings.get("api_key") or "")' in app_src  # passed at startup
+    assert "self.chat_client.reconnect()" in app_src                      # live reconnect on save
+
+
+def test_android_ws_keeps_the_socket_warm():
+    """Phone Wi-Fi power-save silently drops idle sockets; the client pings."""
+    source = (REPO / "android" / "app" / "src" / "main" / "java" / "com" / "arena" / "voice" / "websocket" / "VoiceWebSocketClient.kt").read_text(encoding="utf-8")
+    assert ".pingInterval(30, TimeUnit.SECONDS)" in source
