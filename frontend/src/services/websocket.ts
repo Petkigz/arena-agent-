@@ -243,6 +243,32 @@ class WebSocketService {
     return this.send('action_approval', { conversationId, actionId, approved, reason });
   }
 
+  recordOwnerCorrection(
+    conversationId: string,
+    traceId: string,
+    correction: string,
+    options?: {
+      errorType?: string;
+      subject?: string;
+      predicate?: string;
+      correctedValue?: unknown;
+      actionType?: string;
+      goalType?: string;
+    },
+  ) {
+    return this.send('owner_correction', {
+      conversation_id: conversationId,
+      trace_id: traceId,
+      correction,
+      error_type: options?.errorType || 'other',
+      subject: options?.subject || '',
+      predicate: options?.predicate || '',
+      corrected_value: options?.correctedValue,
+      action_type: options?.actionType || '',
+      goal_type: options?.goalType || '',
+    });
+  }
+
   subscribe(handler: WebSocketEventHandler): () => void {
     this.handlers.add(handler);
     return () => {

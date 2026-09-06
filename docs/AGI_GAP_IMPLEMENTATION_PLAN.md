@@ -18,8 +18,11 @@ Implemented in the current branch:
 - Existing grounded introspection now reports the persisted epistemic status when available.
 - Pipeline and `/chat` response metadata expose the structured presentation.
 - Initial behavioral tests cover unknown preservation, evidence-derived labels, idempotent rendering, and trace persistence.
+- A trace-bound owner correction loop now preserves the original response, records the correction, updates only the hypothesis layer for structured owner facts, and deprioritizes a strategy only after repeated corrections.
+- REST and WebSocket correction channels are available; the active WebSocket response exposes its trace ID and epistemic metadata so a UI can correct the exact response.
+- A trace-linked usefulness feedback store now records explicit ratings and bounded interaction signals separately from correctness, with label/evidence-state summaries.
 
-The full measurement runner, user correction learning loop, and usefulness feedback store remain the next slices; they are not claimed complete by this status update.
+The full measurement runner and automatic feedback inference remain future slices; they are not claimed complete by this status update.
 
 ---
 

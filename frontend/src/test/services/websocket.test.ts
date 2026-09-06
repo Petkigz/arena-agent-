@@ -171,6 +171,32 @@ describe('WebSocketService', () => {
         })
       );
     });
+
+    it('recordOwnerCorrection sends a trace-bound correction', () => {
+      webSocketService.connect('ws://localhost:8000/ws');
+      vi.runAllTimers();
+
+      webSocketService.recordOwnerCorrection('conv-1', 'trace-1', 'I meant the phone', {
+        errorType: 'intent',
+        actionType: 'answer',
+        goalType: 'device_question',
+      });
+
+      expect(lastWsInstance!.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'owner_correction',
+          conversation_id: 'conv-1',
+          trace_id: 'trace-1',
+          correction: 'I meant the phone',
+          error_type: 'intent',
+          subject: '',
+          predicate: '',
+          corrected_value: undefined,
+          action_type: 'answer',
+          goal_type: 'device_question',
+        })
+      );
+    });
   });
 
   describe('message parsing', () => {
