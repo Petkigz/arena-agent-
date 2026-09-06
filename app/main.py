@@ -2182,10 +2182,14 @@ class TrainingCandidateDecisionRequest(BaseModel):
     note: str = ""
 
 class OwnerCorrectionRequest(BaseModel):
-    prompt: str
+    prompt: str = ""
     response: str
     skill_name: str = "general"
     note: str = ""
+    trace_id: Optional[str] = None
+    session_id: Optional[str] = None
+    action_type: str = "owner_correction"
+    goal_type: str = ""
 
 class TrainingDatasetExportRequest(BaseModel):
     skill_name: str
@@ -2268,12 +2272,21 @@ def list_training_candidates_endpoint(
 @router.post("/loras/training-candidates/owner-correction")
 def create_owner_correction_endpoint(req: OwnerCorrectionRequest):
     from app.cognition.runtime import CognitiveRuntime
-    candidate = CognitiveRuntime.get_instance().training_examples.propose_owner_correction(
-        prompt=req.prompt,
-        response=req.response,
-        skill_name=req.skill_name,
-        note=req.note,
-    )
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        candidate = runtime.training_examples.propose_owner_correction(
+            prompt=req.prompt,
+            response=req.response,
+            skill_name=req.skill_name,
+            note=req.note,
+            source_trace_id=req.trace_id or "",
+            source_session_id=req.session_id or "",
+            action_type=req.action_type,
+            goal_type=req.goal_type,
+            strategy_store=runtime.outcomes,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if candidate is None:
         raise HTTPException(status_code=400, detail="Prompt and response must each contain at least 3 characters")
     return {"success": True, "candidate": candidate.to_dict()}

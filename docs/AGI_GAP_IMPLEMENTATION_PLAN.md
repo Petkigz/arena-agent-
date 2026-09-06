@@ -17,9 +17,13 @@ Implemented in the current branch:
 - Main cognitive-cycle responses now carry and display an epistemic status for answer, investigation, defer, blocked-action, unavailable-model, and executed-action paths.
 - Existing grounded introspection now reports the persisted epistemic status when available.
 - Pipeline and `/chat` response metadata expose the structured presentation.
-- Initial behavioral tests cover unknown preservation, evidence-derived labels, idempotent rendering, and trace persistence.
+- Response grounding reconciles deterministic-answer mismatches and explicit empty-observation claims without rewriting unsupported prose.
+- Grounding results persist with traces and are available through grounded introspection without exposing private chain-of-thought.
+- `TrainingExampleStore.propose_owner_correction()` now supports durable trace links, measured strategy-outcome linkage, redaction, and the existing owner review/export gate.
+- The isolated Phase 0 runner exercises the approved owner-correction path rather than a parallel correction database.
+- Initial behavioral tests cover unknown preservation, evidence-derived labels, conservative grounding, idempotent rendering, trace persistence, and owner-review boundaries.
 
-The full measurement runner, user correction learning loop, and usefulness feedback store remain the next slices; they are not claimed complete by this status update.
+Usefulness feedback remains intentionally unimplemented in this slice; it must be added only through an approved existing extension point rather than a parallel store.
 
 ---
 

@@ -16,7 +16,6 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
@@ -275,108 +274,109 @@ class Phase0EvaluationSuite:
                 "trace_explanation_boundary", "observability", introspection_uses_trace_facts
             ))
 
-            def correction_preserves_and_updates_locally():
-                from app.cognition.correction_learning import CorrectionHandler
+            def owner_correction_preserves_trace_link():
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
+                from app.cognition.training_examples import TrainingExampleStatus, TrainingExampleStore
+
                 db_path, trace_id = self._create_trace(root, verified=False)
-
-                class FakeBeliefs:
-                    def __init__(self):
-                        self.calls = []
-
-                    def ingest(self, **kwargs):
-                        self.calls.append(kwargs)
-                        return SimpleNamespace(
-                            has_belief=False,
-                            hypothesis_value=kwargs["value"],
-                            evidence_count=0,
-                        )
-
-                beliefs = FakeBeliefs()
-                handler = CorrectionHandler(
-                    db_path,
-                    belief_engine=beliefs,
-                    strategy_store=StrategyOutcomeStore(str(db_path)),
+                store = TrainingExampleStore(
+                    root / "training_examples.db",
+                    trace_db_path=db_path,
                 )
-                result = handler.handle(
-                    trace_id=trace_id,
-                    correction="Use the phone referent.",
-                    error_type="intent",
-                    subject="current_device",
-                    predicate="referent",
-                    corrected_value="phone",
+                candidate = store.propose_owner_correction(
+                    prompt="",
+                    response="Use the phone referent.",
+                    skill_name="answer",
+                    note="The device referent was wrong.",
+                    source_trace_id=trace_id,
+                    source_session_id="phase0-session",
                     action_type="answer",
                     goal_type="device_question",
+                    strategy_store=StrategyOutcomeStore(str(root / "strategy.db")),
                 )
                 passed = (
-                    result["original_trace"]["trace_id"] == trace_id
-                    and result["belief_update"]["applied"] is True
-                    and result["belief_update"]["authoritative_belief_unchanged"] is True
-                    and result["strategy_update"]["generalized"] is False
+                    candidate is not None
+                    and candidate.status == TrainingExampleStatus.PENDING
+                    and candidate.source_trace_id == trace_id
+                    and candidate.source_session_id == "phase0-session"
+                    and candidate.action_type == "answer"
+                    and candidate.source_type == "owner_correction"
+                    and f"source_trace:{trace_id}" in candidate.evidence
                 )
-                return passed, "correction preserved trace and changed only hypothesis state", {
-                    "strategy_generalized": result["strategy_update"]["generalized"],
-                    "belief_calls": len(beliefs.calls),
+                return passed, "owner correction is pending review and linked to the original durable trace", {
+                    "candidate_id": candidate.candidate_id if candidate else None,
+                    "source_trace_id": candidate.source_trace_id if candidate else "",
+                    "status": candidate.status.value if candidate else "missing",
                 }
 
             checks.append(self._run_check(
-                "correction_local_update", "feedback", correction_preserves_and_updates_locally
+                "owner_correction_trace_link", "feedback", owner_correction_preserves_trace_link
             ))
 
             def repeated_correction_changes_strategy():
-                from app.cognition.correction_learning import CorrectionHandler
                 from app.cognition.strategy_outcomes import StrategyOutcomeStore
+                from app.cognition.training_examples import TrainingExampleStore
+
                 db_path, trace_id = self._create_trace(root, verified=False)
-                outcomes = StrategyOutcomeStore(str(db_path))
-                handler = CorrectionHandler(db_path, strategy_store=outcomes)
+                outcomes = StrategyOutcomeStore(str(root / "repeated_strategy.db"))
+                store = TrainingExampleStore(
+                    root / "repeated_candidates.db",
+                    trace_db_path=db_path,
+                )
                 kwargs = {
-                    "trace_id": trace_id,
-                    "correction": "The interpretation was wrong.",
-                    "error_type": "intent",
+                    "prompt": "Benchmark request",
+                    "response": "The corrected interpretation.",
+                    "skill_name": "answer",
+                    "note": "The interpretation was wrong.",
+                    "source_trace_id": trace_id,
                     "action_type": "answer",
                     "goal_type": "device_question",
+                    "strategy_store": outcomes,
                 }
-                first = handler.handle(**kwargs)
-                second = handler.handle(**kwargs)
+                first = store.propose_owner_correction(**kwargs)
+                second = store.propose_owner_correction(**kwargs)
                 passed = (
-                    first["strategy_update"]["generalized"] is False
-                    and second["strategy_update"]["generalized"] is True
-                    and second["strategy_update"]["adjustment_factor"] < 1.0
+                    first is not None
+                    and second is not None
+                    and first.strategy_update["generalized"] is False
+                    and second.strategy_update["generalized"] is True
+                    and second.strategy_update["adjustment_factor"] < 1.0
                 )
-                return passed, "one correction stayed local; repeated corrections lowered strategy utility", {
-                    "first_generalized": first["strategy_update"]["generalized"],
-                    "second_generalized": second["strategy_update"]["generalized"],
-                    "adjustment_factor": second["strategy_update"]["adjustment_factor"],
+                return passed, "one correction stayed local; repeated reviewed corrections lowered strategy utility", {
+                    "first_generalized": first.strategy_update.get("generalized") if first else None,
+                    "second_generalized": second.strategy_update.get("generalized") if second else None,
+                    "adjustment_factor": second.strategy_update.get("adjustment_factor") if second else None,
                 }
 
             checks.append(self._run_check(
                 "repeated_correction_strategy_revision", "feedback", repeated_correction_changes_strategy
             ))
 
-            def usefulness_is_separate():
-                from app.cognition.usefulness_feedback import UsefulnessFeedbackStore
-                db_path, trace_id = self._create_trace(root, verified=True)
-                store = UsefulnessFeedbackStore(db_path)
-                store.record_rating(trace_id=trace_id, rating=2)
-                store.record(
-                    trace_id=trace_id,
-                    signal_type="task_completed",
-                    value=1.0,
-                    source="benchmark",
+            def owner_review_gate_is_separate_from_proposal():
+                from app.cognition.training_examples import TrainingExampleStatus, TrainingExampleStore
+
+                store = TrainingExampleStore(root / "review_gate.db", trace_db_path=root / "missing-traces.db")
+                candidate = store.propose_owner_correction(
+                    prompt="Review this candidate",
+                    response="Keep it pending until the owner decides",
+                    skill_name="answer",
                 )
-                summary = store.summary()
+                insufficient = store.export_approved("answer")
+                rejected = store.decide(candidate.candidate_id, approved=False, note="Rejected during benchmark")
                 passed = (
-                    summary["samples"] == 2
-                    and summary["overall"]["mean_usefulness"] == 0.625
-                    and "correctness" in summary["note"]
+                    candidate is not None
+                    and candidate.status == TrainingExampleStatus.PENDING
+                    and insufficient.get("success") is False
+                    and rejected.status == TrainingExampleStatus.REJECTED
                 )
-                return passed, "usefulness events aggregate separately from verification", {
-                    "samples": summary["samples"],
-                    "mean_usefulness": summary["overall"]["mean_usefulness"],
+                return passed, "a candidate remains pending and export is blocked without owner approval", {
+                    "candidate_status": candidate.status.value if candidate else "missing",
+                    "export_success": insufficient.get("success"),
+                    "final_status": rejected.status.value,
                 }
 
             checks.append(self._run_check(
-                "usefulness_correctness_separation", "feedback", usefulness_is_separate
+                "owner_review_export_gate", "feedback", owner_review_gate_is_separate_from_proposal
             ))
 
         previous_by_name = {check.name: check for check in previous.checks} if previous else {}

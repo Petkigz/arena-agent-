@@ -1,7 +1,9 @@
 """Verified experience proposes LoRA examples, but only owner-approved data exports."""
 
 from types import SimpleNamespace
+import sqlite3
 
+from app.cognition.strategy_outcomes import StrategyOutcomeStore
 from app.cognition.training_examples import TrainingExampleStatus, TrainingExampleStore
 from app.tools.lora_manager import LoraManagerTool
 
@@ -99,6 +101,61 @@ def test_owner_can_edit_approve_or_reject_exact_candidate(tmp_path):
     )
     rejected = store.decide(rejected.candidate_id, approved=False)
     assert rejected.status == TrainingExampleStatus.REJECTED
+
+
+def test_owner_correction_links_trace_and_measures_repeated_strategy_failures(tmp_path):
+    trace_db = tmp_path / "traces.db"
+    with sqlite3.connect(trace_db) as conn:
+        conn.execute(
+            "CREATE TABLE cognitive_traces "
+            "(trace_id TEXT, session_id TEXT, user_input TEXT, assistant_reply TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO cognitive_traces VALUES (?, ?, ?, ?)",
+            ("trace-owner-1", "session-owner-1", "Which device?", "The wrong device."),
+        )
+
+    store = TrainingExampleStore(
+        tmp_path / "candidates.db",
+        trace_db_path=trace_db,
+    )
+    outcomes = StrategyOutcomeStore(tmp_path / "strategy.db")
+    kwargs = {
+        "prompt": "",
+        "response": "The corrected device is the phone.",
+        "skill_name": "answer",
+        "note": "Owner corrected the referent",
+        "source_trace_id": "trace-owner-1",
+        "action_type": "answer",
+        "goal_type": "device_question",
+        "strategy_store": outcomes,
+    }
+
+    first = store.propose_owner_correction(**kwargs)
+    second = store.propose_owner_correction(**kwargs)
+
+    assert first.source_trace_id == "trace-owner-1"
+    assert first.source_session_id == "session-owner-1"
+    assert first.status == TrainingExampleStatus.PENDING
+    assert first.strategy_update["generalized"] is False
+    assert second.strategy_update["generalized"] is True
+    assert second.strategy_update["adjustment_factor"] < 1.0
+
+
+def test_owner_correction_requires_existing_trace_when_linked(tmp_path):
+    store = TrainingExampleStore(
+        tmp_path / "candidates.db",
+        trace_db_path=tmp_path / "traces.db",
+    )
+
+    import pytest
+    with pytest.raises(KeyError):
+        store.propose_owner_correction(
+            prompt="A request",
+            response="A correction",
+            skill_name="answer",
+            source_trace_id="missing-trace",
+        )
 
 
 def test_export_requires_three_approved_examples_and_writes_manifest(tmp_path, monkeypatch):

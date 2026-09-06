@@ -139,7 +139,8 @@ class CognitiveRuntime:
         self.lessons = LessonStore(db_path=path)
         from app.cognition.training_examples import TrainingExampleStore
         self.training_examples = TrainingExampleStore(
-            db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db"
+            db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db",
+            trace_db_path=path,
         )
         from app.cognition.adaptive_autonomy import AdaptiveAutonomyCalibrator
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(

@@ -117,6 +117,10 @@ class MessageRouter:
         self._rate_limits: Dict[str, List[float]] = {}  # conversation_id -> timestamps
         self._rate_limit_max = 30  # max messages per minute
         self._rate_limit_window = 60  # seconds
+        # Ephemeral metadata cache for binding the active response to its
+        # durable trace. The trace database remains the source of truth; this
+        # is not a second correction or feedback store.
+        self._last_cognitive_results: Dict[str, Dict[str, Any]] = {}
 
         # Voice service will be injected after initialization
         self.voice_service = None
@@ -443,6 +447,9 @@ class MessageRouter:
 
             if not isinstance(result, dict):
                 return "I couldn't produce a response from my cognitive engine."
+
+            if conversation_id:
+                self._last_cognitive_results[conversation_id] = dict(result)
 
             reply = result.get("assistant_reply") or result.get("reply") or ""
             if reply:
