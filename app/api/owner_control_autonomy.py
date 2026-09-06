@@ -336,6 +336,16 @@ class OwnerCharterUpdate(BaseModel):
     standing_directives: Optional[List[str]] = None
 
 
+class UserStateUpdateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    key: str = Field(min_length=1, max_length=160)
+    value: Any
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    evidence_ids: List[str] = Field(default_factory=list, max_length=50)
+    expires_at: Optional[str] = None
+    affects_action_selection: bool = False
+
+
 @router.get("/owner-control/charter")
 def get_owner_charter_endpoint():
     from app.cognition.owner_charter import owner_charter_store
@@ -351,6 +361,52 @@ def update_owner_charter_endpoint(req: OwnerCharterUpdate):
         return owner_charter_store.update(req.model_dump(exclude_unset=True))
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
+
+@router.get("/owner-control/user-state")
+def get_user_state_endpoint(include_expired: bool = Query(False)):
+    """Return versioned owner state with provenance and evidence IDs."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    return CognitiveRuntime.get_instance().user_state.snapshot(
+        include_expired=include_expired
+    )
+
+
+@router.get("/owner-control/user-state/history")
+def get_user_state_history_endpoint(
+    key: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    from app.cognition.runtime import CognitiveRuntime
+
+    return {
+        "success": True,
+        "history": CognitiveRuntime.get_instance().user_state.history(key, limit),
+    }
+
+
+@router.put("/owner-control/user-state")
+def update_user_state_endpoint(req: UserStateUpdateRequest):
+    """Record an explicit owner statement; it cannot silently authorize actions."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    evidence = list(req.evidence_ids or [])
+    if not evidence:
+        evidence = [f"owner_api:{req.key}"]
+    try:
+        result = CognitiveRuntime.get_instance().user_state.set_attribute(
+            req.key,
+            req.value,
+            source_type="explicit_owner",
+            confidence=req.confidence,
+            evidence_ids=evidence,
+            expires_at=req.expires_at,
+            affects_action_selection=req.affects_action_selection,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
 
 @router.get("/owner-control/owner-model")
 def get_owner_model_endpoint():

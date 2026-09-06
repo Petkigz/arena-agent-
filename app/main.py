@@ -2907,8 +2907,12 @@ from app.api.owner_control_autonomy import (  # re-exported for existing callers
     PreemptionRequest,
     ScheduledDirectiveRequest,
     ScheduleStatusRequest,
+    UserStateUpdateRequest,
     create_owner_autonomous_goal_endpoint,
     execute_next_autonomous_goal_endpoint,
+    get_user_state_endpoint,
+    get_user_state_history_endpoint,
+    update_user_state_endpoint,
 )
 from app.api import owner_control_autonomy as _owner_autonomy  # re-export surface
 app.include_router(router, dependencies=[Depends(_legacy_verify_request)])

@@ -109,6 +109,10 @@ class CognitiveRuntime:
         self.events = EventBus()
         self.world = WorldModel(path)
         self.world_ingest = WorldIngestor(self.world, self.events)
+        from app.cognition.user_state import UserStateStore
+        self.user_state = UserStateStore(
+            str(Path(path).parent / "user_state.db") if path else "data/user_state.db"
+        )
         self.beliefs = BeliefEngine(db_path=path)
         self.actions = ActionSelector()
         self.executor = InvestigationExecutor()
@@ -3058,6 +3062,17 @@ class CognitiveRuntime:
                 self.blackboard.set("owner_model_context", owner_ctx, source="owner_model", confidence=1.0)
         except Exception as exc:
             app_logger.warning(f"Owner model context unavailable: {exc}")
+        try:
+            user_state_ctx = self.user_state.compact_context()
+            if user_state_ctx:
+                self.blackboard.set(
+                    "user_state_context",
+                    user_state_ctx,
+                    source="user_state_store",
+                    confidence=1.0,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Versioned user state context unavailable: {exc}")
         # P2 AGI: Multimodal ingestion — if image_path or attachments provided, analyze and ground
         multimodal_context = ""
         if image_path:
