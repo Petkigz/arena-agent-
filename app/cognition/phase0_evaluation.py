@@ -254,6 +254,34 @@ class Phase0EvaluationSuite:
                 "epistemic_trace_roundtrip", "observability", trace_roundtrip
             ))
 
+            def response_grounding_recovery():
+                from app.cognition.response_grounding import reconcile_response
+
+                corrected, mismatch = reconcile_response(
+                    "The result is 41.",
+                    deterministic_answers=[
+                        {"expression": "2 + 2", "value": 4, "value_str": "4"},
+                    ],
+                )
+                preserved, negative = reconcile_response(
+                    "I found no matching files.",
+                    observation_evidence="search_files: []",
+                )
+                passed = (
+                    mismatch.recovery_applied is True
+                    and "2 + 2 = 4" in corrected
+                    and negative.recovery_applied is False
+                    and preserved == "I found no matching files."
+                )
+                return passed, "authoritative contradictions are repaired without rewriting honest negative reports", {
+                    "mismatch_status": mismatch.status,
+                    "negative_status": negative.status,
+                }
+
+            checks.append(self._run_check(
+                "response_grounding_recovery", "grounding", response_grounding_recovery
+            ))
+
             def introspection_uses_trace_facts():
                 from app.cognition.commitment_ledger import GroundedIntrospection
                 db_path, trace_id = self._create_trace(root, verified=True)

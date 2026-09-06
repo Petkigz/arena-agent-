@@ -20,7 +20,7 @@ Implemented in the current branch:
 - Response grounding reconciles deterministic-answer mismatches and explicit empty-observation claims without rewriting unsupported prose.
 - Grounding results persist with traces and are available through grounded introspection without exposing private chain-of-thought.
 - `TrainingExampleStore.propose_owner_correction()` now supports durable trace links, measured strategy-outcome linkage, redaction, and the existing owner review/export gate.
-- The isolated Phase 0 runner exercises the approved owner-correction path rather than a parallel correction database.
+- The isolated Phase 0 runner exercises the approved owner-correction path and conservative response grounding rather than parallel feedback databases.
 - Initial behavioral tests cover unknown preservation, evidence-derived labels, conservative grounding, idempotent rendering, trace persistence, and owner-review boundaries.
 
 Usefulness feedback remains intentionally unimplemented in this slice; it must be added only through an approved existing extension point rather than a parallel store.

@@ -7,7 +7,7 @@ def test_phase0_suite_runs_isolated_checks_and_persists_history(tmp_path):
     history = Phase0EvaluationHistoryStore(tmp_path / "phase0.db")
     run = Phase0EvaluationSuite(history).run()
 
-    assert run.total_count == 7
+    assert run.total_count == 8
     assert run.passed_count == run.total_count, [
         (check.name, check.evidence) for check in run.checks if not check.passed
     ]
