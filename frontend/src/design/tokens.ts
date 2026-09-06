@@ -73,7 +73,15 @@ export const SPACING: Record<string, number> = Object.fromEntries(
 export const SHADOWS: Record<string, string> = tokens.shadow;
 
 /** Motion durations (ms) + shared easing. */
-export const MOTION: Record<string, number | string> = tokens.motion;
+export interface MotionSpec {
+  fast_ms: number;
+  base_ms: number;
+  pulse_slow_ms: number;
+  pulse_fast_ms: number;
+  easing: string;
+}
+
+export const MOTION: MotionSpec = tokens.motion;
 
 /** Focus ring width (px); ring color is ACCENT.primary. */
 export const FOCUS_RING_WIDTH_PX: number = tokens.focus.ring_width_px;

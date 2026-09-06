@@ -483,3 +483,46 @@ def test_landing_composer_wired_and_context_progressive_by_default():
 
     chat_source = (REPO / "desktop" / "pages" / "chat.py").read_text(encoding="utf-8")
     assert 'QPushButton("➤")' in chat_source  # icon send button, not text
+
+
+# --------------------------------------------------------------------------
+# Polish layer (round-21h): motion + theme-aware details, token-driven
+# --------------------------------------------------------------------------
+
+
+def test_desktop_scrollbars_are_theme_aware():
+    """No raw OS scrollbars over the Arena palette (parity with web index.css)."""
+    styles_source = (REPO / "desktop" / "styles.py").read_text(encoding="utf-8")
+    assert "def _app_style" in styles_source
+    assert "QScrollBar::handle:vertical" in styles_source
+    assert "QScrollBar::handle:vertical:hover" in styles_source  # web: thumb:hover muted
+    for value in ("BG_SECONDARY", "BG_SURFACE", "TEXT_MUTED"):  # theme-fresh, not literals
+        assert value in styles_source.split("def _app_style")[1]
+
+    app_source = (REPO / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert app_source.count("setStyleSheet(_app_style())") >= 2  # startup + theme refresh
+
+
+def test_desktop_sidebar_items_have_hover_state():
+    sidebar_source = (REPO / "desktop" / "widgets" / "sidebar.py").read_text(encoding="utf-8")
+    assert sidebar_source.count("QListWidget::item:hover") == 2  # construct + refresh_theme
+
+
+def test_web_animations_derive_from_motion_tokens():
+    config_source = TAILWIND_CONFIG.read_text(encoding="utf-8")
+    assert "tokens.motion" in config_source
+    # The hardcoded durations must not return.
+    for literal in ("'pulse 2s", "'pulse 1s", "fadeIn 0.3s"):
+        assert literal not in config_source
+
+
+def test_web_page_transitions_use_motion_tokens():
+    """The live framer-motion page transitions read the shared tokens."""
+    for rel in (
+        "frontend/src/app/routes/DesktopLayout.tsx",
+        "frontend/src/app/routes/MobileLayout.tsx",
+        "frontend/src/components/animations/PageTransition.tsx",
+    ):
+        source = (REPO / rel).read_text(encoding="utf-8")
+        assert "MOTION.base_ms / 1000" in source, f"{rel} lost the token-driven duration"
+        assert "duration: 0.25" not in source

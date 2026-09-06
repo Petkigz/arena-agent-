@@ -95,6 +95,7 @@ class LeftSidebar(QFrame):
         self.conv_list.setStyleSheet(
             f"background: transparent; color: {TEXT_PRIMARY}; border: none;"
             f" QListWidget::item {{ padding: 8px; border-radius: 6px; }}"
+            f" QListWidget::item:hover {{ background: {_lighten(BG_SECONDARY, 0.08).name()}; }}"
             f" QListWidget::item:selected {{ background: {BG_SURFACE}; }}"
         )
         self.conv_list.itemClicked.connect(self._on_item_clicked)
@@ -174,6 +175,7 @@ class LeftSidebar(QFrame):
         self.conv_list.setStyleSheet(
             f"background: transparent; color: {TEXT_PRIMARY}; border: none;"
             f" QListWidget::item {{ padding: 8px; border-radius: 6px; }}"
+            f" QListWidget::item:hover {{ background: {_lighten(BG_SECONDARY, 0.08).name()}; }}"
             f" QListWidget::item:selected {{ background: {BG_SURFACE}; }}"
         )
         for label in self._nav_sections:

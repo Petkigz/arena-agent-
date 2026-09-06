@@ -79,3 +79,27 @@ def _composer_style() -> str:
     )
     focus = f"QLineEdit:focus {{ border: {ring}px solid {ACCENT}; padding: {pad_y - ring + 1}px {pad_x - ring + 1}px; }}"
     return base + focus
+
+
+def _app_style() -> str:
+    """App-level stylesheet: window canvas + theme-aware scrollbars.
+
+    Mirrors the web scrollbar spec exactly (index.css): 8px, track on
+    background-secondary, pill thumb on background-surface, muted on hover —
+    so the desktop never shows raw OS scrollbars over the Arena palette.
+    """
+    from desktop.design_tokens import RADIUS
+    from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_MUTED
+
+    thumb_radius = max(2, RADIUS["sm_px"] // 2)  # pill for an 8px-wide thumb
+    return (
+        f"QMainWindow {{ background: {BG_PRIMARY}; }}"
+        f"QScrollBar:vertical {{ background: {BG_SECONDARY}; width: 8px; margin: 0; }}"
+        f"QScrollBar:horizontal {{ background: {BG_SECONDARY}; height: 8px; margin: 0; }}"
+        f"QScrollBar::handle:vertical {{ background: {BG_SURFACE}; border-radius: {thumb_radius}px; min-height: 24px; }}"
+        f"QScrollBar::handle:horizontal {{ background: {BG_SURFACE}; border-radius: {thumb_radius}px; min-width: 24px; }}"
+        f"QScrollBar::handle:vertical:hover {{ background: {TEXT_MUTED}; }}"
+        f"QScrollBar::handle:horizontal:hover {{ background: {TEXT_MUTED}; }}"
+        f"QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}"
+        f"QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}"
+    )

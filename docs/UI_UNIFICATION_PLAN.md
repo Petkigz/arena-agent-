@@ -217,10 +217,26 @@ Still needing a real build/device loop: Gradle compile verification (no Android 
 sandbox — Kotlin is source-verified and machine-guarded), voice-flow polish, and the tool
 activity cards. Guards: `tests/test_android_design_tokens.py` (10 tests).
 
-## Phase 6 — Polish last
+## Phase 6 — DONE (round-21h): polish — token-driven, never random margins
 
-Density/compact mode, motion timing, shadows/elevation. Only after hierarchy is unified —
-per the owner's directive, no random margin fixes.
+Systematic polish across all three clients, every value from `design/tokens.json`:
+
+- **Desktop**: theme-aware scrollbars everywhere (new `_app_style()` applied at startup and
+  on every theme switch — 8px, track on background-secondary, pill thumb on
+  background-surface, muted on hover — the web scrollbar spec, natively); conversation-list
+  hover state (only `:selected` was styled).
+- **Web**: the tailwind animation block now derives from `tokens.motion`; the live
+  framer-motion page/layout transitions (Desktop/Mobile layouts, PageTransition) read
+  `MOTION.base_ms` instead of hardcoded 0.25s.
+- **Android**: NavHost screen transitions paced by `MotionTokens` (fast 150ms fades),
+  pinned to `tokens.motion` by test.
+- **Guarded**: 5 new polish tests (38 design-system tests total across the three clients).
+
+Known remaining polish (deferred, needs visual iteration on a real device/browser):
+web's 34 `transition-all` sites could narrow to specific properties (repaint hygiene —
+left alone deliberately; blanket-changing them without per-site review risks regressions);
+desktop QSS cannot express shadows/elevation (Qt limitation); orb effect parity is already
+strong (web + Android per-state ring choreography, desktop per-state pulse/easing).
 
 ## Explicitly not done
 

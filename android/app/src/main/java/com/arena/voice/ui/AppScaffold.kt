@@ -9,6 +9,9 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -25,6 +28,16 @@ import com.arena.voice.ui.screens.PresenceStatus
 import com.arena.voice.ui.screens.ProjectsScreen
 import com.arena.voice.ui.screens.SettingsScreen
 import com.arena.voice.ui.screens.VisionScreen
+
+
+/**
+ * Motion tokens — the shared design system's durations (design/tokens.json,
+ * motion.fast_ms = 150). Pinned by tests/test_android_design_tokens.py.
+ */
+object MotionTokens {
+    const val FAST_MS = 150
+    const val BASE_MS = 300
+}
 
 enum class AppTab(val route: String, val label: String, val icon: ImageVector) {
     BEANIE("beanie", "Beanie", Icons.Default.Person),
@@ -87,6 +100,12 @@ fun AppScaffold(
             navController = navController,
             startDestination = AppTab.CHAT.route,
             modifier = Modifier.padding(padding),
+            // Screen changes: a quiet token-paced fade (review: polish only
+            // after structure — motion durations come from the design system).
+            enterTransition = { fadeIn(animationSpec = tween(MotionTokens.FAST_MS)) },
+            exitTransition = { fadeOut(animationSpec = tween(MotionTokens.FAST_MS)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(MotionTokens.FAST_MS)) },
+            popExitTransition = { fadeOut(animationSpec = tween(MotionTokens.FAST_MS)) },
         ) {
             composable(AppTab.BEANIE.route) {
                 BeanieScreen(

@@ -5,6 +5,7 @@ import { Sidebar } from '../../components/layout/Sidebar';
 import { ContextPanel } from '../../components/layout/ContextPanel';
 import { ConnectionBanner } from '../../components/ui/ConnectionBanner';
 import { OfflineBanner } from '../../components/ui/OfflineBanner';
+import { MOTION } from '../../design/tokens';
 
 export function DesktopLayout() {
   const location = useLocation();
@@ -25,7 +26,7 @@ export function DesktopLayout() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: MOTION.base_ms / 1000, ease: 'easeOut' }}
               className="flex-1 flex flex-col overflow-hidden"
             >
               <Outlet />

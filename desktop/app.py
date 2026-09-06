@@ -53,7 +53,7 @@ from desktop.voice_client import DesktopAudioPlayer, DesktopVoiceClient
 
 # Theme + styles (modularized)
 from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, apply_theme
-from desktop.styles import _button_style
+from desktop.styles import _button_style, _app_style
 
 # Widgets + workers (modularized)
 from desktop.widgets.orb import PresenceOrbWidget
@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         # Dark theme
-        self.setStyleSheet(f"QMainWindow {{ background: {BG_PRIMARY}; }}")
+        self.setStyleSheet(_app_style())
         self._setup_tray()
         self._check_health()
         self.chat_client.connect()
@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_all_themes(self) -> None:
         """Re-apply stylesheets to every widget using current globals (G4 live theme)."""
-        self.setStyleSheet(f"QMainWindow {{ background: {BG_PRIMARY}; }}")
+        self.setStyleSheet(_app_style())
         # Sidebar + context
         try:
             self.sidebar.refresh_theme()

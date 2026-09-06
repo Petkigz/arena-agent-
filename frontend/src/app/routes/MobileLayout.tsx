@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { BottomNavigation } from '../../components/layout/BottomNavigation';
 import { ConnectionBanner } from '../../components/ui/ConnectionBanner';
 import { OfflineBanner } from '../../components/ui/OfflineBanner';
+import { MOTION } from '../../design/tokens';
 
 export function MobileLayout() {
   const location = useLocation();
@@ -19,7 +20,7 @@ export function MobileLayout() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: MOTION.base_ms / 1000, ease: 'easeOut' }}
             className="h-full"
           >
             <Outlet />

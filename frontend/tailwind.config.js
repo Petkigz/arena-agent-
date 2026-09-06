@@ -12,6 +12,15 @@ const accentColors = tokens.color.accent;
 const darkBackground = tokens.color.themes.dark.background;
 // Elevation scale comes from the shared design system (design/tokens.json).
 const shadows = tokens.shadow;
+// Motion durations + easing come from the shared design system too.
+const motion = tokens.motion;
+const animations = {
+  'pulse-slow': `pulse ${motion.pulse_slow_ms}ms ${motion.easing} infinite`,
+  'pulse-fast': `pulse ${motion.pulse_fast_ms}ms ${motion.easing} infinite`,
+  'fade-in': `fadeIn ${motion.base_ms}ms ease-in-out`,
+  'slide-up': `slideUp ${motion.base_ms}ms ease-out`,
+  'slide-down': `slideDown ${motion.base_ms}ms ease-out`,
+};
 
 export default {
   content: [
@@ -41,13 +50,7 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
-      animation: {
-        'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in': 'fadeIn 0.3s ease-in-out',
-        'slide-up': 'slideUp 0.3s ease-out',
-        'slide-down': 'slideDown 0.3s ease-out',
-      },
+      animation: animations,
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0' },

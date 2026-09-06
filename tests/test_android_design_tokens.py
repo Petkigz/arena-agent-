@@ -197,3 +197,15 @@ def test_android_navigation_is_conversation_first():
     assert '"Workspace"' in chat
     for label in ("Pansophy", "Files", "Images", "Projects"):
         assert f'"{label}" to "' in chat, f"drawer lost the {label} entry"
+
+
+def test_android_motion_tokens_match_canonical():
+    """NavHost transitions are paced by the shared motion tokens."""
+    tokens = _tokens()
+    source = SCAFFOLD_KT.read_text(encoding="utf-8")
+    fast = re.search(r"const val FAST_MS = (\d+)", source)
+    base = re.search(r"const val BASE_MS = (\d+)", source)
+    assert fast and int(fast.group(1)) == tokens["motion"]["fast_ms"], "FAST_MS drifted from tokens.motion.fast_ms"
+    assert base and int(base.group(1)) == tokens["motion"]["base_ms"], "BASE_MS drifted from tokens.motion.base_ms"
+    # And the NavHost actually uses them.
+    assert source.count("MotionTokens.FAST_MS") >= 4  # enter/exit/popEnter/popExit
