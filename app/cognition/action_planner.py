@@ -40,6 +40,7 @@ class ActionPlanner:
         world_model: Optional[Any] = None,
         tool_registry: Optional[Any] = None,
         outcome_store: Optional[Any] = None,
+        usefulness_store: Optional[Any] = None,
         lesson_store: Optional[Any] = None,
         analogical_memory: Optional[Any] = None,
         hardware_self_model: Optional[Dict[str, Any]] = None,
@@ -51,6 +52,8 @@ class ActionPlanner:
         preserving 100% of the winning candidate's payload fields.
 
         Phase 1B: When outcome_store is provided, historical success rates adjust utility scores.
+        Owner usefulness feedback adjusts utility only after the separate trace-linked
+        usefulness signal store has its minimum sample; it never replaces correctness.
         Phase 1C: When lesson_store is provided, structured lessons influence strategy selection.
         Phase 3: When analogical_memory is provided, structurally similar verified
         tasks adjust candidate utility without changing execution authority.
@@ -99,7 +102,8 @@ class ActionPlanner:
 
         sim_res = CounterfactualSimulator.simulate_competing_branches(
             goal_text, candidate_list, goal_type=goal_type,
-            outcome_store=outcome_store, lesson_store=lesson_store,
+            outcome_store=outcome_store, usefulness_store=usefulness_store,
+            lesson_store=lesson_store,
             hardware_self_model=hardware_self_model,
             resource_manager=resource_manager,
         )
@@ -127,6 +131,7 @@ class ActionPlanner:
                 "name": branch.branch_name,
                 "action_type": branch.hypothetical_action,
                 "utility_score": branch.utility_score,
+                "usefulness_adjustment": branch.usefulness_adjustment,
                 "reasoning_summary": branch.reasoning_summary,
                 "authorization_requirement": branch.authorization_requirement,
                 "consequences": dict(branch.consequences),

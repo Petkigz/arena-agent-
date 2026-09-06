@@ -30,6 +30,7 @@ class SimulationBranch:
     reasoning_summary: str
     candidate_payload: Dict[str, Any] = field(default_factory=dict)
     history_adjustment: float = 1.0  # Phase 1B: multiplier from historical outcomes
+    usefulness_adjustment: float = 1.0  # owner usefulness only, after minimum sample
     # Consideration is deliberately broader than authorization. A restricted or
     # uncomfortable branch remains visible for consequence comparison, but this
     # field never grants permission to execute it.
@@ -175,6 +176,7 @@ class CounterfactualSimulator:
         hardware_self_model,
         resource_manager,
         manifest_levels: Dict[str, int],
+        usefulness_store=None,
     ) -> SimulationBranch:
         """Compute one branch. Pure function of its inputs; no shared mutable state."""
         idx, act = idx_act
@@ -212,6 +214,13 @@ class CounterfactualSimulator:
         history_adj = 1.0
         if outcome_store and goal_type:
             history_adj = outcome_store.adjustment_factor(goal_type, act_type)
+
+        # Owner usefulness is a separate, slower signal. It can influence
+        # consideration only after validated trace-linked feedback reaches the
+        # minimum sample; it never changes correctness or execution truth.
+        usefulness_adj = 1.0
+        if usefulness_store and goal_type:
+            usefulness_adj = usefulness_store.adjustment_factor(goal_type, act_type)
 
         # Phase 1C: Lesson-based adjustment (failure pattern influence)
         lesson_adj = 1.0
@@ -268,8 +277,17 @@ class CounterfactualSimulator:
         except Exception:
             analogical_adj = 1.0
 
-        # Combined adjustment: outcome history × lessons × skill transfer × resources × analogies
-        combined_adj = history_adj * lesson_adj * skill_adj * resource_adj * analogical_adj
+        # Combined adjustment: verified outcomes × owner usefulness × lessons
+        # × skill transfer × resources × analogies. Usefulness is bounded and
+        # deliberately capped inside StrategyUsefulnessStore.
+        combined_adj = (
+            history_adj
+            * usefulness_adj
+            * lesson_adj
+            * skill_adj
+            * resource_adj
+            * analogical_adj
+        )
 
         # 5. Honest surprisal (P0 #14): evidence-derived uncertainty that
         # actually discriminates branches — consistent verified outcomes are
@@ -285,6 +303,8 @@ class CounterfactualSimulator:
         history_note = ""
         if combined_adj != 1.0:
             history_note = f", HistoryAdj={combined_adj:.2f}"
+        if usefulness_adj != 1.0:
+            history_note += f", UsefulnessAdj={usefulness_adj:.2f}"
         if analogical_adj != 1.0:
             history_note += f", AnalogyAdj={analogical_adj:.2f}"
             analogy_reason = str(act.get("_analogical_reason", "")).strip()
@@ -325,6 +345,7 @@ class CounterfactualSimulator:
             ),
             candidate_payload=dict(payload),
             history_adjustment=combined_adj,
+            usefulness_adjustment=usefulness_adj,
             authorization_requirement=authorization_requirement,
             consequences=consequences,
         )
@@ -340,6 +361,7 @@ class CounterfactualSimulator:
         skill_classifier: Optional[Any] = None,
         hardware_self_model: Optional[Dict[str, Any]] = None,
         resource_manager: Optional[Any] = None,
+        usefulness_store: Optional[Any] = None,
     ) -> CounterfactualSimulationResult:
         app_logger.info(f"CounterfactualSimulator running parallel simulation for goal: '{target_goal}' ({len(candidate_actions)} branches)")
 
@@ -352,6 +374,7 @@ class CounterfactualSimulator:
                 target_goal=target_goal,
                 goal_type=goal_type,
                 outcome_store=outcome_store,
+                usefulness_store=usefulness_store,
                 lesson_store=lesson_store,
                 skill_classifier=skill_classifier,
                 hardware_self_model=hardware_self_model,

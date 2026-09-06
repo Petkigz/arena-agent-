@@ -136,8 +136,12 @@ class CognitiveRuntime:
         from app.cognition.tool_registry import set_shared_registry
         set_shared_registry(self.registry)
         # Phase 1B: Strategy outcome tracking for learning from experience
-        from app.cognition.strategy_outcomes import StrategyOutcomeStore
+        from app.cognition.strategy_outcomes import (
+            StrategyOutcomeStore,
+            StrategyUsefulnessStore,
+        )
         self.outcomes = StrategyOutcomeStore(db_path=path)
+        self.usefulness_feedback = StrategyUsefulnessStore(db_path=path)
         # Phase 1C: Structured lesson extraction and behavior change
         from app.cognition.structured_lessons import LessonStore
         self.lessons = LessonStore(db_path=path)
@@ -555,7 +559,9 @@ class CognitiveRuntime:
         res = ActionPlanner.plan_and_evaluate_action(
             user_text, complexity=complexity, goal_rep=goal_rep,
             memory_store=self.memory, world_model=self.world, tool_registry=self.registry,
-            outcome_store=self.outcomes, lesson_store=self.lessons,
+            outcome_store=self.outcomes,
+            usefulness_store=getattr(self, "usefulness_feedback", None),
+            lesson_store=self.lessons,
             analogical_memory=self.analogies,
             hardware_self_model=self.hardware_self_model,
             resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
@@ -4066,6 +4072,8 @@ class CognitiveRuntime:
         # Generate candidate action proposal
         proposal = forced_proposal or getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity, goal_rep=goal_rep)
         fine_action_type = proposal.action_type
+        trace.strategy_goal_type = str(getattr(goal_rep, "primary_intent_type", "") or "")
+        trace.strategy_action_type = str(fine_action_type or "")
         planner_action = str(getattr(getattr(last_decision, "proposed_action", None), "action_type", "") or "") or None
         action_agreement = (
             planner_action == fine_action_type
@@ -4386,6 +4394,7 @@ class CognitiveRuntime:
                 user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory,
                 world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload,
                 lesson_store=self.lessons, outcome_store=self.outcomes,
+                usefulness_store=getattr(self, "usefulness_feedback", None),
                 analogical_memory=self.analogies,
                 hardware_self_model=self.hardware_self_model,
                 resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
