@@ -64,7 +64,7 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
 
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
-            "SELECT epistemic_presentation_json, grounding_result_json, "
+            "SELECT ontology_revision, epistemic_presentation_json, grounding_result_json, "
             "retrieved_memories_json, hypothesis_state_json, compute_policy_json, "
             "resource_allocation_json, criticality_review_json, "
             "route_comparison_json "
@@ -73,14 +73,16 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
         ).fetchone()
 
     assert row is not None
-    persisted = json.loads(row[0])
-    grounding = json.loads(row[1])
-    retrieved = json.loads(row[2])
-    hypotheses = json.loads(row[3])
-    compute_policy = json.loads(row[4])
-    allocation = json.loads(row[5])
-    review = json.loads(row[6])
-    route = json.loads(row[7])
+    ontology_revision = row[0]
+    persisted = json.loads(row[1])
+    grounding = json.loads(row[2])
+    retrieved = json.loads(row[3])
+    hypotheses = json.loads(row[4])
+    compute_policy = json.loads(row[5])
+    allocation = json.loads(row[6])
+    review = json.loads(row[7])
+    route = json.loads(row[8])
+    assert ontology_revision == 1
     assert persisted["confidence_label"] == "Highly confident"
     assert persisted["evidence_basis"] == ["fresh observation"]
     assert grounding["status"] == "verified"

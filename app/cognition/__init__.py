@@ -4,7 +4,8 @@ from .cognitive_state import CognitiveState
 from .blackboard import Blackboard
 from .events import CognitiveEvent
 from .event_bus import EventBus
-from .checkpoint import CognitiveCheckpointStore
+from .checkpoint import CheckpointSchemaError, CognitiveCheckpointStore
+from .ontology_schema import OntologyRevision, OntologySchemaError, OntologySchemaStore
 from .session import CognitiveSession
 from .verified_reflection import (
     VerifiedReflection,
@@ -19,7 +20,11 @@ __all__ = [
     "Blackboard",
     "CognitiveEvent",
     "EventBus",
+    "CheckpointSchemaError",
     "CognitiveCheckpointStore",
+    "OntologyRevision",
+    "OntologySchemaError",
+    "OntologySchemaStore",
     "CognitiveSession",
     "VerifiedReflection",
     "VerifiedReflectionStore",

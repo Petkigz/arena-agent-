@@ -441,8 +441,8 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 - Add a criticality-triggered adversarial review for high-risk, novel, contradictory, or overconfident conclusions. **A bounded pre-gate review now records risk, no-history, conflict, unresolved-unknown, overconfidence, malformed-proposal, and missing-prediction triggers; it remains advisory and cannot authorize or execute actions.**
 - Add bounded hypothesis sets so the system can preserve competing explanations without premature synthesis. **The belief/reasoning path now retains a bounded ranked set with explicit hypothesis provenance, exposes it in cognitive state, blackboard, runtime traces, and refuses to answer from competing hypotheses without evidence or an explicit `UNKNOWN` defer.**
 - Feed validated usefulness feedback into strategy selection only after separating it from correctness, politeness, and user preference effects. **Trace-linked owner usefulness now influences candidate utility only after two or more explicit events, with a capped adjustment and outcome-signal counts kept separate from correctness; absence remains unmeasured rather than useful. This is an explicit usefulness signal, not evidence that politeness or preference effects have been causally isolated.**
-- Version ontology/schema changes separately from ordinary belief updates.
-- Add migration and rollback for ontology revisions.
+- Version ontology/schema changes separately from ordinary belief updates. **`OntologySchemaStore` now keeps immutable staged revisions, explicit digests, and append-only transition events separate from belief evidence.**
+- Add migration and rollback for ontology revisions. **Activation and rollback now require owner-authorized single-use decisions; rollback points to an older immutable revision without deleting newer history. Checkpoints use schema v2, provide an explicit v1-to-v2 migration, retain source bytes and JSONL audit records, and fail closed when deterministic restoration is unavailable.**
 
 ### Exit criteria
 

@@ -30,7 +30,11 @@ def _now() -> str:
 
 
 DECISION_EXPECTED_IDENTITY_CHANGE = "expected_identity_change"
-DECISION_TYPES = {DECISION_EXPECTED_IDENTITY_CHANGE}
+DECISION_ONTOLOGY_SCHEMA_CHANGE = "ontology_schema_change"
+DECISION_TYPES = {
+    DECISION_EXPECTED_IDENTITY_CHANGE,
+    DECISION_ONTOLOGY_SCHEMA_CHANGE,
+}
 
 
 def _digest(decision_type: str, payload: Dict[str, Any]) -> str:

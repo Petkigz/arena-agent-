@@ -22,6 +22,7 @@ class CognitiveTrace:
     session_id: Optional[str] = field(default_factory=lambda: f"sess_{uuid.uuid4().hex[:8]}")
     trace_id: str = field(default_factory=lambda: f"trace_{uuid.uuid4().hex[:8]}")
     route_chosen: str = "CognitivePipeline"
+    ontology_revision: int = 1
     vram_pressure_at_start: float = 0.0
     ram_pressure_at_start: float = 0.0
     attention_focus: str = ""
@@ -236,6 +237,7 @@ class CognitiveTrace:
                     trace_id TEXT PRIMARY KEY,
                     session_id TEXT NOT NULL,
                     user_input TEXT NOT NULL,
+                    ontology_revision INTEGER NOT NULL DEFAULT 1,
                     assistant_reply TEXT NOT NULL,
                     actions_json TEXT NOT NULL,
                     model_used TEXT NOT NULL,
@@ -266,6 +268,7 @@ class CognitiveTrace:
             # EXISTS won't add them, so patch EVERY missing column in.
             cols = {r[1] for r in cursor.execute("PRAGMA table_info(cognitive_traces)").fetchall()}
             for column, ddl in (
+                ("ontology_revision", "INTEGER NOT NULL DEFAULT 1"),
                 ("attention_focus", "TEXT"),
                 ("belief_confidence", "REAL"),
                 ("gate_decision", "TEXT"),
@@ -288,12 +291,13 @@ class CognitiveTrace:
                     cursor.execute(f"ALTER TABLE cognitive_traces ADD COLUMN {column} {ddl}")
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
-                (trace_id, session_id, user_input, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, hypothesis_state_json, compute_policy_json, strategy_goal_type, strategy_action_type, resource_allocation_json, criticality_review_json, route_comparison_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trace_id, session_id, user_input, ontology_revision, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, hypothesis_state_json, compute_policy_json, strategy_goal_type, strategy_action_type, resource_allocation_json, criticality_review_json, route_comparison_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trace_id,
                 self.session_id or "default",
                 self.user_input,
+                int(self.ontology_revision),
                 self.assistant_reply,
                 json.dumps(self.actions_executed),
                 self.model_used,

@@ -243,6 +243,11 @@ class CognitiveRuntime:
             str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db",
             owner_decisions=self.owner_decisions,
         )
+        from app.cognition.ontology_schema import OntologySchemaStore
+        self.ontology_schema = OntologySchemaStore(
+            str(Path(path).parent / "ontology_schema.db") if path else "data/ontology_schema.db",
+            owner_decisions=self.owner_decisions,
+        )
         from app.cognition.self_recovery import SelfRecoveryStore
         self.self_recovery = SelfRecoveryStore(
             str(Path(path).parent / "self_recovery.db") if path else "data/self_recovery.db"
@@ -539,6 +544,7 @@ class CognitiveRuntime:
             "stale_beliefs": stale_count,
             "total_outcomes": self.outcomes.total_recorded(),
             "total_lessons": self.lessons.total_lessons(),
+            "ontology_revision": self.ontology_schema.current().revision,
         }
         app_logger.info(
             f"Session start: {beliefs_changed} beliefs recalculated, "
@@ -3025,6 +3031,7 @@ class CognitiveRuntime:
             complexity_requested=complexity,
             session_id=session_id
         )
+        trace.ontology_revision = self.ontology_schema.current().revision
 
         try:
             hw = HardwareMonitor.get_hardware_stats()
@@ -4311,6 +4318,7 @@ class CognitiveRuntime:
                 "success": False,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
+                "ontology_revision": trace.ontology_revision,
                 "user_text": user_text,
                 "assistant_reply": blocked_msg,
                 "executed_actions": [],
