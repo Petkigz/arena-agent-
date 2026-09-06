@@ -312,6 +312,13 @@ class ReflectionRequest(BaseModel):
     outcome_summary: str
     user_feedback: Optional[str] = None
 
+class TraceUsefulnessRequest(BaseModel):
+    """Owner feedback about usefulness, separate from correctness."""
+    usefulness: str
+    outcome_signal: str = ""
+    retrieval_useful: Optional[bool] = None
+    note: str = ""
+
 class NotificationRequest(BaseModel):
     title: str
     message: str
@@ -613,6 +620,12 @@ def chat_with_local_brain(req: ChatRequest):
         "goal_verified": pipeline_res.get("goal_verified"),
         "goal_lifecycle_state": pipeline_res.get("goal_lifecycle_state"),
         "reason": pipeline_res.get("reason"),
+        "epistemic_presentation": pipeline_res.get("epistemic_presentation", {}),
+        "grounding": pipeline_res.get("grounding", {}),
+        "reminder": pipeline_res.get("reminder"),
+        "due_reminders": pipeline_res.get("due_reminders", []),
+        "conversation_turn": pipeline_res.get("conversation_turn"),
+        "prospective_memory_error": pipeline_res.get("prospective_memory_error"),
         # Owner review P1 #9: when a loaded fallback model answered, the
         # API names both models — disclosure at the boundary the client
         # sees, not just the logs. Absent when the requested model
@@ -1104,6 +1117,33 @@ def intelligence_benchmark_history_endpoint(
 ):
     from app.cognition.runtime import CognitiveRuntime
     reports = CognitiveRuntime.get_instance().intelligence_benchmarks.history_store.history(limit)
+    return {
+        "success": True,
+        "reports": [report.to_dict() for report in reports],
+    }
+
+
+# ── Phase 0 evidence-centered evaluation ────────────────────────────────────
+@router.post("/benchmarks/phase0/run")
+def run_phase0_evaluation_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    report = CognitiveRuntime.get_instance().phase0_evaluations.run()
+    return {"success": True, "report": report.to_dict()}
+
+
+@router.get("/benchmarks/phase0/latest")
+def latest_phase0_evaluation_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    report = CognitiveRuntime.get_instance().phase0_evaluations.history_store.latest()
+    return {"success": True, "report": report.to_dict() if report else None}
+
+
+@router.get("/benchmarks/phase0/history")
+def phase0_evaluation_history_endpoint(
+    limit: int = Query(20, ge=1, le=200),
+):
+    from app.cognition.runtime import CognitiveRuntime
+    reports = CognitiveRuntime.get_instance().phase0_evaluations.history_store.history(limit)
     return {
         "success": True,
         "reports": [report.to_dict() for report in reports],
@@ -1944,6 +1984,7 @@ async def voice_chat_endpoint(file: UploadFile = File(...), complexity: str = Qu
         "assistant_text": assistant_text,
         "audio_url": tts_res.get("audio_url", ""),
         "model_used": pipeline_res.get("model_used", ""),
+        "grounding": pipeline_res.get("grounding", {}),
         "executed_actions": pipeline_res.get("executed_actions", []),
         "speaker_verified": speaker_check.get("verified", False),
         "speaker_verification": speaker_check,
@@ -2152,10 +2193,14 @@ class TrainingCandidateDecisionRequest(BaseModel):
     note: str = ""
 
 class OwnerCorrectionRequest(BaseModel):
-    prompt: str
+    prompt: str = ""
     response: str
     skill_name: str = "general"
     note: str = ""
+    trace_id: Optional[str] = None
+    session_id: Optional[str] = None
+    action_type: str = "owner_correction"
+    goal_type: str = ""
 
 class TrainingDatasetExportRequest(BaseModel):
     skill_name: str
@@ -2238,12 +2283,21 @@ def list_training_candidates_endpoint(
 @router.post("/loras/training-candidates/owner-correction")
 def create_owner_correction_endpoint(req: OwnerCorrectionRequest):
     from app.cognition.runtime import CognitiveRuntime
-    candidate = CognitiveRuntime.get_instance().training_examples.propose_owner_correction(
-        prompt=req.prompt,
-        response=req.response,
-        skill_name=req.skill_name,
-        note=req.note,
-    )
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        candidate = runtime.training_examples.propose_owner_correction(
+            prompt=req.prompt,
+            response=req.response,
+            skill_name=req.skill_name,
+            note=req.note,
+            source_trace_id=req.trace_id or "",
+            source_session_id=req.session_id or "",
+            action_type=req.action_type,
+            goal_type=req.goal_type,
+            strategy_store=runtime.outcomes,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if candidate is None:
         raise HTTPException(status_code=400, detail="Prompt and response must each contain at least 3 characters")
     return {"success": True, "candidate": candidate.to_dict()}
@@ -2673,6 +2727,38 @@ def ast_generate_test_endpoint(module_query: str = Query(...)):
     return ASTJanitor.generate_pytest_contract(module_query)
 
 # 15. Phase 7 Meta-Learning & RAG Memory Endpoints
+@router.post("/cognition/traces/{trace_id}/usefulness")
+def record_trace_usefulness_endpoint(trace_id: str, req: TraceUsefulnessRequest):
+    """Record an owner usefulness signal without changing correctness state."""
+    from app.cognition.trace import CognitiveTrace
+    try:
+        feedback = CognitiveTrace.record_usefulness_feedback(
+            trace_id,
+            usefulness=req.usefulness,
+            outcome_signal=req.outcome_signal,
+            retrieval_useful=req.retrieval_useful,
+            note=req.note,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"success": True, "feedback": feedback}
+
+
+@router.get("/cognition/traces/{trace_id}/usefulness")
+def list_trace_usefulness_endpoint(trace_id: str):
+    """Return usefulness events; absence is unmeasured, not useful."""
+    from app.cognition.trace import CognitiveTrace
+    return {
+        "success": True,
+        "trace_id": trace_id,
+        "feedback": CognitiveTrace.list_usefulness_feedback(trace_id),
+    }
+
+
 @router.post("/memory/rag-search")
 def rag_search_endpoint(req: RAGSearchRequest):
     results = SemanticRAGEngine.search_memories(req.query, limit=req.limit)
@@ -2860,8 +2946,14 @@ from app.api.owner_control_autonomy import (  # re-exported for existing callers
     PreemptionRequest,
     ScheduledDirectiveRequest,
     ScheduleStatusRequest,
+    UserStateUpdateRequest,
     create_owner_autonomous_goal_endpoint,
     execute_next_autonomous_goal_endpoint,
+    get_user_state_endpoint,
+    get_user_state_history_endpoint,
+    update_user_state_endpoint,
+    list_turn_reminders_endpoint,
+    complete_turn_reminder_endpoint,
 )
 from app.api import owner_control_autonomy as _owner_autonomy  # re-export surface
 app.include_router(router, dependencies=[Depends(_legacy_verify_request)])

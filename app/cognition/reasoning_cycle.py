@@ -81,7 +81,28 @@ class ReasoningCycle:
                     belief=belief
                 )
 
-        # 3. Knowledge Query: Direct answer or high confidence belief
+        # 3. Competing hypotheses: preserve alternatives and seek evidence
+        # instead of collapsing them into a blended answer. If no bounded
+        # information need is available, defer explicitly; no hypothesis is
+        # promoted to environmental truth by this branch.
+        if belief and belief.has_competing_hypotheses:
+            need = choose_information_need(information_needs or [])
+            if need is not None:
+                return ReasoningDecision(
+                    ReasoningAction.INVESTIGATE,
+                    min(float(belief.belief_confidence), 0.54),
+                    "Competing hypotheses remain; gathering evidence before answering.",
+                    information_need=need,
+                    belief=belief,
+                )
+            return ReasoningDecision(
+                ReasoningAction.DEFER,
+                min(float(belief.belief_confidence), 0.54),
+                "Competing hypotheses remain and no evidence request is available; preserving UNKNOWN.",
+                belief=belief,
+            )
+
+        # 4. Knowledge Query: Direct answer or high confidence belief
         if belief and belief.has_belief and belief.belief_confidence >= self.answer_threshold:
             return ReasoningDecision(ReasoningAction.ANSWER, belief.belief_confidence, "Best hypothesis exceeds answer threshold.", belief=belief)
 

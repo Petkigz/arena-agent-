@@ -929,6 +929,8 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(CalendarService.add_event, "title", "start", "end", "location"))
     add("add_reminder", "productivity", 1, "Add a reminder",
         _wrap(CalendarService.add_reminder, "title", "due", "note"))
+    add("add_turn_reminder", "productivity", 1, "Add a reminder after N conversation turns",
+        _wrap(CalendarService.add_turn_reminder, "title", "turns", "session_id", "note", "expiry_turns"))
     add("list_events", "productivity", 0, "List calendar events",
         _ignore_payload(CalendarService.list_events))
     add("due_reminders", "productivity", 0, "List due reminders",

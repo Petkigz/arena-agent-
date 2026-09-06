@@ -8,6 +8,7 @@ from app.utils.logger import app_logger
 from app.cognition.runtime import CognitiveRuntime
 from app.database import db
 from backend.websocket_server import ws_manager
+from backend.voice.orchestrator import VoicePipelineStartupError
 
 
 # System prompt for the AI assistant
@@ -116,6 +117,10 @@ class MessageRouter:
         self._rate_limits: Dict[str, List[float]] = {}  # conversation_id -> timestamps
         self._rate_limit_max = 30  # max messages per minute
         self._rate_limit_window = 60  # seconds
+        # Ephemeral metadata cache for binding the active response to its
+        # durable trace. The trace database remains the source of truth; this
+        # is not a second correction or feedback store.
+        self._last_cognitive_results: Dict[str, Dict[str, Any]] = {}
 
         # Voice service will be injected after initialization
         self.voice_service = None
@@ -317,6 +322,18 @@ class MessageRouter:
                     conversation_history=history[-16:],
                 )
 
+                # Bind the visible answer to the durable trace so an owner can
+                # submit a correction against the exact response, not merely
+                # against the latest conversation turn.
+                runtime_result = self._last_cognitive_results.get(conversation_id, {})
+                if runtime_result.get("trace_id"):
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "cognitive_metadata",
+                        "conversation_id": conversation_id,
+                        "trace_id": runtime_result.get("trace_id"),
+                        "epistemic_presentation": runtime_result.get("epistemic_presentation", {}),
+                        "grounding": runtime_result.get("grounding", {}),
+                    })
                 # Surface the exact pending scope to the owner. This event is only a
                 # request; approval mints a separate short-lived authorization grant.
                 try:
@@ -430,6 +447,9 @@ class MessageRouter:
 
             if not isinstance(result, dict):
                 return "I couldn't produce a response from my cognitive engine."
+
+            if conversation_id:
+                self._last_cognitive_results[conversation_id] = dict(result)
 
             reply = result.get("assistant_reply") or result.get("reply") or ""
             if reply:
@@ -596,15 +616,62 @@ class MessageRouter:
         app_logger.info(f"Voice start requested for conversation {conversation_id}")
 
         if self.voice_service:
-            await self.voice_service.start(conversation_id)
-        else:
-            app_logger.warning("Voice service not available")
-            if websocket:
-                await ws_manager.send_to_connection(websocket, {
+            try:
+                await self.voice_service.start(conversation_id)
+            except VoicePipelineStartupError as exc:
+                # Keep the WebSocket alive and tell the owner exactly which
+                # required component failed, why, and what to fix.  Do not
+                # silently continue with a dead microphone or empty STT path.
+                details = exc.as_dict()
+                payload = {
                     "type": "voice_status",
                     "conversation_id": conversation_id,
-                    "status": "unavailable"
-                })
+                    "status": "error",
+                    **details,
+                    "message": str(exc),
+                }
+                if websocket:
+                    await ws_manager.send_to_connection(websocket, payload)
+                else:
+                    await ws_manager.broadcast_to_conversation(conversation_id, payload)
+                app_logger.error("Voice start refused: %s", exc)
+            except Exception as exc:
+                # Keep unexpected constructor/configuration failures visible too;
+                # never let a voice-start exception terminate the WebSocket with
+                # no component-level explanation.
+                error = VoicePipelineStartupError(
+                    "voice_service",
+                    f"{type(exc).__name__}: {exc}",
+                    "Inspect the server traceback and correct the voice service "
+                    "configuration before retrying.",
+                )
+                payload = {
+                    "type": "voice_status",
+                    "conversation_id": conversation_id,
+                    "status": "error",
+                    **error.as_dict(),
+                    "message": str(error),
+                }
+                if websocket:
+                    await ws_manager.send_to_connection(websocket, payload)
+                else:
+                    await ws_manager.broadcast_to_conversation(conversation_id, payload)
+                app_logger.exception("Unexpected voice start failure")
+        else:
+            app_logger.error("Voice service not available")
+            payload = {
+                "type": "voice_status",
+                "conversation_id": conversation_id,
+                "status": "error",
+                "component": "voice_service",
+                "reason": "The voice service is not initialized",
+                "remediation": "Restart the Arena server and inspect startup logs before retrying.",
+                "message": "Voice service is unavailable; no voice component was started.",
+            }
+            if websocket:
+                await ws_manager.send_to_connection(websocket, payload)
+            else:
+                await ws_manager.broadcast_to_conversation(conversation_id, payload)
 
     async def _handle_voice_stop(self, websocket, message: Dict[str, Any]):
         """Handle stopping voice input."""

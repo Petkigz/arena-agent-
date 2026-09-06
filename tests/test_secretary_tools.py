@@ -13,6 +13,7 @@ from app.tools.translator import TranslatorTool
 from app.tools.email_service import EmailService
 from app.tools.sql_query import SQLQueryTool
 from app.tools.calendar_service import CalendarService
+from app.cognition.prospective_memory import parse_turn_reminder_request
 from app.tools.document_generator import DocumentGenerator, _md_to_html
 from app.tools.weather_service import WeatherService
 
@@ -113,6 +114,59 @@ def test_calendar_events_and_reminders(tmp_path, monkeypatch):
     done = CalendarService.complete_reminder(r["reminder"]["id"])
     assert done["success"] is True
     assert CalendarService.due_reminders() == []
+
+
+def test_turn_reminder_survives_topic_changes_and_delivers_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(CalendarService, "STORE_PATH", tmp_path / "cal.json")
+
+    parsed = parse_turn_reminder_request(
+        "Remind me in three turns to review the deployment"
+    )
+    assert parsed == {
+        "turns": 3,
+        "title": "review the deployment",
+        "connector": "to",
+    }
+
+    created = CalendarService.add_turn_reminder(
+        parsed["title"], parsed["turns"], session_id="conversation-1"
+    )
+    assert created["success"] is True
+    reminder_id = created["reminder"]["id"]
+
+    assert CalendarService.advance_turn("conversation-1")["reminders"] == []
+    assert CalendarService.advance_turn("conversation-1")["reminders"] == []
+    # The intervening requests can concern another topic; only the durable
+    # session turn count controls delivery.
+    delivered = CalendarService.advance_turn("conversation-1")["reminders"]
+    assert [item["id"] for item in delivered] == [reminder_id]
+    assert delivered[0]["status"] == "delivered"
+    assert CalendarService.advance_turn("conversation-1")["reminders"] == []
+
+    listed = CalendarService.list_turn_reminders("conversation-1")
+    assert listed[0]["delivered"] is True
+    completed = CalendarService.complete_reminder(reminder_id)
+    assert completed["success"] is True
+    assert completed["reminder"]["status"] == "completed"
+
+
+def test_turn_reminder_expiry_is_explicit(tmp_path, monkeypatch):
+    monkeypatch.setattr(CalendarService, "STORE_PATH", tmp_path / "cal.json")
+    created = CalendarService.add_turn_reminder(
+        "short-lived follow-up", 3, session_id="conversation-2", expiry_turns=1
+    )
+    assert created["success"] is True
+
+    CalendarService.advance_turn("conversation-2")
+    CalendarService.advance_turn("conversation-2")
+    reminders = CalendarService.list_turn_reminders("conversation-2")
+    assert reminders[0]["status"] == "expired"
+    assert CalendarService.advance_turn("conversation-2")["reminders"] == []
+
+
+def test_ambiguous_turn_reminder_language_is_not_scheduled():
+    assert parse_turn_reminder_request("I was reminded of three turns in a story") is None
+    assert parse_turn_reminder_request("remind me sometime about the report") is None
 
 
 # ── Document generation ─────────────────────────────────────────────────────

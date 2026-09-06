@@ -33,17 +33,23 @@ class SpeechToTextService:
         
         self.model: Optional[WhisperModel] = None
         self.is_running = False
+        self.last_error: Optional[str] = None
         
         # Callbacks
         self.on_transcript: Optional[Callable[[str, bool], None]] = None
         
     def start(self):
-        """Start STT service."""
+        """Start STT service and retain a diagnostic when it cannot load."""
+        self.last_error = None
         if self.is_running:
             return
 
         if WhisperModel is None:
-            app_logger.warning("Cannot start STT service: faster-whisper not installed")
+            self.last_error = "faster-whisper is not installed"
+            app_logger.error(
+                "Cannot start STT service: faster-whisper not installed. "
+                "Install it and ensure the selected model is available locally."
+            )
             return
 
         try:
@@ -58,7 +64,10 @@ class SpeechToTextService:
             app_logger.info(f"STT service started: model={self.model_size}, device={self.device}")
             
         except Exception as e:
-            app_logger.error(f"Failed to start STT service: {e}")
+            self.last_error = f"{type(e).__name__}: {e}"
+            self.model = None
+            self.is_running = False
+            app_logger.error(f"Failed to start STT service: {self.last_error}")
             raise
     
     def stop(self):
@@ -82,7 +91,8 @@ class SpeechToTextService:
         - segments: list of segments with timestamps
         """
         if not self.is_running or self.model is None:
-            return {"text": "", "language": None, "segments": []}
+            reason = self.last_error or "STT is not running with a loaded Whisper model"
+            raise RuntimeError(reason)
             
         try:
             # Transcribe audio
@@ -127,8 +137,9 @@ class SpeechToTextService:
             return result
             
         except Exception as e:
-            app_logger.error(f"Transcription error: {e}")
-            return {"text": "", "language": None, "segments": []}
+            self.last_error = f"{type(e).__name__}: {e}"
+            app_logger.error(f"Transcription error: {self.last_error}")
+            raise
     
     async def transcribe_async(
         self,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,7 +50,10 @@ fun WorkingContextAffordance(context: WorkingContext) {
         Box(
             Modifier
                 .size(8.dp)
-                .background(PresenceStatus.WORKING.color, CircleShape)
+                .background(
+                    SharedPresenceTokens.forStatus(LocalContext.current, PresenceStatus.WORKING).color,
+                    CircleShape,
+                )
         )
         Spacer(Modifier.width(Spacing.sm))
         Text("Working on", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

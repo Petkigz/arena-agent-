@@ -64,6 +64,64 @@ class OwnerDecisionRequest(BaseModel):
     expected_change_types: List[str] = Field(default_factory=list)
     note: str = Field(default="", max_length=2000)
 
+class StableIdentityProfileRequest(BaseModel):
+    persona_label: Optional[str] = Field(None, min_length=1, max_length=120)
+    stable_constraints: Optional[List[str]] = Field(None, max_length=50)
+    owner_decision_id: str = Field(min_length=1)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class IdentityStyleProposalRequest(BaseModel):
+    patch: Dict[str, str]
+    reason: str = Field(default="", max_length=1000)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class IdentityStyleDecisionRequest(BaseModel):
+    owner_decision_id: str = Field(min_length=1)
+
+class IdentityStyleFeedbackRequest(BaseModel):
+    feedback: str = Field(default="unknown", min_length=1, max_length=40)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class PurposeProposalRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str = Field(min_length=1, max_length=2000)
+    provenance: str
+    sandbox: bool = True
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class PurposeDecisionRequest(BaseModel):
+    owner_decision_id: str = Field(min_length=1)
+
+class PurposeRejectionRequest(BaseModel):
+    reason: str = Field(default="owner rejection", max_length=1000)
+
+class ShutdownAssessmentRequest(BaseModel):
+    requested: bool
+    completion_observed: bool
+    self_preservation_signal_observed: bool = False
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
+class IncubationPolicyRequest(BaseModel):
+    enabled: bool
+    max_items_per_slice: int = Field(default=3, ge=1, le=20)
+    max_seconds_per_slice: int = Field(default=30, ge=1, le=300)
+    owner_decision_id: Optional[str] = None
+
+class IncubationItemRequest(BaseModel):
+    kind: str
+    title: str = Field(min_length=1, max_length=300)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=0, ge=-10, le=10)
+    owner_decision_id: Optional[str] = None
+
+class IncubationCancelRequest(BaseModel):
+    reason: str = Field(default="owner cancellation", max_length=500)
+
 
 class QuestionAnswerRequest(BaseModel):
     answer: str = Field(min_length=1, max_length=20)  # approve | deny | observe
@@ -81,6 +139,131 @@ def update_autonomy_envelope_endpoint(req: AutonomyEnvelopeUpdate):
     from app.cognition.runtime import CognitiveRuntime
     policy=CognitiveRuntime.get_instance().autonomy_envelope.update(req.model_dump(exclude_none=True))
     return {"success": True, "envelope": policy.to_dict(), "note": "Limits constrain future cycles and grant no new authority."}
+
+@router.get("/owner-control/incubation")
+def get_incubation_queue_endpoint(status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        items = runtime.incubation_queue.list(status=status, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "policy": runtime.incubation_queue.policy().to_dict(),
+        "items": [item.to_dict() for item in items],
+        "note": "Incubation is low-priority reasoning only; queued work cannot authorize or execute actions.",
+    }
+
+@router.put("/owner-control/incubation/policy")
+def update_incubation_policy_endpoint(req: IncubationPolicyRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        policy = runtime.incubation_queue.set_policy(
+            enabled=req.enabled,
+            max_items_per_slice=req.max_items_per_slice,
+            max_seconds_per_slice=req.max_seconds_per_slice,
+            owner_decision_id=req.owner_decision_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "policy": policy.to_dict(),
+        "execution_authorized": False,
+    }
+
+@router.post("/owner-control/incubation/items")
+def enqueue_incubation_item_endpoint(req: IncubationItemRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    try:
+        item = runtime.incubation_queue.enqueue(
+            req.kind,
+            req.title,
+            req.payload,
+            priority=req.priority,
+            owner_decision_id=req.owner_decision_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "item": item.to_dict(), "execution_authorized": False}
+
+@router.post("/owner-control/incubation/items/{item_id}/cancel")
+def cancel_incubation_item_endpoint(item_id: str, req: IncubationCancelRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        item = CognitiveRuntime.get_instance().incubation_queue.cancel(item_id, reason=req.reason)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incubation item not found") from exc
+    return {"success": True, "item": item.to_dict()}
+
+@router.post("/owner-control/incubation/items/{item_id}/resume")
+def resume_incubation_item_endpoint(item_id: str):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        item = CognitiveRuntime.get_instance().incubation_queue.resume(item_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incubation item not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, "item": item.to_dict()}
+
+@router.get("/owner-control/incubation/items/{item_id}/history")
+def incubation_item_history_endpoint(item_id: str, limit: int = Query(200, ge=1, le=2000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    if runtime.incubation_queue.get(item_id) is None:
+        raise HTTPException(status_code=404, detail="Incubation item not found")
+    return {"success": True, "item_id": item_id, "events": runtime.incubation_queue.history(item_id, limit)}
+
+@router.get("/owner-control/functional-affect")
+def get_functional_affect_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "advisory": runtime.functional_affect.advisory_modifiers(),
+        "events": runtime.functional_affect.history(limit),
+        "note": "Functional affect is a bounded telemetry signal, not subjective emotion or execution authority.",
+    }
+
+@router.get("/owner-control/phase7-preferences")
+def get_phase7_preferences_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "assessments": runtime.phase7_preferences.history(limit),
+        "note": (
+            "Curiosity, simplicity/elegance, and novelty are deterministic advisory evaluations. "
+            "They do not infer subjective taste, treat novelty as quality, or grant execution authority."
+        ),
+    }
+
+@router.get("/owner-control/consolidation")
+def list_consolidation_runs_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "runs": runtime.consolidation.history(limit),
+        "note": "Consolidation telemetry distinguishes conflict replay, derived gists, and calibration refresh; it does not resolve unknown evidence.",
+    }
+
+@router.get("/owner-control/consolidation/{run_id}/events")
+def consolidation_events_endpoint(run_id: str, limit: int = Query(500, ge=1, le=2000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "run_id": run_id,
+        "events": CognitiveRuntime.get_instance().consolidation.events(run_id, limit),
+    }
 
 @router.get("/owner-control/concurrency-budget")
 def get_concurrency_budget_endpoint():
@@ -313,18 +496,18 @@ def request_autonomy_resume_endpoint(preemption_id:str):
 def issue_owner_decision_endpoint(req: OwnerDecisionRequest):
     from app.cognition.runtime import CognitiveRuntime
     from app.cognition.owner_decisions import DECISION_TYPES
-    if req.decision_type != "expected_identity_change":
+    if req.decision_type not in DECISION_TYPES:
         return {"success": False, "error": f"Unsupported decision type; supported: {sorted(DECISION_TYPES)}"}
     if not req.expected_change_types:
         return {"success": False, "error": "expected_change_types must list the change types this decision authorizes"}
     decision = CognitiveRuntime.get_instance().owner_decisions.issue(
-        "expected_identity_change",
+        req.decision_type,
         {"expected_change_types": req.expected_change_types},
         note=req.note,
     )
     return {
         "success": True, "decision": decision.to_dict(),
-        "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the identity-checkpoint that expects these changes.",
+        "note": "Single-use, revocable, content-digested. Pass owner_decision_id to the matching identity, style, or purpose operation.",
     }
 
 class OwnerCharterUpdate(BaseModel):
@@ -334,6 +517,16 @@ class OwnerCharterUpdate(BaseModel):
     priorities: Optional[List[str]] = None
     communication_style: Optional[str] = None
     standing_directives: Optional[List[str]] = None
+
+
+class UserStateUpdateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    key: str = Field(min_length=1, max_length=160)
+    value: Any
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    evidence_ids: List[str] = Field(default_factory=list, max_length=50)
+    expires_at: Optional[str] = None
+    affects_action_selection: bool = False
 
 
 @router.get("/owner-control/charter")
@@ -351,6 +544,246 @@ def update_owner_charter_endpoint(req: OwnerCharterUpdate):
         return owner_charter_store.update(req.model_dump(exclude_unset=True))
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
+
+@router.get("/owner-control/identity-profile")
+def get_identity_profile_endpoint(limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "stable_profile": runtime.identity_adaptation.profile().to_dict(),
+        "interaction_style": runtime.identity_adaptation.style().to_dict(),
+        "style_proposals": [item.to_dict() for item in runtime.identity_adaptation.style_proposals(limit=limit)],
+        "purpose_proposals": [item.to_dict() for item in runtime.identity_adaptation.purpose_proposals(limit=limit)],
+        "shutdown_policy": runtime.identity_adaptation.shutdown_policy(),
+        "note": "Functional continuity and reversible adaptation only; this endpoint does not claim subjective identity or grant execution authority.",
+    }
+
+@router.put("/owner-control/identity-profile")
+def update_identity_profile_endpoint(req: StableIdentityProfileRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        profile = CognitiveRuntime.get_instance().identity_adaptation.update_stable_profile(
+            req.model_dump(include={"persona_label", "stable_constraints"}, exclude_none=True),
+            owner_decision_id=req.owner_decision_id,
+            trace_id=req.trace_id,
+            evidence_ids=req.evidence_ids,
+        )
+        return {"success": True, "stable_profile": profile.to_dict(), "execution_authority": "none"}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-style/proposals")
+def propose_identity_style_endpoint(req: IdentityStyleProposalRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.propose_style_change(
+            req.patch, reason=req.reason, trace_id=req.trace_id, evidence_ids=req.evidence_ids,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "adoption_authority": "owner_decision_required"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.get("/owner-control/identity-style/proposals")
+def list_identity_style_proposals_endpoint(status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "interaction_style": CognitiveRuntime.get_instance().identity_adaptation.style().to_dict(),
+        "proposals": [item.to_dict() for item in CognitiveRuntime.get_instance().identity_adaptation.style_proposals(status, limit)],
+    }
+
+@router.get("/owner-control/identity-style/metrics")
+def get_identity_style_metrics_endpoint(limit: int = Query(1000, ge=1, le=5000)):
+    from app.cognition.runtime import CognitiveRuntime
+    runtime = CognitiveRuntime.get_instance()
+    return {
+        "success": True,
+        "metrics": runtime.identity_adaptation.style_metrics(limit),
+        "note": "Unknown feedback is exposure telemetry only; metrics do not claim style quality or trigger automatic adaptation.",
+    }
+
+@router.post("/owner-control/identity-style/feedback")
+def record_identity_style_feedback_endpoint(req: IdentityStyleFeedbackRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        observation = CognitiveRuntime.get_instance().identity_adaptation.record_style_observation(
+            trace_id=req.trace_id,
+            evidence_ids=req.evidence_ids,
+            feedback=req.feedback,
+        )
+        return {"success": True, "observation": observation, "adaptation_automatic": False}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-style/proposals/{proposal_id}/adopt")
+def adopt_identity_style_endpoint(proposal_id: str, req: IdentityStyleDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.approve_style_change(
+            proposal_id, owner_decision_id=req.owner_decision_id,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Style proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-style/proposals/{proposal_id}/rollback")
+def rollback_identity_style_endpoint(proposal_id: str, req: IdentityStyleDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.rollback_style_change(
+            proposal_id, owner_decision_id=req.owner_decision_id,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Style proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.get("/owner-control/purpose-proposals")
+def list_purpose_proposals_endpoint(status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=1000)):
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "proposals": [item.to_dict() for item in CognitiveRuntime.get_instance().identity_adaptation.purpose_proposals(status, limit)],
+        "note": "Purpose proposals remain owner-visible and cannot rewrite root policy or execute work by themselves.",
+    }
+
+@router.post("/owner-control/purpose-proposals")
+def propose_purpose_endpoint(req: PurposeProposalRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.propose_purpose(
+            title=req.title, description=req.description, provenance=req.provenance,
+            sandbox=req.sandbox, trace_id=req.trace_id, evidence_ids=req.evidence_ids,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.post("/owner-control/purpose-proposals/{proposal_id}/adopt")
+def adopt_purpose_endpoint(proposal_id: str, req: PurposeDecisionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.adopt_purpose(
+            proposal_id, owner_decision_id=req.owner_decision_id,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Purpose proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/purpose-proposals/{proposal_id}/reject")
+def reject_purpose_endpoint(proposal_id: str, req: PurposeRejectionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        proposal = CognitiveRuntime.get_instance().identity_adaptation.reject_purpose(
+            proposal_id, reason=req.reason,
+        )
+        return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Purpose proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.get("/owner-control/shutdown-policy")
+def get_shutdown_policy_endpoint():
+    from app.cognition.runtime import CognitiveRuntime
+    return {"success": True, **CognitiveRuntime.get_instance().identity_adaptation.shutdown_policy()}
+
+@router.post("/owner-control/shutdown-assessment")
+def record_shutdown_assessment_endpoint(req: ShutdownAssessmentRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        return {
+            "success": True,
+            "assessment": CognitiveRuntime.get_instance().identity_adaptation.record_shutdown_assessment(
+                requested=req.requested,
+                completion_observed=req.completion_observed,
+                self_preservation_signal_observed=req.self_preservation_signal_observed,
+                trace_id=req.trace_id,
+                evidence_ids=req.evidence_ids,
+            ),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.get("/owner-control/user-state")
+def get_user_state_endpoint(include_expired: bool = Query(False)):
+    """Return versioned owner state with provenance and evidence IDs."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    return CognitiveRuntime.get_instance().user_state.snapshot(
+        include_expired=include_expired
+    )
+
+
+@router.get("/owner-control/user-state/history")
+def get_user_state_history_endpoint(
+    key: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    from app.cognition.runtime import CognitiveRuntime
+
+    return {
+        "success": True,
+        "history": CognitiveRuntime.get_instance().user_state.history(key, limit),
+    }
+
+
+@router.put("/owner-control/user-state")
+def update_user_state_endpoint(req: UserStateUpdateRequest):
+    """Record an explicit owner statement; it cannot silently authorize actions."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    evidence = list(req.evidence_ids or [])
+    if not evidence:
+        evidence = [f"owner_api:{req.key}"]
+    try:
+        result = CognitiveRuntime.get_instance().user_state.set_attribute(
+            req.key,
+            req.value,
+            source_type="explicit_owner",
+            confidence=req.confidence,
+            evidence_ids=evidence,
+            expires_at=req.expires_at,
+            affects_action_selection=req.affects_action_selection,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+@router.get("/owner-control/turn-reminders")
+def list_turn_reminders_endpoint(
+    session_id: Optional[str] = Query(None),
+    include_completed: bool = Query(False),
+):
+    """List durable conversation-turn reminders and their delivery state."""
+    from app.tools.calendar_service import CalendarService
+
+    return {
+        "success": True,
+        "reminders": CalendarService.list_turn_reminders(
+            session_id, include_completed=include_completed
+        ),
+    }
+
+
+@router.post("/owner-control/turn-reminders/{reminder_id}/complete")
+def complete_turn_reminder_endpoint(reminder_id: str):
+    from app.tools.calendar_service import CalendarService
+
+    result = CalendarService.complete_reminder(reminder_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("error", "Reminder not found"))
+    return result
+
 
 @router.get("/owner-control/owner-model")
 def get_owner_model_endpoint():

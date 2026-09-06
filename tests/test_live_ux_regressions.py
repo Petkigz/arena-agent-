@@ -11,8 +11,9 @@
    status note in the reply, goal_lifecycle_state persisted on traces, and
    GET /cognition/open-goals.
 3. 'Audio reply seems not available' — the WS voice path used Piper ONLY;
-   machines without a Piper voice model got silent replies. Fixed with a
-   piper → pyttsx3 (OS TTS driver) fallback that streams 16 kHz PCM.
+   machines without a Piper voice model got silent replies. The voice path now
+   reports Piper's root cause and remediation instead of substituting an OS
+   TTS engine and hiding the failed component.
 
 Plus: file-existence questions ('do i have a song called kaba') now route to
 a real filesystem search and answer from evidence instead of deferring.
@@ -20,8 +21,7 @@ a real filesystem search and answer from evidence instead of deferring.
 
 import asyncio
 import sqlite3
-import wave
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -151,40 +151,26 @@ def test_open_goals_endpoint_lists_parked_goals():
         assert goal["state"] == "waiting_for_evidence"
 
 
-# ── 4. Voice reply TTS fallback (piper → OS driver) ──────────────────────────
+# ── 4. Voice reply TTS failure reporting ─────────────────────────────────────
 
-def _write_test_wav(path, sample_rate=22050, seconds=0.5):
-    n_frames = int(sample_rate * seconds)
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        import struct
-        frames = b"".join(struct.pack("<h", 1000) for _ in range(n_frames))
-        w.writeframes(frames)
-
-
-def test_tts_fallback_converts_wav_to_pcm16k(tmp_path):
-    """Without a Piper model, spoken replies must fall back to the OS TTS
-    driver and still stream 16 kHz int16 PCM to the voice clients."""
+def test_tts_failure_reports_piper_root_cause_without_substitution():
+    """A missing Piper model must be visible, not hidden by an OS-TTS fallback."""
     from backend.voice.service import VoiceService
 
-    wav = tmp_path / "reply.wav"
-    _write_test_wav(wav, sample_rate=22050, seconds=0.5)
+    service = VoiceService()
+    service.current_conversation_id = "voice-regression"
+    with patch("backend.voice.service.get_settings", return_value={}), \
+         patch("backend.voice.service.synthesize_piper", return_value=None), \
+         patch("backend.voice.service.get_last_piper_error", return_value="selected Piper model is missing"), \
+         patch("backend.voice.service.ws_manager") as mock_ws:
+        mock_ws.broadcast_to_conversation = AsyncMock()
+        mock_ws.send_audio_to_conversation = AsyncMock()
+        asyncio.run(service._speak_reply("hello there"))
 
-    fake_result = {"success": True, "file_path": str(wav)}
-    with patch("app.perception.text_to_speech.LocalTextToSpeech.synthesize_speech",
-               return_value=fake_result):
-        pcm = VoiceService._synthesize_wav_to_pcm16k("hello there")
-    assert isinstance(pcm, bytes) and len(pcm) > 0
-    # 22050 Hz → ~8000 samples at 16 kHz, 2 bytes each.
-    n_samples = len(pcm) // 2
-    assert 7000 <= n_samples <= 9000
-
-
-def test_tts_fallback_returns_none_when_no_engine(tmp_path):
-    from backend.voice.service import VoiceService
-    with patch("app.perception.text_to_speech.LocalTextToSpeech.synthesize_speech",
-               return_value={"success": False, "error": "no engine", "audio_url": ""}):
-        pcm = VoiceService._synthesize_wav_to_pcm16k("hello there")
-    assert pcm is None
+    payloads = [call.args[1] for call in mock_ws.broadcast_to_conversation.await_args_list]
+    errors = [payload for payload in payloads if payload.get("type") == "voice_status"]
+    assert errors
+    assert errors[0]["component"] == "remote_tts"
+    assert errors[0]["reason"] == "selected Piper model is missing"
+    assert "onnx" in errors[0]["remediation"]
+    mock_ws.send_audio_to_conversation.assert_not_awaited()

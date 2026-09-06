@@ -10,7 +10,7 @@
 /* Theme CSS Variables */
 :root {
   --arena-font-size: 14px;
-  --arena-font-family: system-ui;
+  --arena-font-family: Inter, system-ui, sans-serif;
   
   /* Dark theme (default) — the Beanie atmosphere: light emitted into a dark
      environment. Near-black navy canvas, translucent deep-navy panels,
@@ -54,7 +54,7 @@ html {
 body {
   background-color: var(--color-background-primary);
   color: var(--color-text-primary);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--arena-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

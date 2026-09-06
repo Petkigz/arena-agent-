@@ -35,17 +35,23 @@ class WakeWordDetector:
 
         self.model: Optional[OWWModel] = None
         self.is_running = False
+        self.last_error: Optional[str] = None
 
         # Callback
         self.on_wake_word_detected: Optional[Callable[[str], None]] = None
 
     def start(self):
         """Start wake word detection."""
+        self.last_error = None
         if self.is_running:
             return
 
         if OWWModel is None:
-            app_logger.warning("Cannot start wake word detector: openWakeWord not installed")
+            self.last_error = "openWakeWord is not installed"
+            app_logger.error(
+                "Cannot start wake word detector: openWakeWord not installed. "
+                "Install it and its model files before retrying."
+            )
             return
 
         try:
@@ -53,6 +59,9 @@ class WakeWordDetector:
             try:
                 download_models()
             except Exception as e:
+                # The download failure is relevant to diagnosis.  Model
+                # construction below remains authoritative and may still work
+                # from an already-populated local cache.
                 app_logger.warning(f"Could not download wake word models: {e}")
 
             # Map wake word names to openWakeWord model names
@@ -78,7 +87,10 @@ class WakeWordDetector:
             app_logger.info(f"Wake word detector started (model: {model_name})")
 
         except Exception as e:
-            app_logger.error(f"Failed to start wake word detector: {e}")
+            self.last_error = f"{type(e).__name__}: {e}"
+            self.model = None
+            self.is_running = False
+            app_logger.error(f"Failed to start wake word detector: {self.last_error}")
             raise
 
     def stop(self):

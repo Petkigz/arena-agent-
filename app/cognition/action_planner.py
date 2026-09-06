@@ -40,7 +40,9 @@ class ActionPlanner:
         world_model: Optional[Any] = None,
         tool_registry: Optional[Any] = None,
         outcome_store: Optional[Any] = None,
+        usefulness_store: Optional[Any] = None,
         lesson_store: Optional[Any] = None,
+        analogical_memory: Optional[Any] = None,
         hardware_self_model: Optional[Dict[str, Any]] = None,
         resource_manager: Optional[Any] = None,
     ) -> ActionProposal:
@@ -50,7 +52,11 @@ class ActionPlanner:
         preserving 100% of the winning candidate's payload fields.
 
         Phase 1B: When outcome_store is provided, historical success rates adjust utility scores.
+        Owner usefulness feedback adjusts utility only after the separate trace-linked
+        usefulness signal store has its minimum sample; it never replaces correctness.
         Phase 1C: When lesson_store is provided, structured lessons influence strategy selection.
+        Phase 3: When analogical_memory is provided, structurally similar verified
+        tasks adjust candidate utility without changing execution authority.
         P2 AGI: When hardware_self_model/resource_manager provided, resource-aware adjustment
         penalizes high-cost actions under pressure (RAM/CPU/disk).
         """
@@ -68,6 +74,12 @@ class ActionPlanner:
         else:
             candidate_list = cls.generate_candidate_actions(
                 goal_text, complexity=complexity, goal_rep=goal_rep, memory_store=memory_store, world_model=world_model, tool_registry=tool_registry
+            )
+        if analogical_memory is not None and goal_rep is not None:
+            candidate_list = cls._apply_analogical_guidance(
+                candidate_list,
+                goal_rep=goal_rep,
+                analogical_memory=analogical_memory,
             )
         # Phase 1B/1C/P2: Pass stores for history-influenced + resource-aware selection
         goal_type = goal_rep.primary_intent_type if goal_rep else None
@@ -90,7 +102,8 @@ class ActionPlanner:
 
         sim_res = CounterfactualSimulator.simulate_competing_branches(
             goal_text, candidate_list, goal_type=goal_type,
-            outcome_store=outcome_store, lesson_store=lesson_store,
+            outcome_store=outcome_store, usefulness_store=usefulness_store,
+            lesson_store=lesson_store,
             hardware_self_model=hardware_self_model,
             resource_manager=resource_manager,
         )
@@ -118,6 +131,7 @@ class ActionPlanner:
                 "name": branch.branch_name,
                 "action_type": branch.hypothetical_action,
                 "utility_score": branch.utility_score,
+                "usefulness_adjustment": branch.usefulness_adjustment,
                 "reasoning_summary": branch.reasoning_summary,
                 "authorization_requirement": branch.authorization_requirement,
                 "consequences": dict(branch.consequences),
@@ -131,6 +145,72 @@ class ActionPlanner:
             complexity=complexity,
             alternatives_considered=alternatives,
         )
+
+    @classmethod
+    def _apply_analogical_guidance(
+        cls,
+        candidates: List[Dict[str, Any]],
+        *,
+        goal_rep: SemanticGoalRepresentation,
+        analogical_memory: Any,
+    ) -> List[Dict[str, Any]]:
+        """Annotate candidates with bounded structural-memory evidence.
+
+        Analogical recall is advisory only.  It changes simulated utility by a
+        small capped multiplier; it never authorizes a tool, bypasses an
+        approval gate, or turns a past success into current execution truth.
+        """
+        domain_entity_types = {
+            "filesystem": ["file"],
+            "desktop_os": ["process"],
+            "web_research": ["url"],
+            "mobile_phone": ["phone"],
+            "vision_desktop": ["screen"],
+            "conversation": ["conversation"],
+        }
+        entity_types = domain_entity_types.get(
+            str(getattr(goal_rep, "target_domain", "") or ""),
+            [str(getattr(goal_rep, "target_domain", "unknown") or "unknown")],
+        )
+        try:
+            matches = analogical_memory.find_analogies(
+                intent_type=str(getattr(goal_rep, "primary_intent_type", "unknown")),
+                target_domain=str(getattr(goal_rep, "target_domain", "unknown")),
+                entity_types=entity_types,
+                limit=20,
+                min_similarity=0.4,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Analogical guidance unavailable; keeping normal planning: {exc}")
+            return candidates
+
+        if not matches:
+            return candidates
+
+        guided: List[Dict[str, Any]] = []
+        for original in candidates:
+            candidate = dict(original)
+            action_type = str(candidate.get("action_type", ""))
+            relevant = [
+                match for match in matches
+                if str(getattr(getattr(match, "past_task", None), "action_type", "")) == action_type
+            ]
+            if relevant:
+                signals = [
+                    (1.0 if bool(getattr(match.past_task, "success", False)) else -1.0)
+                    * float(getattr(match, "similarity", 0.0) or 0.0)
+                    for match in relevant[:8]
+                ]
+                signal = sum(signals) / max(1, len(signals))
+                adjustment = max(0.88, min(1.12, 1.0 + (0.12 * signal)))
+                candidate["_analogical_adjustment"] = adjustment
+                candidate["_analogical_reason"] = (
+                    f"{len(relevant)} structurally similar task(s): "
+                    f"{sum(1 for match in relevant if getattr(match.past_task, 'success', False))} succeeded, "
+                    f"{sum(1 for match in relevant if not getattr(match.past_task, 'success', False))} failed"
+                )
+            guided.append(candidate)
+        return guided
 
     @classmethod
     def _probe_and_select(cls, sim_res, winner):

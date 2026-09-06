@@ -189,11 +189,43 @@ class GroundedIntrospection:
                     "attention_focus, created_at FROM cognitive_traces WHERE trace_id=?",
                     (trace_id,),
                 ).fetchone()
+                # Older trace databases do not have the optional presentation
+                # column. Keep introspection backward-compatible while using
+                # it whenever a new runtime trace provides it.
+                columns = {item[1] for item in conn.execute("PRAGMA table_info(cognitive_traces)").fetchall()}
+                presentation_row = None
+                grounding_row = None
+                if "epistemic_presentation_json" in columns:
+                    presentation_row = conn.execute(
+                        "SELECT epistemic_presentation_json FROM cognitive_traces WHERE trace_id=?",
+                        (trace_id,),
+                    ).fetchone()
+                if "grounding_result_json" in columns:
+                    grounding_row = conn.execute(
+                        "SELECT grounding_result_json FROM cognitive_traces WHERE trace_id=?",
+                        (trace_id,),
+                    ).fetchone()
             except sqlite3.Error as exc:
                 return {"success": False, "error": f"Trace lookup failed: {exc}"}
         if not row:
             return {"success": False, "error": "Trace not found"}
         actions = json.loads(row[3])
+        epistemic_presentation: Dict[str, Any] = {}
+        if presentation_row and presentation_row[0]:
+            try:
+                parsed = json.loads(presentation_row[0])
+                if isinstance(parsed, dict):
+                    epistemic_presentation = parsed
+            except (TypeError, ValueError):
+                epistemic_presentation = {}
+        grounding: Dict[str, Any] = {}
+        if grounding_row and grounding_row[0]:
+            try:
+                parsed = json.loads(grounding_row[0])
+                if isinstance(parsed, dict):
+                    grounding = parsed
+            except (TypeError, ValueError):
+                grounding = {}
         facts = {
             "trace_id": row[0], "session_id": row[1], "request": row[2],
             "actions": actions, "model_used": row[4], "gate_decision": row[5],
@@ -210,9 +242,28 @@ class GroundedIntrospection:
             explanation.append(f"Recorded attention focus: {row[9]}.")
         if row[7]:
             explanation.append(f"Recorded lesson: {row[7]}")
+        if epistemic_presentation:
+            facts["epistemic_presentation"] = epistemic_presentation
+            label = epistemic_presentation.get("confidence_label", "Unknown")
+            basis = epistemic_presentation.get("evidence_basis") or []
+            explanation.append(f"User-facing epistemic status: {label}.")
+            if basis:
+                explanation.append(f"Recorded evidence basis: {basis[0]}")
+        if grounding:
+            facts["grounding"] = grounding
+            grounding_status = grounding.get("status", "unknown")
+            explanation.append(f"Response grounding status: {grounding_status}.")
+            for fact in grounding.get("authoritative_facts") or []:
+                explanation.append(f"Authoritative response evidence: {fact}")
+            if grounding.get("recovery_applied"):
+                explanation.append(
+                    "The response was conservatively corrected to match authoritative evidence."
+                )
         return {
             "success": True,
             "facts": facts,
+            "epistemic_presentation": epistemic_presentation,
+            "grounding": grounding,
             "explanation": explanation,
             "unknowns": [
                 "Private chain-of-thought is not available or claimed.",

@@ -40,9 +40,12 @@ from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
 from app.cognition.goal_verifier import GoalVerifier, GoalVerificationResult
 from app.cognition.execution_truth import ExecutionTruth
 from app.cognition.goal_replanner import GoalReplanner
-from app.cognition.resource_allocator import ResourceAllocator
+from app.cognition.resource_allocator import ResourceAllocator, TaskComplexity
 from app.cognition.confidence_calibrator import ConfidenceCalibrator
+from app.cognition.epistemic_presentation import presentation_for_cycle
+from app.cognition.response_grounding import reconcile_response
 from app.cognition.self_model import SelfModel
+from app.cognition.phase7_preferences import Phase7PreferenceEngine
 
 def probe_evidence_str(output: Any, budget: int = 300) -> str:
     """Render a probe's output so the DISCRIMINATING facts stay visible.
@@ -67,6 +70,12 @@ def probe_evidence_str(output: Any, budget: int = 300) -> str:
             return head[:budget]
         return "; ".join(str(o)[:80] for o in output[:5])[:budget]
     return str(output)[:budget]
+
+
+def _apply_epistemic_presentation(trace: CognitiveTrace, reply: str, presentation: Any) -> str:
+    """Bind a user-facing epistemic summary to the persisted cycle trace."""
+    trace.epistemic_presentation = presentation.to_dict()
+    return presentation.append_to(reply)
 
 
 class CognitiveRuntime:
@@ -101,6 +110,10 @@ class CognitiveRuntime:
         self.events = EventBus()
         self.world = WorldModel(path)
         self.world_ingest = WorldIngestor(self.world, self.events)
+        from app.cognition.user_state import UserStateStore
+        self.user_state = UserStateStore(
+            str(Path(path).parent / "user_state.db") if path else "data/user_state.db"
+        )
         self.beliefs = BeliefEngine(db_path=path)
         self.actions = ActionSelector()
         self.executor = InvestigationExecutor()
@@ -124,14 +137,19 @@ class CognitiveRuntime:
         from app.cognition.tool_registry import set_shared_registry
         set_shared_registry(self.registry)
         # Phase 1B: Strategy outcome tracking for learning from experience
-        from app.cognition.strategy_outcomes import StrategyOutcomeStore
+        from app.cognition.strategy_outcomes import (
+            StrategyOutcomeStore,
+            StrategyUsefulnessStore,
+        )
         self.outcomes = StrategyOutcomeStore(db_path=path)
+        self.usefulness_feedback = StrategyUsefulnessStore(db_path=path)
         # Phase 1C: Structured lesson extraction and behavior change
         from app.cognition.structured_lessons import LessonStore
         self.lessons = LessonStore(db_path=path)
         from app.cognition.training_examples import TrainingExampleStore
         self.training_examples = TrainingExampleStore(
-            db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db"
+            db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db",
+            trace_db_path=path,
         )
         from app.cognition.adaptive_autonomy import AdaptiveAutonomyCalibrator
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
@@ -177,6 +195,13 @@ class CognitiveRuntime:
                 if path else "data/intelligence_benchmarks.db"
             )
         )
+        from app.cognition.phase0_evaluation import Phase0EvaluationHistoryStore, Phase0EvaluationSuite
+        self.phase0_evaluations = Phase0EvaluationSuite(
+            Phase0EvaluationHistoryStore(
+                str(Path(path).parent / "phase0_evaluations.db")
+                if path else "data/phase0_evaluations.db"
+            )
+        )
         from app.cognition.execution_control import execution_control_registry
         self.execution_control = execution_control_registry
         # Phase 3: Transfer Learning
@@ -189,6 +214,20 @@ class CognitiveRuntime:
         # Phase 5: Meta-Cognition
         self.resource_allocator = ResourceAllocator()
         self.confidence_calibrator = ConfidenceCalibrator(db_path=path)
+        from app.cognition.consolidation import ConsolidationCoordinator
+        self.consolidation = ConsolidationCoordinator(
+            str(Path(path).parent / "consolidation.db") if path else "data/consolidation.db"
+        )
+        from app.cognition.functional_affect import FunctionalAffectStore
+        self.functional_affect = FunctionalAffectStore(
+            str(Path(path).parent / "functional_affect.db") if path else "data/functional_affect.db"
+        )
+        # Phase 7: deterministic curiosity/taste/novelty evaluation. This is
+        # an audit and advisory path only; it cannot enqueue, authorize, or
+        # execute work through any capability.
+        self.phase7_preferences = Phase7PreferenceEngine(
+            str(Path(path).parent / "phase7_preferences.db") if path else "data/phase7_preferences.db"
+        )
         self.self_model = SelfModel(outcome_store=self.outcomes, lesson_store=self.lessons)
         from app.cognition.self_knowledge import SelfKnowledgeLedger
         self.self_knowledge = SelfKnowledgeLedger(
@@ -217,6 +256,26 @@ class CognitiveRuntime:
         )
         self.identity_continuity = IdentityContinuityLedger(
             str(Path(path).parent / "identity_continuity.db") if path else "data/identity_continuity.db",
+            owner_decisions=self.owner_decisions,
+        )
+        from app.cognition.identity_adaptation import IdentityAdaptationStore
+        self.identity_adaptation = IdentityAdaptationStore(
+            str(Path(path).parent / "identity_adaptation.db") if path else "data/identity_adaptation.db",
+            owner_decisions=self.owner_decisions,
+        )
+        from app.cognition.ontology_schema import OntologySchemaStore
+        self.ontology_schema = OntologySchemaStore(
+            str(Path(path).parent / "ontology_schema.db") if path else "data/ontology_schema.db",
+            owner_decisions=self.owner_decisions,
+        )
+        from app.cognition.scene_graph import SceneGraphStore
+        self.scene_graph_store = SceneGraphStore(
+            str(Path(path).parent / "scene_graph.db") if path else "data/scene_graph.db"
+        )
+        self.scene_graph = self.scene_graph_store.load_latest()
+        from app.cognition.incubation_queue import IncubationQueue
+        self.incubation_queue = IncubationQueue(
+            str(Path(path).parent / "incubation.db") if path else "data/incubation.db",
             owner_decisions=self.owner_decisions,
         )
         from app.cognition.self_recovery import SelfRecoveryStore
@@ -499,6 +558,22 @@ class CognitiveRuntime:
             app_logger.warning(f"Hardware-aware complexity selection failed: {e}")
         return requested
 
+    def _interaction_style_instruction(self) -> str:
+        """Render adopted style as bounded presentation guidance only."""
+        try:
+            style = self.identity_adaptation.style().style
+            return (
+                "\n\n[ADOPTED INTERACTION STYLE — presentation guidance only]: "
+                f"verbosity={style.get('verbosity')}; "
+                f"directness={style.get('directness')}; "
+                f"format={style.get('format')}; "
+                f"warmth={style.get('warmth')}. "
+                "This does not change facts, policy, authorization, or execution truth."
+            )
+        except Exception as exc:
+            app_logger.warning(f"Interaction style context unavailable: {exc}")
+            return "\n\n[ADOPTED INTERACTION STYLE]: UNKNOWN; do not infer a preference."
+
     def session_start(self) -> Dict[str, Any]:
         """
         Phase 1D: Session continuity startup.
@@ -515,6 +590,12 @@ class CognitiveRuntime:
             "stale_beliefs": stale_count,
             "total_outcomes": self.outcomes.total_recorded(),
             "total_lessons": self.lessons.total_lessons(),
+            "ontology_revision": self.ontology_schema.current().revision,
+            "scene_revision": self.scene_graph.revision,
+            "incubation_enabled": self.incubation_queue.policy().enabled,
+            "functional_affect": self.functional_affect.advisory_modifiers(),
+            "stable_identity_profile": self.identity_adaptation.profile().to_dict(),
+            "interaction_style": self.identity_adaptation.style().to_dict(),
         }
         app_logger.info(
             f"Session start: {beliefs_changed} beliefs recalculated, "
@@ -535,7 +616,10 @@ class CognitiveRuntime:
         res = ActionPlanner.plan_and_evaluate_action(
             user_text, complexity=complexity, goal_rep=goal_rep,
             memory_store=self.memory, world_model=self.world, tool_registry=self.registry,
-            outcome_store=self.outcomes, lesson_store=self.lessons,
+            outcome_store=self.outcomes,
+            usefulness_store=getattr(self, "usefulness_feedback", None),
+            lesson_store=self.lessons,
+            analogical_memory=self.analogies,
             hardware_self_model=self.hardware_self_model,
             resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
         )
@@ -710,6 +794,15 @@ class CognitiveRuntime:
             app_logger.warning(f"Failed to get recommendations: {e}")
             return []
 
+    def run_incubation_slice(self, processor) -> Dict[str, Any]:
+        """Run a bounded, owner-enabled incubation processor.
+
+        The processor receives an ``IncubationItem`` and must return a result
+        type, trace ID, and evidence IDs. This path never invokes executable
+        tools; real actions remain on the foreground ActionGate path.
+        """
+        return self.incubation_queue.run_slice(processor)
+
     def consolidate_memory(self) -> Dict[str, Any]:
         """
         Phase 4a: "sleep-like" memory consolidation pass.
@@ -831,6 +924,22 @@ class CognitiveRuntime:
             summary["associations_created"] = associations
         except Exception as e:
             app_logger.warning(f"Consolidation: memory association failed: {e}")
+
+        # Phase 6: replay explicit memory conflicts without resolving them,
+        # derive gists only from repeated verified success, and refresh
+        # calibration telemetry from recorded prediction/outcome pairs.
+        try:
+            summary["phase6_consolidation"] = self.consolidation.run(
+                self.memory,
+                calibrator=self.confidence_calibrator,
+                max_tasks=max(10, min(100, episode_batch)),
+            )
+        except Exception as e:
+            summary["phase6_consolidation"] = {
+                "status": "failed",
+                "errors": [str(e)],
+            }
+            app_logger.warning(f"Consolidation: Phase 6 coordinator failed: {e}")
 
         app_logger.info(
             f"Memory consolidation: {summary['beliefs_changed']} beliefs decayed, "
@@ -1801,16 +1910,42 @@ class CognitiveRuntime:
         so GoalVerifier can enforce universal provenance validation.
         """
         entities_data = []
+        freshness_window_hours = getattr(
+            self.world, "DEFAULT_OBSERVATION_MAX_AGE_HOURS", 48.0
+        )
+
+        def _fresh_entity_state(entity_name: str) -> Optional[Dict[str, Any]]:
+            """Return only current observations; stale state stays UNKNOWN."""
+            states = []
+            for predicate in ("status", "process_status"):
+                state = self.world.get_entity_state(
+                    entity_name,
+                    predicate,
+                    max_age_hours=freshness_window_hours,
+                )
+                if state is not None:
+                    states.append(state)
+                    if not state.get("is_stale"):
+                        return state
+            return states[0] if states else None
+
         try:
             entities = self.world.find_entities()[:15]
             for ent in entities:
-                latest_obs = self.world.latest_observation(ent.name, "status") or self.world.latest_observation(ent.name, "process_status")
-                if latest_obs:
-                    # Authoritative: use the structured observation record
-                    real_status = str(latest_obs.value)
-                    obs_source = latest_obs.source
-                    obs_type = getattr(latest_obs, "observation_type", "direct")
-                    obs_conf = latest_obs.confidence
+                observed_state = _fresh_entity_state(ent.name)
+                if observed_state and not observed_state.get("is_stale"):
+                    # Authoritative: use the structured, fresh observation.
+                    real_status = str(observed_state["value"])
+                    obs_source = observed_state["source"]
+                    obs_type = observed_state.get("observation_type", "direct")
+                    obs_conf = observed_state["confidence"]
+                elif observed_state:
+                    # Historical data remains available, but stale state is
+                    # not current environmental evidence.
+                    real_status = "unknown"
+                    obs_source = "stale_observation"
+                    obs_type = "unknown"
+                    obs_conf = 0.0
                 else:
                     # No observation exists for this entity — state is UNKNOWN.
                     # Do NOT inherit entity attributes as provenance. Entity attributes
@@ -1835,12 +1970,17 @@ class CognitiveRuntime:
 
         if not entities_data and goal_rep and getattr(goal_rep, "entities", None):
             for e in goal_rep.entities:
-                latest_obs = self.world.latest_observation(e, "status") or self.world.latest_observation(e, "process_status")
-                if latest_obs:
-                    ent_status = str(latest_obs.value)
-                    obs_source = latest_obs.source
-                    obs_type = getattr(latest_obs, "observation_type", "direct")
-                    obs_conf = latest_obs.confidence
+                observed_state = _fresh_entity_state(e)
+                if observed_state and not observed_state.get("is_stale"):
+                    ent_status = str(observed_state["value"])
+                    obs_source = observed_state["source"]
+                    obs_type = observed_state.get("observation_type", "direct")
+                    obs_conf = observed_state["confidence"]
+                elif observed_state:
+                    ent_status = "unknown"
+                    obs_source = "stale_observation"
+                    obs_type = "unknown"
+                    obs_conf = 0.0
                 else:
                     ent_status = "unknown"
                     obs_source = "not_observed"
@@ -1860,6 +2000,16 @@ class CognitiveRuntime:
         try:
             obs = self.world.recent_observations(limit=25)
             for o in obs:
+                state = self.world.get_entity_state(
+                    o.subject,
+                    o.predicate,
+                    max_age_hours=freshness_window_hours,
+                )
+                # Only the latest fresh observation may enter verification
+                # evidence. Historical/stale rows remain queryable through
+                # WorldModel history but cannot satisfy current conditions.
+                if not state or state.get("is_stale") or state.get("observed_at") != o.observed_at:
+                    continue
                 key = f"{o.subject}.{o.predicate}"
                 if key not in obs_data:
                     obs_data[key] = {
@@ -2286,6 +2436,8 @@ class CognitiveRuntime:
         trace.gate_decision = gate.gate_name
         if not gate.allowed:
             tracker.transition(GoalLifecycleState.BLOCKED, gate.reason)
+            _, blocked_grounding = reconcile_response(gate.reason, observation_evidence="")
+            trace.grounding_result = blocked_grounding.to_dict()
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=gate.reason,
@@ -2311,6 +2463,7 @@ class CognitiveRuntime:
                 "authorization_id": proposal.authorization_id,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
+                "grounding": blocked_grounding.to_dict(),
             }
 
         from app.cognition.goal_interpreter import SemanticGoalInterpreter
@@ -2331,6 +2484,10 @@ class CognitiveRuntime:
                 else "Owner-delegated execution authority passed the gate"
             )
             message = f"{authority_note}, but goal interpretation failed: {exc}"
+            _, interpretation_grounding = reconcile_response(
+                message, observation_evidence=""
+            )
+            trace.grounding_result = interpretation_grounding.to_dict()
             trace.finalize(
                 reply=message,
                 actions=[],
@@ -2357,6 +2514,7 @@ class CognitiveRuntime:
                 "requires_fresh_decision_for_retry": True,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
+                "grounding": interpretation_grounding.to_dict(),
             }
         if success_criteria_override:
             goal_rep.success_conditions = [
@@ -2434,6 +2592,13 @@ class CognitiveRuntime:
             failed_payload=proposal.payload,
         )
         trace.goal_verified = verification.verified_success
+        assistant_reply, execution_grounding = reconcile_response(
+            assistant_reply,
+            observation_evidence="; ".join(verification.met_conditions or []),
+            authoritative_facts=verification.met_conditions,
+            observation_empty=False if verification.verified_success else None,
+        )
+        trace.grounding_result = execution_grounding.to_dict()
         try:
             agency_evidence = list(verification.met_conditions or [])
             if observation_error:
@@ -2662,6 +2827,7 @@ class CognitiveRuntime:
             gate_decision=gate.gate_name,
             goal_verified=verification.verified_success,
             goal_lifecycle_state=tracker.current_state.value,
+            grounding_result=execution_grounding.to_dict(),
         )
 
         verification_unknown = tracker.current_state == GoalLifecycleState.WAITING_FOR_EVIDENCE
@@ -2687,10 +2853,12 @@ class CognitiveRuntime:
             "observation_error": observation_error or None,
             "prediction_surprisal": surprisal,
             "reflection_lesson": lesson_text,
+            "resource_allocation": dict(trace.resource_allocation),
             "latency_ms": round(latency, 2),
             "trace_id": trace.trace_id,
             "session_id": session_id,
             "model_used": trace.model_used,
+            "grounding": execution_grounding.to_dict(),
             "controlled_execution_id": execution.get("controlled_execution_id"),
             "cancel_requested": execution.get("cancel_requested", False),
             "cancellation_observed": execution.get("cancellation_observed", False),
@@ -2703,6 +2871,113 @@ class CognitiveRuntime:
                 scoped_authorization and not verification.verified_success
             ),
             "requires_fresh_decision_for_retry": not verification.verified_success,
+        }
+
+    def _handle_turn_reminder_request(
+        self,
+        user_text: str,
+        request: Dict[str, Any],
+        complexity: str,
+        session_id: Optional[str],
+    ) -> Dict[str, Any]:
+        """Handle an explicit turn-reminder request through durable evidence.
+
+        This is a state-only productivity operation. It does not execute an OS
+        action, alter authorization policy, or infer a commitment from vague
+        prose. The returned reminder record is the authoritative evidence.
+        """
+        from app.tools.calendar_service import CalendarService
+
+        started = time.time()
+        cycle_session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
+        try:
+            created = CalendarService.add_turn_reminder(
+                request["title"],
+                request["turns"],
+                session_id=session_id or "default",
+            )
+        except Exception as exc:
+            app_logger.error(f"Turn reminder could not be persisted: {exc}")
+            created = {"success": False, "error": f"turn reminder persistence failed: {exc}"}
+
+        if created.get("success"):
+            reminder = created["reminder"]
+            reply = (
+                f"I’ll remind you in {request['turns']} conversation turns: "
+                f"{reminder['title']}."
+            )
+            evidence = [
+                "durable local reminder record created",
+                f"session turn {reminder['created_turn']} → delivery at turn {reminder['due_turn']}",
+            ]
+            presentation = presentation_for_cycle(
+                goal_verified=True,
+                environment_observed=True,
+                evidence_items=evidence,
+                action_type="schedule_turn_reminder",
+                source_count=1,
+            )
+            reply = presentation.append_to(reply)
+            grounding = reconcile_response(
+                reply,
+                authoritative_facts=evidence,
+            )[1]
+            actions = [f"Scheduled turn reminder: {reminder['title']}"]
+            goal_verified = True
+            lifecycle = "achieved"
+        else:
+            reason = str(created.get("error") or "the reminder could not be saved")
+            reply = f"I could not schedule that reminder: {reason}."
+            presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[reason],
+                action_type="schedule_turn_reminder",
+            )
+            reply = presentation.append_to(reply)
+            grounding = reconcile_response(reply)[1]
+            reminder = None
+            actions = []
+            goal_verified = False
+            lifecycle = "failed"
+
+        trace = CognitiveTrace(
+            user_input=user_text,
+            complexity_requested=complexity,
+            session_id=cycle_session_id,
+            model_used="deterministic_local",
+        )
+        trace.finalize(
+            reply=reply,
+            actions=actions,
+            latency=(time.time() - started) * 1000.0,
+            gate_decision="passed" if goal_verified else "failed",
+            goal_verified=goal_verified,
+            goal_lifecycle_state=lifecycle,
+            epistemic_presentation=presentation.to_dict(),
+            grounding_result=grounding.to_dict(),
+        )
+        return {
+            "request_success": goal_verified,
+            "execution_success": goal_verified,
+            "goal_verified": goal_verified,
+            "verification_unknown": not goal_verified,
+            "success": goal_verified,
+            "session_id": cycle_session_id,
+            "trace_id": trace.trace_id,
+            "user_text": user_text,
+            "assistant_reply": reply,
+            "executed_actions": actions,
+            "action_type": "schedule_turn_reminder",
+            "reasoning_action": "schedule_turn_reminder",
+            "decision_stage": "state_update_completed" if goal_verified else "state_update_failed",
+            "goal_lifecycle_state": lifecycle,
+            "model_used": trace.model_used,
+            "latency_ms": trace.latency_ms,
+            "reminder": reminder,
+            "epistemic_presentation": presentation.to_dict(),
+            "grounding": grounding.to_dict(),
+            "reason": None if goal_verified else str(created.get("error")),
         }
 
     def process_cognitive_cycle(
@@ -2723,17 +2998,65 @@ class CognitiveRuntime:
         requesting max_tokens=8192 under a 2048 budget simply got 8192."""
         from app.llm import reasoning_token_budget
         from app.cognition.reasoning_loop import ReasoningBudget as _RB
+        from app.cognition.prospective_memory import parse_turn_reminder_request
+        from app.tools.calendar_service import CalendarService
+
+        reminder_session_id = session_id or "default"
+        try:
+            turn_state = CalendarService.advance_turn(reminder_session_id)
+            due_reminders = turn_state.get("reminders", [])
+            conversation_turn = turn_state.get("turn", 0)
+            prospective_memory_error = None
+        except Exception as exc:
+            # Prospective memory must not make ordinary requests fail, but the
+            # failure remains visible to the caller instead of becoming a
+            # silent loss of a reminder.
+            app_logger.error(f"Prospective memory turn advance failed: {exc}")
+            due_reminders = []
+            conversation_turn = None
+            prospective_memory_error = str(exc)
+
+        reminder_request = parse_turn_reminder_request(user_text)
         with reasoning_token_budget(_RB.for_complexity(complexity).max_tokens):
-            return self._process_cognitive_cycle_impl(
-                user_text=user_text,
-                complexity=complexity,
-                session_id=session_id,
-                image_path=image_path,
-                audio_path=audio_path,
-                attachments=attachments,
-                recent_user_messages=recent_user_messages,
-                conversation_history=conversation_history,
-            )
+            if reminder_request is not None:
+                result = self._handle_turn_reminder_request(
+                    user_text=user_text,
+                    request=reminder_request,
+                    complexity=complexity,
+                    session_id=session_id,
+                )
+            else:
+                result = self._process_cognitive_cycle_impl(
+                    user_text=user_text,
+                    complexity=complexity,
+                    session_id=session_id,
+                    image_path=image_path,
+                    audio_path=audio_path,
+                    attachments=attachments,
+                    recent_user_messages=recent_user_messages,
+                    conversation_history=conversation_history,
+                )
+
+        if isinstance(result, dict):
+            result = dict(result)
+            result["due_reminders"] = due_reminders
+            result["conversation_turn"] = conversation_turn
+            if due_reminders:
+                notices = "\n".join(
+                    f"Reminder due: {item.get('title', 'untitled reminder')}"
+                    for item in due_reminders
+                )
+                result["assistant_reply"] = (
+                    f"{str(result.get('assistant_reply', '')).rstrip()}\n\n{notices}"
+                ).strip()
+                trace_id = result.get("trace_id")
+                if trace_id:
+                    CognitiveTrace.update_persisted_reply(
+                        str(trace_id), result["assistant_reply"]
+                    )
+            if prospective_memory_error:
+                result["prospective_memory_error"] = prospective_memory_error
+        return result
 
     def _process_cognitive_cycle_impl(
         self,
@@ -2784,6 +3107,15 @@ class CognitiveRuntime:
             complexity_requested=complexity,
             session_id=session_id
         )
+        trace.ontology_revision = self.ontology_schema.current().revision
+        try:
+            self.identity_adaptation.record_style_observation(
+                trace_id=trace.trace_id,
+                evidence_ids=[f"trace:{trace.trace_id}", "style:runtime_exposure"],
+                feedback="unknown",
+            )
+        except Exception as exc:
+            app_logger.warning(f"Interaction style exposure metric unavailable: {exc}")
 
         try:
             hw = HardwareMonitor.get_hardware_stats()
@@ -2809,6 +3141,50 @@ class CognitiveRuntime:
 
         # 3. Blackboard Ingestion & Context Slicing (Retrieves Past Learned Lessons)
         self.blackboard.set("current_user_query", user_text, source=SourceType.USER_INPUT, confidence=1.0)
+        # Phase 3: route the active turn through the canonical typed memory
+        # store.  Each memory kind receives a bounded retrieval quota so a
+        # noisy episodic history cannot crowd out durable lessons or procedures.
+        # Records are explicitly labelled historical in the prompt and remain
+        # separate from current world observations.
+        memory_context = ""
+        try:
+            memory_records = self.memory.retrieve_context_records(user_text, limit=8, per_kind=2)
+            memory_metadata = self.memory.context_metadata(
+                memory_records,
+                stale_after_hours=float(
+                    getattr(settings, "ARENA_MEMORY_STALE_AFTER_HOURS", 720.0)
+                ),
+            )
+            memory_context = self.memory.render_context(
+                memory_records,
+                stale_after_hours=float(
+                    getattr(settings, "ARENA_MEMORY_STALE_AFTER_HOURS", 720.0)
+                ),
+            )
+            trace.retrieved_memories = [
+                {
+                    "memory_id": record.memory_id,
+                    "kind": record.kind,
+                    "source": record.source,
+                    "task_id": record.task_id,
+                    "outcome": record.outcome,
+                    "success": record.success,
+                    "created_at": record.created_at,
+                    **memory_metadata.get(record.memory_id, {}),
+                }
+                for record in memory_records
+            ]
+            if memory_context:
+                self.blackboard.set(
+                    "runtime_memory_context",
+                    memory_context,
+                    source="memory_store",
+                    confidence=1.0,
+                )
+        except Exception as exc:
+            # Memory retrieval is useful context, never permission to invent
+            # a result.  The trace keeps the empty retrieval explicit.
+            app_logger.warning(f"Typed runtime memory retrieval unavailable: {exc}")
         # Phase 3: expose the hardware self-model so reasoning can consult the machine state.
         self.blackboard.set("hardware_self_model", self.hardware_self_model, source="hardware_governor")
         # F1.6 Owner Charter + owner model: the owner's values and counted
@@ -2823,12 +3199,59 @@ class CognitiveRuntime:
         except Exception as exc:
             app_logger.warning(f"Owner charter context unavailable: {exc}")
         try:
+            self.blackboard.set(
+                "stable_identity_profile",
+                self.identity_adaptation.profile().to_dict(),
+                source="identity_adaptation",
+                confidence=1.0,
+            )
+            self.blackboard.set(
+                "interaction_style",
+                self.identity_adaptation.style().to_dict(),
+                source="identity_adaptation",
+                confidence=1.0,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Identity adaptation context unavailable: {exc}")
+        try:
             from app.cognition.owner_model import owner_model_store
             owner_ctx = owner_model_store.compact_context()
             if owner_ctx:
                 self.blackboard.set("owner_model_context", owner_ctx, source="owner_model", confidence=1.0)
         except Exception as exc:
             app_logger.warning(f"Owner model context unavailable: {exc}")
+        try:
+            user_state_ctx = self.user_state.compact_context()
+            if user_state_ctx:
+                self.blackboard.set(
+                    "user_state_context",
+                    user_state_ctx,
+                    source="user_state_store",
+                    confidence=1.0,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Versioned user state context unavailable: {exc}")
+        try:
+            social_states = self.social_cognition.get_agent_mental_states("owner")[:5]
+            if social_states:
+                self.blackboard.set(
+                    "social_state_context",
+                    [
+                        {
+                            "state_type": state.state_type.value,
+                            "content": state.content,
+                            "confidence": state.confidence,
+                            "evidence": list(state.evidence[:2]),
+                            "belief_chain": list(state.belief_chain),
+                            "nesting_depth": state.nesting_depth,
+                        }
+                        for state in social_states
+                    ],
+                    source="social_cognition",
+                    confidence=1.0,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Social state context unavailable: {exc}")
         # P2 AGI: Multimodal ingestion — if image_path or attachments provided, analyze and ground
         multimodal_context = ""
         if image_path:
@@ -2994,6 +3417,23 @@ class CognitiveRuntime:
         last_decision = loop_trace.decisions[-1] if loop_trace.decisions else None
         reasoning_action = last_decision.action if last_decision else ReasoningAction.ACT
 
+        # Preserve bounded competing explanations as hypothesis telemetry. This
+        # is intentionally separate from environmental belief, execution truth,
+        # and authorization; no hypothesis is treated as a verified fact.
+        try:
+            trace.hypothesis_state = self.beliefs.hypothesis_snapshot(
+                user_text[:30].strip() or "user_query",
+                query_pred,
+            )
+            self.blackboard.set(
+                "active_hypotheses",
+                dict(trace.hypothesis_state),
+                source="belief_engine.hypotheses",
+                confidence=1.0,
+            )
+        except Exception as exc:
+            app_logger.warning(f"Hypothesis snapshot unavailable: {exc}")
+
         # Manifest-first routing (the rewire): a deterministic match against the
         # REAL tool manifest overrides the LLM's 3-intent classification. The
         # manifest decides what is possible; the LLM only advises on ambiguous
@@ -3078,11 +3518,41 @@ class CognitiveRuntime:
         except Exception as exc:
             app_logger.warning(f"Tool matcher failed (normal pipeline continues): {exc}")
 
+        # Phase 4: record route agreement as telemetry, not as proof that one
+        # route was correct. The deterministic reasoning decision and any
+        # manifest/observation override are compared before the branch runs.
+        fast_decision = last_decision.action.value if last_decision else "unknown"
+        route_agreement = (
+            fast_decision == reasoning_action.value
+            if last_decision is not None else None
+        )
+        trace.route_comparison = {
+            "fast_decision": fast_decision,
+            "fast_confidence": (
+                None if last_decision is None else float(last_decision.confidence)
+            ),
+            "selected_route": reasoning_action.value,
+            "agreement": route_agreement,
+            "comparison_basis": "reasoning_loop_decision_vs_authoritative_route",
+            "correction_applied": route_agreement is False,
+            "correction_source": (
+                "authoritative_route_or_manifest"
+                if route_agreement is False else None
+            ),
+            "correction_outcome": "pending_verification",
+        }
+
         # 5. DECISION ROUTER (100% Authoritative ReasoningAction Routing):
         # Branch A: ANSWER / Direct Conversational Q&A
         if reasoning_action == ReasoningAction.ANSWER:
             tracker.transition(GoalLifecycleState.EXECUTING, "Formulating direct conversational answer.")
-            system_instruction = CoworkerBrain.format_coworker_prompt(user_text)
+            system_instruction = CoworkerBrain.format_coworker_prompt(
+                user_text,
+                memory_store=self.memory,
+                world_model=self.world,
+                memory_context=memory_context,
+            )
+            system_instruction += self._interaction_style_instruction()
             # Host-state questions get REAL observations, not LLM guesses:
             # deterministic pattern -> Level-0 read-only tool -> answer from
             # evidence. Anything that mutates state still needs the full
@@ -3233,6 +3703,18 @@ class CognitiveRuntime:
                     GoalLifecycleState.DEFERRED,
                     "Local language model unavailable; no conversational answer was generated.",
                 )
+                presentation = presentation_for_cycle(
+                    goal_verified=False,
+                    unknown=True,
+                    evidence_items=["the local language model was unavailable; no answer was generated"],
+                )
+                assistant_reply, simulated_grounding = reconcile_response(
+                    assistant_reply,
+                    observation_evidence="",
+                )
+                trace.grounding_result = simulated_grounding.to_dict()
+                assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, presentation)
+                trace.route_comparison["correction_outcome"] = "not_executed_llm_unavailable"
                 latency = (time.time() - start_time) * 1000
                 trace.finalize(
                     reply=assistant_reply,
@@ -3260,6 +3742,10 @@ class CognitiveRuntime:
                     "prediction_surprisal": 0.0,
                     "latency_ms": round(latency, 2),
                     "model_used": llm_res.get("model", "fast"),
+                    "grounding": simulated_grounding.to_dict(),
+                    "epistemic_presentation": presentation.to_dict(),
+                    "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
                     "llm_available": False,
                 }
 
@@ -3276,7 +3762,15 @@ class CognitiveRuntime:
                 truth = obs_state.get("execution_truth")
                 if isinstance(truth, dict):
                     truth["results"] = deterministic_answers
-            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state)
+            assistant_reply, answer_grounding = reconcile_response(
+                assistant_reply,
+                deterministic_answers=deterministic_answers,
+                observation_evidence=observation_evidence,
+            )
+            trace.grounding_result = answer_grounding.to_dict()
+            verify_res = GoalVerifier.verify_goal_achievement(
+                goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state
+            )
             trace.goal_verified = verify_res.verified_success
             try:
                 self.learning.record_verified_episode(
@@ -3295,6 +3789,25 @@ class CognitiveRuntime:
                 verification_result=verify_res,
                 session_id=session_id,
                 trace_id=trace.trace_id,
+            )
+            answer_presentation = presentation_for_cycle(
+                goal_verified=verify_res.verified_success,
+                environment_observed=bool(observation_evidence),
+                evidence_items=(
+                    ["a direct observation or deterministic result was supplied to the answer"]
+                    if observation_evidence else
+                    ["the answer was generated from the available conversation and memory context"]
+                ),
+                failed=not verify_res.verified_success,
+                unknown=not verify_res.verified_success and not observation_evidence,
+                action_type="formulate_answer",
+            )
+            assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, answer_presentation)
+            trace.route_comparison["correction_outcome"] = (
+                "verified_success"
+                if trace.route_comparison.get("correction_applied") and verify_res.verified_success
+                else "verified_failure"
+                if trace.route_comparison.get("correction_applied") else "no_correction"
             )
 
             latency = (time.time() - start_time) * 1000
@@ -3332,6 +3845,10 @@ class CognitiveRuntime:
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast"),
+                "grounding": answer_grounding.to_dict(),
+                "epistemic_presentation": answer_presentation.to_dict(),
+                "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
                 # Owner review P1 #9: 'observable, never silent' must
                 # hold at the boundary the consumer sees. When a loaded
                 # FALLBACK model answered (the requested model was not
@@ -3351,7 +3868,14 @@ class CognitiveRuntime:
                 investigation_summary += ": " + "; ".join(
                 f"{r.tool}: {probe_evidence_str(r.output)}" for r in loop_trace.results)
 
-            system_instruction = CoworkerBrain.format_coworker_prompt(user_text, executed_actions=[investigation_summary])
+            system_instruction = CoworkerBrain.format_coworker_prompt(
+                user_text,
+                executed_actions=[investigation_summary],
+                memory_store=self.memory,
+                world_model=self.world,
+                memory_context=memory_context,
+            )
+            system_instruction += self._interaction_style_instruction()
             # D7 live regression (2026-09-02): with the probe returning
             # "search_files: []" the live model still replied "Found 3
             # such songs" — an invented count the loop never produced.
@@ -3386,7 +3910,24 @@ class CognitiveRuntime:
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)
 
             obs_state = self.capture_observed_world_state([investigation_summary], assistant_reply, goal_rep)
-            verify_res = GoalVerifier.verify_goal_achievement(goal_rep, [investigation_summary], assistant_reply, tracker=tracker, observed_state=obs_state)
+            assistant_reply, investigation_grounding = reconcile_response(
+                assistant_reply,
+                observation_evidence=investigation_summary if loop_trace.results else "",
+                authoritative_facts=(
+                    [investigation_summary]
+                    if loop_trace.results else
+                    ["the bounded investigation returned no probe results"]
+                ),
+                observation_empty=not bool(loop_trace.results),
+            )
+            trace.grounding_result = investigation_grounding.to_dict()
+            verify_res = GoalVerifier.verify_goal_achievement(
+                goal_rep,
+                [investigation_summary],
+                assistant_reply,
+                tracker=tracker,
+                observed_state=obs_state,
+            )
             trace.goal_verified = verify_res.verified_success
             try:
                 self.learning.record_verified_episode(
@@ -3417,6 +3958,26 @@ class CognitiveRuntime:
                 trace.reflection_lesson = getattr(lesson_rec, "content", "Investigation completed.")
             except Exception as e:
                 app_logger.warning(f"Investigation reflection notice: {e}")
+
+            investigation_presentation = presentation_for_cycle(
+                goal_verified=verify_res.verified_success,
+                environment_observed=bool(loop_trace.results),
+                evidence_items=(
+                    [f"{len(loop_trace.results)} probe result(s) were returned"]
+                    if loop_trace.results else
+                    ["the bounded investigation returned no probe results"]
+                ),
+                failed=not verify_res.verified_success,
+                unknown=not loop_trace.results,
+                action_type="investigate",
+            )
+            assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, investigation_presentation)
+            trace.route_comparison["correction_outcome"] = (
+                "verified_success"
+                if trace.route_comparison.get("correction_applied") and verify_res.verified_success
+                else "verified_failure"
+                if trace.route_comparison.get("correction_applied") else "no_correction"
+            )
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -3458,6 +4019,10 @@ class CognitiveRuntime:
                 "reflection_lesson": trace.reflection_lesson,
                 "latency_ms": round(latency, 2),
                 "model_used": llm_res.get("model", "fast"),
+                "grounding": investigation_grounding.to_dict(),
+                "epistemic_presentation": investigation_presentation.to_dict(),
+                "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
                 # Owner review P1 #9: fallback disclosure at the boundary
                 # (same contract as the ANSWER branch above).
                 **({"model_fallback": dict(llm_res["model_fallback"])}
@@ -3515,6 +4080,22 @@ class CognitiveRuntime:
                 "wrong domain (e.g. you meant your PC, not your phone), rephrase "
                 "and I'll take another pass."
             )
+            defer_presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[reason],
+                action_type="defer",
+            )
+            defer_msg, defer_grounding = reconcile_response(
+                defer_msg,
+                observation_evidence="",
+            )
+            trace.grounding_result = defer_grounding.to_dict()
+            defer_msg = _apply_epistemic_presentation(trace, defer_msg, defer_presentation)
+            trace.route_comparison["correction_outcome"] = (
+                "not_executed_deferred"
+                if trace.route_comparison.get("correction_applied") else "no_correction"
+            )
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=defer_msg,
@@ -3549,17 +4130,23 @@ class CognitiveRuntime:
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
-                "model_used": "ReasoningCycle"
+                "model_used": "ReasoningCycle",
+                "grounding": defer_grounding.to_dict(),
+                "epistemic_presentation": defer_presentation.to_dict(),
+                "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
             }
 
         # Branch D: ACT / Action Strategy Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Execution
         tracker.transition(GoalLifecycleState.PLANNED, "Simulated candidate branches with CounterfactualSimulator.")
         
         # Phase 5: Meta-Cognition - Classify task complexity and allocate resources
-        complexity_level, complexity_reason = self.resource_allocator.classify_complexity(goal_rep)
-        budget = self.resource_allocator.allocate(complexity_level)
-        app_logger.info(f"Resource Allocation: Complexity={complexity_level.value}, Model={budget.model}, MaxCycles={budget.max_reasoning_cycles}, Reason={complexity_reason}")
-        
+        complexity_level, complexity_reason = self.resource_allocator.classify_complexity(
+            goal_rep=goal_rep,
+            user_text=user_text,
+        )
+        # The allocation is finalized after the selected proposal is known so
+        # value-of-compute can account for authoritative risk and reversibility.
         # Phase 3B: Consult analogical memory for similar past tasks
         similar_tasks = []
         try:
@@ -3593,6 +4180,206 @@ class CognitiveRuntime:
         # Generate candidate action proposal
         proposal = forced_proposal or getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity, goal_rep=goal_rep)
         fine_action_type = proposal.action_type
+        trace.strategy_goal_type = str(getattr(goal_rep, "primary_intent_type", "") or "")
+        trace.strategy_action_type = str(fine_action_type or "")
+        planner_action = str(getattr(getattr(last_decision, "proposed_action", None), "action_type", "") or "") or None
+        action_agreement = (
+            planner_action == fine_action_type
+            if planner_action is not None else None
+        )
+        route_disagreement = trace.route_comparison.get("agreement") is False
+        action_disagreement = action_agreement is False
+        trace.route_comparison.update({
+            "planner_action_type": planner_action,
+            "selected_action_type": fine_action_type,
+            "action_agreement": action_agreement,
+            "comparison_basis": "reasoning_loop_vs_action_planner",
+            "correction_applied": route_disagreement or action_disagreement,
+            "correction_source": (
+                "authoritative_route_or_manifest"
+                if route_disagreement or action_disagreement else None
+            ),
+            "correction_outcome": "pending_verification",
+        })
+
+        # Phase 7 taste is an audit of the planner's already-ranked
+        # alternatives. It must not replace capability-provenance selection,
+        # safety gating, or owner authorization. A disagreement is recorded so
+        # a later benchmark can measure whether a simpler comparable option was
+        # actually chosen, rather than silently changing the action.
+        phase7_taste_evidence = [f"trace:{trace.trace_id}", f"proposal:{proposal.proposal_id}"]
+        try:
+            taste_candidates = [
+                {
+                    "solution_id": str(item.get("branch_id") or item.get("action_type") or "candidate"),
+                    "utility": item.get("utility_score", 0.0),
+                    "description": item.get("reasoning_summary", ""),
+                    "step_count": len(item.get("consequences", {}) or {}),
+                }
+                for item in (proposal.alternatives_considered or [])
+                if isinstance(item, dict)
+            ]
+            if taste_candidates:
+                taste = self.phase7_preferences.choose_solution(
+                    taste_candidates,
+                    trace_id=trace.trace_id,
+                    evidence_ids=phase7_taste_evidence,
+                )
+                planner_selected = next(
+                    (
+                        str(item.get("branch_id"))
+                        for item in (proposal.alternatives_considered or [])
+                        if item.get("recommended")
+                    ),
+                    None,
+                )
+                taste["planner_selected_solution_id"] = planner_selected
+                taste["preference_agrees_with_planner"] = (
+                    planner_selected is not None
+                    and planner_selected == taste.get("selected_solution_id")
+                )
+                trace.resource_allocation["phase7_taste"] = taste
+            else:
+                trace.resource_allocation["phase7_taste"] = {
+                    "status": "insufficient_candidate_comparison",
+                    "result_type": "UNKNOWN",
+                    "trace_id": trace.trace_id,
+                    "evidence_ids": phase7_taste_evidence,
+                    "selection_is_advisory": True,
+                    "authority": "none",
+                }
+        except Exception as exc:
+            app_logger.warning(f"Phase 7 taste evaluation failed: {exc}")
+            trace.resource_allocation["phase7_taste"] = {
+                "status": "unverified",
+                "error": str(exc),
+                "result_type": "UNKNOWN",
+                "trace_id": trace.trace_id,
+                "authority": "none",
+            }
+
+        phase7_taste = trace.resource_allocation.get("phase7_taste")
+
+        # Phase 4: apply the value-of-compute policy to the bounded planning
+        # allocation. Missing owner-stakes and usefulness evidence remain
+        # UNKNOWN; the policy may spend more compute, but never authorizes an
+        # action or treats a heuristic score as calibration.
+        history_available = any(
+            score.action_type == fine_action_type
+            for score in self.outcomes.all_scores()
+        )
+        compute_assessment = self.resource_allocator.assess_value_of_compute(
+            goal_rep=goal_rep,
+            proposal=proposal,
+            history_available=history_available,
+        )
+        allocation_complexity = complexity_level
+        if compute_assessment.recommended_route == "deliberate":
+            if complexity_level in (
+                TaskComplexity.TRIVIAL,
+                TaskComplexity.SIMPLE,
+                TaskComplexity.MODERATE,
+            ):
+                allocation_complexity = TaskComplexity.COMPLEX
+        elif (
+            compute_assessment.recommended_route == "standard"
+            and complexity_level is TaskComplexity.TRIVIAL
+        ):
+            allocation_complexity = TaskComplexity.SIMPLE
+        trace.compute_policy = compute_assessment.to_dict()
+        trace.compute_policy.update({
+            "baseline_complexity": complexity_level.value,
+            "applied_complexity": allocation_complexity.value,
+            "allocation_changed": allocation_complexity != complexity_level,
+        })
+        self.blackboard.set(
+            "value_of_compute",
+            dict(trace.compute_policy),
+            source="value_of_compute_policy",
+            confidence=1.0,
+        )
+
+        # The previous call passed TaskComplexity as the first positional
+        # argument (goal_rep), so allocation silently fell back to a trivial
+        # budget. Keep the classified level explicit and pass the actual goal
+        # context into the allocator.
+        complexity_level = allocation_complexity
+        budget = self.resource_allocator.allocate(
+            goal_rep=goal_rep,
+            user_text=user_text,
+            override_complexity=complexity_level,
+        )
+        trace.resource_allocation = {
+            "complexity": budget.complexity.value,
+            "model": budget.model,
+            "max_reasoning_cycles": budget.max_reasoning_cycles,
+            "max_investigation_depth": budget.max_investigation_depth,
+            "max_replan_attempts": budget.max_replan_attempts,
+            "max_tokens": budget.max_tokens,
+            "timeout_ms": budget.timeout_ms,
+            "classification_reason": budget.classification_reason,
+            "value_of_compute_route": compute_assessment.recommended_route,
+            "functional_affect": self.functional_affect.advisory_modifiers(),
+            "phase7_taste": phase7_taste,
+        }
+        # Phase 7 curiosity is a measured recommendation, not a work loop.
+        # Foreground planning does not imply owner-approved exploration, so
+        # that signal is explicitly false here. Information needs and learning
+        # progress can be inspected without granting activity authority.
+        phase7_evidence = [f"trace:{trace.trace_id}"] + [
+            f"goal_unknown:{str(item)[:80]}"
+            for item in (getattr(goal_rep, "unknowns", []) or [])[:5]
+            if str(item).strip()
+        ]
+        try:
+            from app.cognition.learning_progress import learning_progress_tracker
+            learning_targets = learning_progress_tracker.report(limit=5).get("targets", [])
+            curiosity = self.phase7_preferences.assess_curiosity(
+                information_needs=[
+                    {
+                        "question": str(item),
+                        "target": str(item),
+                        "priority": min(1.0, 0.35 + 0.15 * index),
+                    }
+                    for index, item in enumerate(getattr(goal_rep, "unknowns", []) or [])
+                ],
+                learning_targets=learning_targets,
+                owner_approved_exploration=False,
+                trace_id=trace.trace_id,
+                evidence_ids=phase7_evidence,
+            )
+            trace.resource_allocation["phase7_curiosity"] = curiosity.to_dict()
+            self.blackboard.set(
+                "phase7_curiosity",
+                dict(trace.resource_allocation["phase7_curiosity"]),
+                source="phase7_preference_evaluation",
+                confidence=1.0,
+            )
+        except Exception as exc:
+            # Preserve a visible failure in the trace instead of silently
+            # dropping the evaluation. The action path remains governed by its
+            # existing allocator and gates.
+            app_logger.warning(f"Phase 7 curiosity evaluation failed: {exc}")
+            trace.resource_allocation["phase7_curiosity"] = {
+                "status": "unverified",
+                "error": str(exc),
+                "advisory_only": True,
+                "authority": "none",
+                "result_type": "UNKNOWN",
+                "trace_id": trace.trace_id,
+            }
+        self.blackboard.set(
+            "resource_allocation",
+            dict(trace.resource_allocation),
+            source="resource_allocator",
+            confidence=1.0,
+        )
+        app_logger.info(
+            f"Resource Allocation: Complexity={complexity_level.value}, "
+            f"Model={budget.model}, MaxCycles={budget.max_reasoning_cycles}, "
+            f"Reason={complexity_reason}, "
+            f"ValueOfCompute={compute_assessment.recommended_route}"
+        )
         
         # Phase 3A: Skill classification and transfer adjustment
         skill_type = self.skills.classify(fine_action_type)
@@ -3630,6 +4417,40 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Confidence calibration failed: {e}")
 
+        # Phase 4: deterministic adversarial review before authorization. This
+        # is advisory telemetry; ActionGate remains the only authorization
+        # boundary and observation remains the only execution-truth boundary.
+        try:
+            from app.cognition.criticality_review import review_action_proposal
+            history_available = any(
+                score.action_type == fine_action_type
+                for score in self.outcomes.all_scores()
+            )
+            criticality = review_action_proposal(
+                proposal,
+                goal_rep=goal_rep,
+                calibrated_confidence=pred.confidence,
+                history_available=history_available,
+                memory_conflict=any(
+                    bool(item.get("conflicting"))
+                    for item in trace.retrieved_memories
+                ),
+            )
+            trace.criticality_review = criticality.to_dict()
+            self.blackboard.set(
+                "criticality_review",
+                dict(trace.criticality_review),
+                source="criticality_review",
+                confidence=1.0,
+            )
+            if criticality.required:
+                app_logger.info(
+                    f"Criticality review for {fine_action_type}: "
+                    f"{criticality.severity} ({', '.join(criticality.triggers)})"
+                )
+        except Exception as exc:
+            app_logger.warning(f"Criticality review unavailable: {exc}")
+
         # Multi-Gate Checks (Policy, Resource, Prediction)
         gate_res = ActionGate.evaluate_proposal(proposal)
         trace.gate_decision = gate_res.gate_name
@@ -3661,7 +4482,24 @@ class CognitiveRuntime:
                 tracker.transition(GoalLifecycleState.BLOCKED, f"Action blocked by {gate_res.gate_name}: {gate_res.reason}")
 
             latency = (time.time() - start_time) * 1000
+            trace.route_comparison["correction_outcome"] = (
+                "not_executed_blocked"
+                if trace.route_comparison.get("correction_applied")
+                else "no_correction"
+            )
             blocked_msg = f"Action blocked by {gate_res.gate_name}: {gate_res.reason}"
+            blocked_presentation = presentation_for_cycle(
+                goal_verified=False,
+                unknown=True,
+                evidence_items=[f"the action gate blocked {proposal.action_type}: {gate_res.reason}"],
+                action_type=proposal.action_type,
+            )
+            blocked_msg, blocked_grounding = reconcile_response(
+                blocked_msg,
+                observation_evidence="",
+            )
+            trace.grounding_result = blocked_grounding.to_dict()
+            blocked_msg = _apply_epistemic_presentation(trace, blocked_msg, blocked_presentation)
             trace.finalize(
                 reply=blocked_msg,
                 actions=[],
@@ -3687,6 +4525,7 @@ class CognitiveRuntime:
                 "success": False,
                 "session_id": session_id,
                 "trace_id": trace.trace_id,
+                "ontology_revision": trace.ontology_revision,
                 "user_text": user_text,
                 "assistant_reply": blocked_msg,
                 "executed_actions": [],
@@ -3702,7 +4541,13 @@ class CognitiveRuntime:
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
-                "model_used": "ActionGate"
+                "model_used": "ActionGate",
+                "grounding": blocked_grounding.to_dict(),
+                "epistemic_presentation": blocked_presentation.to_dict(),
+                "criticality_review": dict(trace.criticality_review),
+                "route_comparison": dict(trace.route_comparison),
+                "hypothesis_state": dict(trace.hypothesis_state),
+                "compute_policy": dict(trace.compute_policy),
             }
 
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
@@ -3729,6 +4574,13 @@ class CognitiveRuntime:
             goal_rep, executed_actions, assistant_reply, failed_action_type=proposal.action_type, tracker=tracker, observed_state=obs_state, failed_payload=proposal.payload
         )
         trace.goal_verified = verify_res.verified_success
+        assistant_reply, action_grounding = reconcile_response(
+            assistant_reply,
+            observation_evidence="; ".join(verify_res.met_conditions or []),
+            authoritative_facts=verify_res.met_conditions,
+            observation_empty=False if verify_res.verified_success else None,
+        )
+        trace.grounding_result = action_grounding.to_dict()
         try:
             evidence = list(verify_res.met_conditions or [])
             agent_res["agency_attribution"] = self.self_knowledge.attribute_change(
@@ -3757,6 +4609,8 @@ class CognitiveRuntime:
                 user_text, goal_rep, verify_res, tracker, complexity=complexity, memory_store=self.memory,
                 world_model=self.world, tool_registry=self.registry, failed_payload=proposal.payload,
                 lesson_store=self.lessons, outcome_store=self.outcomes,
+                usefulness_store=getattr(self, "usefulness_feedback", None),
+                analogical_memory=self.analogies,
                 hardware_self_model=self.hardware_self_model,
                 resource_manager=getattr(self.advanced_cognition, "resource_manager", None),
             )
@@ -3908,7 +4762,134 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"EventBus sync warning: {e}")
 
+        # Reconcile the final reply after any bounded Plan B attempt. This is
+        # intentionally conservative: it only repairs deterministic or explicit
+        # empty-observation contradictions and otherwise leaves model prose intact.
+        assistant_reply, action_grounding = reconcile_response(
+            assistant_reply,
+            observation_evidence="; ".join(verify_res.met_conditions or []),
+            authoritative_facts=verify_res.met_conditions,
+            observation_empty=False if verify_res.verified_success else None,
+        )
+        trace.grounding_result = action_grounding.to_dict()
+
+        # Preserve the same conservative observation test used at the response
+        # boundary: a non-empty wrapper or the model's prose is not proof that
+        # the environment was observed.
+        _action_observations = dict((obs_state or {}).get("observations") or {})
+        _action_entity_states = dict((obs_state or {}).get("verified_entity_states") or {})
+        _action_environment_observed = (
+            bool(_action_observations)
+            and _action_observations.get("evidence_source") != "not_observed"
+        ) or any(
+            bool(state) and state != "unknown" for state in _action_entity_states.values()
+        ) or bool(agent_res.get("os_grounding"))
+        action_presentation = presentation_for_cycle(
+            goal_verified=verify_res.verified_success,
+            environment_observed=_action_environment_observed,
+            evidence_items=(
+                list(verify_res.met_conditions or [])[:2]
+                if verify_res.verified_success else
+                list(verify_res.failed_conditions or [])[:2]
+            ),
+            failed=not verify_res.verified_success,
+            unknown=not verify_res.verified_success and not _action_environment_observed,
+            confidence_score=pred.confidence,
+            action_type=final_action_type,
+        )
+        assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, action_presentation)
+
+        # Phase 7 novelty is a comparison result only. It flags divergence
+        # against available material and reports reference uncertainty; it does
+        # not score quality, truth, or permission to act.
+        novelty_evidence = [f"trace:{trace.trace_id}"] + [
+            f"memory:{item.get('memory_id')}"
+            for item in trace.retrieved_memories[:5]
+            if item.get("memory_id")
+        ]
+        try:
+            prior_outputs = [
+                str(item.get("content", ""))
+                for item in (conversation_history or [])
+                if str(item.get("role", "")).lower() == "assistant"
+                and str(item.get("content", "")).strip()
+            ][-5:]
+            baseline_strategies = [
+                str(value) for value in (
+                    proposal.recommendation_reason,
+                    proposal.action_type,
+                    trace.strategy_goal_type,
+                ) if str(value).strip()
+            ]
+            novelty = self.phase7_preferences.detect_novelty(
+                assistant_reply,
+                retrieved_material=[memory_context] if memory_context else [],
+                baseline_strategies=baseline_strategies,
+                prior_outputs=prior_outputs,
+                trace_id=trace.trace_id,
+                evidence_ids=novelty_evidence,
+            )
+            trace.resource_allocation["phase7_novelty"] = novelty.to_dict()
+        except Exception as exc:
+            app_logger.warning(f"Phase 7 novelty evaluation failed: {exc}")
+            trace.resource_allocation["phase7_novelty"] = {
+                "status": "unverified",
+                "error": str(exc),
+                "quality_not_inferred": True,
+                "result_type": "UNKNOWN",
+                "trace_id": trace.trace_id,
+            }
+
         latency = (time.time() - start_time) * 1000
+        if trace.route_comparison.get("correction_applied"):
+            trace.route_comparison.update({
+                "correction_outcome": (
+                    "verified_success"
+                    if verify_res.verified_success else "verified_failure"
+                ),
+                "correction_measurement": (
+                    "single_cycle_verified_outcome; not calibration or adaptation"
+                ),
+            })
+        else:
+            trace.route_comparison["correction_outcome"] = "no_correction"
+        try:
+            self.resource_allocator.record_outcome(
+                budget,
+                verify_res.verified_success,
+                round(latency, 2),
+            )
+        except Exception as exc:
+            app_logger.warning(f"Resource allocation outcome recording failed: {exc}")
+        try:
+            affect_evidence = [
+                str(item) for item in (
+                    list(verify_res.met_conditions or [])[:2]
+                    if verify_res.verified_success else
+                    list(verify_res.failed_conditions or [])[:2]
+                ) if str(item).strip()
+            ] or [f"trace:{trace.trace_id}"]
+            self.functional_affect.record_outcome(
+                trace_id=trace.trace_id,
+                outcome="verified_success" if verify_res.verified_success else "verified_failure",
+                evidence_ids=affect_evidence,
+            )
+            signal_updates = (
+                (("confidence", 0.05), ("uncertainty", -0.05), ("frustration", -0.03))
+                if verify_res.verified_success else
+                (("confidence", -0.05), ("uncertainty", 0.05), ("frustration", 0.05))
+            )
+            for field_name, delta in signal_updates:
+                self.functional_affect.apply_signal(
+                    field_name,
+                    delta,
+                    source="verified_execution_outcome",
+                    trace_id=trace.trace_id,
+                    evidence_ids=affect_evidence,
+                )
+        except Exception as exc:
+            app_logger.warning(f"Functional affect update failed: {exc}")
+        trace.model_used = agent_res.get("model_used", "fast")
         trace.finalize(
             reply=assistant_reply,
             actions=executed_actions,
@@ -3918,8 +4899,8 @@ class CognitiveRuntime:
             gate_decision=gate_res.gate_name,
             goal_verified=verify_res.verified_success,
             goal_lifecycle_state=tracker.current_state.value,
+            grounding_result=action_grounding.to_dict(),
         )
-        trace.model_used = agent_res.get("model_used", "fast")
 
         app_logger.info(
             f"COGNITIVE RUNTIME TRACE [{trace.trace_id[:8]}] | Session: {session_id} | "
@@ -4081,5 +5062,16 @@ class CognitiveRuntime:
             "agency_attribution": agent_res.get("agency_attribution"),
             "boundary_event": agent_res.get("boundary_event"),
             "os_grounding": agent_res.get("os_grounding"),
-            "model_used": trace.model_used
+            "model_used": trace.model_used,
+            "grounding": action_grounding.to_dict(),
+            "epistemic_presentation": action_presentation.to_dict(),
+            "criticality_review": dict(trace.criticality_review),
+            "route_comparison": dict(trace.route_comparison),
+            "hypothesis_state": dict(trace.hypothesis_state),
+            "compute_policy": dict(trace.compute_policy),
+            "phase7": {
+                "curiosity": trace.resource_allocation.get("phase7_curiosity"),
+                "taste": trace.resource_allocation.get("phase7_taste"),
+                "novelty": trace.resource_allocation.get("phase7_novelty"),
+            },
         }

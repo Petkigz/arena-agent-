@@ -103,8 +103,12 @@ class MainWindow(QMainWindow):
     def __init__(self, base_url: str = "http://localhost:8000"):
         super().__init__()
         self.setWindowTitle("Arena — Beanie")
-        self.resize(920, 720)
-        self.setMinimumSize(520, 420)  # freely resizable, both directions
+        # The reference composition is a wide command center. Keep enough room
+        # for sidebar + conversation + context instead of launching into a
+        # squeezed 920px canvas; the context rail collapses responsively below.
+        self.resize(1360, 860)
+        self.setMinimumSize(960, 620)
+        self._context_auto_collapsed = False
 
         self.settings = DesktopSettings()
         # Persisted server URL overrides the CLI default when set.
@@ -250,7 +254,7 @@ class MainWindow(QMainWindow):
         # Right context panel — progressive: collapsible, choice persisted.
         self.context = ContextPanel(
             collapsed=bool(self.settings.get("context_collapsed")),
-            on_collapsed=lambda collapsed: self.settings.set("context_collapsed", bool(collapsed)),
+            on_collapsed=self._on_context_collapsed,
         )
 
         # Three-column ChatGPT-style layout
@@ -268,6 +272,29 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         self._check_health()
         self.chat_client.connect()
+
+    def _on_context_collapsed(self, collapsed: bool) -> None:
+        """Persist user context-rail choice without fighting responsive layout."""
+        self.settings.set("context_collapsed", bool(collapsed))
+        self._context_auto_collapsed = False
+
+    def resizeEvent(self, event) -> None:
+        """Preserve the three-column composition at wide sizes.
+
+        At narrower desktop windows the context rail becomes the progressive
+        detail surface and collapses, rather than squeezing the conversation
+        until the reference composition is unreadable. A user can still reopen
+        it manually from the rail toggle.
+        """
+        super().resizeEvent(event)
+        if not hasattr(self, "context"):
+            return
+        if self.width() < 1120 and not self.context.collapsed:
+            self.context.set_collapsed(True, notify=False)
+            self._context_auto_collapsed = True
+        elif self.width() >= 1280 and self._context_auto_collapsed:
+            self.context.set_collapsed(False, notify=False)
+            self._context_auto_collapsed = False
 
     # ── System tray ─────────────────────────────────────────────────────────
     def _setup_tray(self) -> None:
@@ -395,9 +422,13 @@ class MainWindow(QMainWindow):
         self.update()
 
     def _set_status(self, status: str) -> None:
-        """Update the orb on both the Beanie page and the sidebar."""
+        """Update Beanie's shared state across the desktop surfaces."""
         self.beanie.set_status(status)
         self.sidebar.set_orb_status(status)
+        if hasattr(self, "context"):
+            self.context.set_current_state(status.capitalize())
+        if hasattr(self, "chat"):
+            self.chat.set_voice_status(status)
 
     # ── Health ──
     def _check_health(self) -> None:
@@ -410,6 +441,7 @@ class MainWindow(QMainWindow):
     def _on_online(self) -> None:
         self._set_status("idle")
         self.sidebar.set_status(True)
+        self.chat.set_connection_status(True)
         self.beanie.set_message("What are we working on today?")
         self.context.set_status(True)
 
@@ -417,6 +449,7 @@ class MainWindow(QMainWindow):
     def _on_offline(self, err: str) -> None:
         self._set_status("offline")
         self.sidebar.set_status(False)
+        self.chat.set_connection_status(False, err)
         self.beanie.set_message("Offline — start the backend.")
         self.context.set_status(False, err)
 
@@ -484,6 +517,11 @@ class MainWindow(QMainWindow):
     @Slot(list)
     def _handle_conversation_list(self, conversations: list) -> None:
         self.sidebar.set_conversations(conversations)
+        for conversation in conversations:
+            if len(conversation) >= 2 and conversation[0] == self.current_conv_id:
+                self.chat.set_conversation_title(conversation[1])
+                self.context.set_current_chat(conversation[1])
+                break
         # Cross-device follow: when the owner's most recent conversation moved
         # (they opened/created a chat on the web or phone), join it — unless
         # the user picked a room manually this session or is mid-typing.
@@ -507,6 +545,7 @@ class MainWindow(QMainWindow):
     @Slot(str, str)
     def _handle_conversation_created(self, cid: str, title: str) -> None:
         self.current_conv_id = cid
+        self.chat.set_conversation_title(title)
         self.chat.clear_messages()
         self.chat_client.list_conversations()
 
@@ -542,10 +581,19 @@ class MainWindow(QMainWindow):
     @Slot(dict)
     def _handle_working_context(self, context: dict) -> None:
         # The Live Context rail always shows the agent's mind; the inline card
-        # appears only while Beanie works.
-        self.context.set_context(context or {})
+        # appears only while Beanie works. Enrich the shared partial payload
+        # with the dashboard concepts that do not require another backend call.
+        # The un-enriched form remains the shared contract for partial payloads.
+        # self.context.set_context(context or {})
+        enriched = dict(context or {})
+        enriched.setdefault("chat", self.current_conv_id)
+        enriched.setdefault("state", "Working" if getattr(self, "_beanie_working", False) else "Idle")
+        enriched.setdefault("focus", enriched.get("objective") or enriched.get("project"))
+        enriched.setdefault("activity", "Processing the latest request")
+        enriched.setdefault("insight", "I’m following the current thread.")
+        self.context.set_context(enriched)
         if getattr(self, "_beanie_working", False):
-            self.chat.show_working_context(context)
+            self.chat.show_working_context(enriched)
 
     def _landing_submit(self, text: str) -> None:
         """Landing composer: the conversation is the primary surface — hand the
