@@ -29,6 +29,15 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
         "model": "fast",
         "max_tokens": 500,
     }
+    trace.criticality_review = {
+        "severity": "moderate",
+        "triggers": ["no_verified_action_history"],
+        "required": True,
+    }
+    trace.route_comparison = {
+        "agreement": False,
+        "selected_route": "act",
+    }
     trace.finalize(
         reply="The process is running.\n\n" + presentation.user_text(),
         actions=["probe_process"],
@@ -44,7 +53,8 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
             "SELECT epistemic_presentation_json, grounding_result_json, "
-            "retrieved_memories_json, resource_allocation_json "
+            "retrieved_memories_json, resource_allocation_json, "
+            "criticality_review_json, route_comparison_json "
             "FROM cognitive_traces WHERE trace_id=?",
             (trace.trace_id,),
         ).fetchone()
@@ -54,6 +64,8 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
     grounding = json.loads(row[1])
     retrieved = json.loads(row[2])
     allocation = json.loads(row[3])
+    review = json.loads(row[4])
+    route = json.loads(row[5])
     assert persisted["confidence_label"] == "Highly confident"
     assert persisted["evidence_basis"] == ["fresh observation"]
     assert grounding["status"] == "verified"
@@ -61,6 +73,8 @@ def test_trace_persists_user_facing_epistemic_presentation(tmp_path, monkeypatch
     assert retrieved == [{"memory_id": "memory-1", "kind": "semantic", "source": "owner_note"}]
     assert allocation["complexity"] == "moderate"
     assert allocation["max_tokens"] == 500
+    assert review["triggers"] == ["no_verified_action_history"]
+    assert route["agreement"] is False
     assert trace.epistemic_presentation["evidence_state"] == "verified"
     assert trace.grounding_result["status"] == "verified"
 

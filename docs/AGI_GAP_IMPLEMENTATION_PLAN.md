@@ -429,15 +429,16 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 
 - Implement a fast candidate generator that emits a low-cost hypothesis, confidence, and evidence needs.
 - Let the deliberate path independently verify, reject, or refine that candidate.
-- Wire resource allocation to the actual goal context and persist allocation/outcome telemetry. **Initial allocation telemetry is implemented; fast/slow agreement and correction measurement remain pending.**
+- Wire resource allocation to the actual goal context and persist allocation/outcome telemetry. **Allocation metadata now records the actual goal context, selected budget/model, measured latency, and verified outcome; this remains measurement, not proof of optimal routing or calibration.**
 - Measure:
   - fast answer accuracy;
   - deliberate correction rate;
   - false confidence;
   - latency and token cost;
   - cases where deliberation worsens a correct fast answer.
+  **Current runtime telemetry records fast/authoritative-route agreement, planner/action agreement, whether a correction was applied, and the post-cycle verified outcome. A single verified outcome is explicitly not calibration, adaptation, or proof of route quality.**
 - Add a value-of-compute policy using risk, reversibility, uncertainty, novelty, owner stakes, expected information gain, and predicted user usefulness.
-- Add a criticality-triggered adversarial review for high-risk, novel, contradictory, or overconfident conclusions.
+- Add a criticality-triggered adversarial review for high-risk, novel, contradictory, or overconfident conclusions. **A bounded pre-gate review now records risk, no-history, conflict, unresolved-unknown, overconfidence, malformed-proposal, and missing-prediction triggers; it remains advisory and cannot authorize or execute actions.**
 - Add bounded hypothesis sets so the system can preserve competing explanations without premature synthesis.
 - Feed validated usefulness feedback into strategy selection only after separating it from correctness, politeness, and user preference effects.
 - Version ontology/schema changes separately from ordinary belief updates.

@@ -3389,6 +3389,30 @@ class CognitiveRuntime:
         except Exception as exc:
             app_logger.warning(f"Tool matcher failed (normal pipeline continues): {exc}")
 
+        # Phase 4: record route agreement as telemetry, not as proof that one
+        # route was correct. The deterministic reasoning decision and any
+        # manifest/observation override are compared before the branch runs.
+        fast_decision = last_decision.action.value if last_decision else "unknown"
+        route_agreement = (
+            fast_decision == reasoning_action.value
+            if last_decision is not None else None
+        )
+        trace.route_comparison = {
+            "fast_decision": fast_decision,
+            "fast_confidence": (
+                None if last_decision is None else float(last_decision.confidence)
+            ),
+            "selected_route": reasoning_action.value,
+            "agreement": route_agreement,
+            "comparison_basis": "reasoning_loop_decision_vs_authoritative_route",
+            "correction_applied": route_agreement is False,
+            "correction_source": (
+                "authoritative_route_or_manifest"
+                if route_agreement is False else None
+            ),
+            "correction_outcome": "pending_verification",
+        }
+
         # 5. DECISION ROUTER (100% Authoritative ReasoningAction Routing):
         # Branch A: ANSWER / Direct Conversational Q&A
         if reasoning_action == ReasoningAction.ANSWER:
@@ -3560,6 +3584,7 @@ class CognitiveRuntime:
                 )
                 trace.grounding_result = simulated_grounding.to_dict()
                 assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, presentation)
+                trace.route_comparison["correction_outcome"] = "not_executed_llm_unavailable"
                 latency = (time.time() - start_time) * 1000
                 trace.finalize(
                     reply=assistant_reply,
@@ -3589,6 +3614,7 @@ class CognitiveRuntime:
                     "model_used": llm_res.get("model", "fast"),
                     "grounding": simulated_grounding.to_dict(),
                     "epistemic_presentation": presentation.to_dict(),
+                    "route_comparison": dict(trace.route_comparison),
                     "llm_available": False,
                 }
 
@@ -3646,6 +3672,12 @@ class CognitiveRuntime:
                 action_type="formulate_answer",
             )
             assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, answer_presentation)
+            trace.route_comparison["correction_outcome"] = (
+                "verified_success"
+                if trace.route_comparison.get("correction_applied") and verify_res.verified_success
+                else "verified_failure"
+                if trace.route_comparison.get("correction_applied") else "no_correction"
+            )
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -3684,6 +3716,7 @@ class CognitiveRuntime:
                 "model_used": llm_res.get("model", "fast"),
                 "grounding": answer_grounding.to_dict(),
                 "epistemic_presentation": answer_presentation.to_dict(),
+                "route_comparison": dict(trace.route_comparison),
                 # Owner review P1 #9: 'observable, never silent' must
                 # hold at the boundary the consumer sees. When a loaded
                 # FALLBACK model answered (the requested model was not
@@ -3806,6 +3839,12 @@ class CognitiveRuntime:
                 action_type="investigate",
             )
             assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, investigation_presentation)
+            trace.route_comparison["correction_outcome"] = (
+                "verified_success"
+                if trace.route_comparison.get("correction_applied") and verify_res.verified_success
+                else "verified_failure"
+                if trace.route_comparison.get("correction_applied") else "no_correction"
+            )
 
             latency = (time.time() - start_time) * 1000
             trace.finalize(
@@ -3849,6 +3888,7 @@ class CognitiveRuntime:
                 "model_used": llm_res.get("model", "fast"),
                 "grounding": investigation_grounding.to_dict(),
                 "epistemic_presentation": investigation_presentation.to_dict(),
+                "route_comparison": dict(trace.route_comparison),
                 # Owner review P1 #9: fallback disclosure at the boundary
                 # (same contract as the ANSWER branch above).
                 **({"model_fallback": dict(llm_res["model_fallback"])}
@@ -3918,6 +3958,10 @@ class CognitiveRuntime:
             )
             trace.grounding_result = defer_grounding.to_dict()
             defer_msg = _apply_epistemic_presentation(trace, defer_msg, defer_presentation)
+            trace.route_comparison["correction_outcome"] = (
+                "not_executed_deferred"
+                if trace.route_comparison.get("correction_applied") else "no_correction"
+            )
             latency = (time.time() - start_time) * 1000
             trace.finalize(
                 reply=defer_msg,
@@ -3955,6 +3999,7 @@ class CognitiveRuntime:
                 "model_used": "ReasoningCycle",
                 "grounding": defer_grounding.to_dict(),
                 "epistemic_presentation": defer_presentation.to_dict(),
+                "route_comparison": dict(trace.route_comparison),
             }
 
         # Branch D: ACT / Action Strategy Simulation ➔ ActionProposal ➔ Prediction ➔ ActionGate ➔ Capability Execution
@@ -4025,6 +4070,25 @@ class CognitiveRuntime:
         # Generate candidate action proposal
         proposal = forced_proposal or getattr(last_decision, "proposed_action", None) or self.generate_candidate_action_proposal(user_text, complexity=complexity, goal_rep=goal_rep)
         fine_action_type = proposal.action_type
+        planner_action = str(getattr(getattr(last_decision, "proposed_action", None), "action_type", "") or "") or None
+        action_agreement = (
+            planner_action == fine_action_type
+            if planner_action is not None else None
+        )
+        route_disagreement = trace.route_comparison.get("agreement") is False
+        action_disagreement = action_agreement is False
+        trace.route_comparison.update({
+            "planner_action_type": planner_action,
+            "selected_action_type": fine_action_type,
+            "action_agreement": action_agreement,
+            "comparison_basis": "reasoning_loop_vs_action_planner",
+            "correction_applied": route_disagreement or action_disagreement,
+            "correction_source": (
+                "authoritative_route_or_manifest"
+                if route_disagreement or action_disagreement else None
+            ),
+            "correction_outcome": "pending_verification",
+        })
         
         # Phase 3A: Skill classification and transfer adjustment
         skill_type = self.skills.classify(fine_action_type)
@@ -4062,6 +4126,40 @@ class CognitiveRuntime:
         except Exception as e:
             app_logger.warning(f"Confidence calibration failed: {e}")
 
+        # Phase 4: deterministic adversarial review before authorization. This
+        # is advisory telemetry; ActionGate remains the only authorization
+        # boundary and observation remains the only execution-truth boundary.
+        try:
+            from app.cognition.criticality_review import review_action_proposal
+            history_available = any(
+                score.action_type == fine_action_type
+                for score in self.outcomes.all_scores()
+            )
+            criticality = review_action_proposal(
+                proposal,
+                goal_rep=goal_rep,
+                calibrated_confidence=pred.confidence,
+                history_available=history_available,
+                memory_conflict=any(
+                    bool(item.get("conflicting"))
+                    for item in trace.retrieved_memories
+                ),
+            )
+            trace.criticality_review = criticality.to_dict()
+            self.blackboard.set(
+                "criticality_review",
+                dict(trace.criticality_review),
+                source="criticality_review",
+                confidence=1.0,
+            )
+            if criticality.required:
+                app_logger.info(
+                    f"Criticality review for {fine_action_type}: "
+                    f"{criticality.severity} ({', '.join(criticality.triggers)})"
+                )
+        except Exception as exc:
+            app_logger.warning(f"Criticality review unavailable: {exc}")
+
         # Multi-Gate Checks (Policy, Resource, Prediction)
         gate_res = ActionGate.evaluate_proposal(proposal)
         trace.gate_decision = gate_res.gate_name
@@ -4093,6 +4191,11 @@ class CognitiveRuntime:
                 tracker.transition(GoalLifecycleState.BLOCKED, f"Action blocked by {gate_res.gate_name}: {gate_res.reason}")
 
             latency = (time.time() - start_time) * 1000
+            trace.route_comparison["correction_outcome"] = (
+                "not_executed_blocked"
+                if trace.route_comparison.get("correction_applied")
+                else "no_correction"
+            )
             blocked_msg = f"Action blocked by {gate_res.gate_name}: {gate_res.reason}"
             blocked_presentation = presentation_for_cycle(
                 goal_verified=False,
@@ -4149,6 +4252,8 @@ class CognitiveRuntime:
                 "model_used": "ActionGate",
                 "grounding": blocked_grounding.to_dict(),
                 "epistemic_presentation": blocked_presentation.to_dict(),
+                "criticality_review": dict(trace.criticality_review),
+                "route_comparison": dict(trace.route_comparison),
             }
 
         # Capability Execution Layer (Executes selected ActionProposal directly without re-routing)
@@ -4400,6 +4505,18 @@ class CognitiveRuntime:
         assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, action_presentation)
 
         latency = (time.time() - start_time) * 1000
+        if trace.route_comparison.get("correction_applied"):
+            trace.route_comparison.update({
+                "correction_outcome": (
+                    "verified_success"
+                    if verify_res.verified_success else "verified_failure"
+                ),
+                "correction_measurement": (
+                    "single_cycle_verified_outcome; not calibration or adaptation"
+                ),
+            })
+        else:
+            trace.route_comparison["correction_outcome"] = "no_correction"
         try:
             self.resource_allocator.record_outcome(
                 budget,
@@ -4583,5 +4700,7 @@ class CognitiveRuntime:
             "os_grounding": agent_res.get("os_grounding"),
             "model_used": trace.model_used,
             "grounding": action_grounding.to_dict(),
-            "epistemic_presentation": action_presentation.to_dict()
+            "epistemic_presentation": action_presentation.to_dict(),
+            "criticality_review": dict(trace.criticality_review),
+            "route_comparison": dict(trace.route_comparison),
         }
