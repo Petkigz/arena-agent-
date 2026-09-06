@@ -310,7 +310,7 @@ export function ModelSettingsPage() {
                 }}
                 className="sr-only peer"
               />
-              <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+              <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
             </label>
           </div>
 
@@ -350,9 +350,9 @@ export function ModelSettingsPage() {
                 {testResult.checks.map((check, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-xs">
                     {check.passed ? (
-                      <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+                      <CheckCircle className="w-3 h-3 text-accent-success flex-shrink-0" />
                     ) : (
-                      <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                      <XCircle className="w-3 h-3 text-accent-error flex-shrink-0" />
                     )}
                     <span className="text-text-secondary">
                       {check.name}: {check.detail}
@@ -454,7 +454,7 @@ export function ModelSettingsPage() {
                 <div className="text-sm text-text-primary">
                   <span className="font-medium">Selected:</span> {loraStatus.active || '(none — base model)'}
                   {loraStatus.active && !loraStatus.runtime_applied && (
-                    <span className="text-xs text-amber-600 ml-2">not loaded by inference runtime</span>
+                    <span className="text-xs text-accent-warning ml-2">not loaded by inference runtime</span>
                   )}
                 </div>
                 <div className="text-sm text-text-secondary">
@@ -535,7 +535,7 @@ export function ModelSettingsPage() {
                 <div className="rounded border border-border p-3 text-xs text-text-secondary space-y-2">
                   <p>Skill improvement: <strong>{evaluationReport.skill_improvement ?? 'unknown'}</strong> · unrelated regression: <strong>{evaluationReport.unrelated_regression ?? 'unknown'}</strong></p>
                   <p>Provider identity verified: {evaluationReport.provider_model_identity_verified ? 'yes' : 'no'} · deployment eligible: {evaluationReport.deployment_eligible ? 'yes' : 'no'}</p>
-                  {evaluationReport.errors.length > 0 && <p className="text-red-600">{evaluationReport.errors.join('; ')}</p>}
+                  {evaluationReport.errors.length > 0 && <p className="text-accent-error">{evaluationReport.errors.join('; ')}</p>}
                   {evaluationReport.deployment_eligible && !evaluationReport.runtime_applied && (
                     <button
                       onClick={deployEvaluatedAdapter}
@@ -545,7 +545,7 @@ export function ModelSettingsPage() {
                       Deploy this evaluated provider model
                     </button>
                   )}
-                  {evaluationReport.runtime_applied && <p className="text-green-600">Applied and provider-probed for this process.</p>}
+                  {evaluationReport.runtime_applied && <p className="text-accent-success">Applied and provider-probed for this process.</p>}
                 </div>
               )}
             </div>
@@ -614,7 +614,7 @@ export function ModelSettingsPage() {
                   />
                   <p className="text-xs text-text-muted">Evidence: {candidate.verification_reason || candidate.evidence.join(', ')}</p>
                   {candidate.redactions.length > 0 && (
-                    <p className="text-xs text-amber-600">Redacted: {candidate.redactions.join(', ')}</p>
+                    <p className="text-xs text-accent-warning">Redacted: {candidate.redactions.join(', ')}</p>
                   )}
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -627,14 +627,14 @@ export function ModelSettingsPage() {
                     <button
                       disabled={candidateBusy === candidate.candidate_id}
                       onClick={() => decideCandidate(candidate, false)}
-                      className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                      className="px-2 py-1 text-xs bg-accent-error text-white rounded"
                     >
                       Reject
                     </button>
                     <button
                       disabled={candidateBusy === candidate.candidate_id}
                       onClick={() => decideCandidate(candidate, true)}
-                      className="px-2 py-1 text-xs bg-green-600 text-white rounded"
+                      className="px-2 py-1 text-xs bg-accent-success text-white rounded"
                     >
                       Approve exact pair
                     </button>

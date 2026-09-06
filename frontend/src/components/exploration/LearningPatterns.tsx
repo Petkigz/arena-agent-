@@ -269,7 +269,7 @@ export function LearningPatterns({ memories, conversations, knowledgeNodes }: Le
           </h3>
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <Brain className="w-5 h-5 text-purple-500" />
+              <Brain className="w-5 h-5 text-accent-secondary" />
               <div className="flex-1">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-text-primary">Knowledge Nodes</span>
@@ -278,7 +278,7 @@ export function LearningPatterns({ memories, conversations, knowledgeNodes }: Le
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-amber-500" />
+              <MessageCircle className="w-5 h-5 text-accent-warning" />
               <div className="flex-1">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-text-primary">Conversations</span>
@@ -287,7 +287,7 @@ export function LearningPatterns({ memories, conversations, knowledgeNodes }: Le
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Database className="w-5 h-5 text-blue-500" />
+              <Database className="w-5 h-5 text-accent-primary" />
               <div className="flex-1">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-text-primary">Memories</span>

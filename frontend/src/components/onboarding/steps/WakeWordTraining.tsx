@@ -26,8 +26,8 @@ export function WakeWordTraining({ onNext, onBack, onSkip }: WakeWordTrainingPro
       </div>
 
       {/* Training availability */}
-      <div className="bg-amber-500/10 border border-amber-500/50 rounded-lg p-8 mb-8 text-center">
-        <Mic className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+      <div className="bg-accent-warning/10 border border-accent-warning/50 rounded-lg p-8 mb-8 text-center">
+        <Mic className="w-12 h-12 text-accent-warning mx-auto mb-3" />
         <p className="text-text-primary font-medium mb-2">Custom training is currently unavailable</p>
         <p className="text-sm text-text-secondary">
           Arena does not have a verified custom wake-word ONNX training pipeline configured. No sample or accuracy will be simulated. You can continue with a built-in wake word.

@@ -119,7 +119,7 @@ export function DevicePairing({ onNext, onBack, onSkip }: DevicePairingProps) {
       )}
 
       {pairingError && (
-        <div className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-text-secondary">
+        <div className="mb-6 rounded-lg border border-accent-warning/50 bg-accent-warning/10 p-4 text-sm text-text-secondary">
           {pairingError}
         </div>
       )}

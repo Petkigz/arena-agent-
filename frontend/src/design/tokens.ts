@@ -31,7 +31,7 @@ export interface ThemePalette {
   accent: string;
   border: { subtle: string; active: string };
   /** Beanie's glow — light emitted by the presence states (atmosphere). */
-  glow: { primary: string; secondary: string };
+  glow: { primary: string; secondary: string; gradient_angle_deg: number };
 }
 
 /** All 11 Beanie presence states, keyed by state name. */

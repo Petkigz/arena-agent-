@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.settings import DesktopSettings
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
+from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
 from desktop.styles import _button_style, _input_style, _textarea_style
 from desktop.widgets.orb import PresenceOrbWidget
 from desktop.workers import ChatWorker, HealthWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
@@ -116,7 +116,7 @@ class ToolsPage(QWidget):
         frow.addWidget(self._files_btn)
         outer.addLayout(frow)
         self.files_list = QListWidget()
-        self.files_list.setStyleSheet(f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+        self.files_list.setStyleSheet(f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;")
         outer.addWidget(self.files_list)
 
         outer.addSpacing(12)
@@ -143,7 +143,7 @@ class ToolsPage(QWidget):
         self._files_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
         self.files_input.setStyleSheet(_input_style())
         self._files_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))
-        self.files_list.setStyleSheet(f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; border: 1px solid {BG_SURFACE}; border-radius: 8px;")
+        self.files_list.setStyleSheet(f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;")
         self._status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};")
         self.status_text.setStyleSheet(_textarea_style())
 

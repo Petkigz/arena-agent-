@@ -15,23 +15,23 @@ function ActionStepsComponent({ steps }: ActionStepsProps) {
         <div key={step.id || index} className="flex items-start gap-2 text-sm">
           <div className="mt-0.5 flex-shrink-0">
             {step.status === 'complete' && (
-              <CheckCircle2 className="w-4 h-4 text-green-500" />
+              <CheckCircle2 className="w-4 h-4 text-accent-success" />
             )}
             {step.status === 'in_progress' && (
-              <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+              <Loader2 className="w-4 h-4 text-accent-primary animate-spin drop-shadow-glow" />
             )}
             {step.status === 'pending' && (
               <Circle className="w-4 h-4 text-text-muted" />
             )}
             {step.status === 'error' && (
-              <Circle className="w-4 h-4 text-red-500" />
+              <Circle className="w-4 h-4 text-accent-error" />
             )}
           </div>
           <div className="flex-1">
             <div className={
-              step.status === 'complete' ? 'text-green-500' :
-              step.status === 'in_progress' ? 'text-blue-500' :
-              step.status === 'error' ? 'text-red-500' :
+              step.status === 'complete' ? 'text-accent-success' :
+              step.status === 'in_progress' ? 'text-accent-primary' :
+              step.status === 'error' ? 'text-accent-error' :
               'text-text-muted'
             }>
               {step.description}

@@ -266,7 +266,7 @@ export function VoiceSettingsPage() {
                 }}
                 className="sr-only peer"
               />
-              <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+              <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
             </label>
           </div>
         </Card>
@@ -276,10 +276,10 @@ export function VoiceSettingsPage() {
           <div
             className={`mb-6 p-3 rounded-lg flex items-center gap-2 text-sm ${
               testResult.type === 'success'
-                ? 'bg-green-50 text-green-800 border border-green-200'
+                ? 'bg-accent-success text-accent-success border border-accent-success'
                 : testResult.type === 'error'
-                ? 'bg-red-50 text-red-800 border border-red-200'
-                : 'bg-blue-50 text-blue-800 border border-blue-200'
+                ? 'bg-accent-error text-accent-error border border-accent-error'
+                : 'bg-accent-primary text-accent-primary border border-accent-primary'
             }`}
           >
             {testResult.type === 'success' && <CheckCircle className="w-4 h-4" />}
@@ -316,7 +316,7 @@ export function VoiceSettingsPage() {
                   <p className="text-xs text-text-muted mt-1">
                     Choose a phrase that's easy to say and unlikely to occur in normal conversation
                   </p>
-                  <p className="text-xs text-amber-500/90 mt-2">
+                  <p className="text-xs text-accent-warning/90 mt-2">
                     Note: the PC-side wake-word pipeline only recognizes the installed
                     Picovoice keywords (hey_jarvis / hey_mycroft / alexa) — a custom
                     phrase here gates the Android app, which uses on-device recognition.
@@ -354,7 +354,7 @@ export function VoiceSettingsPage() {
                     className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
                       selectedVoice === voice.id
                         ? 'border-accent-primary bg-accent-primary/10'
-                        : 'border-background-surface hover:border-accent-primary/50'
+                        : 'border-border-subtle hover:border-accent-primary/50'
                     }`}
                   >
                     <input
@@ -435,7 +435,7 @@ export function VoiceSettingsPage() {
                     }}
                     className="sr-only peer"
                   />
-                  <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+                  <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
                 </label>
               </div>
               {noiseSuppression && (

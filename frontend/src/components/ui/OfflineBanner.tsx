@@ -44,7 +44,7 @@ export function OfflineBanner() {
           role="status"
           aria-live="polite"
         >
-          <div className="bg-green-900/90 border-b border-green-700 text-white px-4 py-2 flex items-center gap-3 text-sm">
+          <div className="bg-accent-success/90 border-b border-accent-success text-white px-4 py-2 flex items-center gap-3 text-sm">
             <CheckCircle className="w-4 h-4" aria-hidden="true" />
             <span className="flex-1">Local backend connected — Arena is ready</span>
           </div>
@@ -65,7 +65,7 @@ export function OfflineBanner() {
         role="alert"
         aria-live="assertive"
       >
-        <div className="bg-amber-900/90 border-b border-amber-700 text-white px-4 py-2 flex items-center gap-3 text-sm">
+        <div className="bg-accent-warning/90 border-b border-accent-warning text-white px-4 py-2 flex items-center gap-3 text-sm">
           <Server className="w-4 h-4" aria-hidden="true" />
           <span className="flex-1">
             {isOnline 

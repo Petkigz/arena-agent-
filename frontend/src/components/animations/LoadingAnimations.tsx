@@ -17,7 +17,7 @@ export function AnimatedSpinner({ size = 'md', className }: AnimatedSpinnerProps
   return (
     <div className={cn('relative', sizeMap[size], className)}>
       <motion.div
-        className="absolute inset-0 rounded-full border-2 border-background-surface"
+        className="absolute inset-0 rounded-full border-2 border-border-subtle"
       />
       <motion.div
         className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent-primary"

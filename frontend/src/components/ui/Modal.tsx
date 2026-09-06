@@ -67,7 +67,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
           >
             {/* Header */}
             {title && (
-              <div className="flex items-center justify-between p-4 border-b border-background-surface">
+              <div className="flex items-center justify-between p-4 border-b border-border-subtle">
                 <h2 id="modal-title" className="text-xl font-semibold text-text-primary">{title}</h2>
                 <button
                   onClick={onClose}

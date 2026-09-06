@@ -13,10 +13,10 @@ import { ReactiveBeanieOrb } from '../presence/ReactiveBeanieOrb';
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
 const statusConfig: Record<ConnectionStatus, { color: string; label: string }> = {
-  connected: { color: 'bg-green-500', label: 'Online' },
-  connecting: { color: 'bg-yellow-500', label: 'Connecting...' },
-  reconnecting: { color: 'bg-yellow-500', label: 'Reconnecting...' },
-  disconnected: { color: 'bg-red-500', label: 'Offline' },
+  connected: { color: 'bg-accent-success', label: 'Online' },
+  connecting: { color: 'bg-accent-warning', label: 'Connecting...' },
+  reconnecting: { color: 'bg-accent-warning', label: 'Reconnecting...' },
+  disconnected: { color: 'bg-accent-error', label: 'Offline' },
 };
 
 export function Sidebar() {
@@ -76,12 +76,12 @@ export function Sidebar() {
       transition={{ duration: 0.3, ease: 'easeOut' }}
       aria-label="Application sidebar"
       className={cn(
-        'bg-background-secondary border-r border-background-surface flex flex-col transition-all duration-300',
+        'bg-background-secondary border-r border-border-subtle flex flex-col transition-all duration-300',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Beanie presence orb with real connection status */}
-      <div className="p-4 border-b border-background-surface" data-tutorial="presence-orb">
+      <div className="p-4 border-b border-border-subtle" data-tutorial="presence-orb">
         <div className="flex items-center gap-3">
           <ReactiveBeanieOrb
             status={connectionStatus === 'disconnected' ? 'offline' : presence.status}
@@ -89,7 +89,7 @@ export function Sidebar() {
           />
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-text-primary">Beanie</h2>
+              <h2 className="font-semibold bg-beanie-gradient bg-clip-text text-transparent">Beanie</h2>
               <div className="flex items-center gap-1.5" role="status" aria-live="polite" aria-atomic="true">
                 <span className={`w-2 h-2 rounded-full ${status.color}`} aria-hidden="true" />
                 <p className="text-xs text-text-muted">{status.label}</p>
@@ -191,7 +191,7 @@ export function Sidebar() {
       </nav>
 
       {/* Collapse toggle */}
-      <div className="p-2 border-t border-background-surface">
+      <div className="p-2 border-t border-border-subtle">
         <button
           onClick={toggleSidebar}
           className="w-full flex items-center justify-center p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-background-surface transition-colors"

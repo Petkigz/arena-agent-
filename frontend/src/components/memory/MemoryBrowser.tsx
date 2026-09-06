@@ -21,10 +21,10 @@ const categoryIcons: Record<MemoryCategory, string> = {
 };
 
 const categoryColors: Record<MemoryCategory, string> = {
-  episodic: 'bg-purple-100 text-purple-700',
-  semantic: 'bg-blue-100 text-blue-700',
-  procedural: 'bg-green-100 text-green-700',
-  conversation: 'bg-amber-100 text-amber-700',
+  episodic: 'bg-accent-secondary text-accent-secondary',
+  semantic: 'bg-accent-primary text-accent-primary',
+  procedural: 'bg-accent-success text-accent-success',
+  conversation: 'bg-accent-warning text-accent-warning',
 };
 
 type ViewMode = 'list' | 'timeline';

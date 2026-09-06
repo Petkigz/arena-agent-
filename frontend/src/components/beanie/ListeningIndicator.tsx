@@ -30,7 +30,7 @@ export function ListeningIndicator({ state }: { state: VoiceState }) {
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-24 z-10 flex justify-center" role="status" aria-live="polite">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background-secondary border border-background-surface shadow-lg">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background-secondary border border-border-subtle shadow-lg">
         <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: color }} aria-hidden="true" />
         <span className="text-sm text-text-primary">{label}</span>
       </div>

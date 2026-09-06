@@ -155,8 +155,8 @@ export function ScreenCapture({ conversationId, onCapture }: ScreenCaptureProps)
         )}
 
         {isStreaming && (
-          <div className="flex items-center gap-2 text-sm text-green-500">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <div className="flex items-center gap-2 text-sm text-accent-success">
+            <div className="w-2 h-2 bg-accent-success rounded-full animate-pulse" />
             <span>Streaming</span>
           </div>
         )}

@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.settings import DesktopSettings
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
+from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
 from desktop.styles import _button_style, _input_style, _textarea_style
 from desktop.widgets.orb import PresenceOrbWidget
 from desktop.workers import ChatWorker, HealthWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
@@ -49,7 +49,7 @@ class LeftSidebar(QFrame):
         self._on_conversation = on_conversation
         self._nav_buttons: List[QPushButton] = []
         self.setFixedWidth(240)
-        self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BORDER_SUBTLE};")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
@@ -164,7 +164,7 @@ class LeftSidebar(QFrame):
         self.conversation_btn.blockSignals(False)
 
     def refresh_theme(self) -> None:
-        self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BG_SURFACE};")
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-right: 1px solid {BORDER_SUBTLE};")
         self._name_label.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {TEXT_PRIMARY};")
         self._chats_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px; font-weight: 600;")
         self._new_chat_btn.setStyleSheet(_button_style(ACCENT, "#FFFFFF"))

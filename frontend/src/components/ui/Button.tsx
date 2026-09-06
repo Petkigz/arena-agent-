@@ -22,10 +22,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2 focus:ring-offset-background-primary',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           {
-            'bg-accent-primary text-white hover:bg-blue-600 active:bg-blue-700': variant === 'primary',
+            'bg-accent-primary text-white hover:bg-accent-primary/90 active:bg-accent-primary/80': variant === 'primary',
             'bg-background-surface text-text-primary hover:bg-background-surface/80 active:bg-background-surface/60': variant === 'secondary',
             'bg-transparent text-text-secondary hover:bg-background-surface active:bg-background-surface/60': variant === 'ghost',
-            'bg-accent-error text-white hover:bg-red-600 active:bg-red-700': variant === 'danger',
+            'bg-accent-error text-white hover:bg-accent-error/90 active:bg-accent-error/80': variant === 'danger',
           },
           {
             'px-3 py-1.5 text-sm': size === 'sm',

@@ -41,7 +41,7 @@ export function InteractiveCard({ children, className, onClick }: InteractiveCar
       variants={cardHoverVariants}
       onClick={onClick}
       className={cn(
-        'rounded-lg bg-background-secondary border border-background-surface p-4',
+        'rounded-lg bg-background-secondary border border-border-subtle p-4',
         'shadow-sm transition-shadow duration-200',
         onClick && 'cursor-pointer hover:shadow-md',
         className

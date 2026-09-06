@@ -12,12 +12,12 @@ export const CodeChanges = memo(function CodeChanges({ changes }: CodeChangesPro
   if (!changes || changes.length === 0) return null;
 
   return (
-    <div className="mt-3 border border-background-surface rounded-lg overflow-hidden">
+    <div className="mt-3 border border-border-subtle rounded-lg overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full px-4 py-2 flex items-center gap-2 hover:bg-background-secondary transition-colors text-left"
       >
-        <FileCode className="w-4 h-4 text-blue-500" />
+        <FileCode className="w-4 h-4 text-accent-primary" />
         <span className="text-sm font-medium text-text-secondary">
           Code Changes ({changes.length} {changes.length === 1 ? 'file' : 'files'})
         </span>
@@ -30,11 +30,11 @@ export const CodeChanges = memo(function CodeChanges({ changes }: CodeChangesPro
       </button>
       
       {isExpanded && (
-        <div className="border-t border-background-surface divide-y divide-slate-700">
+        <div className="border-t border-border-subtle divide-y divide-slate-700">
           {changes.map((change, index) => (
             <div key={index} className="p-4 bg-background-primary">
               <div className="flex items-center gap-2 mb-2">
-                <FileCode className="w-4 h-4 text-blue-500" />
+                <FileCode className="w-4 h-4 text-accent-primary" />
                 <span className="text-sm font-mono text-text-secondary">{change.file}</span>
               </div>
               

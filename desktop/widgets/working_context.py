@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
-from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_MUTED, TEXT_SECONDARY
+from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_MUTED, TEXT_SECONDARY, BORDER_SUBTLE
 
 
 class WorkingContextCard(QFrame):
@@ -42,7 +42,7 @@ class WorkingContextCard(QFrame):
 
     # ── card style ─────────────────────────────────────────────────────────
     def _card_style(self) -> str:
-        return f"QFrame {{ background: {BG_SECONDARY}; border: 1px solid {BG_SURFACE}; border-radius: 12px; }}"
+        return f"QFrame {{ background: {BG_SECONDARY}; border: 1px solid {BORDER_SUBTLE}; border-radius: 12px; }}"
 
     # ── API ────────────────────────────────────────────────────────────────
     def set_context(self, context: dict) -> None:

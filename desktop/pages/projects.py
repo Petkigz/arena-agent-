@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.settings import DesktopSettings
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
+from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
 from desktop.styles import _button_style, _input_style, _textarea_style
 from desktop.widgets.orb import PresenceOrbWidget
 from desktop.workers import ChatWorker, HealthWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
@@ -76,7 +76,7 @@ class ProjectsPage(QWidget):
         self.list = QListWidget()
         self.list.setStyleSheet(
             f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
-            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+            f" border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;"
         )
         layout.addWidget(self.list, 1)
 
@@ -104,7 +104,7 @@ class ProjectsPage(QWidget):
         self.load_more_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.list.setStyleSheet(
             f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
-            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+            f" border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;"
         )
         self.detail.setStyleSheet(_textarea_style())
 

@@ -218,7 +218,7 @@ export function ImagesPage() {
             value={promptFocus}
             onChange={(e) => setPromptFocus(e.target.value)}
             placeholder='What should I focus on? (optional, e.g. "the error dialog")'
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-background-surface text-text-primary border border-background-surface focus:outline-none focus:ring-2 focus:ring-accent-primary"
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-background-surface text-text-primary border border-border-subtle focus:outline-none focus:ring-2 focus:ring-accent-primary"
           />
 
           <div className="flex flex-wrap items-center gap-3">
@@ -239,7 +239,7 @@ export function ImagesPage() {
 
         {/* Image preview */}
         <section>
-          <div className="min-h-[200px] rounded-lg bg-background-secondary border border-background-surface flex items-center justify-center overflow-hidden">
+          <div className="min-h-[200px] rounded-lg bg-background-secondary border border-border-subtle flex items-center justify-center overflow-hidden">
             {previewUrl ? (
               <img
                 src={previewUrl}
@@ -295,7 +295,7 @@ export function ImagesPage() {
           <h3 className="text-sm font-medium text-text-muted mb-2 flex items-center gap-2">
             <Eye className="w-4 h-4" /> Grounded detections {engine ? `(engine: ${engine})` : ''}
           </h3>
-          <div className="rounded-lg bg-background-secondary border border-background-surface p-4 text-sm text-text-primary min-h-[48px]">
+          <div className="rounded-lg bg-background-secondary border border-border-subtle p-4 text-sm text-text-primary min-h-[48px]">
             {detections.length ? (
               <ul className="space-y-1">
                 {detections.map((d, i) => (
@@ -316,7 +316,7 @@ export function ImagesPage() {
         {/* Groundings */}
         <section>
           <h3 className="text-sm font-medium text-text-muted mb-2">Language groundings (how words connect to vision)</h3>
-          <div className="rounded-lg bg-background-secondary border border-background-surface p-4 text-sm text-text-primary min-h-[48px]">
+          <div className="rounded-lg bg-background-secondary border border-border-subtle p-4 text-sm text-text-primary min-h-[48px]">
             {groundings.length ? (
               <ul className="space-y-1">
                 {groundings.map((g, i) => (
@@ -334,7 +334,7 @@ export function ImagesPage() {
         {/* OCR text */}
         <section>
           <h3 className="text-sm font-medium text-text-muted mb-2">OCR text</h3>
-          <pre className="whitespace-pre-wrap rounded-lg bg-background-secondary border border-background-surface p-4 text-sm text-text-primary min-h-[48px]">
+          <pre className="whitespace-pre-wrap rounded-lg bg-background-secondary border border-border-subtle p-4 text-sm text-text-primary min-h-[48px]">
             {ocrText || '(nothing yet)'}
           </pre>
         </section>
@@ -342,7 +342,7 @@ export function ImagesPage() {
         {/* AI analysis */}
         <section>
           <h3 className="text-sm font-medium text-text-muted mb-2">AI analysis</h3>
-          <pre className="whitespace-pre-wrap rounded-lg bg-background-secondary border border-background-surface p-4 text-sm text-text-primary min-h-[48px]">
+          <pre className="whitespace-pre-wrap rounded-lg bg-background-secondary border border-border-subtle p-4 text-sm text-text-primary min-h-[48px]">
             {analysisText || '(nothing yet)'}
           </pre>
         </section>

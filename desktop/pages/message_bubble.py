@@ -7,7 +7,7 @@ from typing import List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
-from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, ACCENT
+from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, ACCENT, BORDER_SUBTLE
 from desktop.widgets.orb import PresenceOrbWidget
 
 class MessageBubble(QWidget):
@@ -48,7 +48,7 @@ class MessageBubble(QWidget):
             self._orb = PresenceOrbWidget(diameter=30)
             self.label.setStyleSheet(
                 f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 16px;"
-                f" border: 1px solid {BG_SURFACE}; border-radius: 16px; font-size: 14px;"
+                f" border: 1px solid {BORDER_SUBTLE}; border-radius: 16px; font-size: 14px;"
             )
             row.addWidget(self._orb, alignment=Qt.AlignmentFlag.AlignTop)
             row.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignTop)
@@ -72,6 +72,6 @@ class MessageBubble(QWidget):
         else:
             self.label.setStyleSheet(
                 f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 16px;"
-                f" border: 1px solid {BG_SURFACE}; border-radius: 16px; font-size: 14px;"
+                f" border: 1px solid {BORDER_SUBTLE}; border-radius: 16px; font-size: 14px;"
             )
 

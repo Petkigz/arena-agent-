@@ -96,6 +96,8 @@ def test_tokens_json_schema():
             assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["border"][part]), (theme, part)
         for part in ("primary", "secondary"):
             assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["glow"][part]), (theme, part)
+        assert isinstance(spec["glow"]["gradient_angle_deg"], int), (theme, "gradient_angle_deg")
+        assert 0 <= spec["glow"]["gradient_angle_deg"] <= 360, (theme, "gradient_angle_deg")
         assert re.fullmatch(r"#[0-9A-Fa-f]{6}", spec["accent"]), theme
     for part in ("primary", "secondary", "success", "warning", "error"):
         assert re.fullmatch(r"#[0-9A-Fa-f]{6}", tokens["color"]["accent"][part]), part
@@ -345,6 +347,58 @@ def test_glow_and_panel_vocabulary_reaches_the_web_app():
     context = (FRONTEND_DIR / "src" / "components" / "layout" / "ContextPanel.tsx").read_text(encoding="utf-8")
     assert "bg-background-panel" in context, "context rail translucency removed"
     assert "border-border-subtle" in context, "context rail subtle border removed"
+
+
+def test_beanie_identity_cascades_through_the_web_app():
+    """Identity (21r): the orb's blue→violet light must flow down the hierarchy.
+
+    Beanie orb → glow → headers → tool activity → context → composer.
+    Every layer routes through tokens.json — the identity must be inherited,
+    not painted per-component.
+    """
+    tailwind = TAILWIND_CONFIG.read_text(encoding="utf-8")
+    assert "beanieGradient" in tailwind, "identity gradient no longer derived from glow tokens"
+    assert "gradient_angle_deg" in tailwind, "gradient angle no longer read from tokens"
+
+    # Headers: the Beanie name carries the gradient.
+    sidebar = (FRONTEND_DIR / "src" / "components" / "layout" / "Sidebar.tsx").read_text(encoding="utf-8")
+    assert "bg-beanie-gradient" in sidebar, "sidebar Beanie title lost the identity gradient"
+
+    # Tool activity: in-progress steps emit light; statuses use accent tokens.
+    steps = (FRONTEND_DIR / "src" / "components" / "chat" / "ActionSteps.tsx").read_text(encoding="utf-8")
+    assert "drop-shadow-glow" in steps, "in-progress step no longer glows"
+    for token_class in ("text-accent-success", "text-accent-primary", "text-accent-error"):
+        assert token_class in steps, f"ActionSteps status color {token_class} missing"
+
+    # Thinking is violet — the secondary side of the glow.
+    reasoning = (FRONTEND_DIR / "src" / "components" / "chat" / "ReasoningTrace.tsx").read_text(encoding="utf-8")
+    assert "text-accent-secondary" in reasoning, "reasoning trace no longer violet"
+
+
+_RAW_PALETTE_CLASS = re.compile(
+    r"(?:hover:|focus:|active:|disabled:|group-hover:|dark:|after:|peer-checked:)*"
+    r"(?:text|bg|border|ring|from|to|via|fill|stroke)-"
+    r"(?:blue|green|red|purple|violet|slate|gray|grey|indigo|pink|yellow|orange|emerald|cyan|sky|teal|rose|fuchsia|amber|lime|stone|neutral|zinc)-[0-9]"
+)
+
+
+def test_web_source_uses_token_colors_not_raw_tailwind_palette():
+    """The leak class behind 'generic Slate UI + Beanie orb' (21r review).
+
+    Raw Tailwind palette classes (text-blue-500, bg-green-500/10, ...) bypass
+    design/tokens.json, so the rest of the UI stops inheriting Beanie's
+    identity. All color must route through the token-derived classes
+    (accent-*, background-*, text-*, border-*) or the presence palette.
+    """
+    offenders = []
+    for path in sorted((FRONTEND_DIR / "src").rglob("*.ts*")):
+        sp = str(path)
+        if "/test/" in sp or ".test." in sp:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if _RAW_PALETTE_CLASS.search(line):
+                offenders.append(f"{sp}:{lineno}: {line.strip()[:100]}")
+    assert not offenders, "raw Tailwind palette classes returned:\n" + "\n".join(offenders[:10])
 
 
 def test_tailwind_config_consumes_tokens_json():

@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
-from desktop.theme import TEXT_PRIMARY, BG_SECONDARY, BG_SURFACE, ACCENT
+from desktop.theme import TEXT_PRIMARY, BG_SECONDARY, BG_SURFACE, ACCENT, BORDER_SUBTLE
 from desktop.styles import _button_style, _input_style, _textarea_style
 
 
@@ -57,7 +57,7 @@ class LoraPage(QWidget):
         self.list = QListWidget()
         self.list.setStyleSheet(
             f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
-            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+            f" border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;"
         )
         layout.addWidget(self.list, 1)
 
@@ -77,7 +77,7 @@ class LoraPage(QWidget):
         self.deactivate_btn.setStyleSheet(_button_style(BG_SURFACE, TEXT_PRIMARY))
         self.list.setStyleSheet(
             f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY};"
-            f" border: 1px solid {BG_SURFACE}; border-radius: 8px;"
+            f" border: 1px solid {BORDER_SUBTLE}; border-radius: 8px;"
         )
         self.detail.setStyleSheet(_textarea_style())
 

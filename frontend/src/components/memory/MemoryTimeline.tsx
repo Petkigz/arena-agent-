@@ -18,10 +18,10 @@ interface TimelineGroup {
 }
 
 const categoryColors: Record<string, string> = {
-  episodic: 'border-purple-400 bg-purple-50',
-  semantic: 'border-blue-400 bg-blue-50',
-  procedural: 'border-green-400 bg-green-50',
-  conversation: 'border-amber-400 bg-amber-50',
+  episodic: 'border-accent-secondary bg-accent-secondary',
+  semantic: 'border-accent-primary bg-accent-primary',
+  procedural: 'border-accent-success bg-accent-success',
+  conversation: 'border-accent-warning bg-accent-warning',
 };
 
 const categoryIcons: Record<string, string> = {

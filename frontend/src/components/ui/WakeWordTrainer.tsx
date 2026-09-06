@@ -138,7 +138,7 @@ export function WakeWordTrainer({ onModelTrained }: WakeWordTrainerProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-text-secondary">
+      <div className="rounded-lg border border-accent-warning/50 bg-accent-warning/10 p-3 text-sm text-text-secondary">
         Custom wake-word training is not currently available because no verified ONNX training pipeline is configured. You may record samples, but Arena will not create a fake model or accuracy score.
       </div>
       {/* Wake word input */}
@@ -179,8 +179,8 @@ export function WakeWordTrainer({ onModelTrained }: WakeWordTrainerProps) {
           )}
 
           {isRecording && (
-            <div className="flex items-center gap-2 text-sm text-red-500">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <div className="flex items-center gap-2 text-sm text-accent-error">
+              <div className="w-2 h-2 bg-accent-error rounded-full animate-pulse" />
               <span>Recording... (3 seconds)</span>
             </div>
           )}

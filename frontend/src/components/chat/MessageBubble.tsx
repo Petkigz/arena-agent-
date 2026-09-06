@@ -71,7 +71,7 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
         transition={{ delay: 0.1, type: 'spring', stiffness: 300 }}
       >
         {isUser ? (
-          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-600">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-accent-primary">
             <User className="w-5 h-5 text-white" aria-hidden="true" />
           </div>
         ) : (
@@ -84,16 +84,16 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
         {/* Message bubble */}
         <div className={`rounded-2xl px-4 py-2.5 ${
           isUser
-            ? 'bg-blue-600 text-white'
+            ? 'bg-accent-primary text-white'
             : 'bg-background-secondary text-text-primary'
         }`}>
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
           ) : (
             <div className="text-sm leading-relaxed prose prose-invert prose-sm max-w-none
-              prose-headings:text-text-primary prose-p:text-text-primary prose-a:text-blue-400
-              prose-code:text-emerald-400 prose-code:bg-background-primary prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-              prose-pre:bg-background-primary prose-pre:border prose-pre:border-background-surface
+              prose-headings:text-text-primary prose-p:text-text-primary prose-a:text-accent-primary
+              prose-code:text-accent-success prose-code:bg-background-primary prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+              prose-pre:bg-background-primary prose-pre:border prose-pre:border-border-subtle
               prose-strong:text-text-primary prose-li:text-text-primary">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.content}
@@ -116,13 +116,13 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
         }`}>
           <span>{formattedTime}</span>
           {message.status === 'sending' && (
-            <span className="text-blue-500">Sending...</span>
+            <span className="text-accent-primary">Sending...</span>
           )}
           {message.status === 'streaming' && (
-            <span className="text-blue-400">Streaming...</span>
+            <span className="text-accent-primary">Streaming...</span>
           )}
           {message.status === 'error' && (
-            <span className="text-red-500">Failed to send</span>
+            <span className="text-accent-error">Failed to send</span>
           )}
 
           {/* Action buttons (visible on hover) */}
@@ -132,12 +132,12 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
               className="p-1 hover:text-text-secondary transition-colors"
               aria-label={copied ? 'Copied' : 'Copy message'}
             >
-              {copied ? <Check className="w-3 h-3 text-green-500" aria-hidden="true" /> : <Copy className="w-3 h-3" aria-hidden="true" />}
+              {copied ? <Check className="w-3 h-3 text-accent-success" aria-hidden="true" /> : <Copy className="w-3 h-3" aria-hidden="true" />}
             </button>
             {message.status === 'error' && onRetry && (
               <button
                 onClick={handleRetry}
-                className="p-1 hover:text-blue-400 transition-colors"
+                className="p-1 hover:text-accent-primary transition-colors"
                 aria-label="Retry sending message"
               >
                 <RotateCcw className="w-3 h-3" aria-hidden="true" />
@@ -146,7 +146,7 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
             {onDelete && (
               <button
                 onClick={handleDelete}
-                className="p-1 hover:text-red-400 transition-colors"
+                className="p-1 hover:text-accent-error transition-colors"
                 aria-label="Delete message"
               >
                 <Trash2 className="w-3 h-3" aria-hidden="true" />

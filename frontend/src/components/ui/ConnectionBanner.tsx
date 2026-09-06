@@ -29,25 +29,25 @@ export function ConnectionBanner() {
   const config = {
     disconnected: {
       icon: WifiOff,
-      bg: 'bg-red-900/90 border-red-700',
+      bg: 'bg-accent-error/90 border-accent-error',
       text: 'Disconnected from Arena backend',
       showReconnect: true,
     },
     connecting: {
       icon: RefreshCw,
-      bg: 'bg-yellow-900/90 border-yellow-700',
+      bg: 'bg-accent-warning/90 border-accent-warning',
       text: 'Connecting to Arena...',
       showReconnect: false,
     },
     reconnecting: {
       icon: RefreshCw,
-      bg: 'bg-yellow-900/90 border-yellow-700',
+      bg: 'bg-accent-warning/90 border-accent-warning',
       text: 'Reconnecting...',
       showReconnect: false,
     },
     connected: {
       icon: Wifi,
-      bg: 'bg-green-900/90 border-green-700',
+      bg: 'bg-accent-success/90 border-accent-success',
       text: 'Connected',
       showReconnect: false,
     },

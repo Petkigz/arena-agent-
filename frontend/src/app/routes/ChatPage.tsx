@@ -342,7 +342,7 @@ export function ChatPage() {
       {/* Floating voice-state indicator (listening / thinking / speaking) */}
       <ListeningIndicator state={voiceState} />
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-background-surface bg-background-primary">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border-subtle bg-background-primary">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-text-primary">{currentConversation.title}</h1>
@@ -362,9 +362,9 @@ export function ChatPage() {
 
       {/* Owner approval is separate from execution. */}
       {approvalRequest && (
-        <div className="flex-shrink-0 mx-6 mt-4 rounded-lg border border-amber-500/60 bg-amber-500/10 p-4" role="alert">
+        <div className="flex-shrink-0 mx-6 mt-4 rounded-lg border border-accent-warning/60 bg-accent-warning/10 p-4" role="alert">
           <div className="flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-500 mt-0.5" />
+            <ShieldAlert className="w-5 h-5 text-accent-warning mt-0.5" />
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-text-primary">Owner authorization required</h2>
               <p className="text-sm text-text-secondary mt-1">{approvalRequest.reason}</p>
@@ -387,7 +387,7 @@ export function ChatPage() {
                   <button
                     type="button"
                     onClick={() => decideApproval(true)}
-                    className="px-3 py-2 rounded bg-amber-600 text-white"
+                    className="px-3 py-2 rounded bg-accent-warning text-white"
                   >
                     Authorize exact scope
                   </button>
@@ -409,7 +409,7 @@ export function ChatPage() {
                       type="button"
                       disabled={authorizedExecutionBusy}
                       onClick={executeApprovedScope}
-                      className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+                      className="px-3 py-2 rounded bg-accent-error text-white disabled:opacity-50"
                     >
                       {authorizedExecutionBusy ? 'Executing…' : 'Execute authorized action'}
                     </button>

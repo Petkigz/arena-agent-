@@ -96,7 +96,7 @@ export function ChatInput({
   }, [message, pendingAttachments, disabled]);
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-background-surface bg-background-primary p-4" data-tutorial="chat-input" role="form" aria-label="Message input">
+    <form onSubmit={handleSubmit} className="border-t border-border-subtle bg-background-primary p-4" data-tutorial="chat-input" role="form" aria-label="Message input">
       <div className="max-w-4xl mx-auto">
         {/* Pending attachments preview */}
         {pendingAttachments.length > 0 && (
@@ -104,7 +104,7 @@ export function ChatInput({
             {pendingAttachments.map((attachment) => (
               <div
                 key={attachment.id}
-                className="relative group flex items-center gap-2 px-3 py-2 bg-background-secondary rounded-lg border border-background-surface" role="listitem"
+                className="relative group flex items-center gap-2 px-3 py-2 bg-background-secondary rounded-lg border border-border-subtle" role="listitem"
               >
                 {attachment.preview ? (
                   <img

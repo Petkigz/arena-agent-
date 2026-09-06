@@ -16,7 +16,7 @@ export function BottomNavigation() {
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="bg-background-secondary border-t border-background-surface"
+      className="bg-background-secondary border-t border-border-subtle"
     >
       <div className="flex justify-around items-center h-16">
         {links.map(({ to, icon: Icon, label }) => (

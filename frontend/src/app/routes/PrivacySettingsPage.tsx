@@ -523,7 +523,7 @@ export function PrivacySettingsPage() {
               <p className="text-sm text-text-muted">Loading effective policy…</p>
             ) : (
               <>
-                <div className={`rounded border p-4 ${ownerPolicy.paused ? 'border-red-500 bg-red-500/10' : 'border-border'}`}>
+                <div className={`rounded border p-4 ${ownerPolicy.paused ? 'border-accent-error bg-accent-error/10' : 'border-border'}`}>
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <h3 className="font-medium text-text-primary">
@@ -537,7 +537,7 @@ export function PrivacySettingsPage() {
                       type="button"
                       disabled={controlBusy}
                       onClick={() => setEmergencyPause(!ownerPolicy.paused)}
-                      className={`px-4 py-2 rounded text-white disabled:opacity-50 ${ownerPolicy.paused ? 'bg-green-600' : 'bg-red-600'}`}
+                      className={`px-4 py-2 rounded text-white disabled:opacity-50 ${ownerPolicy.paused ? 'bg-accent-success' : 'bg-accent-error'}`}
                     >
                       {ownerPolicy.paused ? 'Resume' : 'Pause all actions'}
                     </button>
@@ -760,7 +760,7 @@ export function PrivacySettingsPage() {
                     <div className="text-text-muted">{item.next_run_at} · {item.recurrence} · {item.status}</div>
                     {!['completed', 'cancelled'].includes(item.status) && <div className="flex gap-2">
                       <button disabled={autonomyBusy === item.schedule_id} onClick={() => updateScheduleStatus(item.schedule_id, item.status === 'paused' ? 'active' : 'paused')} className="px-2 py-1 border border-border rounded">{item.status === 'paused' ? 'Resume' : 'Pause'}</button>
-                      <button disabled={autonomyBusy === item.schedule_id} onClick={() => updateScheduleStatus(item.schedule_id, 'cancelled')} className="px-2 py-1 border border-red-500 text-red-500 rounded">Cancel</button>
+                      <button disabled={autonomyBusy === item.schedule_id} onClick={() => updateScheduleStatus(item.schedule_id, 'cancelled')} className="px-2 py-1 border border-accent-error text-accent-error rounded">Cancel</button>
                     </div>}
                   </div>
                 ))}
@@ -807,7 +807,7 @@ export function PrivacySettingsPage() {
                       <button
                         disabled={executionBusy === execution.execution_id}
                         onClick={() => cancelExecution(execution.execution_id)}
-                        className="px-2 py-1 text-xs bg-red-600 text-white rounded disabled:opacity-50"
+                        className="px-2 py-1 text-xs bg-accent-error text-white rounded disabled:opacity-50"
                       >
                         Request stop
                       </button>
@@ -816,7 +816,7 @@ export function PrivacySettingsPage() {
                       <button
                         disabled={executionBusy === execution.execution_id}
                         onClick={() => requestRollback(execution.execution_id)}
-                        className="px-2 py-1 text-xs border border-amber-500 text-amber-600 rounded disabled:opacity-50"
+                        className="px-2 py-1 text-xs border border-accent-warning text-accent-warning rounded disabled:opacity-50"
                       >
                         Request rollback
                       </button>
@@ -861,14 +861,14 @@ export function PrivacySettingsPage() {
                   <span className="text-text-muted">{new Date(benchmarkReport.created_at).toLocaleString()}</span>
                 </div>
                 {benchmarkReport.regressions.length > 0 && (
-                  <p className="text-sm text-red-500">Regressions: {benchmarkReport.regressions.join(', ')}</p>
+                  <p className="text-sm text-accent-error">Regressions: {benchmarkReport.regressions.join(', ')}</p>
                 )}
                 <div className="grid gap-2 md:grid-cols-2">
                   {benchmarkReport.checks.map((check) => (
                     <div key={check.name} className="rounded border border-border bg-background-secondary p-3">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium text-text-primary">{check.name}</span>
-                        <span className={check.passed ? 'text-green-500' : 'text-red-500'}>
+                        <span className={check.passed ? 'text-accent-success' : 'text-accent-error'}>
                           {check.passed ? 'PASS' : 'FAIL'}
                         </span>
                       </div>
@@ -892,7 +892,7 @@ export function PrivacySettingsPage() {
             {pendingApprovals.length === 0 ? (
               <p className="text-sm text-text-muted">No actions are waiting for authorization.</p>
             ) : pendingApprovals.map((approval) => (
-              <div key={approval.action_id} className="rounded border border-amber-500/50 bg-amber-500/10 p-4">
+              <div key={approval.action_id} className="rounded border border-accent-warning/50 bg-accent-warning/10 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-medium text-text-primary">{approval.goal_text || approval.action_type}</h3>
@@ -909,7 +909,7 @@ export function PrivacySettingsPage() {
                     type="button"
                     disabled={approvalBusy === approval.action_id}
                     onClick={() => decideApproval(approval, false)}
-                    className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+                    className="px-3 py-2 rounded bg-accent-error text-white disabled:opacity-50"
                   >
                     Deny
                   </button>
@@ -917,7 +917,7 @@ export function PrivacySettingsPage() {
                     type="button"
                     disabled={approvalBusy === approval.action_id}
                     onClick={() => decideApproval(approval, true)}
-                    className="px-3 py-2 rounded bg-green-600 text-white disabled:opacity-50"
+                    className="px-3 py-2 rounded bg-accent-success text-white disabled:opacity-50"
                   >
                     Authorize exact scope once
                   </button>
@@ -1068,7 +1068,7 @@ export function PrivacySettingsPage() {
                           type="button"
                           disabled={busy}
                           onClick={() => decidePlan(plan, false)}
-                          className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+                          className="px-3 py-2 rounded bg-accent-error text-white disabled:opacity-50"
                         >
                           Reject plan
                         </button>
@@ -1076,7 +1076,7 @@ export function PrivacySettingsPage() {
                           type="button"
                           disabled={busy}
                           onClick={() => decidePlan(plan, true)}
-                          className="px-3 py-2 rounded bg-green-600 text-white disabled:opacity-50"
+                          className="px-3 py-2 rounded bg-accent-success text-white disabled:opacity-50"
                         >
                           Approve revision {plan.revision}
                         </button>
@@ -1088,7 +1088,7 @@ export function PrivacySettingsPage() {
                           type="button"
                           disabled={busy}
                           onClick={() => revokePlan(plan)}
-                          className="px-3 py-2 rounded border border-red-500 text-red-500 disabled:opacity-50"
+                          className="px-3 py-2 rounded border border-accent-error text-accent-error disabled:opacity-50"
                         >
                           Revoke approval
                         </button>
@@ -1150,7 +1150,7 @@ export function PrivacySettingsPage() {
                   onChange={(e) => setAutoDeleteOldData(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
               </label>
             </div>
           </Card>
@@ -1177,7 +1177,7 @@ export function PrivacySettingsPage() {
                   onChange={(e) => setEnableTelemetry(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
               </label>
             </div>
 
@@ -1195,7 +1195,7 @@ export function PrivacySettingsPage() {
                   onChange={(e) => setShareUsageStats(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
               </label>
             </div>
           </Card>
@@ -1229,7 +1229,7 @@ export function PrivacySettingsPage() {
                   onChange={(e) => setLogAllActions(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
+                <div className="relative w-11 h-6 bg-background-surface peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-primary"></div>
               </label>
             </div>
           </Card>

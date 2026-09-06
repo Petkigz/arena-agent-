@@ -15,17 +15,17 @@ export function TaskBoard({ project }: TaskBoardProps) {
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
 
   const columns = [
-    { id: 'todo', label: 'To Do', color: 'border-gray-400' },
-    { id: 'in-progress', label: 'In Progress', color: 'border-blue-400' },
-    { id: 'done', label: 'Done', color: 'border-green-400' },
-    { id: 'blocked', label: 'Blocked', color: 'border-red-400' },
+    { id: 'todo', label: 'To Do', color: 'border-border-active' },
+    { id: 'in-progress', label: 'In Progress', color: 'border-accent-primary' },
+    { id: 'done', label: 'Done', color: 'border-accent-success' },
+    { id: 'blocked', label: 'Blocked', color: 'border-accent-error' },
   ];
 
   const priorityConfig = {
     low: { color: 'text-text-muted', bg: 'bg-background-surface/10', label: 'Low' },
-    medium: { color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Medium' },
-    high: { color: 'text-orange-500', bg: 'bg-orange-500/10', label: 'High' },
-    urgent: { color: 'text-red-500', bg: 'bg-red-500/10', label: 'Urgent' },
+    medium: { color: 'text-accent-primary', bg: 'bg-accent-primary/10', label: 'Medium' },
+    high: { color: 'text-accent-warning', bg: 'bg-accent-warning/10', label: 'High' },
+    urgent: { color: 'text-accent-error', bg: 'bg-accent-error/10', label: 'Urgent' },
   };
 
   const handleCreateTask = (taskData: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -114,7 +114,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
                         </span>
 
                         {task.dueDate && (
-                          <span className={`text-xs ${isOverdue ? 'text-red-500' : 'text-text-muted'}`}>
+                          <span className={`text-xs ${isOverdue ? 'text-accent-error' : 'text-text-muted'}`}>
                             <Calendar className="w-3 h-3 inline mr-1" />
                             {format(new Date(task.dueDate), 'MMM d')}
                           </span>

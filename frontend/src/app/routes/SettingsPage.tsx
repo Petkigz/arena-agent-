@@ -26,7 +26,7 @@ export function SettingsPage() {
       description: 'Configure wake word, voice selection, and speech settings',
       icon: Mic,
       route: '/settings/voice',
-      color: 'text-blue-500',
+      color: 'text-accent-primary',
       summary: voiceEnabled
         ? `Wake: "${wakeWord}" • Voice: ${selectedVoice}`
         : 'Voice disabled',
@@ -37,7 +37,7 @@ export function SettingsPage() {
       description: 'Select LLM, STT, and TTS models',
       icon: Brain,
       route: '/settings/models',
-      color: 'text-purple-500',
+      color: 'text-accent-secondary',
       summary: `LLM: ${getLLMName()} • STT: ${getSTTName()} • TTS: ${getTTSName()}`,
     },
     {
@@ -46,7 +46,7 @@ export function SettingsPage() {
       description: 'Data retention, telemetry, and security settings',
       icon: Shield,
       route: '/settings/privacy',
-      color: 'text-green-500',
+      color: 'text-accent-success',
       summary: null,
     },
     {
@@ -55,7 +55,7 @@ export function SettingsPage() {
       description: 'Charter, uncertainty questions, induced skills, learning progress',
       icon: Sparkles,
       route: '/settings/cognition',
-      color: 'text-amber-500',
+      color: 'text-accent-warning',
       summary: null,
     },
     {
@@ -64,7 +64,7 @@ export function SettingsPage() {
       description: 'Theme, font, display, and notification preferences',
       icon: Palette,
       route: '/settings/appearance',
-      color: 'text-pink-500',
+      color: 'text-accent-secondary',
       summary: `Theme: ${theme} • Font: ${fontSize}`,
     },
     {
@@ -73,7 +73,7 @@ export function SettingsPage() {
       description: 'Visual settings, motion preferences, and screen reader support',
       icon: Accessibility,
       route: '/settings/accessibility',
-      color: 'text-orange-500',
+      color: 'text-accent-warning',
       summary: accessibilityFeatures,
     },
   ];

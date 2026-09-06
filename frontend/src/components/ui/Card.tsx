@@ -17,7 +17,7 @@ export function Card({ children, className, padding = 'md', interactive = false,
     <Component
       {...(interactive ? { whileHover: 'hover', variants: cardHoverVariants } : {})}
       className={cn(
-        'rounded-lg bg-background-surface border border-background-surface',
+        'rounded-lg bg-background-surface border border-border-subtle',
         'transition-shadow duration-200',
         interactive && 'cursor-pointer hover:shadow-lg',
         {

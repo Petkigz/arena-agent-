@@ -12,10 +12,10 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const navigate = useNavigate();
 
   const statusConfig = {
-    active: { color: 'text-green-500', bg: 'bg-green-500/10', label: 'Active' },
-    completed: { color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Completed' },
+    active: { color: 'text-accent-success', bg: 'bg-accent-success/10', label: 'Active' },
+    completed: { color: 'text-accent-primary', bg: 'bg-accent-primary/10', label: 'Completed' },
     archived: { color: 'text-text-muted', bg: 'bg-background-surface/10', label: 'Archived' },
-    'on-hold': { color: 'text-yellow-500', bg: 'bg-yellow-500/10', label: 'On Hold' },
+    'on-hold': { color: 'text-accent-warning', bg: 'bg-accent-warning/10', label: 'On Hold' },
   };
 
   const status = statusConfig[project.status];
@@ -82,19 +82,19 @@ export function ProjectCard({ project }: ProjectCardProps) {
             <span>{formatDistanceToNow(new Date(project.updatedAt), { addSuffix: true })}</span>
           </div>
           {urgentTasks > 0 && (
-            <div className="flex items-center gap-1 text-red-500">
+            <div className="flex items-center gap-1 text-accent-error">
               <AlertCircle className="w-4 h-4" />
               <span>{urgentTasks} urgent</span>
             </div>
           )}
           {overdueTasks > 0 && (
-            <div className="flex items-center gap-1 text-orange-500">
+            <div className="flex items-center gap-1 text-accent-warning">
               <Clock className="w-4 h-4" />
               <span>{overdueTasks} overdue</span>
             </div>
           )}
           {completedTasks === totalTasks && totalTasks > 0 && (
-            <div className="flex items-center gap-1 text-green-500">
+            <div className="flex items-center gap-1 text-accent-success">
               <CheckCircle className="w-4 h-4" />
               <span>All done!</span>
             </div>

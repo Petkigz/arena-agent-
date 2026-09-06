@@ -41,14 +41,14 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
   const getStateColor = () => {
     switch (voiceState) {
       case 'recording':
-        return 'bg-red-500';
+        return 'bg-accent-error';
       case 'listening':
-        return 'bg-yellow-500';
+        return 'bg-accent-warning';
       case 'processing':
       case 'thinking':
-        return 'bg-blue-500';
+        return 'bg-accent-primary';
       case 'speaking':
-        return 'bg-green-500';
+        return 'bg-accent-success';
       default:
         return 'bg-background-surface';
     }
@@ -88,8 +88,8 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
 
           {/* Error */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <p className="text-red-700 dark:text-red-400">{error}</p>
+            <div className="mb-6 p-4 bg-accent-error dark:bg-accent-error/20 rounded-lg">
+              <p className="text-accent-error dark:text-accent-error">{error}</p>
             </div>
           )}
 
@@ -98,7 +98,7 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
             {!isListening ? (
               <button
                 onClick={startListening}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-accent-primary hover:bg-accent-primary text-white rounded-lg transition-colors"
               >
                 <Mic className="w-5 h-5" />
                 Start Listening
@@ -106,7 +106,7 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
             ) : (
               <button
                 onClick={stopListening}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-accent-error hover:bg-accent-error text-white rounded-lg transition-colors"
               >
                 <MicOff className="w-5 h-5" />
                 Stop Listening

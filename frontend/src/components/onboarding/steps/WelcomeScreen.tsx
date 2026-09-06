@@ -11,7 +11,7 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
     <div className="max-w-2xl mx-auto px-6 py-12 text-center">
       {/* Logo/Icon with gradient background */}
       <div className="mb-8">
-        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full mb-6 shadow-lg shadow-accent-primary/30">
+        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-full mb-6 shadow-lg shadow-accent-primary/30">
           <Sparkles className="w-12 h-12 text-white" />
         </div>
       </div>
@@ -29,8 +29,8 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
 
       {/* Features list */}
       <div className="grid gap-4 mb-12 text-left">
-        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-background-surface/50 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-border-subtle/50 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-full flex items-center justify-center shadow-sm">
             <span className="text-white font-bold text-sm">1</span>
           </div>
           <div>
@@ -41,8 +41,8 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
           </div>
         </div>
 
-        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-background-surface/50 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-border-subtle/50 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-full flex items-center justify-center shadow-sm">
             <span className="text-white font-bold text-sm">2</span>
           </div>
           <div>
@@ -53,8 +53,8 @@ export function WelcomeScreen({ onNext, onSkip }: WelcomeScreenProps) {
           </div>
         </div>
 
-        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-background-surface/50 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+        <div className="flex items-start gap-3 p-4 bg-background-secondary rounded-lg border border-border-subtle/50 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-full flex items-center justify-center shadow-sm">
             <span className="text-white font-bold text-sm">3</span>
           </div>
           <div>

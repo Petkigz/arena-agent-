@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.settings import DesktopSettings
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
+from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
 from desktop.styles import _button_style, _input_style, _textarea_style
 from desktop.widgets.orb import PresenceOrbWidget
 from desktop.workers import ChatWorker, HealthWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
@@ -60,7 +60,7 @@ class ContextPanel(QFrame):
         self._on_collapsed = on_collapsed
         self._collapsed = False
         self.setFixedWidth(self.COLLAPSED_WIDTH if collapsed else self.EXPANDED_WIDTH)
-        self.setStyleSheet(f"background: {BG_SECONDARY}; border-left: 1px solid {BG_SURFACE};")
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-left: 1px solid {BORDER_SUBTLE};")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
@@ -238,7 +238,7 @@ class ContextPanel(QFrame):
 
 
     def refresh_theme(self) -> None:
-        self.setStyleSheet(f"background: {BG_SECONDARY}; border-left: 1px solid {BG_SURFACE};")
+        self.setStyleSheet(f"background: {BG_SECONDARY}; border-left: 1px solid {BORDER_SUBTLE};")
         self._title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {TEXT_PRIMARY};")
         self._toggle_btn.setStyleSheet(self._toggle_style())
         if self._online is not None:

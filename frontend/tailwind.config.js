@@ -28,6 +28,13 @@ const glowShadows = {
   'glow-strong': `0 0 40px 0 ${withAlpha(glow.primary, 0.5)}`,
   'glow-violet': `0 0 24px 0 ${withAlpha(glow.secondary, 0.35)}`,
 };
+// The identity gradient: Beanie's blue→violet light, used for titles and
+// brand moments. Angle is a token so the whole cascade tunes in one place.
+const beanieGradient = `linear-gradient(${glow.gradient_angle_deg}deg, ${glow.primary}, ${glow.secondary})`;
+const glowDropShadows = {
+  'drop-shadow-glow': `drop-shadow(0 0 6px ${withAlpha(glow.primary, 0.6)})`,
+  'drop-shadow-glow-violet': `drop-shadow(0 0 6px ${withAlpha(glow.secondary, 0.6)})`,
+};
 const animations = {
   'pulse-slow': `pulse ${motion.pulse_slow_ms}ms ${motion.easing} infinite`,
   'pulse-fast': `pulse ${motion.pulse_fast_ms}ms ${motion.easing} infinite`,
@@ -44,6 +51,8 @@ export default {
   theme: {
     extend: {
       boxShadow: { ...shadows, ...glowShadows },
+      dropShadow: glowDropShadows,
+      backgroundImage: { 'beanie-gradient': beanieGradient },
       colors: {
         // Theme-aware colors using CSS variables
         background: {

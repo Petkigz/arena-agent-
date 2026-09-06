@@ -151,7 +151,7 @@ export function CognitionPage() {
           type="button"
           onClick={() => void saveCharter()}
           disabled={charterBusy}
-          className="rounded bg-blue-600 text-white px-4 py-2 text-sm disabled:opacity-50"
+          className="rounded bg-accent-primary text-white px-4 py-2 text-sm disabled:opacity-50"
         >
           {charterBusy ? 'Saving…' : 'Save charter'}
         </button>

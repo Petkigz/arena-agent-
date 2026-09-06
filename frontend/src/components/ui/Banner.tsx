@@ -18,10 +18,10 @@ export function Banner({ type, children, onDismiss, className }: BannerProps) {
   };
 
   const colors = {
-    info: 'bg-blue-500/10 border-blue-500 text-blue-500',
-    success: 'bg-green-500/10 border-green-500 text-green-500',
-    warning: 'bg-amber-500/10 border-amber-500 text-amber-500',
-    error: 'bg-red-500/10 border-red-500 text-red-500',
+    info: 'bg-accent-primary/10 border-accent-primary text-accent-primary',
+    success: 'bg-accent-success/10 border-accent-success text-accent-success',
+    warning: 'bg-accent-warning/10 border-accent-warning text-accent-warning',
+    error: 'bg-accent-error/10 border-accent-error text-accent-error',
   };
 
   return (

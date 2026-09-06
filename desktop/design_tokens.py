@@ -107,6 +107,9 @@ def _validate(tokens: dict) -> None:
         glow = _require(theme, "glow", f"color.themes.{theme_name}")
         for part in ("primary", "secondary"):
             _hex(_require(glow, part, f"color.themes.{theme_name}.glow"), f"{theme_name}.glow.{part}")
+        angle = glow["gradient_angle_deg"]
+        if not isinstance(angle, int) or isinstance(angle, bool) or not 0 <= angle <= 360:
+            raise DesignTokenError(f"design tokens: {theme_name}.glow.gradient_angle_deg must be 0..360")
         for part in ("primary", "secondary", "muted"):
             _hex(_require(text, part, f"color.themes.{theme_name}.text"), f"{theme_name}.text.{part}")
         _hex(_require(theme, "accent", f"color.themes.{theme_name}"), f"{theme_name}.accent")
