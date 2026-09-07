@@ -17,6 +17,14 @@ export default defineConfig({
     host: '0.0.0.0',
     // Arena previews use a generated host; do not reject that browser origin.
     allowedHosts: true,
+    proxy: {
+      '/backend': {
+        target: process.env.ARENA_BACKEND_URL || 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/backend/, ''),
+      },
+    },
   },
   test: {
     environment: 'jsdom',

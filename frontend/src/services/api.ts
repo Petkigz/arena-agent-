@@ -4,12 +4,12 @@ import { logger } from './logger';
  */
 
 /**
- * Backend origin for HTTP calls. Mirrors websocket.ts (`ws://${hostname}:8000`):
- * works under `vite dev` (localhost:5173 → localhost:8000) AND when the built
- * SPA is served by the backend itself on any host (LAN/Android), where a
- * hardcoded "localhost:8000" would break every request.
+ * Production uses the serving origin (including HTTPS and non-default ports).
+ * Vite forwards /backend to the local backend; browser code never assumes
+ * the sandbox's localhost or port 8000 is reachable. Explicit overrides remain.
  */
-const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  || (import.meta.env.DEV ? '/backend' : window.location.origin);
 
 /**
  * Turn a root-relative backend path (e.g. '/loras/status') into an absolute URL.

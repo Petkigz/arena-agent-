@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import { apiUrl } from './api';
 import type { Message, ActionStep, PresenceState, ServerConversationMessage } from '../types';
 
 export type VoiceState = 'idle' | 'listening' | 'recording' | 'processing' | 'thinking' | 'speaking' | 'stopped';
@@ -93,12 +94,14 @@ class WebSocketService {
       return;
     }
 
-    // Resolve WebSocket URL: parameter > env var > hostname-based default
-    const wsUrl = url || import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8000/ws`;
-
-    // Append API key if configured
+    // HTTP and WebSocket share one backend origin/proxy, including HTTPS.
+    const target = new URL(url || import.meta.env.VITE_WS_URL || apiUrl('/ws'), window.location.href);
+    if (target.protocol === 'https:') target.protocol = 'wss:';
+    if (target.protocol === 'http:') target.protocol = 'ws:';
     const apiKey = import.meta.env.VITE_API_KEY;
-    const finalUrl = apiKey ? `${wsUrl}?api_key=${encodeURIComponent(apiKey)}` : wsUrl;
+    // Reconnects reuse the URL: replace, never append a second query string.
+    if (apiKey) target.searchParams.set('api_key', apiKey);
+    const finalUrl = target.toString();
 
     this.url = finalUrl;
     this.shouldReconnect = true;

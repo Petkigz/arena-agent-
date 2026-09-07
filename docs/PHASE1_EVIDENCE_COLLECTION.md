@@ -26,8 +26,10 @@ environment and inference profile. For example, on Windows:
 
 On Linux/macOS, use `.venv/bin/python` instead. Open
 `http://127.0.0.1:8000/chat`. Use LM Studio on the owner machine for real model
-behavior. Offline responses can be rated as unavailable/unhelpful but are not
-proof of model quality or generalization.
+behavior. When a deterministic tool has already computed a valid result, the
+runtime can deliver it without a language model and names `deterministic_local`
+as the responding implementation. Model-dependent answers still disclose
+unavailability. Neither case is proof of model quality or generalization.
 
 For LAN access, keep the existing API-key protections and configure the web
 client's API key before building. Do not disable authentication to collect
@@ -41,6 +43,11 @@ feedback. No new packages or model downloads are required by this feature.
    message. Never substitute the newest trace from another turn.
 4. The panel loads existing records before enabling submission. A loading error
    is not treated as an empty history; use **Retry loading**.
+5. **Why this response?** reads the existing grounded-introspection endpoint. It
+   quotes persisted evidence/gates, not a new model-generated explanation.
+6. **Correct this response** opens the existing Model Settings correction editor,
+   with the exact trace, original request, and response loaded. Submit the
+   preferred response there; it stays pending the existing training review.
 
 New streamed message IDs and trace references persist in the existing
 `conversations` table. They survive browser hydration and a backend restart.
@@ -64,7 +71,9 @@ and press **Save usefulness**.
   `POST /cognition/traces/{trace_id}/usefulness`.
 - Does not rewrite `goal_verified`, grounding, or execution evidence.
 - Does not submit a held-out task evaluation or approve training.
-- Repeated owner signals can influence the existing bounded strategy ranking.
+- Owner signals on at least two distinct response traces can influence the
+  existing bounded strategy ranking. Revisions to one response are one sample;
+  the full event history is still preserved.
   This is why the UI does not silently turn every task assessment into a learning
   signal.
 - The normal web form shows the saved rating instead of offering another rating
@@ -138,6 +147,8 @@ The existing authenticated API surfaces remain authoritative:
 | `GET /benchmarks/phase1/tasks/evaluations?split=held_out` | Aggregate held-out outcome/usefulness counts and descriptive paired comparisons |
 | `GET /benchmarks/phase1/evidence` | Recorded trace grounding, outcomes, route corrections, and learning-feedback volume |
 | `GET /cognition/corrections/measurements` | Existing correction receipt/latency and strategy-link telemetry |
+| `GET /self-awareness/introspection/{trace_id}` | Original request/response and evidence-based explanation |
+| `POST /loras/training-candidates/owner-correction` | Existing reviewed correction pipeline; accepts exact `trace_id` and derives recorded strategy context |
 
 Task-evaluation usefulness and response-feedback usefulness are intentionally
 separate metrics. A task-only assessment does not increase the trace feedback
@@ -161,8 +172,8 @@ owner-only form submission, UNKNOWN defaults, and visible load/save failures.
 
 Web controls are implemented in this slice. Native desktop and Android retain
 protocol compatibility but do not yet expose these response-review controls.
-Trace-linked correction submission is still available through the existing API;
-a new inline correction editor is not part of this slice.
+Corrections use the pre-existing Model Settings editor, now linked to the exact
+response; no second correction editor or correction brain was introduced.
 
 Unit/integration fixtures are **contract evidence**, not owner held-out results.
 Real LM Studio outcomes, usefulness volume, cross-task improvement, and supported
@@ -170,8 +181,9 @@ host/device behavior must still be measured on the owner installation.
 
 ### Current software-only validation (2026-09-07)
 
-- Backend: **3,133 passed, 14 skipped, 4 e2e deselected**, 3 environment/dependency warnings.
-- Frontend: **246 passed**; production build passed; lint **0 errors**, 18 existing warnings.
+- Backend: **3,152 passed, 14 skipped, 5 e2e deselected**, 3 environment/dependency warnings.
+- Frontend: **249 passed**; production build passed; lint **0 errors**, 18 existing warnings.
+- Real-browser/server integration: **5 e2e tests passed**, using Chromium and temporary stores. Final focused verifier checks also pass after the deterministic-fallback guard review.
 - Inherited CI opener test is now deterministic on Linux/macOS/Windows branches
   using mocks (not real application launches). The GitHub backend checks passed.
   `scripts/ci/frontend.yml` contains the updated Node 22 test/build/lint template,
@@ -181,4 +193,63 @@ host/device behavior must still be measured on the owner installation.
   in `.github/workflows/`. No credentials should be shared in chat.
 - No runtime dependencies were added. The only database schema migration is the
   additive message/trace identity columns and index in the existing conversations
-  table. Feedback and evaluation retry receipts reuse their existing tables.
+  table, plus source type/trace columns in the existing strategy-outcome table.
+  Feedback, corrections, and evaluation receipts reuse existing stores.
+
+## 7. Verified path and remaining acceptance boundary
+
+The reproducible browser test is `tests/e2e/test_phase1_feedback_e2e.py`. It uses
+the built React app, a real Chromium process, the real FastAPI/WebSocket server,
+the singleton runtime, and real temporary databases. It records a deterministic
+reminder, checks the durable reminder and response trace, submits both review
+forms, checks the reports, restarts the server, clears browser conversation
+state, and verifies persisted history. It then reads the evidence explanation
+and submits/retries a correction through the existing Model Settings editor.
+There are **no mocked cognition, HTTP responses, or WebSocket frames**. A test-only
+key authenticates transport; all stores are isolated and task assessments use
+`split=contract`, never `held_out`.
+
+Run after building the web client, with the repository virtual environment activated:
+
+```text
+python -m playwright install chromium
+python -m pytest tests/e2e -m e2e -q
+```
+
+`ARENA_E2E_CHROMIUM` optionally selects an existing compatible browser executable.
+The fixture disables live model calls and autonomous scheduling, uses a random
+API key, and tears down its server. This exercises deterministic local behavior,
+not the owner machine's model, GPU, microphone, or phone.
+
+The Phase 1 follow-up fixed existing behavioral defects rather than introducing
+new production modules:
+
+- Empty/sample-poor calibration can no longer report calibrated. UNKNOWN does
+  not add a negative calibration/strategy sample; ordinary execution calibration
+  uses its raw predictor and matching action/task-class history, not unrelated
+  actions' failures.
+- A deterministic contradiction now delivers the explicit repair. The original
+  visible claim is retained in `grounding.generated_response` and the failed
+  attempt is **not** promoted to verified success.
+- Answer/investigation/reminder/authorized traces now retain strategy identity;
+  authorized results also carry the existing epistemic presentation.
+- One trace's ratings/corrections are not repeated tasks. The first trace-linked
+  correction stays local even with pre-existing normal task history. A second
+  distinct same-context trace can affect strategy ranking. Correction source
+  rows are not consumed as verified outcomes by adaptive-autonomy calibration.
+- Reports use recent bounded cohorts. Unknown grounding metadata is not counted
+  as grounded evidence; unsupported-claim *trace* rates cannot exceed one.
+  Feedback outside the selected trace cohort is excluded. Audit event counts
+  remain separate from distinct rated traces. Task success-rate denominators
+  exclude UNKNOWN; revised assessments are one sample, and pairs require
+  different traces.
+
+Older calibration/outcome records are preserved, not guessed, relabeled, or
+silently deleted. Their historical provenance may be insufficient to repair
+previous UNKNOWN-as-failure records retrospectively. Use a documented evaluation
+profile and inspect legacy data before drawing before/after conclusions.
+
+**Phase 1.4's empirical exit criterion remains open.** Passing these contracts,
+or a report's small minimum-sample flag, does not establish real-world usefulness,
+trust calibration, or broad transfer. That requires the predeclared owner-task
+protocol above with actual observations, failures, and regressions retained.

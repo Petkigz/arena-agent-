@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/ui';
 import { useModelSettingsStore, type ModelConfig } from '../../stores';
 import { ArrowLeft, Brain, Mic, Volume2, Gauge, Zap, Cpu, Shield, RotateCcw, CheckCircle, XCircle, Layers } from 'lucide-react';
 import { apiKeyHeader, apiUrl } from '../../services/api';
+import { getResponseExplanation } from '../../services/responseFeedback';
 
 interface LoraAdapter {
   name: string;
@@ -48,6 +49,12 @@ interface TrainingCandidate {
 
 export function ModelSettingsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const correctionTrace = searchParams.get('correctionTrace') || '';
+  const [correctionSource, setCorrectionSource] = useState<{ traceId: string; response?: string; error?: string } | null>(null);
+  const correctionSourceReady = !correctionTrace || (
+    correctionSource?.traceId === correctionTrace && !correctionSource.error
+  );
   const {
     llmModels,
     selectedLLM,
@@ -96,6 +103,20 @@ export function ModelSettingsPage() {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!correctionTrace) return;
+    const controller = new AbortController();
+    getResponseExplanation(correctionTrace, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      setCorrection((draft) => ({ ...draft, prompt: result.facts.request }));
+      setCorrectionSource({ traceId: correctionTrace, response: result.facts.response });
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setCorrectionSource({ traceId: correctionTrace, error: error instanceof Error ? error.message : 'Could not load source trace.' });
+    });
+    return () => controller.abort();
+  }, [correctionTrace]);
 
   const refreshCandidates = async () => {
     const response = await fetch(apiUrl('/loras/training-candidates'), { headers: apiKeyHeader() });
@@ -175,16 +196,18 @@ export function ModelSettingsPage() {
   };
 
   const addOwnerCorrection = async () => {
+    if (!correctionSourceReady || candidateBusy === 'owner-correction') return;
     setCandidateBusy('owner-correction');
     try {
       const response = await fetch(apiUrl('/loras/training-candidates/owner-correction'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKeyHeader() },
-        body: JSON.stringify(correction),
+        body: JSON.stringify({ ...correction, ...(correctionTrace ? { trace_id: correctionTrace } : {}) }),
       });
-      if (!response.ok) throw new Error('Could not add owner correction');
-      setCorrection({ skill_name: correction.skill_name, prompt: '', response: '' });
-      setCandidateMessage('Owner correction added to the review queue');
+      const result = await response.json();
+      if (!response.ok || result?.success !== true) throw new Error(result?.detail || 'Could not add owner correction');
+      setCorrection({ skill_name: correction.skill_name, prompt: correctionTrace ? correction.prompt : '', response: '' });
+      setCandidateMessage('Owner correction added to the review queue; training still requires approval.');
       await refreshCandidates();
     } catch (error) {
       setCandidateMessage(error instanceof Error ? error.message : 'Could not add correction');
@@ -560,6 +583,17 @@ export function ModelSettingsPage() {
               {candidateMessage && <p className="text-xs text-text-secondary">{candidateMessage}</p>}
               <div className="rounded border border-border p-3 space-y-2">
                 <h4 className="text-sm font-medium text-text-primary">Add an owner correction</h4>
+                {correctionTrace && <div className="space-y-1 text-xs text-text-secondary">
+                  <p className="break-all">Correcting exact trace: <code>{correctionTrace}</code></p>
+                  {!correctionSourceReady && <p role={correctionSource?.error ? 'alert' : 'status'}>
+                    {correctionSource?.traceId === correctionTrace && correctionSource.error
+                      ? correctionSource.error : 'Loading the original response…'}
+                  </p>}
+                  {correctionSource?.traceId === correctionTrace && correctionSource.response && <blockquote className="border-l border-border-subtle pl-2">
+                    {correctionSource.response.slice(0, 1500)}
+                  </blockquote>}
+                  <p>One correction stays local. Only corrections on distinct same-context traces can influence strategy ranking; nothing trains automatically.</p>
+                </div>}
                 <input
                   value={correction.skill_name}
                   onChange={(event) => setCorrection({ ...correction, skill_name: event.target.value })}
@@ -568,18 +602,21 @@ export function ModelSettingsPage() {
                 />
                 <textarea
                   value={correction.prompt}
+                  readOnly={!!correctionTrace}
+                  aria-label="Correction source prompt"
                   onChange={(event) => setCorrection({ ...correction, prompt: event.target.value })}
                   className="w-full min-h-16 px-3 py-2 rounded border border-border bg-background-primary text-xs"
                   placeholder="Prompt or situation"
                 />
                 <textarea
                   value={correction.response}
+                  aria-label="Preferred response"
                   onChange={(event) => setCorrection({ ...correction, response: event.target.value })}
                   className="w-full min-h-20 px-3 py-2 rounded border border-border bg-background-primary text-xs"
                   placeholder="Preferred response"
                 />
                 <button
-                  disabled={candidateBusy === 'owner-correction' || correction.prompt.trim().length < 3 || correction.response.trim().length < 3}
+                  disabled={!correctionSourceReady || candidateBusy === 'owner-correction' || correction.prompt.trim().length < 3 || correction.response.trim().length < 3}
                   onClick={addOwnerCorrection}
                   className="px-3 py-1.5 text-xs bg-background-secondary border border-border rounded disabled:opacity-50"
                 >

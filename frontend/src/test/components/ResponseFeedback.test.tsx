@@ -6,7 +6,7 @@ import * as api from '../../services/responseFeedback';
 
 vi.mock('../../services/responseFeedback', () => ({
   loadResponseFeedback: vi.fn(), recordResponseUsefulness: vi.fn(), recordTaskEvaluation: vi.fn(),
-  newSubmissionId: vi.fn(),
+  newSubmissionId: vi.fn(), getResponseExplanation: vi.fn(),
 }));
 
 const ratingReceipt: api.UsefulnessFeedback = {
@@ -41,6 +41,23 @@ function fillTask() {
 }
 
 describe('response feedback controls', () => {
+  it('explains from the existing trace endpoint and links to the existing correction editor', async () => {
+    vi.mocked(api.getResponseExplanation).mockResolvedValue({
+      facts: { trace_id: 'trace-a', request: 'Question', goal_verified: false },
+      explanation: ['No independent observation was available.'],
+      epistemic_presentation: { calibration_status: 'evidence_derived' },
+    });
+    await openReview();
+    expect(api.getResponseExplanation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Why this response?' }));
+    await screen.findByText('No independent observation was available.');
+    expect(api.getResponseExplanation).toHaveBeenCalledWith('trace-a');
+    expect(screen.getByRole('link', { name: 'Correct this response' })).toHaveAttribute(
+      'href', '/settings/models?correctionTrace=trace-a',
+    );
+    expect(api.recordResponseUsefulness).not.toHaveBeenCalled();
+  });
+
   it('does not load or record anything until the owner opens the review', async () => {
     render(<ResponseFeedback traceId="trace-a" />);
     expect(api.loadResponseFeedback).not.toHaveBeenCalled();

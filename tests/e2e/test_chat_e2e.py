@@ -6,6 +6,7 @@ Run explicitly:  PYTHONPATH=. pytest tests/e2e -m e2e
 """
 
 import json
+import re
 
 import pytest
 
@@ -27,21 +28,20 @@ def test_spa_serves_react_app(page):
 
 def test_chat_input_renders(page):
     """The chat UI renders its message input."""
-    # The SPA may require onboarding to be completed; skip if not present.
-    page.wait_for_timeout(1500)
-    # The ChatInput placeholder is rendered when the chat page is active.
-    # Onboarding may intercept — assert at least the app shell is present.
-    assert page.locator("body").count() == 1
+    page.get_by_role("button", name=re.compile("^New Chat$", re.I)).click()
+    from playwright.sync_api import expect
+    expect(page.get_by_role("textbox", name="Type your message")).to_be_enabled()
 
 
-def test_websocket_chat_roundtrip(server_url):
+def test_websocket_chat_roundtrip(server_url, live_server):
     """A WebSocket user_message must stream a reply from the cognitive runtime."""
     import asyncio
 
     import websockets
 
     async def _run():
-        ws_url = server_url.replace("http://", "ws://") + "/ws"
+        from urllib.parse import urlencode
+        ws_url = server_url.replace("http://", "ws://") + "/ws?" + urlencode({"api_key": live_server.key})
         async with websockets.connect(ws_url, origin=server_url) as ws:
             await ws.send(json.dumps({
                 "type": "join_conversation",
@@ -55,6 +55,7 @@ def test_websocket_chat_roundtrip(server_url):
             }))
 
             tokens = []
+            metadata = None
             done = False
             while not done:
                 msg = json.loads(await asyncio.wait_for(ws.recv(), 60))
@@ -63,9 +64,20 @@ def test_websocket_chat_roundtrip(server_url):
                     tokens.append(msg.get("token", ""))
                     if msg.get("done"):
                         done = True
+                elif t == "cognitive_metadata":
+                    metadata = msg
                 elif t == "error":
                     raise AssertionError(f"server returned error: {msg}")
-            return "".join(tokens)
+            return "".join(tokens), metadata
 
-    reply = asyncio.run(_run())
-    assert reply  # a non-empty reply was streamed back
+    reply, metadata = asyncio.run(_run())
+    assert re.search(r"=\s*4\b", reply)
+    assert "Computed locally" in reply
+    assert metadata["grounding"]["status"] == "verified"
+    import sqlite3
+    with sqlite3.connect(live_server.data / "assistant.db") as conn:
+        row = conn.execute(
+            "SELECT model_used, goal_verified FROM cognitive_traces WHERE trace_id=?",
+            (metadata["trace_id"],),
+        ).fetchone()
+    assert row == ("deterministic_local", 1)

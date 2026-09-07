@@ -7,6 +7,7 @@ class MockWebSocket {
   static OPEN = 1;
   static CLOSING = 2;
   static CLOSED = 3;
+  static lastUrl = '';
 
   readyState = MockWebSocket.CONNECTING;
   binaryType = 'blob';
@@ -18,6 +19,7 @@ class MockWebSocket {
   onmessage: ((event: MessageEvent) => void) | null = null;
 
   constructor(_url: string) {
+    MockWebSocket.lastUrl = _url;
     // Auto-open after construction (simulates successful connection)
     setTimeout(() => {
       this.readyState = MockWebSocket.OPEN;
@@ -37,6 +39,27 @@ describe('WebSocketService', () => {
     webSocketService.disconnect();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('resolves default HTTP/WS through the same Vite backend proxy', () => {
+    webSocketService.connect();
+    const url = new URL(MockWebSocket.lastUrl);
+    expect(url.host).toBe(window.location.host);
+    expect(url.pathname).toBe('/backend/ws');
+  });
+
+  it('preserves secure origins and replaces an API key rather than duplicating query strings', () => {
+    vi.stubEnv('VITE_API_KEY', 'test-reconnect-key');
+    webSocketService.connect('https://owner.example:8443/ws?room=one&api_key=old');
+    const first = new URL(MockWebSocket.lastUrl);
+    expect(first.protocol).toBe('wss:');
+    expect(first.host).toBe('owner.example:8443');
+    expect(first.searchParams.get('room')).toBe('one');
+    webSocketService.disconnect();
+    webSocketService.connect(first.toString());
+    const retried = new URL(MockWebSocket.lastUrl);
+    expect(retried.searchParams.getAll('api_key')).toEqual(['test-reconnect-key']);
   });
 
   describe('connection status', () => {

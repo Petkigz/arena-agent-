@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiUrl } from '../services/api';
 
 export interface OnlineStatus {
   isOnline: boolean;
@@ -11,7 +12,6 @@ export interface OnlineStatus {
  * For fully offline PC operation, "online" means the local backend is reachable.
  */
 export function useOnlineStatus(): OnlineStatus {
-  const backendUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [backendConnected, setBackendConnected] = useState(false);
   const [lastChecked, setLastChecked] = useState(Date.now());
@@ -39,7 +39,7 @@ export function useOnlineStatus(): OnlineStatus {
   // Periodically check if the local backend is reachable
   const checkBackend = useCallback(async () => {
     try {
-      const healthUrl = `${backendUrl.replace(/\/$/, '')}/health`;
+      const healthUrl = apiUrl('/health');
       const response = await fetch(healthUrl, { 
         method: 'GET',
         signal: AbortSignal.timeout(3000),
@@ -50,7 +50,7 @@ export function useOnlineStatus(): OnlineStatus {
       setBackendConnected(false);
     }
     setLastChecked(Date.now());
-  }, [backendUrl]);
+  }, []);
 
   useEffect(() => {
     checkBackend();

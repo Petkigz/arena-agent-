@@ -2,9 +2,9 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ClipboardCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../ui/Button';
 import {
-  loadResponseFeedback, newSubmissionId, recordResponseUsefulness, recordTaskEvaluation,
+  loadResponseFeedback, newSubmissionId, recordResponseUsefulness, recordTaskEvaluation, getResponseExplanation,
   type EvaluationCondition, type EvaluationSplit, type TaskEvaluation,
-  type TaskOutcome, type Usefulness, type UsefulnessFeedback,
+  type TaskOutcome, type Usefulness, type UsefulnessFeedback, type ResponseExplanation,
 } from '../../services/responseFeedback';
 
 const fieldClass = 'mt-1 w-full rounded-lg border border-border-subtle bg-background-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary disabled:opacity-50';
@@ -47,6 +47,18 @@ export function ResponseFeedback({ traceId }: { traceId: string }) {
 
 function FeedbackPanel({ traceId }: { traceId: string }) {
   const id = useId();
+  const [explanation, setExplanation] = useState<ResponseExplanation | null>(null);
+  const [explanationBusy, setExplanationBusy] = useState(false);
+  const [explanationError, setExplanationError] = useState('');
+
+  const explain = async () => {
+    if (explanationBusy) return;
+    setExplanationBusy(true);
+    setExplanationError('');
+    try { setExplanation(await getResponseExplanation(traceId)); }
+    catch (error) { setExplanationError(error instanceof Error ? error.message : 'Could not load the recorded evidence.'); }
+    finally { setExplanationBusy(false); }
+  };
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
@@ -151,6 +163,25 @@ function FeedbackPanel({ traceId }: { traceId: string }) {
           <summary className="cursor-pointer">Exact trace reference</summary>
           <code className="mt-1 block break-all">{traceId}</code>
         </details>
+      </div>
+
+      <div className="space-y-2 border-t border-border-subtle pt-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="secondary" size="sm" isLoading={explanationBusy} onClick={explain}>
+            Why this response?
+          </Button>
+          <a className="text-xs text-accent-primary underline" href={`/settings/models?correctionTrace=${encodeURIComponent(traceId)}`}>
+            Correct this response
+          </a>
+        </div>
+        {explanationError && <p role="alert" className="text-accent-error">{explanationError}</p>}
+        {explanation && <div aria-label="Recorded response evidence" className="space-y-1 text-xs">
+          <p className="font-medium text-text-primary">Recorded evidence — not private reasoning</p>
+          <ul className="list-disc space-y-1 pl-4">
+            {explanation.explanation.slice(0, 12).map((line, index) => <li key={index}>{line}</li>)}
+          </ul>
+          <p className="text-text-muted">Confidence basis: {explanation.epistemic_presentation?.calibration_status || 'unrecorded'}.</p>
+        </div>}
       </div>
 
       {loadState === 'loading' && <p role="status">Loading recorded feedback…</p>}

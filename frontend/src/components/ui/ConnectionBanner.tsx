@@ -22,7 +22,7 @@ export function ConnectionBanner() {
   const handleReconnect = () => {
     webSocketService.disconnect();
     setTimeout(() => {
-      webSocketService.connect(`ws://${window.location.hostname}:8000/ws`);
+      webSocketService.connect();
     }, 100);
   };
 

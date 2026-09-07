@@ -106,3 +106,21 @@ export function newSubmissionId(): string {
     ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return `web-${random}`;
 }
+
+
+export interface ResponseExplanation {
+  facts: { trace_id: string; request: string; response?: string; goal_verified: boolean };
+  explanation: string[];
+  epistemic_presentation: { confidence_label?: string; calibration_status?: string };
+}
+
+/** Reuse the existing grounded-introspection endpoint; never ask an LLM why. */
+export async function getResponseExplanation(traceId: string, signal?: AbortSignal) {
+  const result = await request<ResponseExplanation>(
+    `/self-awareness/introspection/${encodeURIComponent(traceId)}`, { signal },
+  );
+  if (result.facts?.trace_id !== traceId || !Array.isArray(result.explanation)) {
+    throw new Error('No matching trace explanation was returned.');
+  }
+  return result;
+}

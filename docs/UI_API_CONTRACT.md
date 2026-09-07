@@ -68,6 +68,8 @@ Auth: optional API key header on every call (shared setting `api_key`).
 | `POST /cognition/traces/{trace_id}/usefulness` | `{usefulness, note?, submission_id?}` → `{success, feedback}`; does not change verification |
 | `GET /benchmarks/phase1/tasks/evaluations` | optional `trace_id`, `split=held_out\|contract`, `limit`; `{success, report, evaluations}` |
 | `POST /benchmarks/phase1/tasks/evaluations` | `{trace_id, task_key, observed_outcome, usefulness?, split?, condition?, correction_received?, evidence_ids?, note?, submission_id?}` → `{success, evaluation}`; measurement only |
+| `GET /self-awareness/introspection/{trace_id}` | existing `{success, facts, explanation, epistemic_presentation, grounding}` used by **Why this response?** and the correction editor |
+| `POST /loras/training-candidates/owner-correction` | existing correction route; `trace_id` binds source/strategy, candidate stays pending training review |
 
 Usefulness feedback and task-evaluation usefulness are separate signals. A task
 assessment must not silently create a strategy-learning rating. `submission_id`
@@ -75,6 +77,12 @@ is optional for compatibility; when provided, exact retries return the original
 receipt and changed-payload reuse is rejected. See
 [`PHASE1_EVIDENCE_COLLECTION.md`](PHASE1_EVIDENCE_COLLECTION.md) for the owner
 workflow, valid values, pairing rules, and limits of the evidence.
+
+Production HTTP/WS use the serving origin, preserving HTTPS and non-default ports.
+Vite proxies `/backend` to the configured local backend; explicit `VITE_API_URL`
+and `VITE_WS_URL` overrides remain supported. Health and manual reconnect use the
+same origin contract. `correctionTrace` on the Model Settings URL selects a trace,
+not a new correction workflow or an authorization grant.
 
 The server persists new streamed message IDs and optional trace links in the
 existing conversation table. Old rows keep numeric IDs without guessed traces.
@@ -128,3 +136,8 @@ the UI depends on. Endpoint drift = test failure, see §4.)
 - `tests/test_ui_api_contract.py` pins this document against the backend route table and
   the desktop client surface, so an endpoint rename fails CI instead of silently breaking
   a client.
+
+The browser acceptance path in `tests/e2e/test_phase1_feedback_e2e.py` exercises
+these surfaces against the real server/runtime and temporary stores, including
+restart and the existing correction editor. It must be run explicitly with
+`-m e2e`; unit pass counts are not a substitute for that path.
