@@ -857,6 +857,67 @@ class IdentityAdaptationStore:
         }
         return metrics
 
+    def suggest_style_proposal_from_feedback(
+        self,
+        candidate_patch: Mapping[str, Any],
+        *,
+        reason: str,
+        trace_id: str,
+        evidence_ids: Iterable[Any],
+        minimum_known_feedback: int = 3,
+    ) -> Dict[str, Any]:
+        """Create a reversible proposal only when feedback is decision-grade.
+
+        The candidate patch remains explicit: feedback can justify reviewing a
+        style change, but it cannot safely invent which presentation dimension
+        should change. The method never adopts a proposal or grants authority.
+        """
+        trace = _trace_id(trace_id)
+        evidence = _evidence_ids(evidence_ids)
+        minimum = max(1, int(minimum_known_feedback))
+        metrics = self.style_metrics()
+        known = int(metrics["known_feedback_count"])
+        if known < minimum:
+            return {
+                "status": "insufficient_data",
+                "result_type": "UNKNOWN",
+                "known_feedback_count": known,
+                "minimum_known_feedback": minimum,
+                "requires_owner_decision": True,
+                "trace_id": trace,
+                "evidence_ids": evidence,
+            }
+        helpful_rate = metrics.get("helpful_rate")
+        if helpful_rate is None or helpful_rate >= 0.75:
+            return {
+                "status": "no_change_recommended",
+                "result_type": "no_change",
+                "known_feedback_count": known,
+                "helpful_rate": helpful_rate,
+                "requires_owner_decision": False,
+                "trace_id": trace,
+                "evidence_ids": evidence,
+            }
+        proposal = self.propose_style_change(
+            candidate_patch,
+            reason=(
+                f"longitudinal_feedback: {reason or 'explicit feedback indicates a presentation mismatch'}; "
+                f"helpful_rate={helpful_rate}"
+            ),
+            trace_id=trace,
+            evidence_ids=evidence,
+        )
+        return {
+            "status": "proposal_created",
+            "result_type": proposal.result_type,
+            "known_feedback_count": known,
+            "helpful_rate": helpful_rate,
+            "requires_owner_decision": True,
+            "proposal": proposal.to_dict(),
+            "trace_id": trace,
+            "evidence_ids": evidence,
+        }
+
     def style_proposals(self, status: Optional[str] = None, limit: int = 100) -> List[StyleAdaptationProposal]:
         query = "SELECT proposal_id FROM style_adaptation_proposals"
         params: List[Any] = []

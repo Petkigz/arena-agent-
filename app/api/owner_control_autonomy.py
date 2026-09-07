@@ -85,6 +85,13 @@ class IdentityStyleFeedbackRequest(BaseModel):
     trace_id: str = Field(min_length=1)
     evidence_ids: List[str] = Field(min_length=1, max_length=50)
 
+class IdentityStyleSuggestionRequest(BaseModel):
+    candidate_patch: Dict[str, str]
+    reason: str = Field(default="", max_length=1000)
+    minimum_known_feedback: int = Field(default=3, ge=1, le=1000)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
 class PurposeProposalRequest(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     description: str = Field(min_length=1, max_length=2000)
@@ -624,6 +631,23 @@ def record_identity_style_feedback_endpoint(req: IdentityStyleFeedbackRequest):
             feedback=req.feedback,
         )
         return {"success": True, "observation": observation, "adaptation_automatic": False}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-style/suggest")
+def suggest_identity_style_endpoint(req: IdentityStyleSuggestionRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        return {
+            "success": True,
+            "suggestion": CognitiveRuntime.get_instance().identity_adaptation.suggest_style_proposal_from_feedback(
+                req.candidate_patch,
+                reason=req.reason,
+                trace_id=req.trace_id,
+                evidence_ids=req.evidence_ids,
+                minimum_known_feedback=req.minimum_known_feedback,
+            ),
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

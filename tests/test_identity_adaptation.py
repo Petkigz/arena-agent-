@@ -127,6 +127,34 @@ def test_owner_soft_delete_resets_adaptation_without_erasing_audit_or_goals(tmp_
     assert protected.status == "adopted" and protected.linked_goal_id == "goal-existing"
 
 
+def test_longitudinal_feedback_can_create_only_a_reversible_style_proposal(tmp_path):
+    store = IdentityAdaptationStore(tmp_path / "identity.db", owner_decisions=FakeOwnerDecisions())
+    for index, feedback in enumerate(["not_helpful", "partially_helpful", "not_helpful"]):
+        store.record_style_observation(
+            trace_id=f"trace-feedback-{index}",
+            evidence_ids=[f"feedback:{index}"],
+            feedback=feedback,
+        )
+    suggestion = store.suggest_style_proposal_from_feedback(
+        {"verbosity": "concise"},
+        reason="owners requested shorter answers",
+        trace_id="trace-suggestion",
+        evidence_ids=["feedback:0", "feedback:1", "feedback:2"],
+    )
+    assert suggestion["status"] == "proposal_created"
+    assert suggestion["requires_owner_decision"] is True
+    assert suggestion["proposal"]["status"] == "proposed"
+    assert store.style().style["verbosity"] == "standard"
+
+    insufficient = IdentityAdaptationStore(tmp_path / "insufficient.db", owner_decisions=FakeOwnerDecisions())
+    insufficient.record_style_observation(trace_id="trace-one", evidence_ids=["feedback:one"], feedback="not_helpful")
+    result = insufficient.suggest_style_proposal_from_feedback(
+        {"verbosity": "concise"}, reason="not enough data", trace_id="trace-insufficient", evidence_ids=["feedback:one"]
+    )
+    assert result["status"] == "insufficient_data"
+    assert result["result_type"] == "UNKNOWN"
+
+
 def test_stable_profile_update_cannot_change_root_policy_and_requires_owner(tmp_path):
     store = IdentityAdaptationStore(tmp_path / "identity.db", owner_decisions=FakeOwnerDecisions())
     with pytest.raises(IdentityAdaptationError, match="root policy"):
