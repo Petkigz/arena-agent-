@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
     _chat_room_signal = Signal(str, str)
     _chat_list_signal = Signal(list)
     _chat_history_signal = Signal(str, list)
+    _chat_correction_signal = Signal(str, dict)
     _chat_history_detail_signal = Signal(str, list)
     _chat_created_signal = Signal(str, str)
     _chat_action_signal = Signal(str, str)
@@ -184,6 +185,7 @@ class MainWindow(QMainWindow):
         # actually renders (see _handle_conversation_history_detail).
         self.chat_client.on_history_detail = lambda cid, items: self._chat_history_detail_signal.emit(cid, items)
         self.chat_client.on_cognitive_metadata = lambda cid, mid, tid: self._chat_meta_signal.emit(cid, mid, tid)
+        self.chat_client.on_correction_recorded = lambda cid, payload: self._chat_correction_signal.emit(cid, payload)
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
         self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
         self.chat_client.on_activity = self._on_conversation_activity
@@ -204,6 +206,7 @@ class MainWindow(QMainWindow):
         # twice). The detail handler is what binds review bars to traces.
         self._chat_history_detail_signal.connect(self._handle_conversation_history_detail)
         self._chat_meta_signal.connect(self._handle_cognitive_metadata)
+        self._chat_correction_signal.connect(self._handle_correction_recorded)
         self._chat_created_signal.connect(self._handle_conversation_created)
         self._chat_error_signal.connect(self._handle_chat_error)
         self._chat_action_signal.connect(self._handle_action_step)
@@ -544,6 +547,14 @@ class MainWindow(QMainWindow):
             bool(self.chat.input.text().strip()),
         ):
             self._select_conversation(conversations[0][0], user_action=False)
+
+    @Slot(str, dict)
+    def _handle_correction_recorded(self, cid: str, payload: dict) -> None:
+        """An explicit in-chat correction was recorded (existing owner-correction
+        path); the chat shows a transient note pointing at the review surface."""
+        if cid != self.current_conv_id:
+            return
+        self.chat.show_correction_note(payload)
 
     @Slot(str, str, str)
     def _handle_cognitive_metadata(self, cid: str, message_id: str, trace_id: str) -> None:

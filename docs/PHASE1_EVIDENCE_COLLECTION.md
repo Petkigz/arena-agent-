@@ -112,6 +112,29 @@ Use only non-sensitive references and notes. Do not paste credentials or private
 file contents into evaluation notes. References are owner statements, not
 independent environmental verification.
 
+## 3.b In-chat corrections (chat-native path)
+
+You can correct in the conversation itself: reply with an explicit correction such as
+**"No, you searched the wrong folder, search the whole pc."** When the message starts
+with (or clearly contains) an explicit correction marker, the runtime:
+
+1. links it to the exact previous reply's persisted trace in that conversation;
+2. classifies it (factual / intent / retrieval / routing / procedural / unspecified —
+   deterministic markers, conservative by design; ambiguous messages are not recorded);
+3. records it through the SAME owner-correction path as the form: a pending training
+   candidate (`Model Settings → Training`, where you can edit the preferred response
+   before approval) plus one correction-measurement sample (duplicate retries of the
+   same correction stay one sample);
+4. still executes your corrective instruction as the normal follow-up task in the same
+   turn — the web shows a brief "Understood as a correction" notice, and the desktop
+   client shows the same note above the composer.
+
+Boundaries: detection prefers missing a casually phrased correction over inventing one;
+legacy replies without a trace can never be correction targets (use the Review-response
+form for manual targeting); scope escalation ("search the whole pc") still goes through
+the normal planner authorization, not the correction path. Recording a correction is not
+an outcome: the baseline/adapted task evaluations in section 3 remain the measurement.
+
 ## 4. Repeated real-task protocol
 
 Before collecting outcomes, write down the task set, success criteria, evidence

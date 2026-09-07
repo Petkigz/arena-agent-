@@ -9,6 +9,7 @@ import {
   webSocketService,
   type ApprovalRequestEvent,
   type ApprovalResultEvent,
+  type CorrectionRecordedEvent,
   type VoiceState,
 } from '../../services/websocket';
 import { executeAuthorizedAction, revokeAuthorization } from '../../services/ownerControl';
@@ -30,6 +31,8 @@ export function ChatPage() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [beanieActive, setBeanieActive] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  // An in-chat correction was understood and recorded (transient notice).
+  const [correctionNotice, setCorrectionNotice] = useState<CorrectionRecordedEvent | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<
     'disconnected' | 'connecting' | 'connected' | 'reconnecting'
   >(webSocketService.status);
@@ -58,6 +61,13 @@ export function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentConversation?.messages]);
+
+  // Correction notices fade after a moment; a new notice resets the timer.
+  useEffect(() => {
+    if (!correctionNotice) return;
+    const timer = setTimeout(() => setCorrectionNotice(null), 12000);
+    return () => clearTimeout(timer);
+  }, [correctionNotice]);
 
   // Set up WebSocket event handlers
   useEffect(() => {
@@ -145,6 +155,14 @@ export function ChatPage() {
         if (request.conversation_id === currentConversation.id) {
           setApprovalRequest(request);
           setApprovalResult(null);
+        }
+      } else if (event.type === 'correction_recorded') {
+        // An in-chat correction was understood and recorded through the
+        // existing owner-correction path. Surface it; the candidate stays
+        // pending owner review in Model Settings → Training.
+        const notice = event.data as CorrectionRecordedEvent;
+        if (notice.conversation_id === currentConversation.id && !notice.duplicate) {
+          setCorrectionNotice(notice);
         }
       } else if (event.type === 'approval_result') {
         const result = event.data as ApprovalResultEvent;
@@ -456,6 +474,13 @@ export function ChatPage() {
             />
           ))}
           <div ref={messagesEndRef} />
+        </div>
+      )}
+
+      {/* In-chat correction understood + recorded (transient notice) */}
+      {correctionNotice && (
+        <div className="flex-shrink-0 mx-6 mb-2 rounded-lg border border-border-subtle bg-background-secondary px-3 py-2 text-xs text-text-secondary" role="status">
+          Understood as a correction ({correctionNotice.correction_type}) of your previous response — recorded and pending your review in Model Settings → Training.
         </div>
       )}
 

@@ -245,6 +245,27 @@ class MessageRouter:
             message_id = f"msg_{uuid.uuid4().hex[:12]}"
             add_to_history(conversation_id, "user", content, message_id=message_id)
 
+            # In-chat correction: an explicit owner correction ("no, you
+            # searched the wrong folder") is understood AS a correction and
+            # recorded through the EXISTING owner-correction path against the
+            # prior reply's trace. The turn itself still runs normally below —
+            # the corrective instruction ("search the whole pc") is executed by
+            # the cognitive path, not here. Failures never break the chat flow.
+            try:
+                from backend.chat_corrections import record_chat_correction
+                correction_note = record_chat_correction(
+                    self.runtime, conversation_id, content,
+                    fetch=lambda cid, limit: db.get_conversation_messages(cid, limit=limit),
+                )
+                if correction_note:
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "correction_recorded",
+                        "conversation_id": conversation_id,
+                        **correction_note,
+                    })
+            except Exception as exc:
+                app_logger.warning(f"In-chat correction handling failed (message continues): {exc}")
+
             # The assistant reply gets its OWN id: clients match streamed tokens and
             # action steps against it. Sharing the user's id would make other
             # clients append the reply onto the sender's message bubble.

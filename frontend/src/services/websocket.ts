@@ -33,11 +33,22 @@ export interface CognitiveMetadataEvent {
   grounding?: Record<string, unknown>;
 }
 
+export interface CorrectionRecordedEvent {
+  conversation_id: string;
+  correction_type: string;
+  signal: string;
+  target_trace_id: string;
+  candidate_id: string;
+  generalized: boolean;
+  duplicate: boolean;
+}
+
 export type WebSocketEvent =
   | { type: 'message'; data: Message }
   | { type: 'message_ack'; data: { conversation_id: string; status: string } }
   | { type: 'message_token'; data: { conversation_id: string; message_id: string; token: string; done: boolean } }
   | { type: 'cognitive_metadata'; data: CognitiveMetadataEvent }
+  | { type: 'correction_recorded'; data: CorrectionRecordedEvent }
   | { type: 'room_message'; data: { conversation_id: string; message_id: string; content: string } }
   | { type: 'action_step'; data: ActionStep & { conversation_id: string; message_id: string } }
   | { type: 'approval_request'; data: ApprovalRequestEvent }

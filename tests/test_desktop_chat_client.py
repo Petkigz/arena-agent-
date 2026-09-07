@@ -54,3 +54,33 @@ def test_parse_created():
     c.on_created = lambda cid, t: seen.append((cid, t))
     c._handle_text(json.dumps({"type": "conversation_created", "conversation_id": "x", "title": "New"}))
     assert seen == [("x", "New")]
+
+
+def test_correction_recorded_frame_reaches_the_callback():
+    """The backend correction_recorded event is dispatched GUI-free."""
+    c = DesktopChatClient(ws_url="ws://unused", conversation_id="conv-1")
+    seen = []
+    c.on_correction_recorded = lambda cid, payload: seen.append((cid, payload))
+    c._handle_text(json.dumps({
+        "type": "correction_recorded",
+        "conversation_id": "conv-1",
+        "correction_type": "retrieval",
+        "signal": "no,",
+        "target_trace_id": "trace_abc",
+        "candidate_id": "train_123",
+        "generalized": False,
+        "duplicate": False,
+    }))
+    assert seen == [(
+        "conv-1",
+        {
+            "type": "correction_recorded",
+            "conversation_id": "conv-1",
+            "correction_type": "retrieval",
+            "signal": "no,",
+            "target_trace_id": "trace_abc",
+            "candidate_id": "train_123",
+            "generalized": False,
+            "duplicate": False,
+        },
+    )]

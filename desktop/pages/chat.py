@@ -95,6 +95,19 @@ class ChatPage(QWidget):
         self.working_card = WorkingContextCard()
         right.addWidget(self.working_card)
 
+        # In-chat correction notice: an explicit owner correction was
+        # understood and recorded through the existing owner-correction path
+        # (candidate stays pending owner review). Transient, auto-hides.
+        self.correction_note = QLabel()
+        self.correction_note.setWordWrap(True)
+        self.correction_note.setStyleSheet(
+            f"font-size: 12px; color: {TEXT_SECONDARY};"
+            f" background: {BG_SECONDARY}; border: 1px solid {BORDER_SUBTLE};"
+            f" border-radius: 8px; padding: 6px 10px;"
+        )
+        self.correction_note.hide()
+        right.addWidget(self.correction_note)
+
         composer = QHBoxLayout()
         self.input = QLineEdit()
         self.input.setPlaceholderText("Message Beanie…")
@@ -182,6 +195,24 @@ class ChatPage(QWidget):
     def set_conversation_title(self, title: str) -> None:
         self._header_conversation.setText(title or "Current conversation")
         self._header_conversation.setToolTip(title or "Current conversation")
+
+    def show_correction_note(self, payload: dict) -> None:
+        """Surface an understood in-chat correction for a few seconds.
+
+        ``payload`` is the backend ``correction_recorded`` event: correction
+        type, the corrected reply's trace, and the pending candidate id. The
+        correction is RECORDED already; this note only tells the owner where
+        to review it. Duplicates (client retries) stay silent.
+        """
+        if payload.get("duplicate"):
+            return
+        correction_type = str(payload.get("correction_type") or "unspecified")
+        self.correction_note.setText(
+            f"Understood as a correction ({correction_type}) of your previous "
+            "response — recorded and pending your review in Model Settings → Training."
+        )
+        self.correction_note.show()
+        QTimer.singleShot(12000, self.correction_note.hide)
 
     def set_connection_status(self, online: bool, detail: str = "") -> None:
         label = "Online" if online else "Offline"

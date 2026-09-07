@@ -58,6 +58,9 @@ class DesktopChatClient:
         #: on_history still fires with plain (role, content) tuples for
         #: compatibility; consumers wanting review binding use this one.
         self.on_history_detail: Optional[Callable[[str, List[dict]], None]] = None
+        #: Called with (conversation_id, event dict) when an explicit in-chat
+        #: correction was recorded through the existing owner-correction path.
+        self.on_correction_recorded: Optional[Callable[[str, dict], None]] = None
 
     @property
     def connected(self) -> bool:
@@ -215,6 +218,11 @@ class DesktopChatClient:
             # Owner-wide signal: another device moved the active conversation.
             if self.on_activity:
                 self.on_activity(data.get("conversation_id", ""))
+        elif t == "correction_recorded":
+            if self.on_correction_recorded:
+                self.on_correction_recorded(
+                    data.get("conversation_id", ""), data,
+                )
         elif t == "error":
             if self.on_error:
                 self.on_error(data.get("message", "Chat error"))

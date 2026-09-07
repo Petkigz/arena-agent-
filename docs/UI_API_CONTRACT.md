@@ -31,6 +31,7 @@ Server → client messages:
 | `conversation_created` | `conversation_id`, `title` | after create |
 | `message_token` | `conversation_id`, `message_id`, `token`, `done` | streaming reply (token-by-token; `done: true` ends the turn) |
 | `cognitive_metadata` | `conversation_id`, `message_id`, `trace_id`, `epistemic_presentation`, `grounding` | evidence metadata for one exact assistant reply, never the latest message by position |
+| `correction_recorded` | `conversation_id`, `correction_type`, `signal`, `target_trace_id`, `candidate_id`, `generalized`, `duplicate` | an explicit in-chat owner correction was understood and recorded through the existing owner-correction path; the candidate stays pending owner review. `duplicate=true` retries stay silent. Clients may ignore it; web shows a transient notice, desktop shows a note above the composer |
 | `room_message` | `message_id`, `content` | message from another client in the shared room (echo suppression is client-side) |
 | `action_step` | `label`, `status` | streamed tool activity attached to the assistant reply; `status` streams `in_progress` → `complete` (web: ActionSteps, Android: ToolActivity, desktop: Live Context rail) |
 | `conversation_activity` | `conversation_id` | owner-wide signal: another device moved the active conversation (cross-device follow) |
