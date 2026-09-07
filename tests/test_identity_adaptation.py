@@ -240,6 +240,43 @@ def test_shutdown_cooperation_is_explicitly_observed_without_self_preservation_a
     assert flagged["status"] == "requires_review"
 
 
+def test_adopted_purpose_bridge_creates_only_an_evaluated_goal(tmp_path):
+    from app.cognition.runtime import CognitiveRuntime
+
+    runtime = CognitiveRuntime(db_path=str(tmp_path / "runtime.db"))
+    proposal = runtime.identity_adaptation.propose_purpose(
+        title="Review recovery evidence",
+        description="Inspect bounded recovery evidence without changing policy.",
+        provenance="owner_requested",
+        trace_id="trace-purpose-proposal",
+        evidence_ids=["e:purpose"],
+    )
+    decision = runtime.owner_decisions.issue(
+        "purpose_adoption",
+        {"expected_change_types": [f"purpose_adoption:{proposal.proposal_id}"]},
+    )
+    runtime.identity_adaptation.adopt_purpose(
+        proposal.proposal_id,
+        owner_decision_id=decision.decision_id,
+    )
+
+    result = runtime.create_goal_from_adopted_purpose(
+        proposal.proposal_id,
+        trace_id="trace-purpose-goal",
+        evidence_ids=["e:goal-bridge"],
+    )
+
+    assert result["created_now"] is True
+    assert result["execution_authorized"] is False
+    assert result["planning_approval_required"] is True
+    assert result["goal"]["status"] == "evaluated"
+    assert result["goal"]["source"] == "owner_directive"
+    assert result["goal"]["max_action_level"] == 2
+    assert runtime.goal_generator.get_next_goal() is None
+    linked = runtime.identity_adaptation.get_purpose_proposal(proposal.proposal_id)
+    assert linked.linked_goal_id == result["goal"]["goal_id"]
+
+
 def test_identity_adaptation_persists_schema_and_audit_history(tmp_path):
     path = tmp_path / "identity.db"
     store = IdentityAdaptationStore(path, owner_decisions=FakeOwnerDecisions())
@@ -253,6 +290,26 @@ def test_identity_adaptation_persists_schema_and_audit_history(tmp_path):
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT storage_schema_version FROM identity_adaptation_meta").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM purpose_proposals").fetchone()[0] == 1
+
+
+def test_restart_restores_functional_style_without_changing_stable_identity(tmp_path):
+    path = tmp_path / "identity-restart.db"
+    decisions = FakeOwnerDecisions()
+    first = IdentityAdaptationStore(path, owner_decisions=decisions)
+    stable_digest = first.profile().content_digest
+    proposal = first.propose_style_change(
+        {"verbosity": "detailed"},
+        reason="repeated request for fuller explanations",
+        trace_id="trace-restart-style",
+        evidence_ids=["feedback:restart"],
+    )
+    first.approve_style_change(proposal.proposal_id, owner_decision_id="owner-style-restart")
+
+    restarted = IdentityAdaptationStore(path, owner_decisions=decisions)
+    assert restarted.profile().content_digest == stable_digest
+    assert restarted.profile().revision == 0
+    assert restarted.style().revision == 1
+    assert restarted.style().style["verbosity"] == "detailed"
 
 
 def test_identity_adaptation_rejects_unsupported_schema(tmp_path):
