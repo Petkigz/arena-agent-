@@ -76,6 +76,19 @@ class DatabaseManager:
                 )
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_conv ON conversations(conversation_id)")
+            # Additive migration: legacy rows keep their numeric IDs and no
+            # invented trace link. New replies retain their streamed identity
+            # across reloads, so owner feedback targets the exact response.
+            conversation_columns = {
+                row[1] for row in cursor.execute("PRAGMA table_info(conversations)")
+            }
+            for column in ("message_id", "trace_id"):
+                if column not in conversation_columns:
+                    cursor.execute(f"ALTER TABLE conversations ADD COLUMN {column} TEXT")
+            cursor.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_message "
+                "ON conversations(conversation_id, message_id) WHERE message_id IS NOT NULL"
+            )
 
             # 5. Create Project Tasks Table (Kanban tasks inside projects, synced
             # across all UIs — web, desktop, Android all read/write this store).
@@ -274,22 +287,31 @@ class DatabaseManager:
             return [dict(row) for row in cursor.fetchall()]
 
     # Conversations (persistent chat history)
-    def add_conversation_message(self, conversation_id: str, role: str, content: str) -> Optional[int]:
-        """Insert a chat message; returns the new row id (used as message_id
-        so every UI can dedupe hydrated history against live token streams)."""
+    def add_conversation_message(
+        self, conversation_id: str, role: str, content: str, *,
+        message_id: Optional[str] = None, trace_id: Optional[str] = None,
+    ) -> Optional[int]:
+        """Persist streamed identity and an optional runtime-authored trace link.
+
+        The numeric row ID remains the return value for legacy callers. A
+        trace reference does not assert correctness or grant any authority.
+        """
+        if trace_id and role != "assistant":
+            raise ValueError("Only assistant responses can carry a cognitive trace")
         with self._get_connection() as conn:
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
             cursor.execute("""
-                INSERT INTO conversations (conversation_id, role, content, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (conversation_id, role, content, now))
+                INSERT INTO conversations
+                    (conversation_id, role, content, created_at, message_id, trace_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (conversation_id, role, content, now, message_id, trace_id))
             conn.commit()
             return cursor.lastrowid
 
     def get_conversation_messages(
         self, conversation_id: str, limit: Optional[int] = 50,
-    ) -> List[Dict[str, str]]:
+    ) -> List[Dict[str, Any]]:
         """`limit=None` returns the FULL history (the server-side chat
         export needs every message — the owner report 2026-09-05: a
         client-side export can only export what it hydrated, capped at
@@ -297,18 +319,19 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, role, content, created_at FROM conversations "
+                "SELECT id, message_id, trace_id, role, content, created_at FROM conversations "
                 "WHERE conversation_id = ? ORDER BY id ASC",
                 (conversation_id,),
             )
             rows = cursor.fetchall()
             # Return the most recent `limit` messages, preserving order. The row
-            # id is exposed as message_id for cross-client dedupe; created_at
-            # is the message's REAL time (exports show it, not hydration time).
+            # id remains a fallback for older messages; new streamed IDs and
+            # trace links survive restart. created_at is the real message time.
             selected = rows if limit is None else rows[-limit:]
             return [
-                {"message_id": r["id"], "role": r["role"],
-                 "content": r["content"], "created_at": r["created_at"]}
+                {"message_id": r["message_id"] or r["id"], "role": r["role"],
+                 "content": r["content"], "created_at": r["created_at"],
+                 **({"trace_id": r["trace_id"]} if r["trace_id"] else {})}
                 for r in selected
             ]
 
