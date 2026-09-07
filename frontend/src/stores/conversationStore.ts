@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Conversation, Message } from '../types';
+import type { Conversation, Message, ServerConversationMessage } from '../types';
 import { webSocketService } from '../services/websocket';
 
 interface ConversationState {
@@ -25,7 +25,8 @@ interface ConversationState {
   hydrateFromServer: (
     previews: Array<{ id: string; title: string; lastMessage: string; updatedAt: string }>
   ) => void;
-  hydrateMessages: (conversationId: string, messages: Array<{ role: string; content: string }>) => void;
+  hydrateMessages: (conversationId: string, messages: ServerConversationMessage[]) => void;
+  bindResponseTrace: (conversationId: string, messageId: string, traceId: string) => void;
 }
 
 export const useConversationStore = create<ConversationState>()(
@@ -194,18 +195,43 @@ export const useConversationStore = create<ConversationState>()(
         }
       },
 
+      bindResponseTrace: (conversationId, messageId, traceId) =>
+        set((state) => {
+          // Ignore legacy/unbound or malformed events instead of guessing the
+          // latest reply. Metadata may arrive before the first response token.
+          if (![conversationId, messageId, traceId].every((id) => typeof id === 'string' && id.trim())) return state;
+          const bind = (conversation: Conversation): Conversation => {
+            if (conversation.id !== conversationId) return conversation;
+            const existing = conversation.messages.find((message) => message.id === messageId);
+            if (existing && (existing.role !== 'assistant' || (existing.traceId && existing.traceId !== traceId))) {
+              return conversation;
+            }
+            const messages: Message[] = existing
+              ? conversation.messages.map((message) => message.id === messageId ? { ...message, traceId } : message)
+              : [...conversation.messages, {
+                  id: messageId, conversationId, traceId, role: 'assistant', content: '',
+                  timestamp: new Date().toISOString(), status: 'streaming',
+                }];
+            return { ...conversation, messages };
+          };
+          return {
+            conversations: state.conversations.map(bind),
+            currentConversation: state.currentConversation ? bind(state.currentConversation) : null,
+          };
+        }),
+
       hydrateMessages: (conversationId, messages) =>
         set((state) => {
           const mapped: Message[] = messages.map((m, i) => ({
             // Server message ids let the token handler match streamed replies
             // against hydrated entries instead of duplicating them.
-            id: (m as { message_id?: string | number }).message_id
-              ? `${(m as { message_id?: string | number }).message_id}`
-              : `hist-${conversationId}-${i}`,
+            id: m.message_id != null ? String(m.message_id) : `hist-${conversationId}-${i}`,
             conversationId,
+            traceId: m.role === 'assistant' && typeof m.trace_id === 'string' && m.trace_id.trim()
+              ? m.trace_id : undefined,
             role: m.role === 'assistant' ? 'assistant' : 'user',
             content: m.content,
-            timestamp: new Date().toISOString(),
+            timestamp: m.created_at || new Date().toISOString(),
             status: 'complete' as const,
           }));
           const updateConv = (c: Conversation): Conversation =>

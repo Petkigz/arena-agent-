@@ -9,6 +9,7 @@ import { CodeChanges } from './CodeChanges';
 import { AttachmentDisplay } from '../ui/AttachmentDisplay';
 import { messageVariants } from '../animations/variants';
 import { BeanieAvatar } from '../presence/BeanieAvatar';
+import { ResponseFeedback } from './ResponseFeedback';
 import type { Message } from '../../types';
 
 interface MessageBubbleProps {
@@ -155,6 +156,10 @@ function MessageBubbleComponent({ message, onRetry, onDelete }: MessageBubblePro
           </div>
         </div>
 
+        {!isUser && message.traceId && message.status === 'complete' && message.content && (
+          <ResponseFeedback key={message.traceId} traceId={message.traceId} />
+        )}
+
         {/* Action steps (only for assistant messages) */}
         {!isUser && message.actionSteps && message.actionSteps.length > 0 && (
           <ActionSteps steps={message.actionSteps} />
@@ -179,6 +184,7 @@ function arePropsEqual(prevProps: MessageBubbleProps, nextProps: MessageBubblePr
   return (
     prevProps.message.id === nextProps.message.id &&
     prevProps.message.content === nextProps.message.content &&
+    prevProps.message.traceId === nextProps.message.traceId &&
     prevProps.message.status === nextProps.message.status &&
     prevProps.message.timestamp === nextProps.message.timestamp &&
     prevProps.onRetry === nextProps.onRetry &&

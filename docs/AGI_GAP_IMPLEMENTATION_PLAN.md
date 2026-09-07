@@ -8,6 +8,12 @@ This document replaces optimistic phase labels with an implementation plan tied 
 
 For the chronological work queue and per-item status matrix, see [`AGI_EXECUTION_STATUS.md`](AGI_EXECUTION_STATUS.md). That document is the operational checklist; this document remains the fuller rationale and phase description.
 
+**2026-09-07 collection follow-up:** exact response/trace links now survive chat
+history and restart, and the web **Review response** workflow submits usefulness
+and measurement-only task evaluations separately. Retries with a submission ID
+return one receipt. This is collection infrastructure, not a claim of measured
+real-task improvement; follow [`PHASE1_EVIDENCE_COLLECTION.md`](PHASE1_EVIDENCE_COLLECTION.md).
+
 ## Implementation status
 
 **First slice started:** Phase 0 + core Phase 1.

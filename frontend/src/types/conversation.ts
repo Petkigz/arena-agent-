@@ -3,6 +3,8 @@ import type { Attachment } from '../stores/multiModalStore';
 export interface Message {
   id: string;
   conversationId?: string;
+  /** Runtime-authored trace of this exact assistant response, never the latest turn. */
+  traceId?: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
@@ -45,4 +47,13 @@ export interface ConversationListItem {
   updatedAt: string;
   unread?: boolean;
   projectId?: string;
+}
+
+/** Durable server history, including additive response trace links. */
+export interface ServerConversationMessage {
+  role: string;
+  content: string;
+  message_id?: string | number;
+  trace_id?: string;
+  created_at?: string;
 }

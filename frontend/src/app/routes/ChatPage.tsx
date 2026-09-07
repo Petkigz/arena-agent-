@@ -62,6 +62,10 @@ export function ChatPage() {
   // Set up WebSocket event handlers
   useEffect(() => {
     const unsubscribe = webSocketService.subscribe((event) => {
+      // WS events can be back-to-back before React re-renders. Read current
+      // state so a metadata-created bubble is reused, never duplicated, and
+      // a room switch cannot attach tokens or traces to the previous chat.
+      const currentConversation = useConversationStore.getState().currentConversation;
       if (!currentConversation) return;
 
       if (event.type === 'message') {
@@ -149,7 +153,8 @@ export function ChatPage() {
           if (result.status === 'denied') setApprovalRequest(null);
         }
       } else if (event.type === 'action_step') {
-        const step = event.data as ActionStep & { message_id: string };
+        const step = event.data as ActionStep & { message_id: string; conversation_id: string };
+        if (step.conversation_id !== currentConversation.id) return;
         // Steps reference the assistant reply's message id and can arrive
         // before the first token — lazily create the streaming bubble so
         // action steps render on every client, not just the sender.
@@ -165,12 +170,11 @@ export function ChatPage() {
           });
           return;
         }
-        if (message.actionSteps) {
-          const updatedSteps = message.actionSteps.map((s) =>
-            s.id === step.id ? { ...s, ...step } : s
-          );
-          updateMessage(step.message_id, { actionSteps: updatedSteps });
-        }
+        const steps = message.actionSteps || [];
+        const updatedSteps = steps.some((item) => item.id === step.id)
+          ? steps.map((item) => item.id === step.id ? { ...item, ...step } : item)
+          : [...steps, step];
+        updateMessage(step.message_id, { actionSteps: updatedSteps });
       } else if (event.type === 'conversation_created') {
         // Server confirmed conversation creation — frontend already created it optimistically
       }

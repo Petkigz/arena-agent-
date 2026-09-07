@@ -10,7 +10,10 @@ That has been reconciled. Here is the authoritative layout.
 | File | What it is |
 |---|---|
 | `../README.md` | Project overview, architecture, setup, run instructions |
-| `../AGI_MEASURED_STATUS.md` | **The single source of truth for status** — measured facts (test counts, module wiring, capability scorecard), not percentages |
+| `AGI_EXECUTION_STATUS.md` | **Current chronological status and work queue**, with latest validation and explicit evidence gaps |
+| `AGI_GAP_IMPLEMENTATION_PLAN.md` | Phase rationale and acceptance criteria |
+| `PHASE1_EVIDENCE_COLLECTION.md` | Owner workflow for exact-response usefulness and held-out task evaluations |
+| `../AGI_MEASURED_STATUS.md` | Detailed architecture and earlier dated measurement baseline; consult the execution status for current validation |
 | `../AUDIT_REPORT.md` | Latest full-system audit (tests, security, code quality) |
 | `FULL_AUDIT_2026-08-22.md` | Full thorough audit — bugs, gaps, security, incomplete (this session) |
 | `AGI_HUMAN_AUDIT_2026-08-22.md` | AGI human-intelligence audit — 12 dimensions, module depth, how far we can take it |

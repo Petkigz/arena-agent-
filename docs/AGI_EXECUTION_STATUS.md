@@ -1,7 +1,8 @@
 # Arena AGI Execution Status
 
 **Date:** 2026-09-07  
-**Branch:** `arena/01a07695-arena-agent`  
+**Branch:** `arena/01a07ad8-arena-agent`
+
 **Purpose:** A chronological, repository-grounded work queue. This document separates “the path exists” from “the behavior is robustly demonstrated.” It is the operational companion to `AGI_GAP_IMPLEMENTATION_PLAN.md`.
 
 ## Status legend
@@ -29,7 +30,10 @@ The numerical discrepancy is now reconciled in favor of the displayed item rows.
 Latest automated verification:
 
 - Focused Phase 8-related tests: **46 passed**.
-- Full repository suite: **3106 passed, 14 skipped, 4 deselected, 3 warnings**.
+- Full repository suite (2026-09-07 collection follow-up): **3133 passed, 14 skipped, 4 deselected, 3 warnings**.
+- Frontend: **246 tests passed**; production build passed; lint **0 errors, 18 existing warnings**.
+- The inherited CI failure in the file-opener test was fixed by explicit platform/opener mocks; GitHub passed the backend commits. The frontend CI template (`scripts/ci/frontend.yml`) now matches the local test/build/lint checks. Activation remains blocked because the GitHub App connection lacks workflow-edit permission; the active workflow is unchanged.
+- New regression coverage proves response/trace persistence, retry-safe submissions, exact-trace history, truth-field preservation, web metadata/token/history races, and explicit owner feedback controls.
 - These results verify automated contracts; they do not prove general intelligence, subjective experience, or all-host shutdown behavior.
 
 ## Chronological execution plan
@@ -55,7 +59,9 @@ Latest automated verification:
 | 1.4 | Calibrate confidence and response usefulness over longitudinal held-out tasks. | **IN PROGRESS / PARTIAL** | Recorded-outcome calibration, unsupported-claim control, correction recovery, correction receipt/latency telemetry, owner-recorded held-out task evaluations, paired outcome/usefulness replays, and aggregate reports are implemented; broader real-task usefulness volume and outcome improvement remain unverified. |
 | 1.5 | Make correction outcomes change the relevant strategy without overgeneralizing from one correction. | **DONE — IMPLEMENTED AND WIRED for the bounded owner-correction path** | Corrections are trace-linked, measured through an owner-visible API, remain local after one signal, and affect only the repeated same-context strategy after repeated evidence; broader task-class generalization remains an evidence gap. |
 
-**Current local evidence snapshot (2026-09-07):** the configured trace database contains 20 recorded traces, 7 verified outcomes, 11 traces with `UNKNOWN` grounding, 11 unsupported-claim entries, and 2 route corrections. It contains **0 usefulness-feedback events and 0 owner-recorded held-out task evaluations**. These are local observations, not population metrics; the missing usefulness and held-out evaluation evidence means Phase 1.4 is **not complete**.
+**Previous session's recorded local evidence snapshot (2026-09-07; database not included in the Git checkout):** the configured trace database contains 20 recorded traces, 7 verified outcomes, 11 traces with `UNKNOWN` grounding, 11 unsupported-claim entries, and 2 route corrections. It contains **0 usefulness-feedback events and 0 owner-recorded held-out task evaluations**. These are local observations, not population metrics; the missing usefulness and held-out evaluation evidence means Phase 1.4 is **not complete**.
+
+**Collection workflow update (2026-09-07):** the web chat now offers **Review response** on completed, trace-linked replies. Exact streamed message IDs and trace links persist through history/restart; failed cycles cannot borrow a prior trace. The owner can submit usefulness feedback or a separate measurement-only task evaluation using the existing stores. Optional submission IDs make exact retries idempotent, including concurrent retries. Evaluation history can be filtered to the exact trace, and missing strategy/routing fields are read from the persisted trace when available. No training approval or action authorization is granted. Older unlinked replies and native response-review controls remain outside this slice. See [`PHASE1_EVIDENCE_COLLECTION.md`](PHASE1_EVIDENCE_COLLECTION.md) for collection instructions. **This closes a collection/UI gap, not Phase 1.4's real-task evidence gap.**
 
 ### 2. Explicit user, world, social, and temporal state
 
@@ -134,7 +140,7 @@ Latest automated verification:
 
 The next work should not add another cognitive label. It should close the open evidence gaps in this order:
 
-1. **Extend Phase 1 held-out evaluation (1.4).** The isolated suite now covers 33 deterministic contracts, including recorded calibration trends, unsupported-claim/correction/empty-observation controls, correction telemetry, owner-recorded task evaluation, paired outcome/usefulness replays, and aggregate evidence reporting. Next collect repeated real-task evaluations through the owner endpoint for usefulness volume and outcome improvement without treating synthetic replay as generalization evidence.
+1. **Extend Phase 1 held-out evaluation (1.4).** The isolated suite now covers 33 deterministic contracts, including recorded calibration trends, unsupported-claim/correction/empty-observation controls, correction telemetry, owner-recorded task evaluation, paired outcome/usefulness replays, and aggregate evidence reporting. Next collect repeated real-task evaluations through the web response-review workflow or owner endpoint for usefulness volume and outcome improvement without treating synthetic replay as generalization evidence. Keep task evaluation separate from strategy-learning ratings while measuring a baseline.
 2. **Measure correction and adaptation effects beyond the bounded path (1.5, 2.5, 8.3).** The single-versus-repeated correction boundary is implemented; broader task-class transfer and owner-feedback adaptation still require evidence.
 3. **Measure memory and incubation improvement (3.3, 3.4, 6.4).** Compare later task outcomes against a no-compounding baseline.
 4. **Measure causal/physics transfer (5.3, 5.4).** Expand beyond deterministic toy scenes while preserving the simulated-versus-observed boundary.

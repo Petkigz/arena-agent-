@@ -27,9 +27,10 @@ Server → client messages:
 | type | payload | purpose |
 | --- | --- | --- |
 | `conversation_list` | `conversations: [{id\|conversation_id, title}]` | sidebar list |
-| `conversation_history` | `conversation_id`, `messages: [{role, content}]` | history on join |
+| `conversation_history` | `conversation_id`, `messages: [{message_id, role, content, created_at, trace_id?}]` | durable history on join; legacy rows may lack trace links |
 | `conversation_created` | `conversation_id`, `title` | after create |
-| `message_token` | `token`, `done` | streaming reply (token-by-token; `done: true` ends the turn) |
+| `message_token` | `conversation_id`, `message_id`, `token`, `done` | streaming reply (token-by-token; `done: true` ends the turn) |
+| `cognitive_metadata` | `conversation_id`, `message_id`, `trace_id`, `epistemic_presentation`, `grounding` | evidence metadata for one exact assistant reply, never the latest message by position |
 | `room_message` | `message_id`, `content` | message from another client in the shared room (echo suppression is client-side) |
 | `action_step` | `label`, `status` | streamed tool activity attached to the assistant reply; `status` streams `in_progress` → `complete` (web: ActionSteps, Android: ToolActivity, desktop: Live Context rail) |
 | `conversation_activity` | `conversation_id` | owner-wide signal: another device moved the active conversation (cross-device follow) |
@@ -58,6 +59,30 @@ Auth: optional API key header on every call (shared setting `api_key`).
 | `GET /settings` / `POST /settings` | shared settings (theme, voice, models, api key) |
 | `GET /models` / `POST /models/config` | model selection |
 | `GET /voice/piper-voices` / `POST /voice/piper/select` | voice list + selection |
+
+### Response review (Phase 1.4 — web controls)
+
+| endpoint | shape (UI-relevant) |
+| --- | --- |
+| `GET /cognition/traces/{trace_id}/usefulness` | `{success, trace_id, feedback: [...]}` — existing explicit owner ratings |
+| `POST /cognition/traces/{trace_id}/usefulness` | `{usefulness, note?, submission_id?}` → `{success, feedback}`; does not change verification |
+| `GET /benchmarks/phase1/tasks/evaluations` | optional `trace_id`, `split=held_out\|contract`, `limit`; `{success, report, evaluations}` |
+| `POST /benchmarks/phase1/tasks/evaluations` | `{trace_id, task_key, observed_outcome, usefulness?, split?, condition?, correction_received?, evidence_ids?, note?, submission_id?}` → `{success, evaluation}`; measurement only |
+
+Usefulness feedback and task-evaluation usefulness are separate signals. A task
+assessment must not silently create a strategy-learning rating. `submission_id`
+is optional for compatibility; when provided, exact retries return the original
+receipt and changed-payload reuse is rejected. See
+[`PHASE1_EVIDENCE_COLLECTION.md`](PHASE1_EVIDENCE_COLLECTION.md) for the owner
+workflow, valid values, pairing rules, and limits of the evidence.
+
+The server persists new streamed message IDs and optional trace links in the
+existing conversation table. Old rows keep numeric IDs without guessed traces.
+Clients must bind metadata by both conversation and message IDs, preserve it
+through history hydration, and never attach a preceding trace to a failed reply.
+The web exposes review only for completed, trace-linked assistant responses;
+native clients can ignore these additive fields until their review surfaces are
+implemented. Existing action approval and model-training review remain separate.
 
 ### Owner / autonomy (owner area — desktop `Owner Control`, web owner pages)
 | endpoint | shape (UI-relevant) |
@@ -95,6 +120,8 @@ the UI depends on. Endpoint drift = test failure, see §4.)
 ## 4. Keeping the contract honest
 
 - `tests/test_desktop_backend_client.py` pins the client methods' HTTP calls.
+- `tests/test_response_trace_binding.py` and `tests/test_response_feedback_api.py` pin durable response identity, filtered measurements, truth boundaries, and retry receipts.
+- Frontend trace/store/transport and response-review tests cover exact-message binding, metadata/token/history races, UNKNOWN defaults, explicit submissions, and failure states. Backend GitHub CI is active; frontend test/build/lint pass locally. The updated `scripts/ci/frontend.yml` template cannot be activated until the GitHub connection has workflow-edit permission.
 - The Android client (`android/`) consumes the same contract: `VoiceWebSocketClient` speaks
   the `/ws` protocol above and `ApiClient` hits the documented HTTP endpoints — one contract,
   three clients.

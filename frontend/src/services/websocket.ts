@@ -1,5 +1,5 @@
 import { logger } from './logger';
-import type { Message, ActionStep, PresenceState } from '../types';
+import type { Message, ActionStep, PresenceState, ServerConversationMessage } from '../types';
 
 export type VoiceState = 'idle' | 'listening' | 'recording' | 'processing' | 'thinking' | 'speaking' | 'stopped';
 
@@ -24,10 +24,19 @@ export interface ApprovalResultEvent {
   };
 }
 
+export interface CognitiveMetadataEvent {
+  conversation_id: string;
+  message_id: string;
+  trace_id: string;
+  epistemic_presentation?: Record<string, unknown>;
+  grounding?: Record<string, unknown>;
+}
+
 export type WebSocketEvent =
   | { type: 'message'; data: Message }
   | { type: 'message_ack'; data: { conversation_id: string; status: string } }
   | { type: 'message_token'; data: { conversation_id: string; message_id: string; token: string; done: boolean } }
+  | { type: 'cognitive_metadata'; data: CognitiveMetadataEvent }
   | { type: 'room_message'; data: { conversation_id: string; message_id: string; content: string } }
   | { type: 'action_step'; data: ActionStep & { conversation_id: string; message_id: string } }
   | { type: 'approval_request'; data: ApprovalRequestEvent }
@@ -36,7 +45,7 @@ export type WebSocketEvent =
   | { type: 'conversation_created'; data: { conversation_id: string; title: string } }
   | { type: 'conversation_joined'; data: { conversation_id: string } }
   | { type: 'conversation_list'; data: { conversations: Array<{ id: string; title: string; lastMessage: string; updatedAt: string }> } }
-  | { type: 'conversation_history'; data: { conversation_id: string; messages: Array<{ role: string; content: string; message_id?: string | number }> } }
+  | { type: 'conversation_history'; data: { conversation_id: string; messages: ServerConversationMessage[] } }
   | { type: 'conversation_activity'; data: { conversation_id: string } }
   | { type: 'voice_state'; data: { state: VoiceState; conversation_id?: string } }
   | { type: 'voice_transcript'; data: { text: string; is_final: boolean } }

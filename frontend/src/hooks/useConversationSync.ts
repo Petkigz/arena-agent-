@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { webSocketService } from '../services/websocket';
 import { useConversationStore } from '../stores/conversationStore';
+import type { ServerConversationMessage } from '../types';
 
 /**
  * Hydrates the conversation store from the backend (SQLite-persisted) so chat
@@ -31,10 +32,13 @@ export function useConversationSync(): void {
         if (Array.isArray(conversations)) {
           hydrateFromServer(conversations);
         }
+      } else if (event.type === 'cognitive_metadata') {
+        const { conversation_id, message_id, trace_id } = event.data;
+        useConversationStore.getState().bindResponseTrace(conversation_id, message_id, trace_id);
       } else if (event.type === 'conversation_history') {
         const { conversation_id, messages } = event.data as {
           conversation_id: string;
-          messages: Array<{ role: string; content: string }>;
+          messages: ServerConversationMessage[];
         };
         if (conversation_id && Array.isArray(messages)) {
           hydrateMessages(conversation_id, messages);
