@@ -88,8 +88,10 @@ class MainWindow(QMainWindow):
     _chat_room_signal = Signal(str, str)
     _chat_list_signal = Signal(list)
     _chat_history_signal = Signal(str, list)
+    _chat_history_detail_signal = Signal(str, list)
     _chat_created_signal = Signal(str, str)
     _chat_action_signal = Signal(str, str)
+    _chat_meta_signal = Signal(str, str, str)
     _chat_error_signal = Signal(str)
     # Marshal voice events from the voice WS recv thread onto the GUI thread
     # (the _on_voice_* handlers mutate widgets, which must only happen on the
@@ -176,6 +178,12 @@ class MainWindow(QMainWindow):
         self.chat_client.on_room_message = lambda mid, c: self._chat_room_signal.emit(mid, c)
         self.chat_client.on_conversation_list = lambda c: self._chat_list_signal.emit(c)
         self.chat_client.on_history = lambda cid, h: self._chat_history_signal.emit(cid, h)
+        # Full-detail history (message_id + trace_id per message) drives the
+        # Review-response binding; the plain on_history render above would
+        # double-render if both were connected, so only the detail handler
+        # actually renders (see _handle_conversation_history_detail).
+        self.chat_client.on_history_detail = lambda cid, items: self._chat_history_detail_signal.emit(cid, items)
+        self.chat_client.on_cognitive_metadata = lambda cid, mid, tid: self._chat_meta_signal.emit(cid, mid, tid)
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
         self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
         self.chat_client.on_activity = self._on_conversation_activity
@@ -191,7 +199,11 @@ class MainWindow(QMainWindow):
         self._chat_token_signal.connect(self._handle_chat_token)
         self._chat_room_signal.connect(self._handle_room_message)
         self._chat_list_signal.connect(self._handle_conversation_list)
-        self._chat_history_signal.connect(self._handle_conversation_history)
+        # History renders through the DETAIL handler only (chat_client fires
+        # on_history as well, but connecting both would render every message
+        # twice). The detail handler is what binds review bars to traces.
+        self._chat_history_detail_signal.connect(self._handle_conversation_history_detail)
+        self._chat_meta_signal.connect(self._handle_cognitive_metadata)
         self._chat_created_signal.connect(self._handle_conversation_created)
         self._chat_error_signal.connect(self._handle_chat_error)
         self._chat_action_signal.connect(self._handle_action_step)
@@ -533,13 +545,35 @@ class MainWindow(QMainWindow):
         ):
             self._select_conversation(conversations[0][0], user_action=False)
 
+    @Slot(str, str, str)
+    def _handle_cognitive_metadata(self, cid: str, message_id: str, trace_id: str) -> None:
+        """A reply was persisted with its cognitive trace (same frame the web
+        uses). Bind the Review-response bar to THAT exact assistant reply."""
+        if cid != self.current_conv_id or not trace_id.strip():
+            return
+        from desktop.pages.response_review import ResponseReviewBar
+        bar = ResponseReviewBar(client=self.client, trace_id=trace_id, message_id=message_id)
+        self.chat.attach_review_to_last_assistant(bar)
+
     @Slot(str, list)
-    def _handle_conversation_history(self, cid: str, history: list) -> None:
+    def _handle_conversation_history_detail(self, cid: str, items: list) -> None:
+        """Render hydrated history; assistant messages carrying their durable
+        trace id get a Review-response bar — unlinked replies stay unreviewable."""
         if cid != self.current_conv_id:
             return
+        from desktop.pages.response_review import ResponseReviewBar, reviewable_trace
         self.chat.clear_messages()
-        for role, content in history:
-            self.chat.append_message(role, content)
+        for item in items:
+            role = item.get("role", "assistant")
+            content = item.get("content", "")
+            bubble = self.chat.append_message(role, content)
+            trace_id = item.get("trace_id") or ""
+            if role == "assistant" and reviewable_trace(trace_id):
+                bubble.attach_review_widget(ResponseReviewBar(
+                    client=self.client,
+                    trace_id=trace_id,
+                    message_id=item.get("message_id") or "",
+                ))
 
     @Slot(str, str)
     def _handle_conversation_created(self, cid: str, title: str) -> None:

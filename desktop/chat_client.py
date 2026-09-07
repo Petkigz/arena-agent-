@@ -48,6 +48,16 @@ class DesktopChatClient:
         #: Called with (label, status) for streamed tool activity — the same
         #: semantic events the web/Android render ("in_progress" -> "complete").
         self.on_action_step: Optional[Callable[[str, str], None]] = None
+        #: Called with (conversation_id, message_id, trace_id) once a reply is
+        #: persisted with its cognitive trace. This is the exact-response
+        #: identity the Review-response flow binds feedback to (same frame the
+        #: web app consumes). Replies without a trace never get a review bar.
+        self.on_cognitive_metadata: Optional[Callable[[str, str, str], None]] = None
+        #: Called with (conversation_id, [message dict, ...]) for history where
+        #: each dict carries role/content plus optional message_id/trace_id.
+        #: on_history still fires with plain (role, content) tuples for
+        #: compatibility; consumers wanting review binding use this one.
+        self.on_history_detail: Optional[Callable[[str, List[dict]], None]] = None
 
     @property
     def connected(self) -> bool:
@@ -158,10 +168,28 @@ class DesktopChatClient:
         elif t == "conversation_history":
             cid = data.get("conversation_id", "")
             history: List[Tuple[str, str]] = []
+            detail: List[dict] = []
             for m in data.get("messages") or []:
-                history.append((m.get("role", "assistant"), m.get("content", "")))
+                role = m.get("role", "assistant")
+                content = m.get("content", "")
+                history.append((role, content))
+                detail.append({
+                    "role": role,
+                    "content": content,
+                    "message_id": m.get("message_id") or "",
+                    "trace_id": m.get("trace_id") or "",
+                })
             if self.on_history:
                 self.on_history(cid, history)
+            if self.on_history_detail:
+                self.on_history_detail(cid, detail)
+        elif t == "cognitive_metadata":
+            if self.on_cognitive_metadata:
+                self.on_cognitive_metadata(
+                    data.get("conversation_id", ""),
+                    data.get("message_id", ""),
+                    data.get("trace_id", ""),
+                )
         elif t == "conversation_created":
             if self.on_created:
                 self.on_created(data.get("conversation_id", ""), data.get("title", "New Conversation"))

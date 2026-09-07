@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from desktop.theme import BG_SECONDARY, TEXT_PRIMARY, ACCENT, BORDER_SUBTLE
 from desktop.widgets.orb import PresenceOrbWidget
@@ -50,11 +50,37 @@ class MessageBubble(QWidget):
                 f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 16px;"
                 f" border: 1px solid {BORDER_SUBTLE}; border-radius: 16px; font-size: 14px;"
             )
+            # Assistant bubbles stack the text and (optionally) the response
+            # review bar in one column so the review controls sit directly
+            # under the exact reply they belong to.
+            self._bubble_column = QVBoxLayout()
+            self._bubble_column.setContentsMargins(0, 0, 0, 0)
+            self._bubble_column.setSpacing(3)
+            self._bubble_column.addWidget(self.label)
+            column_holder = QWidget()
+            column_holder.setLayout(self._bubble_column)
             row.addWidget(self._orb, alignment=Qt.AlignmentFlag.AlignTop)
-            row.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignTop)
+            row.addWidget(column_holder, alignment=Qt.AlignmentFlag.AlignTop)
             row.addStretch(1)
+            self._review_widget: Optional[QWidget] = None
 
         self.set_text(content)
+
+    def attach_review_widget(self, widget: QWidget) -> bool:
+        """Mount a Review-response bar under THIS exact reply.
+
+        Returns False when the bubble already carries one or is not an
+        assistant bubble — one review bar per reply, user replies have
+        nothing to review.
+        """
+        if self._role != "assistant" or self._review_widget is not None:
+            return False
+        self._review_widget = widget
+        self._bubble_column.addWidget(widget)
+        return True
+
+    def has_review_widget(self) -> bool:
+        return self._review_widget is not None
 
     def set_text(self, content: str) -> None:
         self.label.setText(content)
@@ -74,4 +100,7 @@ class MessageBubble(QWidget):
                 f"background: {BG_SECONDARY}; color: {TEXT_PRIMARY}; padding: 10px 16px;"
                 f" border: 1px solid {BORDER_SUBTLE}; border-radius: 16px; font-size: 14px;"
             )
+            review = getattr(self, "_review_widget", None)
+            if review is not None and hasattr(review, "refresh_theme"):
+                review.refresh_theme()
 

@@ -170,10 +170,14 @@ binding, failed-cycle cache clearing, exact-trace history filtering, concurrent
 submission retries, truth-field preservation, metadata/token/history races,
 owner-only form submission, UNKNOWN defaults, and visible load/save failures.
 
-Web controls are implemented in this slice. Native desktop and Android retain
-protocol compatibility but do not yet expose these response-review controls.
-Corrections use the pre-existing Model Settings editor, now linked to the exact
-response; no second correction editor or correction brain was introduced.
+Web controls are implemented in this slice. The native PySide6 desktop client
+now exposes the same Review-response controls against the same endpoints and
+stores (its GUI-free logic, WS metadata parsing, and REST paths are unit-tested
+everywhere; the offscreen widget test runs wherever PySide6 is installed).
+Android retains protocol compatibility but does not yet expose these
+response-review controls. Corrections use the pre-existing Model Settings
+editor, now linked to the exact response; no second correction editor or
+correction brain was introduced.
 
 Unit/integration fixtures are **contract evidence**, not owner held-out results.
 Real LM Studio outcomes, usefulness volume, cross-task improvement, and supported

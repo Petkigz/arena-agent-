@@ -340,6 +340,50 @@ class ArenaBackendClient:
             payload["lm_studio_url"] = lm_studio_url.strip()
         return self._post_json("/models/config", payload)
 
+    # ── response review (Phase 1.4 evidence, same stores as the web) ────────
+    def trace_usefulness(self, trace_id: str) -> Dict[str, Any]:
+        """GET /cognition/traces/{trace_id}/usefulness → recorded feedback."""
+        return self._get_json(
+            f"/cognition/traces/{quote(trace_id, safe='')}/usefulness")
+
+    def record_trace_usefulness(
+        self,
+        trace_id: str,
+        usefulness: str,
+        note: str = "",
+        submission_id: str = "",
+    ) -> Dict[str, Any]:
+        """POST /cognition/traces/{trace_id}/usefulness → feedback receipt."""
+        return self._post_json(
+            f"/cognition/traces/{quote(trace_id, safe='')}/usefulness",
+            {
+                "usefulness": usefulness,
+                "note": note,
+                "submission_id": submission_id,
+            },
+        )
+
+    def trace_task_evaluations(
+        self,
+        trace_id: str,
+        split: str = "held_out",
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """GET /benchmarks/phase1/tasks/evaluations filtered to one trace."""
+        return self._get_json(
+            "/benchmarks/phase1/tasks/evaluations"
+            f"?trace_id={quote(trace_id, safe='')}&split={quote(split, safe='')}&limit={int(limit)}"
+        )
+
+    def record_trace_task_evaluation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /benchmarks/phase1/tasks/evaluations (measurement only)."""
+        return self._post_json("/benchmarks/phase1/tasks/evaluations", payload)
+
+    def response_explanation(self, trace_id: str) -> Dict[str, Any]:
+        """GET /self-awareness/introspection/{trace_id} — grounded trace facts."""
+        return self._get_json(
+            f"/self-awareness/introspection/{quote(trace_id, safe='')}")
+
     # ── voice (Settings) ────────────────────────────────────────────────────
     def list_piper_voices(self) -> list:
         """GET /voice/piper-voices → discovered Piper voices + active voice."""

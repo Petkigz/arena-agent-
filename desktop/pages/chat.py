@@ -132,10 +132,31 @@ class ChatPage(QWidget):
         self._streaming_bubble = None
         self._streaming = ""
 
-    def append_message(self, role: str, content: str) -> None:
+    def append_message(self, role: str, content: str) -> MessageBubble:
         bubble = MessageBubble(role, content)
         self._bubbles.append(bubble)
         self._insert_bubble(bubble)
+        return bubble
+
+    def last_assistant_bubble(self) -> Optional[MessageBubble]:
+        for bubble in reversed(self._bubbles):
+            if bubble._role == "assistant":
+                return bubble
+        return None
+
+    def attach_review_to_last_assistant(self, widget) -> bool:
+        """Bind a Review-response bar to the most recent assistant reply.
+
+        Used when the backend's cognitive_metadata frame arrives right after
+        the streamed reply finishes — the bar lands under THAT exact reply.
+        """
+        bubble = self.last_assistant_bubble()
+        if bubble is None:
+            return False
+        attached = bubble.attach_review_widget(widget)
+        if attached:
+            self._scroll_to_bottom()
+        return attached
 
     def show_user_message(self, message_id: str, content: str) -> None:
         """Render a user message that came from another client (cross-room sync)."""
