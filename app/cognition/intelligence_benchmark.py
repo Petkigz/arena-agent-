@@ -890,6 +890,32 @@ class IntelligenceBenchmarkSuite:
                 evaluation_scope="held_out",
             ))
 
+            def held_out_unsupported_claim_control():
+                from app.cognition.response_grounding import reconcile_response
+
+                reply, grounding = reconcile_response(
+                    "The deployment definitely completed successfully."
+                )
+                passed = (
+                    reply == "The deployment definitely completed successfully."
+                    and grounding.status == "unknown"
+                    and grounding.supported is False
+                    and bool(grounding.unsupported_claims)
+                    and grounding.recovery_applied is False
+                )
+                return passed, "a claim without authoritative evidence stayed explicitly unknown", {
+                    "status": grounding.status,
+                    "supported": grounding.supported,
+                    "unsupported_claim_count": len(grounding.unsupported_claims),
+                }
+
+            checks.append(self._run_check(
+                "held_out_unsupported_claim_control",
+                "grounding",
+                held_out_unsupported_claim_control,
+                evaluation_scope="held_out",
+            ))
+
             def held_out_deterministic_mismatch():
                 from app.cognition.response_grounding import reconcile_response
 
@@ -943,6 +969,144 @@ class IntelligenceBenchmarkSuite:
                 "held_out_empty_observation",
                 "grounding",
                 held_out_empty_observation,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_outcome_guided_choice():
+                from app.cognition.counterfactual_simulator import CounterfactualSimulator
+                from app.cognition.strategy_outcomes import StrategyOutcomeStore
+
+                candidates = [
+                    {"name": "Direct lookup", "action_type": "open_application", "payload": {}},
+                    {"name": "Web lookup", "action_type": "web_search", "payload": {}},
+                ]
+                goal = "Open Chrome"
+                baseline = CounterfactualSimulator.simulate_competing_branches(
+                    goal, candidates, goal_type="knowledge_query"
+                )
+                outcomes = StrategyOutcomeStore(str(root / "held_out_outcomes.db"))
+                for index in range(3):
+                    outcomes.record_outcome(
+                        "knowledge_query", "open_application", False,
+                        goal_text=goal, surprisal=0.9,
+                    )
+                    outcomes.record_outcome(
+                        "knowledge_query", "web_search", True,
+                        goal_text=goal, surprisal=0.1,
+                    )
+                adapted = CounterfactualSimulator.simulate_competing_branches(
+                    goal,
+                    candidates,
+                    goal_type="knowledge_query",
+                    outcome_store=outcomes,
+                )
+                baseline_replayed_success = baseline.winning_branch.hypothetical_action == "web_search"
+                adapted_replayed_success = adapted.winning_branch.hypothetical_action == "web_search"
+                passed = (
+                    baseline.winning_branch.hypothetical_action == "open_application"
+                    and baseline_replayed_success is False
+                    and adapted_replayed_success is True
+                    and adapted.winning_branch.hypothetical_action != baseline.winning_branch.hypothetical_action
+                )
+                return passed, "held-out replay compared baseline and outcome-informed task results", {
+                    "baseline_strategy": baseline.winning_branch.hypothetical_action,
+                    "adapted_strategy": adapted.winning_branch.hypothetical_action,
+                    "baseline_replayed_success": baseline_replayed_success,
+                    "adapted_replayed_success": adapted_replayed_success,
+                    "observed_outcome_delta": int(adapted_replayed_success) - int(baseline_replayed_success),
+                }
+
+            checks.append(self._run_check(
+                "held_out_outcome_guided_choice",
+                "outcome_comparison",
+                held_out_outcome_guided_choice,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_usefulness_guided_choice():
+                from app.cognition.counterfactual_simulator import CounterfactualSimulator
+                from app.cognition.strategy_outcomes import StrategyUsefulnessStore
+                from app.cognition.trace import CognitiveTrace
+
+                # CognitiveTrace uses the process DB setting. Point it at this
+                # benchmark-owned database so owner feedback cannot touch live
+                # traces, then restore the setting even if a probe fails.
+                previous_db = settings.DB_PATH
+                feedback_db = root / "held_out_usefulness.db"
+                settings.DB_PATH = feedback_db
+                try:
+                    for index in range(3):
+                        for action_type, usefulness, signal in (
+                            ("open_application", "not_helpful", "correction_followup"),
+                            ("web_search", "helpful", "task_completed"),
+                        ):
+                            trace = CognitiveTrace(
+                                user_input="Open Chrome",
+                                session_id=f"held-out-usefulness-{index}",
+                                strategy_goal_type="knowledge_query",
+                                strategy_action_type=action_type,
+                            )
+                            trace.finalize(
+                                reply="Benchmark response",
+                                actions=[],
+                                latency=1.0,
+                                goal_verified=action_type == "web_search",
+                            )
+                            CognitiveTrace.record_usefulness_feedback(
+                                trace.trace_id,
+                                usefulness=usefulness,
+                                outcome_signal=signal,
+                            )
+
+                    usefulness = StrategyUsefulnessStore(str(feedback_db))
+                    candidates = [
+                        {"name": "Direct lookup", "action_type": "open_application", "payload": {}},
+                        {"name": "Web lookup", "action_type": "web_search", "payload": {}},
+                    ]
+                    baseline = CounterfactualSimulator.simulate_competing_branches(
+                        "Open Chrome", candidates, goal_type="knowledge_query"
+                    )
+                    adapted = CounterfactualSimulator.simulate_competing_branches(
+                        "Open Chrome",
+                        candidates,
+                        goal_type="knowledge_query",
+                        usefulness_store=usefulness,
+                    )
+                    direct_score = usefulness.score_strategy(
+                        "knowledge_query", "open_application"
+                    )
+                    web_score = usefulness.score_strategy(
+                        "knowledge_query", "web_search"
+                    )
+                    baseline_replayed_success = baseline.winning_branch.hypothetical_action == "web_search"
+                    adapted_replayed_success = adapted.winning_branch.hypothetical_action == "web_search"
+                    passed = bool(
+                        direct_score
+                        and web_score
+                        and direct_score.total_feedback == 3
+                        and web_score.total_feedback == 3
+                        and direct_score.usefulness_rate == 0.0
+                        and web_score.usefulness_rate == 1.0
+                        and baseline.winning_branch.hypothetical_action == "open_application"
+                        and baseline_replayed_success is False
+                        and adapted.winning_branch.hypothetical_action == "web_search"
+                        and adapted_replayed_success is True
+                    )
+                    return passed, "held-out replay compared explicit usefulness signals without changing correctness fields", {
+                        "baseline_strategy": baseline.winning_branch.hypothetical_action,
+                        "adapted_strategy": adapted.winning_branch.hypothetical_action,
+                        "baseline_replayed_success": baseline_replayed_success,
+                        "adapted_replayed_success": adapted_replayed_success,
+                        "direct_usefulness_rate": direct_score.usefulness_rate if direct_score else None,
+                        "web_usefulness_rate": web_score.usefulness_rate if web_score else None,
+                    }
+                finally:
+                    settings.DB_PATH = previous_db
+
+            checks.append(self._run_check(
+                "held_out_usefulness_guided_choice",
+                "outcome_comparison",
+                held_out_usefulness_guided_choice,
                 evaluation_scope="held_out",
             ))
 
