@@ -1,6 +1,7 @@
-import { Image, FileText, Code, Film, Music, Eye, Download } from 'lucide-react';
+import { getAttachmentIcon, formatFileSize } from '../../utils/filePresentation';
+import { Eye, Download } from 'lucide-react';
 import { Button } from './Button';
-import type { Attachment, AttachmentType } from '../../stores/multiModalStore';
+import type { Attachment } from '../../stores/multiModalStore';
 
 interface AttachmentDisplayProps {
   attachments: Attachment[];
@@ -10,28 +11,6 @@ interface AttachmentDisplayProps {
 export function AttachmentDisplay({ attachments, onPreview }: AttachmentDisplayProps) {
   if (attachments.length === 0) return null;
 
-  const getAttachmentIcon = (type: AttachmentType) => {
-    switch (type) {
-      case 'image':
-        return Image;
-      case 'document':
-        return FileText;
-      case 'code':
-        return Code;
-      case 'video':
-        return Film;
-      case 'audio':
-        return Music;
-      default:
-        return FileText;
-    }
-  };
-
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   return (
     <div className="mt-3 space-y-2">
@@ -60,7 +39,7 @@ export function AttachmentDisplay({ attachments, onPreview }: AttachmentDisplayP
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-text-primary truncate">{attachment.name}</p>
               <div className="flex items-center gap-2 text-xs text-text-muted mt-1">
-                <span>{formatSize(attachment.size)}</span>
+                <span>{formatFileSize(attachment.size)}</span>
                 <span>•</span>
                 <span>{attachment.type}</span>
                 {attachment.analysis && (

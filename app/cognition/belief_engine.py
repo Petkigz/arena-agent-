@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from .beliefs import BeliefStore, Evidence, AdmissibleEvidence
 from .hypotheses import HypothesisSet
-from .source_types import SourceType, ADMISSIBLE_SOURCES, INADMISSIBLE_SOURCES
+from .source_types import SourceType, ADMISSIBLE_SOURCES
 
 @dataclass(frozen=True)
 class RevisionResult:

@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from app.database import db
 from app.policy import PolicyEvaluator
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 class FinanceTraderTool:
     @classmethod

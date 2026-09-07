@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Conversation, Message, ServerConversationMessage } from '../types';
 import { webSocketService } from '../services/websocket';
+import { exportConversationAsMarkdown as renderConversationMarkdown } from '../utils/graphExport';
 
 interface ConversationState {
   conversations: Conversation[];
@@ -251,26 +252,7 @@ export const useConversationStore = create<ConversationState>()(
         const conv = state.conversations.find((c) => c.id === id);
         if (!conv) return null;
 
-        const lines: string[] = [
-          `# ${conv.title}`,
-          '',
-          `*Created: ${new Date(conv.createdAt).toLocaleString()}*`,
-          `*Updated: ${new Date(conv.updatedAt).toLocaleString()}*`,
-          '',
-          '---',
-          '',
-        ];
-
-        for (const msg of conv.messages) {
-          const role = msg.role === 'user' ? '**You**' : '**Arena**';
-          const time = new Date(msg.timestamp).toLocaleString();
-          lines.push(`### ${role} — ${time}`);
-          lines.push('');
-          lines.push(msg.content);
-          lines.push('');
-        }
-
-        return lines.join('\n');
+        return renderConversationMarkdown(conv);
       },
     }),
     {

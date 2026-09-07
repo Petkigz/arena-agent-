@@ -12,7 +12,7 @@ A comprehensive knowledge base containing 10,000+ facts about:
 This is the foundation for AGI - without common sense, AI cannot understand the world.
 """
 
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 import json

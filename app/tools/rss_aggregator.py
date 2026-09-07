@@ -12,12 +12,12 @@ Safety model (manifest authoritative): Level 0 (read-only; fetches public feeds)
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 
-from app.llm import llm_client, extract_reply, require_real_completion
-from app.utils.logger import app_logger, audit_logger
+from app.llm import llm_client, require_real_completion
+from app.utils.logger import app_logger
 from app.cognition.execution_control import run_cancellable_blocking_call
 
 

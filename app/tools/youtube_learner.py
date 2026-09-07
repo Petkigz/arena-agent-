@@ -1,7 +1,7 @@
 import re
 from typing import Dict, Any, List, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger
 
 class YouTubeLearner:

@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import getpass
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import psutil
 
@@ -53,7 +53,7 @@ class ProcessManager:
                        sort_by: str = "cpu_percent") -> Dict[str, Any]:
         """List processes, optionally filtered by name, sorted by cpu/mem/pid."""
         if sort_by not in ("cpu_percent", "memory_percent", "pid"):
-            return {"success": False, "error": f"sort_by must be cpu_percent, memory_percent, or pid."}
+            return {"success": False, "error": "sort_by must be cpu_percent, memory_percent, or pid."}
         limit = max(1, min(int(limit), 500))
         try:
             procs = list(psutil.process_iter())

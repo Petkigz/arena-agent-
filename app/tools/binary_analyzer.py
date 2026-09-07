@@ -13,7 +13,7 @@ import struct
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 _ELF_MACHINES = {
     0x03: "x86", 0x3E: "x86-64", 0x28: "ARM", 0xB7: "AArch64", 0xF3: "RISC-V",

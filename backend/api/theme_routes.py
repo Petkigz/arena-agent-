@@ -1,6 +1,6 @@
 """Theme customization."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.utils.logger import app_logger

@@ -1,10 +1,10 @@
-"""Single-Path Pipeline Bridge delegating strictly to CognitivePipeline."""
+"""Compatibility names for the single authoritative cognitive pipeline.
 
-from __future__ import annotations
-from typing import Optional, Dict, Any
-from app.cognition.cognitive_pipeline import CognitivePipeline
+Keep legacy import paths without a second wrapper implementation or execution.
+"""
 
-class PipelineBridge:
-    @staticmethod
-    def process_chat(user_text: str, complexity: str = "fast", session_id: Optional[str] = None) -> Dict[str, Any]:
-        return CognitivePipeline.process_chat(user_text, complexity=complexity, session_id=session_id)
+from app.cognition.cognitive_pipeline import CognitivePipeline as CognitivePipeline
+
+PipelineBridge = CognitivePipeline
+
+__all__ = ["CognitivePipeline", "PipelineBridge"]

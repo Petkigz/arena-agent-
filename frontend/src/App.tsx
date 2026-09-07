@@ -32,6 +32,7 @@ const PrivacySettingsPage = lazy(() => import('./app/routes/PrivacySettingsPage'
 const AppearanceSettingsPage = lazy(() => import('./app/routes/AppearanceSettingsPage').then(m => ({ default: m.AppearanceSettingsPage })));
 const AccessibilitySettingsPage = lazy(() => import('./app/routes/AccessibilitySettingsPage').then(m => ({ default: m.AccessibilitySettingsPage })));
 const CognitionPage = lazy(() => import('./app/routes/CognitionPage').then(m => ({ default: m.CognitionPage })));
+const ProjectsPage = lazy(() => import('./app/routes/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
 const ProjectDetailPage = lazy(() => import('./app/routes/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
 const NotFoundPage = lazy(() => import('./app/routes/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
@@ -119,9 +120,8 @@ function AppContent() {
       
       <Suspense fallback={<LoadingFallback message="Loading Arena..." />}>
         <Routes>
-        {/* Mobile routes */}
-        {isMobile ? (
-          <Route element={<MobileLayout />}>
+          {/* One destination list, with platform-specific layout only. */}
+          <Route element={isMobile ? <MobileLayout /> : <DesktopLayout />}>
             <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
             <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
             <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
@@ -135,29 +135,10 @@ function AppContent() {
             <Route path="/settings/cognition" element={<PageErrorBoundary pageName="CognitionPage"><CognitionPage /></PageErrorBoundary>} />
             <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
             <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
+            <Route path="/projects" element={<PageErrorBoundary pageName="ProjectsPage"><ProjectsPage /></PageErrorBoundary>} />
             <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
-        ) : (
-          /* Desktop routes */
-          <Route element={<DesktopLayout />}>
-            <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
-            <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
-            <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
-            <Route path="/files" element={<PageErrorBoundary pageName="FilesPage"><FilesPage /></PageErrorBoundary>} />
-            <Route path="/images" element={<PageErrorBoundary pageName="ImagesPage"><ImagesPage /></PageErrorBoundary>} />
-            <Route path="/code" element={<PageErrorBoundary pageName="CodeExecutionPage"><CodeExecutionPage /></PageErrorBoundary>} />
-            <Route path="/settings" element={<PageErrorBoundary pageName="SettingsPage"><SettingsPage /></PageErrorBoundary>} />
-            <Route path="/settings/voice" element={<PageErrorBoundary pageName="VoiceSettingsPage"><VoiceSettingsPage /></PageErrorBoundary>} />
-            <Route path="/settings/models" element={<PageErrorBoundary pageName="ModelSettingsPage"><ModelSettingsPage /></PageErrorBoundary>} />
-            <Route path="/settings/privacy" element={<PageErrorBoundary pageName="PrivacySettingsPage"><PrivacySettingsPage /></PageErrorBoundary>} />
-            <Route path="/settings/cognition" element={<PageErrorBoundary pageName="CognitionPage"><CognitionPage /></PageErrorBoundary>} />
-            <Route path="/settings/appearance" element={<PageErrorBoundary pageName="AppearanceSettingsPage"><AppearanceSettingsPage /></PageErrorBoundary>} />
-            <Route path="/settings/accessibility" element={<PageErrorBoundary pageName="AccessibilitySettingsPage"><AccessibilitySettingsPage /></PageErrorBoundary>} />
-            <Route path="/projects/:projectId" element={<PageErrorBoundary pageName="ProjectDetailPage"><ProjectDetailPage /></PageErrorBoundary>} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-        )}
         </Routes>
       </Suspense>
       <Toaster

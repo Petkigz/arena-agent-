@@ -1,7 +1,6 @@
 """Voice service - integrates voice pipeline with WebSocket and cognitive runtime."""
 
 import asyncio
-import time
 from typing import Optional
 
 import numpy as np

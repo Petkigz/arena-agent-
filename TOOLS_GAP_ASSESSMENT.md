@@ -1,5 +1,10 @@
 # Cognitive System ↔ Tools/Features Gap Assessment
 
+> **2026-09-07 audit note:** the `dynamic_fibonacci_calc.py` and
+> `dynamic_systemloganalyzer.py` files mentioned below were fake-success
+> placeholders, not implemented capabilities. They have been removed; the
+> registered tool catalogue is unchanged. See `docs/REPOSITORY_AUDIT.md`.
+
 **Scanned:** 2026-08-21 · Branch `arena/01a01f89-arena-agent`
 
 ## The core problem (your instinct is right, but the cause is subtle)

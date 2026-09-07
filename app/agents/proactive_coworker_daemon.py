@@ -1,14 +1,11 @@
 import asyncio
-import os
 import psutil
 import datetime
-from typing import Dict, Any, List, Optional
-from app.config import settings
+from typing import Dict, Any, Optional
 from app.database import db
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 from app.utils.hardware_governor import HardwareGovernor
 from app.tasks import TaskManager
-from app.memory.semantic_rag import SemanticRAGEngine
 from app.scheduler.self_healer import AutonomousSelfHealer
 
 class ProactiveCoworkerDaemon:

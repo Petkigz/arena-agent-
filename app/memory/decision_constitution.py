@@ -1,5 +1,4 @@
-from typing import Dict, Any, List
-from app.database import db
+from typing import Dict, Any
 
 class DecisionConstitution:
     CORE_VALUES = [

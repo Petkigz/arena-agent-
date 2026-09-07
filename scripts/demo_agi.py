@@ -26,7 +26,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.cognition.runtime import CognitiveRuntime
-from app.utils.logger import app_logger
 
 
 def demo_scorecard():

@@ -70,17 +70,11 @@ class ObservationCollector:
         
         # Support dict or ExecutionResult object
         if hasattr(execution_result, "execution_facts"):
-            execution_facts = getattr(execution_result, "execution_facts", [])
             raw_output = getattr(execution_result, "outputs", {})
-            exec_success = getattr(execution_result, "success", False)
         elif isinstance(execution_result, dict):
-            execution_facts = execution_result.get("execution_facts", [])
             raw_output = execution_result.get("raw_output", {})
-            exec_success = bool(execution_result.get("success", False))
         else:
-            execution_facts = []
             raw_output = {}
-            exec_success = False
 
         # 1. Execution facts are NOT ingested into WorldModel.
         #    They belong in ExecutionTrace (preserved in ExecutionResult.execution_facts
@@ -562,15 +556,8 @@ class ObservationCollector:
             ingested.append(obs)
             return
 
-        # Device availability probe (generic fallback)
-        try:
-            result = run_cancellable_subprocess(
-                ["adb", "get-state"], capture_output=True, text=True, timeout=5
-            )
-            device_state = result.stdout.strip() if result.returncode == 0 else "offline"
-        except Exception:
-            device_state = "adb_unavailable"
-
+        # Connection state cannot verify an SMS/tap/camera effect. Do not run
+        # an unused adb get-state probe and imply it checks that postcondition.
         # SMS, tap, camera, and other actions have no reliable postcondition sensor.
         # Record explicit UNKNOWN rather than claiming success.
         obs = cls._make_obs(

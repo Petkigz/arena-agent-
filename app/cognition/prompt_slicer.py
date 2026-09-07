@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 class SlicedPromptContext(BaseModel):
     selected_instructions: List[str]

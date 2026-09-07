@@ -1085,7 +1085,7 @@ class SemanticGoalInterpreter:
                     req_caps = ["filesystem.search", "filesystem.read"]
             elif _has_any_word(text_lower, ["screenshot", "screen"]):
                 domain = "vision_desktop"
-                goal = f"Capture and analyze active screen window"
+                goal = "Capture and analyze active screen window"
                 outcome = "Desktop screen capture saved and analyzed"
                 req_caps = ["screen.capture", "vision.analyze"]
             else:

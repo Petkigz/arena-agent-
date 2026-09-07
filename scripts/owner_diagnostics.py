@@ -39,7 +39,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -436,9 +436,11 @@ def h_adb_phone() -> Tuple[str, str]:
     from app.tools.android_adb_controller import AndroidADBController
     if not AndroidADBController.is_adb_available():
         return "skip", "adb binary not on PATH"
-    res = AndroidADBController.list_connected_devices() or {}
-    devices = res.get("devices") or res.get("result") or res
-    n = len(devices) if isinstance(devices, list) else "?"
+    res = AndroidADBController.list_connected_devices()
+    if not isinstance(res, dict) or res.get("success") is not True:
+        reason = res.get("error", "device listing was not confirmed") if isinstance(res, dict) else "invalid device listing"
+        return "fail", str(reason)
+    devices = res.get("devices", [])
     return "pass", f"connected devices: {str(devices)[:160]}"
 
 

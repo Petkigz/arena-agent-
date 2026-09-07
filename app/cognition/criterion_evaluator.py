@@ -39,7 +39,6 @@ from app.cognition.condition_language import (
     ObservationEnvironment,
     PASS,
     FAIL,
-    UNKNOWN,
     condition_from_dict,
     parse_condition,
 )

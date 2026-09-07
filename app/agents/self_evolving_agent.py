@@ -1,13 +1,10 @@
-import os
 import sys
 import importlib
-import traceback
-import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from app.config import settings
 from app.database import db
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 from app.llm import llm_client, ModelCompletionUnavailable, require_real_completion
 from app.tools.disposable_sandbox import DisposableSandbox
 

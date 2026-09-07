@@ -1,5 +1,11 @@
 # Arena Agent — Full System Audit
 
+> **Historical snapshot, not a current cleanliness certificate.** See
+> [the current repository audit](docs/REPOSITORY_AUDIT.md) for caller/wiring
+> findings and [execution status](docs/AGI_EXECUTION_STATUS.md) for the active
+> work queue. Older "all wired" or "removed" statements must not substitute
+> for checking the current source and registrations.
+
 **Date:** 2026-08-21 · **Branch:** `arena/01a01f89-arena-agent`
 **Scope:** 209 Python files (~45,000 lines), 158 frontend TS/TSX files, 194 test files, backend + frontend + Android skeleton. 118 tools in the manifest.
 

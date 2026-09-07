@@ -338,7 +338,7 @@ class EthicalReasoningSystem:
         elif any(word in goal_text for word in moderate_risk):
             return EthicalConcern(
                 principle=EthicalPrinciple.DO_NO_HARM,
-                description=f"Goal involves modification that could have unintended consequences",
+                description="Goal involves modification that could have unintended consequences",
                 severity=HarmLevel.LOW,
                 mitigations=[
                     "Verify changes before applying",

@@ -7,7 +7,7 @@ never assumed.
 """
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from app.tools.manifest import _LazyImportProxy
 

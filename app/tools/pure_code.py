@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import ast
 import io
-import re
 import contextlib
 from typing import Any, Dict
 

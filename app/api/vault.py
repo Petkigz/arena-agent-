@@ -5,7 +5,7 @@ derived per operation with scrypt from the owner's passphrase and never stored.
 Passphrases travel in request bodies exactly like every other credential-based
 tool — owner-only surfaces, HTTPS/localhost assumed.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 

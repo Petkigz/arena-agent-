@@ -13,9 +13,9 @@ Safety model (manifest authoritative): Level 0 (read-only; fetches public pages)
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger
 
 _VERDICTS = ("supported", "refuted", "unverifiable")

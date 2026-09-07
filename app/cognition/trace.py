@@ -1,7 +1,6 @@
 """Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry."""
 
 from __future__ import annotations
-import time
 import uuid
 import sqlite3
 import json
@@ -9,7 +8,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from app.config import settings
-from app.database import db
 from app.utils.logger import app_logger, audit_logger
 from app.utils.submissions import submission_record_id, require_same_submission
 

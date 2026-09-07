@@ -240,7 +240,6 @@ class VerifiedReflectionStore:
     
     def _create_tables(self) -> None:
         """Create the reflections table if it doesn't exist."""
-        import json
         
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS verified_reflections (
@@ -299,7 +298,6 @@ class VerifiedReflectionStore:
     
     def get(self, reflection_id: str) -> Optional[VerifiedReflection]:
         """Retrieve a reflection by ID."""
-        import json
         
         cursor = self.conn.execute(
             "SELECT * FROM verified_reflections WHERE reflection_id = ?",
@@ -319,7 +317,6 @@ class VerifiedReflectionStore:
         limit: int = 100,
     ) -> List[VerifiedReflection]:
         """Query reflections with filters."""
-        import json
         
         query = "SELECT * FROM verified_reflections WHERE verification_quality >= ?"
         params: List[Any] = [min_quality]

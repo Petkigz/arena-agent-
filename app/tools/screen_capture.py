@@ -7,7 +7,6 @@ except ImportError:
     mss = None
     MSS_AVAILABLE = False
 
-from PIL import Image
 from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings

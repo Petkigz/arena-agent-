@@ -81,3 +81,14 @@ def test_websocket_chat_roundtrip(server_url, live_server):
             (metadata["trace_id"],),
         ).fetchone()
     assert row == ("deterministic_local", 1)
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_existing_project_backlinks_reach_one_shared_projects_route(page, server_url, width):
+    from playwright.sync_api import expect
+
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto(f"{server_url}/projects/audit-missing-project", wait_until="domcontentloaded")
+    page.get_by_role("button", name="Back to Projects", exact=True).click()
+    expect(page.get_by_role("heading", name="Projects", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="New Project", exact=True)).to_be_visible()

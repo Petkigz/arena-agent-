@@ -1,9 +1,8 @@
-import os
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger, audit_logger
 
 class MediaStudioTool:

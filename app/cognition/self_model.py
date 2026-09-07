@@ -10,12 +10,9 @@ self-assessment backed by actual performance data.
 
 from __future__ import annotations
 
-import sqlite3
-import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
-from uuid import uuid4
 
 
 def _now() -> str:

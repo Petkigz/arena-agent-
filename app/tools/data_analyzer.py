@@ -1,11 +1,9 @@
-import os
 import pandas as pd
-import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for headless PNG generation
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from app.config import settings
 from app.utils.logger import app_logger, audit_logger
 

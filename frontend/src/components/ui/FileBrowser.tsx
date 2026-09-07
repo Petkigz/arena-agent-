@@ -1,5 +1,6 @@
+import { getFileIcon, formatFileSize } from '../../utils/filePresentation';
 import { useState, useMemo } from 'react';
-import { Search, File, Image, FileText, Film, Music, Archive, Trash2, Eye } from 'lucide-react';
+import { Search, File, Trash2, Eye } from 'lucide-react';
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
 import { useFileStore, type UploadedFile } from '../../stores/fileStore';
@@ -31,20 +32,6 @@ export function FileBrowser({ conversationId, onPreview }: FileBrowserProps) {
     return result;
   }, [files, conversationId, searchQuery, filterType]);
 
-  const getFileIcon = (type: string) => {
-    if (type.startsWith('image/')) return Image;
-    if (type.startsWith('video/')) return Film;
-    if (type.startsWith('audio/')) return Music;
-    if (type.includes('pdf') || type.includes('document')) return FileText;
-    if (type.includes('zip') || type.includes('archive')) return Archive;
-    return File;
-  };
-
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   const handleDelete = (id: string) => {
     if (confirm('Delete this file?')) {
@@ -120,7 +107,7 @@ export function FileBrowser({ conversationId, onPreview }: FileBrowserProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-text-primary font-medium truncate">{file.name}</p>
                   <div className="flex items-center gap-3 text-xs text-text-muted mt-1">
-                    <span>{formatSize(file.size)}</span>
+                    <span>{formatFileSize(file.size)}</span>
                     <span>•</span>
                     <span>{new Date(file.uploadedAt).toLocaleDateString()}</span>
                   </div>

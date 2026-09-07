@@ -81,7 +81,7 @@ from __future__ import annotations
 import threading
 from typing import Dict, Any, List, Optional, Callable
 from app.utils.logger import app_logger, audit_logger
-from app.cognition.action_proposal import ActionProposal, ActionGate, GateResult
+from app.cognition.action_proposal import ActionProposal, ActionGate
 from app.cognition.prediction_engine import PredictionEngine
 from app.cognition.event_bus import EventBus
 

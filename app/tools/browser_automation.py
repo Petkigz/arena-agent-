@@ -1,4 +1,3 @@
-import os
 import re
 import uuid
 from pathlib import Path
@@ -285,13 +284,11 @@ class BrowserAutomation:
             }
         except ExecutionCancelled:
             # Never assert the peer aborted cleanly: only local cleanup is known.
-            partial_removed = None
             if destination is not None:
                 try:
                     destination.unlink(missing_ok=True)
-                    partial_removed = not destination.exists()
                 except Exception:
-                    partial_removed = False
+                    pass  # Cleanup is best effort, never a rollback guarantee.
             cls.DISK_LEDGER.release(reservation_id, reason="cancelled in flight")
             raise
         except Exception as exc:

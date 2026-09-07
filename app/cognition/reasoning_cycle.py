@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from .belief_engine import BeliefEngine, RevisionResult
 from .information_gain import InformationNeed, choose_information_need

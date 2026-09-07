@@ -16,4 +16,4 @@ cp scripts/ci/android.yml .github/workflows/android.yml
 git add .github/workflows
 git commit -m "ci: enable frontend and android workflows" || true
 echo "Workflows installed and committed. Push when ready:"
-echo "  git push origin arena/01a02b25-arena-agent"
+printf '  git push origin %s\n' "$(git branch --show-current)"

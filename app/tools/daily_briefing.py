@@ -1,11 +1,8 @@
-import os
-import json
 import datetime
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.tasks import TaskManager
 from app.utils.hardware_monitor import HardwareMonitor
-from app.memory.semantic_rag import SemanticRAGEngine
 from app.perception.text_to_speech import LocalTextToSpeech
 from app.database import db
 from app.utils.logger import app_logger
@@ -60,8 +57,8 @@ class DailyBriefingEngine:
                 f"- Available System RAM: {ram_free_gb} GB\n"
                 f"- GPU Status: RX 580 VRAM Ready\n\n"
                 f"ACTIVE TASK OVERVIEW:\n" + "\n".join(task_summary_lines) + "\n\n"
-                f"KNOWLEDGE & MEMORY HIGHLIGHTS:\n" + "\n".join(mem_highlights) + "\n\n"
-                f"SYSTEM STATUS: 100% Offline, Privacy Enforced, Zero Cloud Dependency.\n"
+                "KNOWLEDGE & MEMORY HIGHLIGHTS:\n" + "\n".join(mem_highlights) + "\n\n"
+                "SYSTEM STATUS: 100% Offline, Privacy Enforced, Zero Cloud Dependency.\n"
             )
 
             if custom_topics:

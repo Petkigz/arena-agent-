@@ -1,9 +1,8 @@
 """WebSocket server for real-time communication with frontend."""
 
 import asyncio
-import json
 from typing import Dict, Set, Optional
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from app.utils.logger import app_logger
 
 

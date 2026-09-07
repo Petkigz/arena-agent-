@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import Property, QEasingCurve, QPointF, QPropertyAnimation, Qt, Signal, Slot
+from PySide6.QtCore import Property, QEasingCurve, QPointF, QPropertyAnimation, Qt, Slot
 from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import QWidget
 

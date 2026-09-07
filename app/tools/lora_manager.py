@@ -31,7 +31,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from app.config import settings
 from app.utils.logger import app_logger

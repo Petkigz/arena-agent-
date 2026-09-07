@@ -11,7 +11,7 @@ from app.utils.hardware_governor import HardwareGovernor
 from app.utils.hardware_monitor import HardwareMonitor
 from app.cognition.prediction_engine import PredictionEngine
 from app.cognition.owner_control import authorization_store, owner_control_store
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

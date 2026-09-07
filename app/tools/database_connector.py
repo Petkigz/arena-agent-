@@ -27,7 +27,7 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.tools.sql_query import SQLQueryTool
 from app.utils.logger import app_logger, audit_logger

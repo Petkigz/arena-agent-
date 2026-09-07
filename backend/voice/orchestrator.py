@@ -1,7 +1,6 @@
 """Voice pipeline orchestrator - coordinates audio capture, wake word, VAD, STT, and TTS."""
 
 import asyncio
-import time
 import numpy as np
 from typing import Optional, Callable, Set
 from enum import Enum

@@ -1,10 +1,9 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 from app.tools.ocr_reader import OCRReaderTool
 from app.tools.screen_capture import ScreenCaptureTool
-from app.tools.knowledge_indexer import KnowledgeIndexer
 from app.utils.logger import app_logger
 
 class VisionAnalyzerTool:

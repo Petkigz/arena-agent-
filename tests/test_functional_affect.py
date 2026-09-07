@@ -46,7 +46,7 @@ def test_affect_rejects_unbounded_or_unsupported_updates(tmp_path):
     store = FunctionalAffectStore(tmp_path / "affect.db")
     with pytest.raises(FunctionalAffectError, match="unsupported affect field"):
         store.apply_signal("valence", 0.2, source="test", trace_id="t", evidence_ids=["e"])
-    with pytest.raises(FunctionalAffectError, match="in \[-1, 1\]"):
+    with pytest.raises(FunctionalAffectError, match=r"in \[-1, 1\]"):
         store.apply_signal("load", 2.0, source="test", trace_id="t", evidence_ids=["e"])
     with pytest.raises(FunctionalAffectError, match="evidence_ids"):
         store.apply_signal("load", 0.1, source="test", trace_id="t", evidence_ids=[])

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
-from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_MUTED, TEXT_SECONDARY, BORDER_SUBTLE
+from desktop.theme import BG_SECONDARY, TEXT_MUTED, TEXT_SECONDARY, BORDER_SUBTLE
 
 
 class WorkingContextCard(QFrame):

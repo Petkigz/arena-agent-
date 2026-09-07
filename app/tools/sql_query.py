@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import csv
 import sqlite3
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from app.utils.logger import app_logger
 

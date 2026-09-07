@@ -610,7 +610,6 @@ class PeriodicAutonomousCycle:
 
             # Unexplored files (recent files in workspace not yet indexed)
             try:
-                from pathlib import Path
                 from app.config import settings
                 workspace = settings.DATA_DIR / "workspace"
                 if workspace.exists():

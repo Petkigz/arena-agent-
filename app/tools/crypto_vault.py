@@ -26,10 +26,10 @@ import os
 import re
 import stat
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.config import settings
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 _SCRYPT_N = 2 ** 15
 _SCRYPT_R = 8
@@ -67,7 +67,6 @@ class CryptoVault:
             raise VaultError(f"Vault metadata unreadable: {exc}") from exc
 
     def _derive_fernet_key(self, passphrase: str, meta: Dict[str, Any]) -> bytes:
-        from cryptography.fernet import Fernet
         raw = hashlib.scrypt(
             passphrase.encode("utf-8"),
             salt=base64.b64decode(meta["salt"]),
@@ -78,7 +77,7 @@ class CryptoVault:
         return base64.urlsafe_b64encode(raw)
 
     def _fernet(self, passphrase: str):
-        from cryptography.fernet import Fernet, InvalidToken
+        from cryptography.fernet import Fernet
         meta = self._load_meta()
         if meta is None:
             raise VaultError("Vault is not initialized; initialize it with the owner passphrase first")

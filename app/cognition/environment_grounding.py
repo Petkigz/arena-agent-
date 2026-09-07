@@ -1,24 +1,19 @@
 """Phase B/E: Environmental Self-Grounding & Resource Topology Engine."""
 
 from __future__ import annotations
-import os
-import sys
-import psutil
 import platform
-import datetime
 from uuid import uuid4
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from app.config import settings
 from app.database import db
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 from app.utils.hardware_monitor import HardwareMonitor
 from app.utils.hardware_governor import HardwareGovernor
-from app.cognition.world_model import Observation
 from app.cognition.source_types import SourceType
 from app.tools.app_inventory import SystemAppInventory
 from app.tools.win32_ghost_operator import Win32GhostOperator
-from app.cognition.world_model import WorldModel, Entity, Observation
+from app.cognition.world_model import WorldModel, Observation
 
 class EnvironmentGroundingEngine:
     """

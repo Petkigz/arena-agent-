@@ -1,4 +1,5 @@
-import { X, Download, Share2, File, Image, FileText, Film, Music, Archive } from 'lucide-react';
+import { getFileIcon, formatFileSize } from '../../utils/filePresentation';
+import { X, Download, Share2, Image } from 'lucide-react';
 import { Button } from './Button';
 import type { UploadedFile } from '../../stores/fileStore';
 
@@ -8,20 +9,6 @@ interface FilePreviewProps {
 }
 
 export function FilePreview({ file, onClose }: FilePreviewProps) {
-  const getFileIcon = (type: string) => {
-    if (type.startsWith('image/')) return Image;
-    if (type.startsWith('video/')) return Film;
-    if (type.startsWith('audio/')) return Music;
-    if (type.includes('pdf') || type.includes('document')) return FileText;
-    if (type.includes('zip') || type.includes('archive')) return Archive;
-    return File;
-  };
-
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   const handleDownload = () => {
     // In a real implementation, this would download from the backend
@@ -100,7 +87,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
             {/* In a real implementation, this would fetch and display the file content */}
             <p className="text-text-muted">Text file preview not available in demo mode.</p>
             <p className="text-text-muted mt-2">File: {file.name}</p>
-            <p className="text-text-muted">Size: {formatSize(file.size)}</p>
+            <p className="text-text-muted">Size: {formatFileSize(file.size)}</p>
           </div>
         </div>
       );
@@ -124,7 +111,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-text-primary truncate">{file.name}</h2>
             <p className="text-sm text-text-muted mt-1">
-              {formatSize(file.size)} • {file.type} • Uploaded{' '}
+              {formatFileSize(file.size)} • {file.type} • Uploaded{' '}
               {new Date(file.uploadedAt).toLocaleDateString()}
             </p>
           </div>

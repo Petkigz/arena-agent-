@@ -2,41 +2,18 @@
 
 from __future__ import annotations
 
-import math
-import sys
-from typing import List, Optional
 
-from PySide6.QtCore import Property, QBuffer, QEasingCurve, QIODevice, QPointF, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QFileDialog,
-    QFrame,
-    QHBoxLayout,
     QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
     QPushButton,
-    QScrollArea,
-    QStackedWidget,
-    QSystemTrayIcon,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
-from desktop.settings import DesktopSettings
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
-from desktop.styles import _button_style, _input_style, _textarea_style
-from desktop.widgets.orb import PresenceOrbWidget
-from desktop.workers import ChatWorker, HealthWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
+from desktop.theme import TEXT_PRIMARY, ACCENT
+from desktop.styles import _button_style, _textarea_style
 
 
 

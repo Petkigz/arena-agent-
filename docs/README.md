@@ -10,6 +10,8 @@ That has been reconciled. Here is the authoritative layout.
 | File | What it is |
 |---|---|
 | `../README.md` | Project overview, architecture, setup, run instructions |
+| `REPOSITORY_AUDIT.md` | Current whole-repository structural/dead-code audit, repairs, preserved gaps, and validation limits |
+| `REPOSITORY_AUDIT_FILES.csv` | File-by-file coverage, hashes, check types, and review scope |
 | `AGI_EXECUTION_STATUS.md` | **Current chronological status and work queue**, with latest validation and explicit evidence gaps |
 | `AGI_GAP_IMPLEMENTATION_PLAN.md` | Phase rationale and acceptance criteria |
 | `PHASE1_EVIDENCE_COLLECTION.md` | Owner workflow for exact-response usefulness and held-out task evaluations |

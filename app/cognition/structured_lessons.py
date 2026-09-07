@@ -11,7 +11,6 @@ by adjusting CounterfactualSimulator weights and suggesting corrective actions.
 from __future__ import annotations
 
 import sqlite3
-import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional

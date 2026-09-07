@@ -29,7 +29,7 @@ import psutil
 from app.config import settings
 from app.cognition.os_grounding import OSGroundingStore
 from app.tools.display_topology import DisplayTopologyTool
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 
 def _refusal(reason: str, detail: str, **extra: Any) -> Dict[str, Any]:

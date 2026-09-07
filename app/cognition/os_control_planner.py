@@ -31,7 +31,7 @@ from __future__ import annotations
 import platform
 import re
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from app.utils.logger import app_logger, audit_logger
 
@@ -206,7 +206,6 @@ DANGEROUS_PATTERNS = re.compile(
 
 def plan_os_action(user_text: str, llm_client=None) -> Optional[OSActionPlan]:
     """Have the LLM plan the OS command. Returns None on any failure."""
-    import datetime
     import uuid
 
     if llm_client is None:

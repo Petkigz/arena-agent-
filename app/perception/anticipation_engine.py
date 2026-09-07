@@ -10,7 +10,6 @@ Anticipations require approval for sensitive actions.
 from __future__ import annotations
 
 import sqlite3
-import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone

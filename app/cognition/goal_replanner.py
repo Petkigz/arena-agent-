@@ -1,12 +1,12 @@
 """Goal Reassessment & Replanning Engine."""
 
 from __future__ import annotations
-from typing import Dict, Any, List, Optional
-from app.cognition.action_proposal import ActionProposal, ActionGate
+from typing import Dict, Any, Optional
+from app.cognition.action_proposal import ActionProposal
 from app.cognition.action_planner import ActionPlanner
 from app.cognition.goal_interpreter import SemanticGoalRepresentation
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
-from app.cognition.goal_verifier import GoalVerificationResult, GoalVerifier
+from app.cognition.goal_verifier import GoalVerificationResult
 from app.utils.logger import app_logger, audit_logger
 
 class GoalReplanner:
@@ -198,7 +198,7 @@ class GoalReplanner:
 
         # Handle UNKNOWN verification (perception evidence missing, zero hard failures)
         if failed_result.is_unknown and not failed_result.failed_conditions:
-            app_logger.info(f"GoalReplanner: Verification status is UNKNOWN (missing perception evidence). Triggering re-observation probe...")
+            app_logger.info("GoalReplanner: Verification status is UNKNOWN (missing perception evidence). Triggering re-observation probe...")
             tracker.transition(GoalLifecycleState.REASSESSING, f"Re-observing environment for unknown conditions: {failed_result.unknown_conditions}")
             tracker.transition(GoalLifecycleState.REPLAN, "Generating diagnostic re-observation probe strategy.")
 

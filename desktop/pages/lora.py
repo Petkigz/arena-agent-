@@ -8,7 +8,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QPushButton,
     QTextEdit,
@@ -16,9 +15,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop.backend_client import ArenaBackendClient, BackendConnectionError
-from desktop.theme import TEXT_PRIMARY, BG_SECONDARY, BG_SURFACE, ACCENT, BORDER_SUBTLE
-from desktop.styles import _button_style, _input_style, _textarea_style
+from desktop.backend_client import ArenaBackendClient
+from desktop.theme import TEXT_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE
+from desktop.styles import _button_style, _textarea_style
 
 
 class LoraPage(QWidget):

@@ -6,12 +6,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 import json
 import sqlite3
-from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from app.config import settings
-from app.cognition.source_types import ObservationType
+# Public compatibility export used by observation clients and provenance tests.
+from app.cognition.source_types import ObservationType as ObservationType
 
 
 def _now() -> str:

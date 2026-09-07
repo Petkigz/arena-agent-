@@ -17,7 +17,7 @@ import json
 import re
 import subprocess
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from app.cognition.execution_control import run_cancellable_subprocess
 from app.utils.logger import app_logger, audit_logger

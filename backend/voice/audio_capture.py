@@ -4,7 +4,6 @@ Gracefully degrades if PyAudio is not installed — the backend will
 still start and text chat will work, but voice features will be unavailable.
 """
 
-import asyncio
 import queue
 import numpy as np
 from typing import Optional, Callable

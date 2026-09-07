@@ -62,48 +62,7 @@ export function announceToScreenReader(message: string, priority: 'polite' | 'as
   }, 100);
 }
 
-/**
- * Manage focus trap for modals and dialogs
- */
-export function useFocusTrap(isActive: boolean) {
-  useEffect(() => {
-    if (!isActive) return;
-
-    const focusableElements = document.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    
-    const firstElement = focusableElements[0] as HTMLElement;
-    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-
-    const handleTabKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-
-      if (e.shiftKey) {
-        // Shift + Tab
-        if (document.activeElement === firstElement) {
-          e.preventDefault();
-          lastElement?.focus();
-        }
-      } else {
-        // Tab
-        if (document.activeElement === lastElement) {
-          e.preventDefault();
-          firstElement?.focus();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleTabKey);
-    
-    // Focus first element
-    firstElement?.focus();
-
-    return () => {
-      document.removeEventListener('keydown', handleTabKey);
-    };
-  }, [isActive]);
-}
+// Modal focus trapping has one implementation: ./useFocusTrap (container-scoped).
 
 /**
  * Skip to main content link handler

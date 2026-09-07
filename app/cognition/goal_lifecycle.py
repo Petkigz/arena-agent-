@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Dict, List
 from uuid import uuid4
 from app.utils.logger import app_logger
 

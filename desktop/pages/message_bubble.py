@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
-from desktop.theme import BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, ACCENT, BORDER_SUBTLE
+from desktop.theme import BG_SECONDARY, TEXT_PRIMARY, ACCENT, BORDER_SUBTLE
 from desktop.widgets.orb import PresenceOrbWidget
 
 class MessageBubble(QWidget):

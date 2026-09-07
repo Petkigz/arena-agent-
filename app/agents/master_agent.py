@@ -1,13 +1,9 @@
 import os
 import re
-import json
 from typing import Dict, Any, List, Optional
 
-from app.config import settings
-from app.database import db
 from app.llm import llm_client, ModelCompletionUnavailable, require_real_completion
-from app.policy import PolicyEvaluator
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 from app.utils.hardware_monitor import HardwareMonitor
 
 # Tool modules are imported inside the branch that invokes them.  Importing the
@@ -169,8 +165,6 @@ def _no_media_playback_capability() -> bool:
     except Exception:
         pass
     return True
-from app.cognition.reasoning_cycle import ReasoningCycle, ReasoningAction, ReasoningDecision
-from app.cognition.belief_engine import BeliefEngine
 from app.cognition.execution_result import ExecutionResult, ExecutionStatus
 
 class MasterAgentOrchestrator:
@@ -401,26 +395,6 @@ class MasterAgentOrchestrator:
             from pathlib import Path as _P
             from app.tools.universal_filesystem import UniversalFilesystem
 
-            def _resolve_open_target(name: str) -> Dict[str, Any]:
-                direct = _P(str(name)).expanduser()
-                if direct.exists():
-                    return {"resolved": str(direct)}
-                hits = UniversalFilesystem.search_filesystem(
-                    str(name), root_dir=str(_P.home()), max_results=5)
-                exact = [h for h in hits
-                         if h.get("file_name", "").lower() == str(name).lower()]
-                pool = exact or hits
-                if len(pool) == 1:
-                    return {"resolved": pool[0]["file_path"]}
-                if not pool:
-                    return {"error": f"couldn't find any file matching '{name}'"}
-                return {
-                    "error": f"found {len(pool)} files matching '{name}': "
-                             + "; ".join(h["file_path"] for h in pool[:4])
-                             + " — tell me which one",
-                    "matches": [h["file_path"] for h in pool[:4]],
-                }
-
             target = str(
                 payload.get("file_path") or payload.get("path")
                 or payload.get("name") or payload.get("source_name")
@@ -433,7 +407,7 @@ class MasterAgentOrchestrator:
                     "No file was specified — name the file to open "
                     "(e.g. 'play kaba.mp3' or 'open the file report.pdf').")
             else:
-                res = _resolve_open_target(target)
+                res = _resolve_file_reference(target)
                 if res.get("resolved"):
                     open_res = UniversalFilesystem.open_with_default_app(res["resolved"])
                     raw_output_data["open_res"] = open_res
@@ -607,7 +581,7 @@ class MasterAgentOrchestrator:
                 raw_output_data["delete_res"] = res
                 if res.get("trashed"):
                     executed_actions.append(
-                        f"Deleted (moved to trash, recoverable): "
+                        "Deleted (moved to trash, recoverable): "
                         + ", ".join(m["original"] for m in res["trashed"])
                         + f". Restore from: {res.get('trash_session')}")
                     execution_facts.append({

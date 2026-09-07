@@ -13,8 +13,7 @@ This is a critical capability for AGI - the ability to learn once and apply ever
 
 import sqlite3
 import json
-import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -332,20 +331,11 @@ class CrossDomainTransferEngine:
     
     def _generate_embedding(self, domain: DomainKnowledge) -> List[float]:
         """Generate vector embedding for a domain."""
-        # Combine all text
-        text = " ".join([
-            domain.name,
-            domain.description,
-            " ".join(domain.concepts),
-            " ".join(domain.skills),
-            " ".join(domain.principles),
-            " ".join(domain.patterns)
-        ])
-        
-        # Store the text for later embedding computation
-        # We'll compute embeddings on-demand when comparing domains
-        return []  # Return empty for now, will compute on-demand
-    
+        # This retained extension point does not produce embeddings yet.
+        # Domain text remains on the DomainKnowledge record; no generated text
+        # or empty vector is evidence of semantic transfer.
+        return []
+
     def discover_transfer_relationships(
         self,
         source_domain_id: str,

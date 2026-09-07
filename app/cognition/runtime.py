@@ -12,7 +12,7 @@ from app.config import settings
 from app.database import db
 from app.llm import llm_client
 from app.memory.coworker_brain import CoworkerBrain
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 from app.utils.hardware_monitor import HardwareMonitor
 from app.utils.hardware_governor import HardwareGovernor
 
@@ -37,7 +37,7 @@ from app.cognition.reasoning_loop import CognitiveReasoningLoop, ReasoningBudget
 from app.cognition.prompt_slicer import PromptSlicerEngine
 from app.cognition.trace import CognitiveTrace
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
-from app.cognition.goal_verifier import GoalVerifier, GoalVerificationResult
+from app.cognition.goal_verifier import GoalVerifier
 from app.cognition.execution_truth import ExecutionTruth
 from app.cognition.goal_replanner import GoalReplanner
 from app.cognition.resource_allocator import ResourceAllocator, TaskComplexity
@@ -1946,7 +1946,6 @@ class CognitiveRuntime:
         name tokens ('telegram' -> send_telegram, 'search' -> search_files).
         Never resolves via loose stems — 'send_telegram' must not look up a
         stem like 'telegram' that isn't a real registry key."""
-        cap_tokens = set(cap_clean.replace(".", "_").split("_"))
         for name in registered_tools:
             norm = name.lower().replace(".", "_").replace("-", "_")
             if norm == cap_clean:

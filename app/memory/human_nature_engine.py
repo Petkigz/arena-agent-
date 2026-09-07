@@ -1,10 +1,7 @@
-import os
-import json
 import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from app.database import db
 from app.utils.logger import app_logger
-from app.llm import llm_client
 
 class HumanNatureEngine:
     """

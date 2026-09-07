@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import os
 import re
-import string
-import sys
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
@@ -547,7 +545,6 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         if name:
             name, artist = _strip_artist_tail(name)
         if name and 1 <= len(name) <= 80:
-            home = os.path.expanduser("~")
             # 'do i have a song called london' must not be answered with the
             # tzdata 'Europe\London' folder: point the model at media files.
             media_noun = file_q.group(2)
@@ -619,7 +616,6 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
         ):
             followup_name = ""
         if followup_name and 1 <= len(followup_name) <= 80:
-            home = os.path.expanduser("~")
             hint = (
                 f"Filesystem search for '{followup_name}' (user home + other fixed drives)"
             )
@@ -688,7 +684,6 @@ def plan_observation(text: str, recent_user_messages: Optional[List[str]] = None
 
     if name and not blocked_intent and ((noun_or_ext and read_intent) or search_verb):
         name, _artist = _strip_artist_tail(name)
-        home = os.path.expanduser("~")
         is_location = bool(re.search(r"\bwhere\b|\blocation\b|\bpath\b|\bfolder\b|\bdirectory\b", t))
         is_existence = bool(re.search(
             r"\b(do i have|is there|have i got|got|does my (?:pc|computer) have|do i own|any)\b", t

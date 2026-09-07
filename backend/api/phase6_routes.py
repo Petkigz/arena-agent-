@@ -8,13 +8,11 @@ Security features:
 - No file size or type restrictions (personal agent)
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from pathlib import Path
-import shutil
 import uuid
 import asyncio
 import json

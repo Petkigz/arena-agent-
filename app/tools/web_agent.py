@@ -54,7 +54,6 @@ class WebAgent:
         for strict JSON; prose without a parseable verdict is honestly
         "unknown" — never guessed into a success (P0 review #8).
         """
-        import re as _re
 
         raw = str(text or "").strip()
 

@@ -495,7 +495,7 @@ class AutonomousGoalExecutor:
                     step.status = ExecutionStatus.WAITING_APPROVAL
                     step.confidence = 0.0
                     step.error = (
-                        f"Action requires owner approval"
+                        "Action requires owner approval"
                         + (f" ({gate_blocked})" if gate_blocked else "")
                     )
                 else:

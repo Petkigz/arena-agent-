@@ -19,7 +19,6 @@ or unwritable, search degrades to the plain walk without error.
 """
 from __future__ import annotations
 
-import os
 import sqlite3
 import threading
 import time

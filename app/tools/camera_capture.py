@@ -9,7 +9,6 @@ clear failure result instead of crashing the pipeline.
 """
 
 import uuid
-from pathlib import Path
 from typing import Dict, Any, Optional
 
 from app.config import settings

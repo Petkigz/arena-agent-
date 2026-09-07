@@ -1,5 +1,5 @@
-from typing import Dict, Any, List, Optional
-from app.llm import llm_client, extract_reply, require_real_completion
+from typing import Dict, Any
+from app.llm import llm_client, require_real_completion
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
 

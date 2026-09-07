@@ -4,7 +4,7 @@ import os
 import base64
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel, ConfigDict

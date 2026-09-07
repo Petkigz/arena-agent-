@@ -215,7 +215,6 @@ def integrate_phase_modules(
         # like 'person', 'face', 'chair' become grounded to real visual features.
         # Best-effort, rate-limited (max once per 60s to save CPU), never raises.
         try:
-            from pathlib import Path
             import time as _time
             from app.tools.object_detector import ObjectDetectorTool
 

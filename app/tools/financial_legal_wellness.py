@@ -1,14 +1,10 @@
-import os
-import re
 import datetime
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
-from app.utils.logger import app_logger
 from app.llm import (
     ModelCompletionUnavailable,
     llm_client,
-    extract_reply,
     require_real_completion,
 )
 

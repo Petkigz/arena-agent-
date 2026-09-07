@@ -1,10 +1,9 @@
 """Explicit OS privilege and process-ownership evidence."""
 from __future__ import annotations
-import getpass,json,os,platform,sqlite3
+import getpass,os,platform,sqlite3
 from dataclasses import asdict,dataclass
 from datetime import datetime,timezone
 from pathlib import Path
-from typing import Optional
 import psutil
 
 def _now():return datetime.now(timezone.utc).isoformat()

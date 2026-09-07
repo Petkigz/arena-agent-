@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional
 from app.database import db
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 
 class KnowledgeIndexer:
     @staticmethod

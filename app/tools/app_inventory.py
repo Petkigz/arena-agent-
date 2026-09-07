@@ -1,12 +1,8 @@
 import os
-import sys
-import glob
 import shutil
 import platform
 import subprocess
-from pathlib import Path
 from typing import Dict, Any, List, Optional
-from app.config import settings
 from app.database import db
 from app.policy import PolicyEvaluator
 from app.utils.logger import app_logger, audit_logger
@@ -208,7 +204,6 @@ class SystemAppInventory:
         cls._cached_apps = list(discovered_apps.values())
 
         # Save into SQLite table
-        now_str = sys.getwindowsversion() if hasattr(sys, 'getwindowsversion') else "scanned"
         with db._get_connection() as conn:
             cursor = conn.cursor()
             for app_info in cls._cached_apps:

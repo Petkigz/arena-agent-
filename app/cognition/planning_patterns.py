@@ -20,7 +20,7 @@ import sqlite3
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from uuid import uuid4
 
 

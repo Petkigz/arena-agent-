@@ -38,12 +38,12 @@ import sqlite3
 import json
 import math
 import random
-from typing import Dict, List, Optional, Any, Tuple, Set
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 import uuid
-from collections import defaultdict, deque
+from collections import defaultdict
 from app.utils.logger import app_logger
 
 
@@ -1089,7 +1089,7 @@ class KnowledgeSynthesizer:
         
         if not numeric_claims:
             app_logger.warning(
-                f"Cannot use weighted average: values are not numeric"
+                "Cannot use weighted average: values are not numeric"
             )
             return None
         

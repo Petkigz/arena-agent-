@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget, QFrame
@@ -16,7 +15,7 @@ except Exception:
     app_logger = None
     _HAS_APP_LOGGER = False
 
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT
+from desktop.theme import BG_PRIMARY, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT
 from desktop.styles import _button_style, _input_style
 class SettingsPage(QWidget):
     """Full settings form (shared across web / desktop / Android via the backend).

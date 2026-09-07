@@ -1,6 +1,5 @@
 import re
 from typing import Dict, Any, Tuple
-from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
 
@@ -109,7 +108,7 @@ class PolicyEvaluator:
         if action_type in ["submit_form", "send_email", "delete_file", "shell_command", "trade_action", "publish_post"]:
             audit_logger.warning(f"Level 3 action requested: {action_type} - requires approval. Details: {details}")
             db.create_audit_log(action_type, "pending_approval", f"Sensitive action: {details}", level=3)
-            return False, f"Action requires explicit user approval (Level 3: Sensitive/Irreversible Action)", 3
+            return False, "Action requires explicit user approval (Level 3: Sensitive/Irreversible Action)", 3
 
         # Fallback/Unknown actions default to requiring approval
         audit_logger.warning(f"Unknown action requested: {action_type} - defaulting to Level 3 approval requirement.")

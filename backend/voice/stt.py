@@ -2,7 +2,7 @@
 
 import asyncio
 import numpy as np
-from typing import Optional, Callable, List, Dict
+from typing import Optional, Callable, Dict
 from app.utils.logger import app_logger
 
 try:

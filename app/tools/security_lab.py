@@ -1,7 +1,6 @@
 import socket
 from typing import Dict, Any, List, Optional
 from app.policy import PolicyEvaluator
-from app.database import db
 from app.utils.logger import app_logger, audit_logger
 
 class SecurityLabTool:

@@ -2,41 +2,22 @@
 
 from __future__ import annotations
 
-import math
-import sys
-from typing import List, Optional
+from typing import List
 
-from PySide6.QtCore import Property, QBuffer, QEasingCurve, QIODevice, QPointF, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
     QPushButton,
-    QScrollArea,
-    QStackedWidget,
-    QSystemTrayIcon,
-    QTextEdit,
     QVBoxLayout,
-    QWidget,
 )
 
-from desktop.backend_client import ArenaBackendClient, BackendConnectionError
-from desktop.settings import DesktopSettings
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten
-from desktop.styles import _button_style, _input_style, _textarea_style
+from desktop.theme import BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_MUTED, ACCENT, _lighten
+from desktop.styles import _button_style
 from desktop.widgets.orb import PresenceOrbWidget
-from desktop.workers import ChatWorker, HealthWorker, LocationWorker, VisionWorker, CameraThread, CV2_AVAILABLE
 
 
 
@@ -146,8 +127,6 @@ class LeftSidebar(QFrame):
     def set_conversations(self, conversations) -> None:
         self.conv_list.clear()
         for cid, title in conversations:
-            from PySide6.QtWidgets import QListWidgetItem
-            from PySide6.QtCore import Qt
             item = QListWidgetItem(title or "Conversation")
             item.setData(Qt.ItemDataRole.UserRole, cid)
             self.conv_list.addItem(item)

@@ -1,5 +1,5 @@
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from app.policy import PolicyEvaluator
 from app.tools.doc_manager import DocumentManager
 from app.utils.logger import app_logger, audit_logger
@@ -49,6 +49,9 @@ class ConnectorsTool:
         content = f"# Email Draft\n**To:** {to_address}\n**Subject:** {subject}\n\n---\n\n{body}"
 
         res = DocumentManager.create_document(file_name, content, overwrite=True)
+        if not isinstance(res, dict) or res.get("success") is not True:
+            reason = res.get("error", "document creation was not confirmed") if isinstance(res, dict) else "invalid document result"
+            return {"success": False, "error": f"Could not create email draft: {reason}"}
         audit_logger.info(f"Prepared email draft for {to_address}: {file_name}")
 
         return {
@@ -56,5 +59,6 @@ class ConnectorsTool:
             "to_address": to_address,
             "subject": subject,
             "draft_file": file_name,
+            **({"file_path": res["file_path"]} if res.get("file_path") else {}),
             "note": "Email draft created in workspace. Sending live emails requires Level 3 explicit user approval."
         }

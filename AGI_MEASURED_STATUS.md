@@ -1,5 +1,11 @@
 # Arena Agent — Measured Status
 
+> **Historical snapshot, not a current cleanliness certificate.** See
+> [the current repository audit](docs/REPOSITORY_AUDIT.md) for caller/wiring
+> findings and [execution status](docs/AGI_EXECUTION_STATUS.md) for the active
+> work queue. Older "all wired" or "removed" statements must not substitute
+> for checking the current source and registrations.
+
 **Updated:** 2026-08-24 · Branch `arena/01a02b25-arena-agent`
 **This is the canonical status document.** It supersedes the percentage-based status
 files that previously lived at the repo root (`AGI_STATUS.md`, `AGI_LEVEL_ASSESSMENT.md`,

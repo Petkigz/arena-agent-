@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import math
-import sys
-from typing import List, Optional
+from typing import Optional
 
-from PySide6.QtCore import QBuffer, QIODevice, QPointF, Qt, QThread, Signal, Slot
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QImage
 
 from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 

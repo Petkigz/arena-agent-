@@ -356,7 +356,6 @@ class SelfReflectionEngine:
     def _update_self_model(self, goal, plan):
         """Update the self-model based on execution outcome."""
         from app.cognition.autonomous_goal_executor import ExecutionStatus
-        from app.cognition.autonomous_goal_generator import GoalSource
         
         goal_source = goal.source.value
         
@@ -394,7 +393,6 @@ class SelfReflectionEngine:
         Returns:
             List of discovered patterns
         """
-        from app.cognition.autonomous_goal_executor import ExecutionStatus
         
         # Group plans by goal source
         plans_by_source = {}

@@ -1,10 +1,9 @@
 import httpx
-import re
 import random
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, quote_plus
-from typing import Dict, Any, List, Optional
-from app.llm import llm_client, extract_reply, require_real_completion
+from typing import Dict, Any, List
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger
 from app.cognition.execution_control import (
     ExecutionCancelled,

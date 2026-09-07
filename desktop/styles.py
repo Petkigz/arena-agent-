@@ -14,7 +14,7 @@ from desktop.theme import _lighten
 
 
 def _button_style(bg: str, fg: str) -> str:
-    from desktop.design_tokens import FOCUS_RING_WIDTH_PX, FONT_WEIGHTS, RADIUS, SPACING
+    from desktop.design_tokens import FONT_WEIGHTS, RADIUS, SPACING
     from desktop.theme import ACCENT, BG_SECONDARY, TEXT_MUTED
 
     hover = _lighten(bg, 0.15).name()

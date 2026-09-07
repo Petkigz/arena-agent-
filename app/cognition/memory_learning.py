@@ -2,10 +2,10 @@
 from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Iterable, Dict, Any, List, Optional
+from typing import Iterable, Any, Optional
 from .memory import MemoryRecord, MemoryStore
 from app.memory.reflection_engine import ReflectionEngine
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 @dataclass(frozen=True)
 class Lesson:

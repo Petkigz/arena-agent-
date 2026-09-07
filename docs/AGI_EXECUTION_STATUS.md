@@ -5,6 +5,13 @@
 
 **Purpose:** A chronological, repository-grounded work queue. This document separates “the path exists” from “the behavior is robustly demonstrated.” It is the operational companion to `AGI_GAP_IMPLEMENTATION_PLAN.md`.
 
+## Current owner-directed gate
+
+Feature work is paused for the [repository-wide dead-code/repetition audit](REPOSITORY_AUDIT.md).
+Unique unconnected features are retained by owner choice and listed explicitly;
+this does not make them working features or change their phase maturity. Review
+the audit and caller map before adding another implementation.
+
 ## Status legend
 
 - **DONE — IMPLEMENTED AND WIRED:** The path is reachable from the active runtime or owner-control surface and has regression coverage.

@@ -1,7 +1,8 @@
+import { getAttachmentIcon, formatFileSize } from '../../utils/filePresentation';
 import { useState } from 'react';
-import { Paperclip, X, Image, FileText, Code, Film, Music } from 'lucide-react';
+import { Paperclip, X } from 'lucide-react';
 import { Button } from './Button';
-import { useMultiModalStore, type AttachmentType } from '../../stores/multiModalStore';
+import { useMultiModalStore } from '../../stores/multiModalStore';
 
 interface AttachmentButtonProps {
   onAttach: (files: File[]) => void;
@@ -21,28 +22,6 @@ export function AttachmentButton({ onAttach, disabled }: AttachmentButtonProps) 
     e.target.value = '';
   };
 
-  const getAttachmentIcon = (type: AttachmentType) => {
-    switch (type) {
-      case 'image':
-        return Image;
-      case 'document':
-        return FileText;
-      case 'code':
-        return Code;
-      case 'video':
-        return Film;
-      case 'audio':
-        return Music;
-      default:
-        return FileText;
-    }
-  };
-
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   return (
     <div className="relative">
@@ -114,7 +93,7 @@ export function AttachmentButton({ onAttach, disabled }: AttachmentButtonProps) 
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-text-primary truncate">{attachment.name}</p>
-                        <p className="text-xs text-text-muted">{formatSize(attachment.size)}</p>
+                        <p className="text-xs text-text-muted">{formatFileSize(attachment.size)}</p>
                       </div>
                       <button
                         onClick={() => removePendingAttachment(attachment.id)}

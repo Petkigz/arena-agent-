@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from app.config import settings
 from app.utils.logger import app_logger

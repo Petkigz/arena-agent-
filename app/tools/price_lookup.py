@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import httpx
 
@@ -43,7 +43,7 @@ class PriceLookup:
         currency = (currency or "usd").strip().lower()
         try:
             resp = _cancellable_get(
-                f"https://api.coingecko.com/api/v3/simple/price",
+                "https://api.coingecko.com/api/v3/simple/price",
                 params={"ids": coin_id, "vs_currencies": currency},
                 timeout=10.0,
             )

@@ -11,7 +11,6 @@ labeled as counted observations, never claims about the owner's intent.
 """
 from __future__ import annotations
 
-import json
 import math
 import sqlite3
 import threading
@@ -22,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from app.config import settings
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 
 
 def _now() -> str:

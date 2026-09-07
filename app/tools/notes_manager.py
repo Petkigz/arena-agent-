@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional
 from uuid import uuid4
 
 from app.config import settings
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 
 def _now() -> str:

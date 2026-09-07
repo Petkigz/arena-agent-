@@ -1,13 +1,11 @@
 import os
 import re
-import uuid
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import httpx
 from bs4 import BeautifulSoup
-from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 from app.cognition.execution_control import (
     ExecutionCancelled,
     run_cancellable_blocking_call,

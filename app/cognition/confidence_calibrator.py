@@ -12,7 +12,6 @@ future predictions.
 from __future__ import annotations
 
 import sqlite3
-import json
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone

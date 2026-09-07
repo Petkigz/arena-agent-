@@ -1,6 +1,5 @@
 """Wake word detection using openWakeWord."""
 
-import asyncio
 import numpy as np
 from typing import Optional, Callable
 from app.utils.logger import app_logger

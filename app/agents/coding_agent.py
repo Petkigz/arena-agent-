@@ -217,7 +217,7 @@ class CodingAgent:
     def _write_code(self, target_file: Optional[str], code: str) -> Dict[str, Any]:
         if not target_file:
             # No target file → write to a generated file in the workdir.
-            target_file = f"data/workspace/coding_agent_output.py"
+            target_file = "data/workspace/coding_agent_output.py"
         path = self.workdir / target_file
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

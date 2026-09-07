@@ -15,7 +15,7 @@ import re
 import socket
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.cognition.execution_control import run_cancellable_subprocess
 from app.utils.logger import app_logger, audit_logger

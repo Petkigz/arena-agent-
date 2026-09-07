@@ -16,7 +16,7 @@ import sqlite3
 import json
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from enum import Enum
 import uuid
 from app.utils.logger import app_logger
@@ -541,7 +541,6 @@ class StrategicPlanningEngine:
         # Analyze each short-term goal
         for goal in short_term_goals:
             goal_priority = goal.get('priority', 0.5)
-            goal_effort = goal.get('estimated_effort', 'medium')
             
             # Check if goal supports any long-term plan
             supports_long_term = False

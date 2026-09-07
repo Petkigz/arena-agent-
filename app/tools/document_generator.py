@@ -7,12 +7,10 @@ best-effort and degrades gracefully.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from uuid import uuid4
 
 from app.config import settings
-from app.utils.logger import app_logger
 
 
 def _md_to_html(markdown: str) -> str:

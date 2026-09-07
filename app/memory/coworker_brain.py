@@ -1,11 +1,6 @@
-import os
-import re
 from typing import Dict, Any, List, Optional
-from app.config import settings
-from app.database import db
 from app.utils.logger import app_logger
 from app.memory.semantic_rag import SemanticRAGEngine
-from app.tools.app_inventory import SystemAppInventory
 from app.cognition.environment_grounding import EnvironmentGroundingEngine
 
 class CoworkerBrain:

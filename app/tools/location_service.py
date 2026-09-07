@@ -10,8 +10,7 @@ permission prompt:
 Gracefully degrades: returns an empty/unknown result when offline, never raises.
 """
 
-import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import httpx
 

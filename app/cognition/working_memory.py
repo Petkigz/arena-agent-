@@ -26,7 +26,6 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from app.config import settings
-from app.utils.logger import app_logger
 
 
 def _now_dt() -> datetime:

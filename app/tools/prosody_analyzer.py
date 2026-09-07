@@ -11,7 +11,7 @@ Uses only numpy (no heavy deps), so it runs on i9 CPU.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -151,7 +151,7 @@ class ProsodyAnalyzerTool:
             elif rms > 0.1 and duration < 0.8:
                 emotion = "anger"
                 intensity = 0.5
-                triggers.append(f"short burst high energy → anger/frustration")
+                triggers.append("short burst high energy → anger/frustration")
 
             return {
                 "success": True,
@@ -192,7 +192,9 @@ class ProsodyAnalyzerTool:
 
             # Try torchaudio
             try:
-                import torch
+                # Loading (not just finding) torch is an availability check.
+                import importlib
+                importlib.import_module("torch")
                 import torchaudio
                 waveform, sr = torchaudio.load(str(p))
                 data = waveform.mean(dim=0).numpy() if waveform.ndim > 1 else waveform.numpy()

@@ -8,7 +8,7 @@ prediction, never an observation or execution result.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from app.cognition.causal_inference import (
     CausalEdge,

@@ -281,7 +281,7 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     # ── Root: React SPA for browsers, JSON status for API clients ──
-    # Registered FIRST so it wins over the core router's legacy `/` handler.
+    # Owned here; the core-only legacy root is not included in this app.
     @app.get("/")
     async def root(request: Request):
         accept = request.headers.get("accept", "")
@@ -354,16 +354,8 @@ def create_app() -> FastAPI:
             "auth_enabled": API_KEY_ENABLED,
         }
 
-    @app.get("/conversations", dependencies=_auth_deps)
-    async def list_conversations(limit: int = 50):
-        """Delegate to the shared helper (same view as the WS handler).
-
-        NOTE: the owner-control router registered earlier in create_app() also
-        exposes GET /conversations and, registering first, serves the request —
-        this duplicate exists only so the path exists if that router is ever
-        unmounted. Both return the identical DB-backed list."""
-        from backend.message_router import list_conversation_previews
-        return {"success": True, "conversations": list_conversation_previews(limit=limit)}
+    # /conversations is owned by owner_control_autonomy_router above. Do not
+    # register a second fallback here: the first matching route always wins.
 
     # ── WebSocket endpoints ──
     @app.websocket("/ws")

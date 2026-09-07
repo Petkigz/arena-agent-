@@ -12,6 +12,12 @@ Runs **entirely locally** on Intel Core i9-14900K, RX 580 GPU (8 GB), and system
 
 ---
 
+> **Before new feature work:** consult [the repository audit](docs/REPOSITORY_AUDIT.md)
+> and its [file-by-file ledger](docs/REPOSITORY_AUDIT_FILES.csv). The owner requested
+> preserving unique unconnected work while removing confirmed obsolete duplication.
+> A module's presence, an export, or a passing isolated test does not prove it is
+> wired into the running agent.
+
 ## Core Philosophy
 
 ```

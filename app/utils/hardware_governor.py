@@ -1,11 +1,9 @@
 import os
 import gc
-import sys
 import psutil
 import platform
 import subprocess
-from typing import Dict, Any, List, Optional
-from app.config import settings
+from typing import Dict, Any
 from app.database import db
 from app.utils.logger import app_logger
 from app.utils.hardware_monitor import HardwareMonitor

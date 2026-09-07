@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

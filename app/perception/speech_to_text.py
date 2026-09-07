@@ -1,6 +1,4 @@
-import os
 import wave
-import math
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, Optional

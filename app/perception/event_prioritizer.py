@@ -15,9 +15,8 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
-from app.utils.logger import app_logger
 
 
 def _now() -> str:

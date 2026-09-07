@@ -52,7 +52,7 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"=== LoRA Training ===")
+    print("=== LoRA Training ===")
     print(f"Adapter: {args.adapter}")
     print(f"Base: {args.base}")
     print(f"Skill: {args.skill}")
@@ -84,21 +84,21 @@ def main():
         print(f"\nConfig:\n{job.get('config','')}")
         return 1
 
-    print(f"✅ Job config created:")
+    print("✅ Job config created:")
     print(f"  Dataset: {job['config']['dataset_path']}")
     print(f"  Output: {job['config']['output_dir']}")
     print()
 
     # Run training
-    print(f"Starting training (this may take a while on GPU)...")
+    print("Starting training (this may take a while on GPU)...")
     result = LoraManagerTool.train(args.adapter, args.base, args.skill)
 
     if result.get("success"):
-        print(f"\n✅ Training completed!")
+        print("\n✅ Training completed!")
         print(f"  Adapter: {result.get('adapter_name')}")
         print(f"  Path: {result.get('path')}")
         print(f"  Info: {result.get('training_info')}")
-        print(f"\nNext steps (selection alone does not change behavior):")
+        print("\nNext steps (selection alone does not change behavior):")
         print("  1. Make the provider expose distinct base and adapter/merged model IDs.")
         print("  2. POST /loras/evaluations with this adapter, both model IDs, the skill dataset, and an unrelated dataset.")
         print("  3. Review the report, then separately POST /loras/deploy-evaluated only if deployment_eligible=true.")

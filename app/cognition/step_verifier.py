@@ -103,8 +103,6 @@ class StepVerifier:
         """
         verified = cycle_result.get("goal_verified")
         lifecycle = cycle_result.get("goal_lifecycle_state", "") or ""
-        reasoning = (cycle_result.get("reasoning_action") or "").lower()
-        executed = cycle_result.get("executed_actions") or []
 
         declares_evidence = bool(
             getattr(step, "produces_evidence", None)

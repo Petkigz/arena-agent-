@@ -16,7 +16,7 @@ import sqlite3
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from .source_types import SourceType, PROVENANCE_WEIGHTS, DEFAULT_PROVENANCE_WEIGHT

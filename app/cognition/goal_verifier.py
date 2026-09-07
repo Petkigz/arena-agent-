@@ -17,7 +17,7 @@ from app.cognition.condition_language import (
     parse_condition,
 )
 from app.cognition.goal_lifecycle import GoalLifecycleState, GoalTracker
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

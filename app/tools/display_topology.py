@@ -1,7 +1,6 @@
 """Verified multi-monitor topology and coordinate transforms."""
 from __future__ import annotations
 import hashlib,json
-from typing import Any,Dict,List
 class DisplayTopologyTool:
  _snapshot=None
  @classmethod

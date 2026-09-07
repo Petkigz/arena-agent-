@@ -32,10 +32,10 @@ from __future__ import annotations
 import sys
 import time
 from collections import deque
-from typing import List, Optional
+from typing import Optional
 
-from PySide6.QtCore import QPointF, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPixmap, QRadialGradient
+from PySide6.QtCore import QPointF, Qt, Signal, Slot
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -52,14 +52,13 @@ from desktop.settings import DesktopSettings
 from desktop.voice_client import DesktopAudioPlayer, DesktopVoiceClient
 
 # Theme + styles (modularized)
-from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, apply_theme
-from desktop.styles import _button_style, _app_style
+from desktop.theme import BG_PRIMARY as BG_PRIMARY, BG_SECONDARY as BG_SECONDARY, BG_SURFACE as BG_SURFACE, TEXT_PRIMARY as TEXT_PRIMARY, TEXT_SECONDARY as TEXT_SECONDARY, TEXT_MUTED as TEXT_MUTED, ACCENT as ACCENT, apply_theme as apply_theme
+from desktop.styles import _button_style as _button_style, _app_style as _app_style
 
 # Widgets + workers (modularized)
-from desktop.widgets.orb import PresenceOrbWidget
 from desktop.widgets.sidebar import LeftSidebar
 from desktop.widgets.context import ContextPanel
-from desktop.workers import HealthWorker
+from desktop.workers import HealthWorker as HealthWorker
 
 # Pages (modularized)
 from desktop.pages.beanie import BeaniePage
@@ -75,10 +74,10 @@ from desktop.pages.lora import LoraPage
 from desktop.pages.owner_control import OwnerControlPage
 
 # For backward compatibility, re-export theme globals and helpers that old code might import from desktop.app
-from desktop.theme import THEME_COLORS, PRESENCE_COLORS, PRESENCE_DURATIONS, _lighten, _is_system_dark, _resolved_theme_name
-from desktop.styles import _input_style, _textarea_style
-from desktop.workers import ChatWorker, LocationWorker, VisionWorker, CameraThread, WorkingContextWorker, CV2_AVAILABLE
-from desktop.pages.message_bubble import MessageBubble
+from desktop.theme import THEME_COLORS as THEME_COLORS, PRESENCE_COLORS as PRESENCE_COLORS, PRESENCE_DURATIONS as PRESENCE_DURATIONS, _lighten as _lighten, _is_system_dark as _is_system_dark, _resolved_theme_name as _resolved_theme_name
+from desktop.styles import _input_style as _input_style, _textarea_style as _textarea_style
+from desktop.workers import ChatWorker as ChatWorker, LocationWorker as LocationWorker, VisionWorker as VisionWorker, CameraThread as CameraThread, WorkingContextWorker as WorkingContextWorker, CV2_AVAILABLE as CV2_AVAILABLE
+from desktop.pages.message_bubble import MessageBubble as MessageBubble
 
 
 class MainWindow(QMainWindow):

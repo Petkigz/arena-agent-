@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget, QFrame
 
-from desktop.backend_client import ArenaBackendClient, BackendConnectionError
 from desktop.theme import BG_PRIMARY, BG_SECONDARY, BG_SURFACE, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, PRESENCE_COLORS
 from desktop.styles import _button_style, _composer_style
 from desktop.widgets.working_context import WorkingContextCard

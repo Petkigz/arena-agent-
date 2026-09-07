@@ -9,14 +9,13 @@ import socket
 import uuid
 from datetime import datetime
 import signal
-import sys
 
 from app.config import settings
 from app.database import db
 from app.tasks import TaskManager, TaskCreate, TaskUpdate, Task
 from app.llm import llm_client, output_budget, require_real_completion
 from app.policy import PolicyEvaluator
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 from app.utils.spa import spa_for_browsers
 
 from app.tools.manifest import _LazyImportProxy
@@ -91,23 +90,16 @@ from app.cognition.owner_control import ControlMode, authorization_store, owner_
 # (app/server.py) can include them alongside the WebSocket/API/SPA routes.
 # A backward-compatible `app` is built at the bottom of this module.
 router = APIRouter()
+# Core-only legacy launch keeps its old root response. It is not registered in
+# the unified server, whose root negotiates the built SPA and public health UI.
+_legacy_root_router = APIRouter()
 
 # Global System State
 SYSTEM_STATE = "active"  # "active" or "sleeping"
 
-# NOTE: these router.mount() calls are DEAD — FastAPI's include_router() drops
-# Mount routes, so they never reach the assembled app (see the app-level mounts
-# at the bottom of this module and in app/server.py). Kept only so `router`
-# remains self-describing for anyone reading top-down.
-# Mount static files directory if it exists
+# The core-only legacy root can serve an installed static dashboard. Actual
+# /static and /audio mounts belong to the ASGI applications, not APIRouter.
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(static_dir):
-    router.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-# Mount audio static directory
-audio_dir = settings.DATA_DIR / "audio"
-audio_dir.mkdir(parents=True, exist_ok=True)
-router.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
 
 # Models for the API
 class ChatRequest(BaseModel):
@@ -540,7 +532,7 @@ class SimulationRequest(BaseModel):
     candidate_actions: List[Dict[str, Any]]
 
 # 1. Base Endpoint - Serves HTML Visual Dashboard or JSON status
-@router.get("/")
+@_legacy_root_router.get("/")
 def get_root(request: Request):
     # Check if client explicitly requested JSON
     accept_header = request.headers.get("accept", "")
@@ -587,32 +579,6 @@ def get_api_status():
         "lm_studio_endpoint": settings.LM_STUDIO_URL,
         "database_connected": True
     }
-
-import re
-
-def _parse_and_execute_intent(user_text: str) -> Optional[str]:
-    """
-    Canonical Cognitive Route Delegation.
-    Delegates 100% to CognitivePipeline -> CognitiveRuntime, ensuring a single unified cognitive authority.
-    """
-    res = CognitivePipeline.process_request(user_text, complexity="fast")
-    if res.get("executed_actions"):
-        return f"[ACTION EXECUTED BY COGNITIVE RUNTIME]: " + "; ".join(res["executed_actions"])
-    return None
-
-def _enrich_messages_with_local_tools_and_rag(user_text: str, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """
-    Canonical Cognitive Route Delegation.
-    Delegates 100% to CognitivePipeline -> CognitiveRuntime, ensuring a single unified cognitive authority.
-    """
-    res = CognitivePipeline.process_request(user_text, complexity="fast")
-    enriched = list(messages)
-    reply = res.get("assistant_reply", "")
-    if enriched and enriched[0]["role"] == "system":
-        enriched[0]["content"] += f"\n\n[COGNITIVE RUNTIME CONTEXT]: {reply}"
-    else:
-        enriched.insert(0, {"role": "system", "content": f"[COGNITIVE RUNTIME CONTEXT]: {reply}"})
-    return enriched
 
 # 2. Local Chat Completions Route
 @router.post("/chat")
@@ -3067,25 +3033,26 @@ async def _legacy_localhost_guard(request: Request, call_next):
 
 from app.api.owner_control_autonomy import router as _owner_autonomy_router
 from app.api.owner_control_autonomy import (  # re-exported for existing callers/tests
-    AutonomousGoalDecisionRequest,
-    AutonomousGoalPriorityRequest,
-    AutonomyEnvelopeUpdate,
-    ConcurrencyBudgetUpdate,
-    OwnerAutonomousGoalRequest,
-    OwnerDecisionRequest,
-    PreemptionRequest,
-    ScheduledDirectiveRequest,
-    ScheduleStatusRequest,
-    UserStateUpdateRequest,
-    create_owner_autonomous_goal_endpoint,
-    execute_next_autonomous_goal_endpoint,
-    get_user_state_endpoint,
-    get_user_state_history_endpoint,
-    update_user_state_endpoint,
-    list_turn_reminders_endpoint,
-    complete_turn_reminder_endpoint,
+    AutonomousGoalDecisionRequest as AutonomousGoalDecisionRequest,
+    AutonomousGoalPriorityRequest as AutonomousGoalPriorityRequest,
+    AutonomyEnvelopeUpdate as AutonomyEnvelopeUpdate,
+    ConcurrencyBudgetUpdate as ConcurrencyBudgetUpdate,
+    OwnerAutonomousGoalRequest as OwnerAutonomousGoalRequest,
+    OwnerDecisionRequest as OwnerDecisionRequest,
+    PreemptionRequest as PreemptionRequest,
+    ScheduledDirectiveRequest as ScheduledDirectiveRequest,
+    ScheduleStatusRequest as ScheduleStatusRequest,
+    UserStateUpdateRequest as UserStateUpdateRequest,
+    create_owner_autonomous_goal_endpoint as create_owner_autonomous_goal_endpoint,
+    execute_next_autonomous_goal_endpoint as execute_next_autonomous_goal_endpoint,
+    get_user_state_endpoint as get_user_state_endpoint,
+    get_user_state_history_endpoint as get_user_state_history_endpoint,
+    update_user_state_endpoint as update_user_state_endpoint,
+    list_turn_reminders_endpoint as list_turn_reminders_endpoint,
+    complete_turn_reminder_endpoint as complete_turn_reminder_endpoint,
 )
-from app.api import owner_control_autonomy as _owner_autonomy  # re-export surface
+from app.api import owner_control_autonomy as _owner_autonomy  # noqa: F401 — legacy module export
+app.include_router(_legacy_root_router, dependencies=[Depends(_legacy_verify_request)])
 app.include_router(router, dependencies=[Depends(_legacy_verify_request)])
 app.include_router(_owner_autonomy_router, dependencies=[Depends(_legacy_verify_request)])
 from app.api.os_browser_automation import router as _os_browser_router
@@ -3093,25 +3060,23 @@ app.include_router(_os_browser_router, dependencies=[Depends(_legacy_verify_requ
 from app.api.self_awareness import router as _self_awareness_router
 from app.api.vault import router as _vault_router
 from app.api.self_awareness import (  # re-exported for existing callers/tests
-    ExplicitCommitmentRequest,
-    IdentityCheckpointRequest,
-    RecoveryActionRequest,
-    RecoveryDecisionRequest,
-    create_explicit_commitment_endpoint,
-    identity_continuity_checkpoint_endpoint,
-    self_agency_history_endpoint,
-    self_awareness_endpoint,
-    self_belief_revisions_endpoint,
-    self_commitments_endpoint,
+    ExplicitCommitmentRequest as ExplicitCommitmentRequest,
+    IdentityCheckpointRequest as IdentityCheckpointRequest,
+    RecoveryActionRequest as RecoveryActionRequest,
+    RecoveryDecisionRequest as RecoveryDecisionRequest,
+    create_explicit_commitment_endpoint as create_explicit_commitment_endpoint,
+    identity_continuity_checkpoint_endpoint as identity_continuity_checkpoint_endpoint,
+    self_agency_history_endpoint as self_agency_history_endpoint,
+    self_awareness_endpoint as self_awareness_endpoint,
+    self_belief_revisions_endpoint as self_belief_revisions_endpoint,
+    self_commitments_endpoint as self_commitments_endpoint,
 )
 app.include_router(_self_awareness_router, dependencies=[Depends(_legacy_verify_request)])
 app.include_router(_vault_router, dependencies=[Depends(_legacy_verify_request)])
 
 # ── Static mounts (app-level) ──
-# The router.mount() calls near the top of this module are silently DROPPED by
-# app.include_router() above (FastAPI does not carry Mount routes through
-# include_router), so /static/* and /audio/* would 404. Mount them on the app
-# directly. app/server.py (the unified entry point) mounts the same paths.
+# Mount assets on ASGI applications, never on APIRouter (FastAPI drops those
+# during include_router). The unified entry point mounts these paths itself.
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(_static_dir):
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")

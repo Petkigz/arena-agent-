@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import uuid
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from app.cognition.runtime import CognitiveRuntime
 from app.cognition.epistemic_presentation import presentation_for_cycle
 from app.cognition.response_grounding import ResponseGrounding

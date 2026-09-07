@@ -15,14 +15,14 @@ import hashlib
 import json
 import sqlite3
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from app.config import settings
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import audit_logger
 
 
 def _now() -> str:

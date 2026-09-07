@@ -1,9 +1,9 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from app.database import db
 from app.tools.web_research import WebResearcher
 from app.tools.youtube_learner import YouTubeLearner
 from app.tools.knowledge_indexer import KnowledgeIndexer
-from app.utils.logger import app_logger, audit_logger
+from app.utils.logger import app_logger
 
 class SkillAcquisitionManager:
     @classmethod

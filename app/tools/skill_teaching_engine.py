@@ -1,12 +1,10 @@
-import os
 import json
 import datetime
 from typing import Dict, Any, List, Optional
-from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger
 from app.tools.disposable_sandbox import DisposableSandbox
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 
 class SkillTeachingEngine:
     """

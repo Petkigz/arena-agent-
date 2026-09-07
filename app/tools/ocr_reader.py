@@ -1,7 +1,7 @@
 import pytesseract
 from PIL import Image
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from app.config import settings
 from app.utils.logger import app_logger
 

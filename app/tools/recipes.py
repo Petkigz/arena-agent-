@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from app.llm import llm_client, extract_reply, require_real_completion
+from app.llm import llm_client, require_real_completion
 from app.utils.logger import app_logger
 
 

@@ -1,5 +1,5 @@
 import httpx
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from app.config import settings
 from app.utils.logger import app_logger
 from app.cognition.execution_control import (

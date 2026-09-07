@@ -16,8 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
-from uuid import uuid4
+from typing import Any, Dict, List, Optional
 
 
 def _now() -> str:
