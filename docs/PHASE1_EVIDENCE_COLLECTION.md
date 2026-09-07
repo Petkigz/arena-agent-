@@ -184,10 +184,10 @@ Unit/integration fixtures are **contract evidence**, not owner held-out results.
 Real LM Studio outcomes, usefulness volume, cross-task improvement, and supported
 host/device behavior must still be measured on the owner installation.
 
-### Current software-only validation (2026-09-07)
+### Current software-only validation (2026-09-07, refreshed with the 36-check benchmark)
 
-- Backend: **3,152 passed, 14 skipped, 5 e2e deselected**, 3 environment/dependency warnings.
-- Frontend: **249 passed**; production build passed; lint **0 errors**, 18 existing warnings.
+- Backend: **3,196 passed, 18 skipped**, 3 environment/dependency warnings (browser e2e excluded; the 5 e2e tests passed in an earlier browser-capable session).
+- Frontend: **255 passed**; production build passed; lint **0 errors**, 18 existing warnings.
 - Real-browser/server integration: **5 e2e tests passed**, using Chromium and temporary stores. Final focused verifier checks also pass after the deterministic-fallback guard review.
 - Inherited CI opener test is now deterministic on Linux/macOS/Windows branches
   using mocks (not real application launches). The GitHub backend checks passed.
