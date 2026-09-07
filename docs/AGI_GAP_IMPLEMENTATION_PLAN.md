@@ -6,6 +6,8 @@
 
 This document replaces optimistic phase labels with an implementation plan tied to observable behavior. It does not claim consciousness, human-level AGI, or subjective experience.
 
+For the chronological work queue and per-item status matrix, see [`AGI_EXECUTION_STATUS.md`](AGI_EXECUTION_STATUS.md). That document is the operational checklist; this document remains the fuller rationale and phase description.
+
 ## Implementation status
 
 **First slice started:** Phase 0 + core Phase 1.
