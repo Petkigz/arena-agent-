@@ -32,6 +32,7 @@ import com.arena.voice.ui.components.BeanieMessage
 import com.arena.voice.ui.components.BeanieTopBar
 import com.arena.voice.ui.components.ConversationDrawer
 import com.arena.voice.ui.components.PresenceStatus
+import com.arena.voice.ui.components.ResponseReviewBar
 import com.arena.voice.ui.components.VoiceStatusIndicator
 import com.arena.voice.ui.components.WorkingContextAffordance
 import com.arena.voice.ui.theme.Spacing
@@ -125,7 +126,33 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.md),
                 ) {
                     items(messages, key = { it.id }) { msg ->
-                        BeanieMessage(msg, voiceStatus)
+                        Column {
+                            BeanieMessage(msg, voiceStatus)
+                            // Review controls bind ONLY to finished, trace-linked
+                            // replies. Unlinked replies (blank trace) are
+                            // intentionally unreviewable — we never guess identity.
+                            if (msg.role == "assistant" && !msg.isStreaming && msg.traceId.isNotBlank()) {
+                                ResponseReviewBar(
+                                    traceId = msg.traceId,
+                                    usefulnessLevels = viewModel.usefulnessLevels,
+                                    taskOutcomes = viewModel.taskOutcomes,
+                                    onRecordUsefulness = { usefulness, note, onResult ->
+                                        viewModel.recordUsefulness(msg.traceId, usefulness, note, onResult)
+                                    },
+                                    onRecordEvaluation = { taskKey, outcome, correction, note, onResult ->
+                                        viewModel.recordTaskEvaluation(
+                                            msg.traceId, taskKey, outcome, correction, note, onResult,
+                                        )
+                                    },
+                                    onLoadSummary = { onResult ->
+                                        viewModel.loadFeedbackSummary(msg.traceId, onResult)
+                                    },
+                                    onExplain = { onResult ->
+                                        viewModel.fetchExplanation(msg.traceId, onResult)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }

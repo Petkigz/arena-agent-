@@ -12,6 +12,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.arena.voice.util.SettingsRepository
 
+/** One hydrated history message. `traceId` is the exact-response identity the
+ * Review-response flow binds owner feedback to — blank for older unlinked
+ * replies, which stay intentionally unreviewable (never guessable). */
+data class HistoryMessage(
+    val messageId: String,
+    val role: String,
+    val content: String,
+    val traceId: String = "",
+)
+
 @Singleton
 class VoiceWebSocketClient @Inject constructor(
     private val settings: SettingsRepository,
@@ -288,16 +298,24 @@ class VoiceWebSocketClient @Inject constructor(
                     "conversation_history" -> {
                         val convId = json.optString("conversation_id")
                         val history = json.optJSONArray("messages")
-                        // Triple of (server message id, role, content) — the id
-                        // lets us match streamed tokens against hydrated rows.
-                        val msgs = mutableListOf<Triple<String, String, String>>()
+                        // Server message ids + trace ids: the id lets us match
+                        // streamed tokens against hydrated rows; the trace id
+                        // binds review controls to THAT exact reply.
+                        val msgs = mutableListOf<HistoryMessage>()
                         if (history != null) {
                             for (i in 0 until history.length()) {
                                 val m = history.optJSONObject(i)
                                 val mid = m?.optString("message_id", "") ?: ""
                                 val role = m?.optString("role", "assistant") ?: "assistant"
                                 val content = m?.optString("content", "") ?: ""
-                                if (content.isNotBlank()) msgs.add(Triple(mid, role, content))
+                                if (content.isNotBlank()) msgs.add(
+                                    HistoryMessage(
+                                        messageId = mid,
+                                        role = role,
+                                        content = content,
+                                        traceId = m?.optString("trace_id", "") ?: "",
+                                    )
+                                )
                             }
                         }
                         listeners.forEach { it.onConversationHistory(convId, msgs) }
@@ -313,6 +331,15 @@ class VoiceWebSocketClient @Inject constructor(
                         // The owner chatted/created a conversation on any device.
                         val convId = json.optString("conversation_id")
                         listeners.forEach { it.onConversationActivity(convId) }
+                    }
+                    "cognitive_metadata" -> {
+                        // A reply was persisted with its cognitive trace — the
+                        // same frame the web/desktop clients consume for the
+                        // Review-response flow. Blank trace = unlinked reply.
+                        val convId = json.optString("conversation_id")
+                        val msgId = json.optString("message_id")
+                        val traceId = json.optString("trace_id")
+                        listeners.forEach { it.onCognitiveMetadata(convId, msgId, traceId) }
                     }
                     "error" -> {
                         val message = json.optString("message", "Unknown error")
@@ -368,7 +395,8 @@ class VoiceWebSocketClient @Inject constructor(
         fun onConversationJoined(conversationId: String) {}
         fun onConversationCreated(conversationId: String) {}
         fun onConversationList(conversations: List<Pair<String, String>>) {}
-        fun onConversationHistory(conversationId: String, messages: List<Triple<String, String, String>>) {}
+        fun onConversationHistory(conversationId: String, messages: List<HistoryMessage>) {}
+        fun onCognitiveMetadata(conversationId: String, messageId: String, traceId: String) {}
         fun onRemoteMessage(conversationId: String, messageId: String, content: String) {}
         fun onConversationActivity(conversationId: String) {}
         fun onChatError(message: String) {}

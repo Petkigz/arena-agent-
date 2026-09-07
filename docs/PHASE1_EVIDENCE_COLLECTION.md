@@ -174,10 +174,11 @@ Web controls are implemented in this slice. The native PySide6 desktop client
 now exposes the same Review-response controls against the same endpoints and
 stores (its GUI-free logic, WS metadata parsing, and REST paths are unit-tested
 everywhere; the offscreen widget test runs wherever PySide6 is installed).
-Android retains protocol compatibility but does not yet expose these
-response-review controls. Corrections use the pre-existing Model Settings
-editor, now linked to the exact response; no second correction editor or
-correction brain was introduced.
+The Android client exposes the same controls on trace-linked replies
+(Kotlin structure pinned by Python tests + tree-sitter parse; device/GUI
+behavior unverified in this environment). Corrections use the pre-existing
+Model Settings editor, now linked to the exact response; no second correction
+editor or correction brain was introduced.
 
 Unit/integration fixtures are **contract evidence**, not owner held-out results.
 Real LM Studio outcomes, usefulness volume, cross-task improvement, and supported

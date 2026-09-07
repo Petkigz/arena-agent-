@@ -30,6 +30,10 @@ data class ChatMessage(
     val content: String,
     val isStreaming: Boolean = false,
     val actionSteps: List<ToolActivity> = emptyList(),
+    /** The exact cognitive trace this reply was persisted with. Blank = an
+     * unlinked reply (older messages, or a failed cycle) — intentionally
+     * unreviewable, never guessable. */
+    val traceId: String = "",
 )
 
 /** One tool/activity step rendered semantically (review: Android must render
@@ -196,6 +200,136 @@ class ChatViewModel @Inject constructor(
         webSocketClient.removeListener(this)
     }
 
+    // ── Response review (Phase 1.4 evidence; same endpoints/stores as web/desktop) ──
+    // Value domains enforced by the backend models (app/main.py) — validated
+    // locally too so an invalid review fails fast without a round trip.
+    val usefulnessLevels = listOf("helpful", "partially_helpful", "not_helpful")
+    val taskOutcomes = listOf("success", "failure", "unknown")
+
+    // Retry identity per trace: the SAME id is reused until the backend
+    // returns its matching receipt, so a flaky network can never inflate
+    // evidence counts (the web/desktop contract; ids start with "android-").
+    private val usefulnessSubmissionIds = mutableMapOf<String, String>()
+    private val evaluationSubmissionIds = mutableMapOf<String, String>()
+
+    private fun submissionId(map: MutableMap<String, String>, traceId: String): String =
+        map.getOrPut(traceId) { "android-${UUID.randomUUID()}" }
+
+    /** Owner usefulness feedback for one exact trace. Feeds the existing
+     * bounded strategy-learning path; changes no correctness state. */
+    fun recordUsefulness(traceId: String, usefulness: String, note: String, onResult: (Boolean, String) -> Unit) {
+        if (traceId.isBlank()) {
+            onResult(false, "This reply carries no trace — it cannot be reviewed.")
+            return
+        }
+        if (usefulness !in usefulnessLevels) {
+            onResult(false, "Usefulness must be one of: ${usefulnessLevels.joinToString()}")
+            return
+        }
+        viewModelScope.launch {
+            val sid = submissionId(usefulnessSubmissionIds, traceId)
+            val raw = apiClient.recordTraceUsefulness(traceId, usefulness, note.trim(), sid)
+            val receipt = runCatching {
+                JSONObject(raw ?: "{}").optJSONObject("feedback")?.optString("feedback_id").orEmpty()
+            }.getOrDefault("")
+            val ok = receipt.isNotBlank()
+            if (ok) usefulnessSubmissionIds.remove(traceId) // durable: next review gets a fresh identity
+            onResult(ok, if (ok) "Saved ✓" else "Not saved — retry the same rating.")
+        }
+    }
+
+    /** Owner-recorded task evaluation. MEASUREMENT ONLY: recorded against the
+     * exact trace; it never changes runtime truth, authorizes work, or
+     * approves training. */
+    fun recordTaskEvaluation(
+        traceId: String,
+        taskKey: String,
+        observedOutcome: String,
+        correctionReceived: Boolean,
+        note: String,
+        onResult: (Boolean, String) -> Unit,
+    ) {
+        if (traceId.isBlank()) {
+            onResult(false, "This reply carries no trace — it cannot be reviewed.")
+            return
+        }
+        val key = taskKey.trim()
+        if (key.isEmpty()) {
+            onResult(false, "A task key is required to record an evaluation.")
+            return
+        }
+        if (observedOutcome !in taskOutcomes) {
+            onResult(false, "Observed outcome must be one of: ${taskOutcomes.joinToString()}")
+            return
+        }
+        viewModelScope.launch {
+            val sid = submissionId(evaluationSubmissionIds, traceId)
+            val payload = JSONObject()
+                .put("task_key", key)
+                .put("trace_id", traceId)
+                .put("observed_outcome", observedOutcome)
+                .put("usefulness", "unknown")
+                .put("split", "held_out")
+                .put("condition", "single")
+                .put("correction_received", correctionReceived)
+                .put("evidence_ids", JSONArray())
+                .put("note", note.trim())
+                .put("submission_id", sid)
+            val raw = apiClient.recordTaskEvaluation(payload)
+            val receipt = runCatching {
+                JSONObject(raw ?: "{}").optJSONObject("evaluation")?.optString("evaluation_id").orEmpty()
+            }.getOrDefault("")
+            val ok = receipt.isNotBlank()
+            if (ok) evaluationSubmissionIds.remove(traceId)
+            onResult(ok, if (ok) "Evaluation saved ✓" else "Not saved — retry the same submission.")
+        }
+    }
+
+    /** What is already recorded for this trace (absence stays explicit). */
+    fun loadFeedbackSummary(traceId: String, onResult: (Pair<Int, Int>?) -> Unit) {
+        if (traceId.isBlank()) {
+            onResult(null)
+            return
+        }
+        viewModelScope.launch {
+            var feedback = -1
+            var evaluations = 0
+            runCatching {
+                feedback = JSONObject(apiClient.traceUsefulness(traceId) ?: "{}")
+                    .optJSONArray("feedback")?.length() ?: 0
+                evaluations = JSONObject(apiClient.traceTaskEvaluations(traceId) ?: "{}")
+                    .optJSONArray("evaluations")?.length() ?: 0
+            }
+            onResult(if (feedback < 0) null else Pair(feedback, evaluations))
+        }
+    }
+
+    /** Grounded "why this response": the persisted trace facts via the
+     * existing introspection endpoint — never a model self-narration. */
+    fun fetchExplanation(traceId: String, onResult: (List<String>, Boolean) -> Unit) {
+        if (traceId.isBlank()) {
+            onResult(listOf("This reply carries no trace to explain."), false)
+            return
+        }
+        viewModelScope.launch {
+            val raw = apiClient.responseExplanation(traceId)
+            val fallback = Pair(listOf("No trace explanation was returned."), false)
+            val parsed = runCatching {
+                val obj = JSONObject(raw ?: "{}")
+                val lines = mutableListOf<String>()
+                val arr = obj.optJSONArray("explanation")
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        lines.add(arr.optString(i))
+                    }
+                }
+                val verified = obj.optJSONObject("facts")?.optBoolean("goal_verified", false) ?: false
+                Pair(lines, verified)
+            }.getOrDefault(fallback)
+            onResult(parsed.first, parsed.second)
+        }
+    }
+
     // ── WebSocket listener (chat) ───────────────────────────────────────────
     override fun onConnected() {
         _isConnected.value = true
@@ -248,19 +382,34 @@ class ChatViewModel @Inject constructor(
         webSocketClient.listConversations()
     }
 
-    override fun onConversationHistory(conversationId: String, history: List<Triple<String, String, String>>) {
+    override fun onConversationHistory(conversationId: String, history: List<HistoryMessage>) {
         if (conversationId != this.conversationId) return
         messages.clear()
-        history.forEach { (messageId, role, content) ->
-            // Server message ids keep hydrated rows matched against live tokens.
+        history.forEach { m ->
+            // Server message ids keep hydrated rows matched against live tokens;
+            // trace ids enable the Review-response bar on linked replies only.
             messages.add(
                 ChatMessage(
-                    id = messageId.ifBlank { UUID.randomUUID().toString() },
-                    role = role,
-                    content = content
+                    id = m.messageId.ifBlank { UUID.randomUUID().toString() },
+                    role = m.role,
+                    content = m.content,
+                    traceId = m.traceId,
                 )
             )
         }
+    }
+
+    override fun onCognitiveMetadata(conversationId: String, messageId: String, traceId: String) {
+        // The just-persisted reply carries its exact trace — bind it to the
+        // streamed message so the review bar can appear. A blank trace means
+        // the cycle failed to persist one; the reply stays unreviewable.
+        if (conversationId != this.conversationId || traceId.isBlank()) return
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx >= 0) {
+            messages[idx] = messages[idx].copy(traceId = traceId)
+        }
+        // A miss (frame raced a re-hydration) is left alone: the next history
+        // pull carries the durable trace — we never guess a binding.
     }
 
     override fun onRemoteMessage(conversationId: String, messageId: String, content: String) {

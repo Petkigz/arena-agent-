@@ -319,6 +319,29 @@ class ApiClient @Inject constructor(
     suspend fun getLearningProgress(): String? = call("/owner-control/learning-progress")
     suspend fun getOwnerModel(): String? = call("/owner-control/owner-model")
 
+    // ── response review (Phase 1.4 evidence; same stores as the web/desktop) ──
+    suspend fun traceUsefulness(traceId: String): String? =
+        call("/cognition/traces/${segment(traceId)}/usefulness")
+
+    suspend fun recordTraceUsefulness(traceId: String, usefulness: String, note: String, submissionId: String): String? =
+        call(
+            "/cognition/traces/${segment(traceId)}/usefulness", "POST",
+            JSONObject().put("usefulness", usefulness).put("note", note)
+                .put("submission_id", submissionId).toString(),
+        )
+
+    suspend fun traceTaskEvaluations(traceId: String, split: String = "held_out", limit: Int = 100): String? =
+        call(
+            "/benchmarks/phase1/tasks/evaluations?trace_id=${segment(traceId)}&split=${segment(split)}&limit=$limit",
+        )
+
+    suspend fun recordTaskEvaluation(payload: JSONObject): String? =
+        call("/benchmarks/phase1/tasks/evaluations", "POST", payload.toString())
+
+    /** Grounded trace facts — the same endpoint the web "Why this response?" uses. */
+    suspend fun responseExplanation(traceId: String): String? =
+        call("/self-awareness/introspection/${segment(traceId)}")
+
     // ── OS grounding + browser tabs (read-only observations) ────────────────
     suspend fun getOsGrounding(): String? = call("/os-grounding")
     suspend fun getAccessibilityStatus(): String? = call("/os-grounding/accessibility/status")
