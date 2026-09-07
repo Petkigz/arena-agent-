@@ -15,9 +15,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from app.config import settings
+from app.utils.submissions import submission_record_id, require_same_submission
 
 _ALLOWED_OUTCOMES = {"success", "failure", "unknown"}
 _ALLOWED_USEFULNESS = {"helpful", "partially_helpful", "not_helpful", "unknown"}
@@ -91,24 +91,34 @@ class Phase1TaskEvaluationStore:
             )
             conn.commit()
 
-    def _trace_exists(self, trace_id: str) -> bool:
+    def _trace_context(self, trace_id: str) -> Optional[Dict[str, str]]:
         path = Path(self.trace_db_path)
         if not path.exists():
-            return False
+            return None
         try:
             with sqlite3.connect(path) as conn:
                 columns = {
-                    row[1]
-                    for row in conn.execute("PRAGMA table_info(cognitive_traces)").fetchall()
+                    row[1] for row in conn.execute("PRAGMA table_info(cognitive_traces)")
                 }
                 if "trace_id" not in columns:
-                    return False
-                return bool(conn.execute(
-                    "SELECT 1 FROM cognitive_traces WHERE trace_id=?",
-                    (str(trace_id),),
-                ).fetchone())
+                    return None
+                fields = ("strategy_goal_type", "strategy_action_type", "route_comparison_json")
+                selected = ", ".join(field if field in columns else "''" for field in fields)
+                row = conn.execute(
+                    f"SELECT {selected} FROM cognitive_traces WHERE trace_id=?", (trace_id,),
+                ).fetchone()
+                if row is None:
+                    return None
+                context = dict(zip(fields, (str(value or "") for value in row)))
+                try:
+                    comparison = json.loads(context.pop("route_comparison_json") or "{}")
+                except (TypeError, ValueError):
+                    comparison = {}
+                selected_route = comparison.get("selected_route") if isinstance(comparison, dict) else None
+                context["route"] = selected_route if isinstance(selected_route, str) else ""
+                return context
         except sqlite3.Error:
-            return False
+            return None
 
     def record(
         self,
@@ -126,6 +136,7 @@ class Phase1TaskEvaluationStore:
         evidence_ids: Optional[List[str]] = None,
         note: str = "",
         created_at: Optional[str] = None,
+        submission_id: Optional[str] = None,
     ) -> Phase1TaskEvaluation:
         task_key = str(task_key or "").strip()[:200]
         trace_id = str(trace_id or "").strip()[:200]
@@ -145,11 +156,17 @@ class Phase1TaskEvaluationStore:
             raise ValueError(
                 "usefulness must be helpful, partially_helpful, not_helpful, or unknown"
             )
-        if not trace_id or not self._trace_exists(trace_id):
+        trace_context = self._trace_context(trace_id) if trace_id else None
+        if trace_context is None:
             raise KeyError(f"Trace not found: {trace_id}")
+        # The web client need only send the exact trace. Fill missing strategy
+        # metadata from its persisted facts, never from a guessed current task.
+        strategy_goal_type = strategy_goal_type or trace_context["strategy_goal_type"]
+        strategy_action_type = strategy_action_type or trace_context["strategy_action_type"]
+        route = route or trace_context["route"]
         evidence = [str(item).strip()[:200] for item in (evidence_ids or []) if str(item).strip()]
         evaluation = Phase1TaskEvaluation(
-            evaluation_id=f"phase1_eval_{uuid4().hex[:12]}",
+            evaluation_id=submission_record_id("phase1_eval_", submission_id),
             task_key=task_key,
             split=split,
             condition=condition,
@@ -165,6 +182,15 @@ class Phase1TaskEvaluationStore:
             created_at=str(created_at or _now()),
         )
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT * FROM phase1_task_evaluations WHERE evaluation_id=?",
+                (evaluation.evaluation_id,),
+            ).fetchone()
+            if existing is not None:
+                receipt = self._from_row(existing)
+                require_same_submission(receipt.to_dict(), evaluation.to_dict())
+                return receipt
             conn.execute(
                 """INSERT INTO phase1_task_evaluations
                 (evaluation_id, task_key, split, condition_name, trace_id,
@@ -192,7 +218,9 @@ class Phase1TaskEvaluationStore:
             conn.commit()
         return evaluation
 
-    def history(self, *, limit: int = 5000, split: Optional[str] = None) -> List[Phase1TaskEvaluation]:
+    def history(
+        self, *, limit: int = 5000, split: Optional[str] = None, trace_id: Optional[str] = None,
+    ) -> List[Phase1TaskEvaluation]:
         bounded_limit = max(1, min(int(limit), 5000))
         query = """SELECT evaluation_id, task_key, split, condition_name,
                           trace_id, observed_outcome, usefulness,
@@ -201,35 +229,37 @@ class Phase1TaskEvaluationStore:
                           note, created_at
                    FROM phase1_task_evaluations"""
         params: List[Any] = []
+        filters = []
         if split is not None:
-            query += " WHERE split=?"
-            params.append(str(split))
+            if split not in _ALLOWED_SPLITS:
+                raise ValueError("split must be held_out or contract")
+            filters.append("split=?")
+            params.append(split)
+        if trace_id is not None:
+            filters.append("trace_id=?")
+            params.append(str(trace_id))
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
         query += " ORDER BY created_at ASC LIMIT ?"
         params.append(bounded_limit)
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
-        return [
-            Phase1TaskEvaluation(
-                evaluation_id=row[0],
-                task_key=row[1],
-                split=row[2],
-                condition=row[3],
-                trace_id=row[4],
-                observed_outcome=row[5],
-                usefulness=row[6],
-                correction_received=bool(row[7]),
-                strategy_goal_type=row[8],
-                strategy_action_type=row[9],
-                route=row[10],
-                evidence_ids=list(json.loads(row[11] or "[]")),
-                note=row[12],
-                created_at=row[13],
-            )
-            for row in rows
-        ]
+        return [self._from_row(row) for row in rows]
 
-    def report(self, *, limit: int = 5000, split: str = "held_out") -> Dict[str, Any]:
-        evaluations = self.history(limit=limit, split=split)
+    @staticmethod
+    def _from_row(row) -> Phase1TaskEvaluation:
+        return Phase1TaskEvaluation(
+            evaluation_id=row[0], task_key=row[1], split=row[2], condition=row[3],
+            trace_id=row[4], observed_outcome=row[5], usefulness=row[6],
+            correction_received=bool(row[7]), strategy_goal_type=row[8],
+            strategy_action_type=row[9], route=row[10],
+            evidence_ids=list(json.loads(row[11] or "[]")), note=row[12], created_at=row[13],
+        )
+
+    def report(
+        self, *, limit: int = 5000, split: str = "held_out", trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        evaluations = self.history(limit=limit, split=split, trace_id=trace_id)
         outcome_counts = Counter(item.observed_outcome for item in evaluations)
         usefulness_counts = Counter(
             item.usefulness for item in evaluations if item.usefulness != "unknown"

@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.database import db
 from app.utils.logger import app_logger, audit_logger
+from app.utils.submissions import submission_record_id, require_same_submission
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -88,6 +89,7 @@ class CognitiveTrace:
         outcome_signal: str = "",
         retrieval_useful: Optional[bool] = None,
         note: str = "",
+        submission_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Append an owner usefulness event to the trace database.
 
@@ -117,10 +119,23 @@ class CognitiveTrace:
                 "clarification_requested, correction_followup, abandoned, unknown"
             )
         note = str(note or "").strip()[:2000]
-        feedback_id = f"feedback_{uuid.uuid4().hex[:12]}"
+        feedback_id = submission_record_id("feedback_", submission_id)
         created_at = _now()
+        feedback = {
+            "feedback_id": feedback_id,
+            "trace_id": str(trace_id),
+            "usefulness": usefulness,
+            "outcome_signal": outcome_signal,
+            "retrieval_useful": None if retrieval_useful is None else bool(retrieval_useful),
+            "note": note,
+            "created_at": created_at,
+        }
         try:
             with sqlite3.connect(str(settings.DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                # Serialize retry detection and insertion: concurrent deliveries
+                # of one owner submission must never inflate feedback volume.
+                conn.execute("BEGIN IMMEDIATE")
                 try:
                     trace_exists = conn.execute(
                         "SELECT 1 FROM cognitive_traces WHERE trace_id = ? LIMIT 1",
@@ -143,6 +158,16 @@ class CognitiveTrace:
                         created_at TEXT NOT NULL
                     )
                 """)
+                existing = conn.execute(
+                    "SELECT * FROM cognitive_trace_usefulness WHERE feedback_id=?", (feedback_id,),
+                ).fetchone()
+                if existing is not None:
+                    receipt = dict(existing)
+                    receipt["retrieval_useful"] = (
+                        None if receipt["retrieval_useful"] is None else bool(receipt["retrieval_useful"])
+                    )
+                    require_same_submission(receipt, feedback)
+                    return receipt
                 conn.execute("""
                     INSERT INTO cognitive_trace_usefulness
                     (feedback_id, trace_id, usefulness, outcome_signal,
@@ -158,20 +183,12 @@ class CognitiveTrace:
                     created_at,
                 ))
                 conn.commit()
-        except KeyError:
+        except (KeyError, ValueError):
             raise
         except Exception as exc:
             app_logger.warning(f"CognitiveTrace usefulness feedback failed: {exc}")
             raise RuntimeError(f"could not record usefulness feedback: {exc}") from exc
-        return {
-            "feedback_id": feedback_id,
-            "trace_id": str(trace_id),
-            "usefulness": usefulness,
-            "outcome_signal": outcome_signal,
-            "retrieval_useful": retrieval_useful,
-            "note": note,
-            "created_at": created_at,
-        }
+        return feedback
 
     @classmethod
     def list_usefulness_feedback(cls, trace_id: str) -> List[Dict[str, Any]]:

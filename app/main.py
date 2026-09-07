@@ -318,6 +318,10 @@ class TraceUsefulnessRequest(BaseModel):
     outcome_signal: str = ""
     retrieval_useful: Optional[bool] = None
     note: str = ""
+    submission_id: Optional[str] = Field(
+        default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_-]+$",
+    )
+
 
 class Phase1TaskEvaluationRequest(BaseModel):
     """Owner-recorded held-out task outcome; measurement only."""
@@ -333,6 +337,10 @@ class Phase1TaskEvaluationRequest(BaseModel):
     route: str = ""
     evidence_ids: List[str] = Field(default_factory=list, max_length=20)
     note: str = ""
+    submission_id: Optional[str] = Field(
+        default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_-]+$",
+    )
+
 
 class NotificationRequest(BaseModel):
     title: str
@@ -2781,6 +2789,7 @@ def record_trace_usefulness_endpoint(trace_id: str, req: TraceUsefulnessRequest)
             outcome_signal=req.outcome_signal,
             retrieval_useful=req.retrieval_useful,
             note=req.note,
+            submission_id=req.submission_id,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -2848,6 +2857,7 @@ def record_phase1_task_evaluation_endpoint(req: Phase1TaskEvaluationRequest):
             route=req.route,
             evidence_ids=req.evidence_ids,
             note=req.note,
+            submission_id=req.submission_id,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -2860,13 +2870,14 @@ def record_phase1_task_evaluation_endpoint(req: Phase1TaskEvaluationRequest):
 def phase1_task_evaluations_endpoint(
     limit: int = Query(default=5000, ge=1, le=5000),
     split: str = Query(default="held_out"),
+    trace_id: Optional[str] = None,
 ):
     """Return owner-recorded task evaluations and descriptive comparisons."""
     from app.cognition.runtime import CognitiveRuntime
     store = CognitiveRuntime.get_instance().phase1_task_evaluations
     try:
-        report = store.report(limit=limit, split=split)
-        history = [item.to_dict() for item in store.history(limit=limit, split=split)]
+        report = store.report(limit=limit, split=split, trace_id=trace_id)
+        history = [item.to_dict() for item in store.history(limit=limit, split=split, trace_id=trace_id)]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
