@@ -13,24 +13,32 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
 
     run = suite.run()
 
-    assert run.total_count == 23
+    assert run.total_count == 26
     assert run.passed_count == run.total_count
     assert run.regressions == []
     assert {check.category for check in run.checks} >= {
         "memory", "learning", "adaptation", "control", "perception", "planning",
-        "identity_adaptation", "calibration",
+        "identity_adaptation", "calibration", "grounding",
     }
     assert {check.name for check in run.checks} >= {
         "identity_adaptation_governance",
         "shutdown_cooperation_boundary",
         "confidence_calibration_history",
+        "held_out_unknown_answer",
+        "held_out_deterministic_mismatch",
+        "held_out_empty_observation",
     }
+    assert all(
+        check.evaluation_scope == "held_out"
+        for check in run.checks
+        if check.name.startswith("held_out_")
+    )
     assert all(check.duration_ms >= 0 for check in run.checks)
 
     restored = BenchmarkHistoryStore(tmp_path / "benchmarks.db").latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.passed_count == 23
+    assert restored.passed_count == 26
 
 
 def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):
@@ -40,17 +48,18 @@ def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):
 
     original = IntelligenceBenchmarkSuite._run_check
 
-    def fail_one(name, category, function):
+    def fail_one(name, category, function, *, evaluation_scope="contract"):
         if name == "memory_paraphrase_retrieval":
             return BenchmarkCheck(
                 name=name,
                 category=category,
                 passed=False,
                 evidence="injected regression",
-                metrics={},
-                duration_ms=0.0,
-            )
-        return original(name, category, function)
+                    metrics={},
+                    duration_ms=0.0,
+                    evaluation_scope=evaluation_scope,
+                )
+        return original(name, category, function, evaluation_scope=evaluation_scope)
 
     monkeypatch.setattr(IntelligenceBenchmarkSuite, "_run_check", staticmethod(fail_one))
     regressed = IntelligenceBenchmarkSuite(history).run()
@@ -84,6 +93,7 @@ def test_trend_requires_repeated_runs_and_reports_observed_changes_only(tmp_path
     assert trend["status"] == "measured"
     assert trend["run_count"] == 2
     assert trend["checks"]["identity_adaptation_governance"]["observed_change"] == "stable"
+    assert trend["checks"]["held_out_unknown_answer"]["evaluation_scope"] == "held_out"
     assert "agi_score" not in trend
     assert "causal" in trend["note"].lower()
 

@@ -40,7 +40,7 @@ Latest automated verification:
 |---|---|---|---|
 | 0.1 | Reconcile the 27-item audit row scores and headline total. | **DONE — NUMERIC BASELINE RECONCILED; SOURCE WORDING UNAVAILABLE** | The displayed rows and aggregate agree, and the missing source wording is explicitly recorded rather than guessed. |
 | 0.2 | Maintain the isolated test environment and repeatable focused/full commands. | **DONE — IMPLEMENTED AND WIRED** | A change can be tested at focused, subsystem, and full-suite levels. |
-| 0.3 | Add a bounded longitudinal evaluation runner for repeated benchmark behavior. | **DONE — IMPLEMENTED AND WIRED for deterministic contract trends** | The isolated benchmark has 23 deterministic checks plus persisted pass/fail trend reporting and an API endpoint; held-out task outcome effects are tracked separately under Phase 1.4. |
+| 0.3 | Add a bounded longitudinal evaluation runner for repeated benchmark behavior. | **DONE — IMPLEMENTED AND WIRED for deterministic contract trends** | The isolated benchmark has 26 deterministic checks, including three explicitly scoped held-out grounding cases, plus persisted pass/fail trend reporting and an API endpoint; held-out task outcome effects are tracked separately under Phase 1.4. |
 | 0.4 | Keep score upgrades tied to observable behavior rather than filenames, modules, or phase labels. | **DONE for current audit process** | Every status cites a reachable path and a test or explicit evidence gap. |
 
 **Phase 0 exit status:** CLOSED for the bounded measurement and observability layer. The unavailable source questionnaire is recorded as an evidence gap, not treated as a blocker. Phase 1 now owns held-out behavior and outcome improvement.
@@ -52,7 +52,7 @@ Latest automated verification:
 | 1.1 | Carry provenance, evidence IDs, freshness, and trace IDs through input → decision → tool → observation → result. | **DONE — IMPLEMENTED AND WIRED** for the main cognitive paths | A trace can reconstruct the evidence path without exposing private chain-of-thought. |
 | 1.2 | Preserve `UNKNOWN`, contradictions, stale observations, and failed tool results. | **DONE — IMPLEMENTED AND WIRED** | Unsupported or contradictory output cannot become verified success. |
 | 1.3 | Expose user-facing epistemic labels and concise evidence explanations. | **DONE — IMPLEMENTED AND WIRED** | Normal responses and metadata expose evidence state, assumptions, and what would change. |
-| 1.4 | Calibrate confidence and response usefulness over longitudinal held-out tasks. | **IN PROGRESS / PARTIAL** | A deterministic recorded-outcome calibration trend is benchmarked; unsupported-claim rate, correction speed, usefulness, and held-out task improvement remain to be measured. |
+| 1.4 | Calibrate confidence and response usefulness over longitudinal held-out tasks. | **IN PROGRESS / PARTIAL** | Recorded-outcome calibration and three held-out grounding cases are benchmarked; unsupported-claim rate, correction speed, usefulness, and held-out task improvement remain to be measured. |
 | 1.5 | Make correction outcomes change the relevant strategy without overgeneralizing from one correction. | **PARTIAL** | A correction is trace-linked through immediate belief revision, strategy selection, and later measured behavior. |
 
 ### 2. Explicit user, world, social, and temporal state
@@ -132,7 +132,7 @@ Latest automated verification:
 
 The next work should not add another cognitive label. It should close the open evidence gaps in this order:
 
-1. **Extend Phase 1 held-out evaluation (1.4).** The isolated suite now covers 23 deterministic contracts, including recorded calibration trends, and persists observed pass/fail trends; next add repeated held-out task runs that compare unsupported claims, corrections, route choice, usefulness, memory compounding, and style changes.
+1. **Extend Phase 1 held-out evaluation (1.4).** The isolated suite now covers 26 deterministic contracts, including recorded calibration trends and three explicitly scoped held-out grounding cases; next add repeated task runs that compare unsupported claims, corrections, route choice, usefulness, memory compounding, and style changes.
 2. **Measure correction and adaptation effects (1.5, 2.5, 8.3).** Prove that feedback changes future behavior appropriately without overgeneralizing or silently changing policy.
 3. **Measure memory and incubation improvement (3.3, 3.4, 6.4).** Compare later task outcomes against a no-compounding baseline.
 4. **Measure causal/physics transfer (5.3, 5.4).** Expand beyond deterministic toy scenes while preserving the simulated-versus-observed boundary.

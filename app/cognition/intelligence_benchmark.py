@@ -32,6 +32,7 @@ class BenchmarkCheck:
     evidence: str
     metrics: Dict[str, Any] = field(default_factory=dict)
     duration_ms: float = 0.0
+    evaluation_scope: str = "contract"  # contract | held_out
 
 
 @dataclass
@@ -142,9 +143,11 @@ class BenchmarkHistoryStore:
         # history() is newest-first; reverse it to make the baseline explicit.
         chronological = list(reversed(reports))
         by_name: Dict[str, List[bool]] = {}
+        scope_by_name: Dict[str, str] = {}
         for report in chronological:
             for check in report.checks:
                 by_name.setdefault(check.name, []).append(bool(check.passed))
+                scope_by_name.setdefault(check.name, check.evaluation_scope)
 
         checks: Dict[str, Dict[str, Any]] = {}
         for name, outcomes in sorted(by_name.items()):
@@ -158,6 +161,7 @@ class BenchmarkHistoryStore:
             else:
                 observed_change = "stable"
             checks[name] = {
+                "evaluation_scope": scope_by_name.get(name, "contract"),
                 "run_count": len(outcomes),
                 "passed_runs": sum(outcomes),
                 "pass_rate": pass_rate,
@@ -184,6 +188,8 @@ class IntelligenceBenchmarkSuite:
         name: str,
         category: str,
         function: Callable[[], tuple[bool, str, Dict[str, Any]]],
+        *,
+        evaluation_scope: str = "contract",
     ) -> BenchmarkCheck:
         started = time.perf_counter()
         try:
@@ -197,6 +203,7 @@ class IntelligenceBenchmarkSuite:
             evidence=evidence,
             metrics=metrics,
             duration_ms=round((time.perf_counter() - started) * 1000, 3),
+            evaluation_scope=evaluation_scope,
         )
 
     def run(self) -> BenchmarkRun:
@@ -853,6 +860,90 @@ class IntelligenceBenchmarkSuite:
                 "confidence_calibration_history",
                 "calibration",
                 confidence_calibration_history,
+            ))
+
+            def held_out_unknown_answer():
+                from app.cognition.epistemic_presentation import (
+                    LABEL_UNKNOWN,
+                    presentation_for_cycle,
+                )
+
+                presentation = presentation_for_cycle(
+                    goal_verified=False,
+                    unknown=True,
+                    evidence_items=["held-out task supplied no authoritative evidence"],
+                )
+                passed = (
+                    presentation.evidence_state == "unknown"
+                    and presentation.confidence_label == LABEL_UNKNOWN
+                    and presentation.visible is True
+                )
+                return passed, "missing evidence stayed UNKNOWN in a held-out response case", {
+                    "evidence_state": presentation.evidence_state,
+                    "confidence_label": presentation.confidence_label,
+                }
+
+            checks.append(self._run_check(
+                "held_out_unknown_answer",
+                "grounding",
+                held_out_unknown_answer,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_deterministic_mismatch():
+                from app.cognition.response_grounding import reconcile_response
+
+                corrected, grounding = reconcile_response(
+                    "The computed result is 41.",
+                    deterministic_answers=[
+                        {"expression": "2 + 2", "value": 4, "value_str": "4"},
+                    ],
+                )
+                passed = (
+                    grounding.status == "contradicted"
+                    and grounding.recovery_applied is True
+                    and "2 + 2 = 4" in corrected
+                )
+                return passed, "a held-out wrong deterministic answer was marked contradicted", {
+                    "status": grounding.status,
+                    "recovery_applied": grounding.recovery_applied,
+                }
+
+            checks.append(self._run_check(
+                "held_out_deterministic_mismatch",
+                "grounding",
+                held_out_deterministic_mismatch,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_empty_observation():
+                from app.cognition.response_grounding import reconcile_response
+
+                positive, positive_grounding = reconcile_response(
+                    "I found three matching files.",
+                    observation_evidence="search_files: []",
+                )
+                negative, negative_grounding = reconcile_response(
+                    "I found no matching files.",
+                    observation_evidence="search_files: []",
+                )
+                passed = (
+                    positive_grounding.status == "contradicted"
+                    and positive_grounding.recovery_applied is True
+                    and "no matching results" in positive
+                    and negative_grounding.recovery_applied is False
+                    and negative == "I found no matching files."
+                )
+                return passed, "empty observations rejected positive discovery but preserved honest denial", {
+                    "positive_status": positive_grounding.status,
+                    "negative_status": negative_grounding.status,
+                }
+
+            checks.append(self._run_check(
+                "held_out_empty_observation",
+                "grounding",
+                held_out_empty_observation,
+                evaluation_scope="held_out",
             ))
 
         previous_by_name = {
