@@ -2209,6 +2209,7 @@ class OwnerCorrectionRequest(BaseModel):
     response: str
     skill_name: str = "general"
     note: str = ""
+    correction_type: str = "unspecified"
     trace_id: Optional[str] = None
     session_id: Optional[str] = None
     action_type: str = "owner_correction"
@@ -2312,7 +2313,22 @@ def create_owner_correction_endpoint(req: OwnerCorrectionRequest):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if candidate is None:
         raise HTTPException(status_code=400, detail="Prompt and response must each contain at least 3 characters")
-    return {"success": True, "candidate": candidate.to_dict()}
+    measurement = runtime.correction_measurements.record(
+        trace_id=candidate.source_trace_id,
+        correction_type=req.correction_type,
+        expected_effect=(
+            "repeated evidence may adjust the linked strategy"
+            if candidate.strategy_update.get("generalized")
+            else "keep the correction local until repeated evidence exists"
+        ),
+        strategy_update=candidate.strategy_update,
+        evidence=list(candidate.evidence),
+    )
+    return {
+        "success": True,
+        "candidate": candidate.to_dict(),
+        "correction_measurement": measurement.to_dict(),
+    }
 
 
 @router.put("/loras/training-candidates/{candidate_id}")
@@ -2768,6 +2784,22 @@ def list_trace_usefulness_endpoint(trace_id: str):
         "success": True,
         "trace_id": trace_id,
         "feedback": CognitiveTrace.list_usefulness_feedback(trace_id),
+    }
+
+
+@router.get("/cognition/corrections/measurements")
+def correction_measurements_endpoint(limit: int = Query(default=100, ge=1, le=5000)):
+    """Return owner-visible correction telemetry without rewriting truth fields."""
+    from app.cognition.runtime import CognitiveRuntime
+    store = CognitiveRuntime.get_instance().correction_measurements
+    return {
+        "success": True,
+        "summary": store.summary().to_dict(),
+        "events": [event.to_dict() for event in store.history(limit=limit)],
+        "note": (
+            "latency is measured from linked trace creation to correction receipt; "
+            "it is a bounded telemetry proxy, not human reaction time"
+        ),
     }
 
 

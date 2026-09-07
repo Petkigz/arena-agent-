@@ -151,6 +151,11 @@ class CognitiveRuntime:
             db_path=str(Path(path).parent / "training_examples.db") if path else "data/training_examples.db",
             trace_db_path=path,
         )
+        from app.cognition.correction_measurements import CorrectionMeasurementStore
+        self.correction_measurements = CorrectionMeasurementStore(
+            db_path=str(Path(path).parent / "correction_measurements.db") if path else "data/correction_measurements.db",
+            trace_db_path=path,
+        )
         from app.cognition.adaptive_autonomy import AdaptiveAutonomyCalibrator
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
             path=str(Path(path).parent / "adaptive_autonomy.json") if path else "data/adaptive_autonomy.json"

@@ -1110,6 +1110,142 @@ class IntelligenceBenchmarkSuite:
                 evaluation_scope="held_out",
             ))
 
+            def held_out_correction_measurement():
+                from datetime import datetime, timedelta
+                from app.cognition.correction_measurements import CorrectionMeasurementStore
+                from app.cognition.trace import CognitiveTrace
+
+                trace_db = root / "held_out_correction_trace.db"
+                previous_db = settings.DB_PATH
+                settings.DB_PATH = trace_db
+                try:
+                    trace = CognitiveTrace(
+                        user_input="Which device?",
+                        session_id="held-out-correction",
+                    )
+                    trace.finalize(
+                        reply="The wrong device.",
+                        actions=[],
+                        latency=1.0,
+                        goal_verified=False,
+                    )
+                finally:
+                    settings.DB_PATH = previous_db
+                with sqlite3.connect(trace_db) as conn:
+                    source_created_at = conn.execute(
+                        "SELECT created_at FROM cognitive_traces WHERE trace_id=?",
+                        (trace.trace_id,),
+                    ).fetchone()[0]
+                source_time = datetime.fromisoformat(source_created_at.replace("Z", "+00:00"))
+                received_at = (source_time + timedelta(milliseconds=125)).isoformat()
+                store = CorrectionMeasurementStore(
+                    root / "held_out_corrections.db",
+                    trace_db_path=trace_db,
+                )
+                event = store.record(
+                    trace_id=trace.trace_id,
+                    correction_type="factual",
+                    expected_effect="keep the correction local until repeated evidence exists",
+                    strategy_update={
+                        "applied": True,
+                        "generalized": False,
+                        "correction_count": 1,
+                        "adjustment_factor": 1.0,
+                    },
+                    evidence=[f"source_trace:{trace.trace_id}"],
+                    received_at=received_at,
+                )
+                summary = store.summary()
+                passed = bool(
+                    event.trace_id == trace.trace_id
+                    and event.latency_ms == 125.0
+                    and event.strategy_applied is True
+                    and event.strategy_generalized is False
+                    and summary.trace_linked_corrections == 1
+                    and summary.measured_latency_count == 1
+                )
+                return passed, "correction receipt and bounded trace-to-receipt latency were measured", {
+                    "trace_id": event.trace_id,
+                    "latency_ms": event.latency_ms,
+                    "latency_basis": event.latency_basis,
+                    "strategy_generalized": event.strategy_generalized,
+                }
+
+            checks.append(self._run_check(
+                "held_out_correction_measurement",
+                "correction",
+                held_out_correction_measurement,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_correction_non_generalization():
+                from app.cognition.strategy_outcomes import StrategyOutcomeStore
+                from app.cognition.training_examples import TrainingExampleStore
+
+                from app.cognition.trace import CognitiveTrace
+
+                trace_db = root / "held_out_correction_strategy_trace.db"
+                previous_db = settings.DB_PATH
+                settings.DB_PATH = trace_db
+                try:
+                    trace = CognitiveTrace(
+                        user_input="Benchmark request",
+                        session_id="held-out-correction-strategy",
+                    )
+                    trace.finalize(
+                        reply="The wrong interpretation.",
+                        actions=[],
+                        latency=1.0,
+                        goal_verified=False,
+                    )
+                finally:
+                    settings.DB_PATH = previous_db
+                trace_id = trace.trace_id
+                outcomes = StrategyOutcomeStore(str(root / "held_out_correction_strategy.db"))
+                candidates = TrainingExampleStore(
+                    root / "held_out_correction_candidates.db",
+                    trace_db_path=trace_db,
+                )
+                kwargs = {
+                    "prompt": "Benchmark request",
+                    "response": "The corrected interpretation.",
+                    "skill_name": "answer",
+                    "note": "The interpretation was wrong.",
+                    "source_trace_id": trace_id,
+                    "action_type": "answer",
+                    "goal_type": "device_question",
+                    "strategy_store": outcomes,
+                }
+                first = candidates.propose_owner_correction(**kwargs)
+                after_one = outcomes.adjustment_factor("device_question", "answer")
+                unrelated_before = outcomes.adjustment_factor("calendar_question", "answer")
+                second = candidates.propose_owner_correction(**kwargs)
+                after_repeat = outcomes.adjustment_factor("device_question", "answer")
+                unrelated_after = outcomes.adjustment_factor("calendar_question", "answer")
+                passed = bool(
+                    first
+                    and second
+                    and first.strategy_update.get("generalized") is False
+                    and after_one == 1.0
+                    and unrelated_before == 1.0
+                    and second.strategy_update.get("generalized") is True
+                    and after_repeat < 1.0
+                    and unrelated_after == 1.0
+                )
+                return passed, "one correction stayed local while repeated same-context evidence changed only its strategy", {
+                    "first_generalized": first.strategy_update.get("generalized") if first else None,
+                    "second_generalized": second.strategy_update.get("generalized") if second else None,
+                    "same_context_after_repeat": after_repeat,
+                    "unrelated_context_after_repeat": unrelated_after,
+                }
+
+            checks.append(self._run_check(
+                "held_out_correction_non_generalization",
+                "correction",
+                held_out_correction_non_generalization,
+                evaluation_scope="held_out",
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}

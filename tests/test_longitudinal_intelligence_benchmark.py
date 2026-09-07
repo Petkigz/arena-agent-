@@ -13,7 +13,7 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
 
     run = suite.run()
 
-    assert run.total_count == 29
+    assert run.total_count == 31
     assert run.passed_count == run.total_count
     assert run.regressions == []
     assert {check.category for check in run.checks} >= {
@@ -30,6 +30,8 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
         "held_out_empty_observation",
         "held_out_outcome_guided_choice",
         "held_out_usefulness_guided_choice",
+        "held_out_correction_measurement",
+        "held_out_correction_non_generalization",
     }
     assert all(
         check.evaluation_scope == "held_out"
@@ -40,12 +42,14 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
     assert by_name["held_out_unsupported_claim_control"].metrics["supported"] is False
     assert by_name["held_out_outcome_guided_choice"].metrics["observed_outcome_delta"] == 1
     assert by_name["held_out_usefulness_guided_choice"].metrics["adapted_strategy"] == "web_search"
+    assert by_name["held_out_correction_measurement"].metrics["latency_ms"] == 125.0
+    assert by_name["held_out_correction_non_generalization"].metrics["unrelated_context_after_repeat"] == 1.0
     assert all(check.duration_ms >= 0 for check in run.checks)
 
     restored = BenchmarkHistoryStore(tmp_path / "benchmarks.db").latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.passed_count == 29
+    assert restored.passed_count == 31
 
 
 def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):
