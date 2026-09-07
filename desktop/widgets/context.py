@@ -100,9 +100,15 @@ class ContextPanel(QFrame):
         inner_layout.addWidget(self._status_label)
         self._sections.append(self._status_label)
 
-        self._mission = self._section(inner_layout, "MISSION", "No active mission")
+        self._mission = self._section(inner_layout, "MISSION", "No active goal")
         self._working = self._section(inner_layout, "WORKING ON", "—")
+        self._state = self._section(inner_layout, "STATE", "Idle")
+        self._focus = self._section(inner_layout, "FOCUS", "—")
         self._memory = self._section(inner_layout, "MEMORY", "—")
+        self._perception = self._section(inner_layout, "PERCEPTION", "Local environment")
+        self._current_chat = self._section(inner_layout, "CURRENT CHAT", "—")
+        self._recent_activity = self._section(inner_layout, "RECENT ACTIVITY", "Nothing yet")
+        self._insight = self._section(inner_layout, "BEANIE INSIGHT", "I'm here.")
 
         # Tools: the execution timeline (semantic, like web ActionSteps).
         self._tools_title = self._label("TOOLS", 12, True, TEXT_SECONDARY)
@@ -188,11 +194,27 @@ class ContextPanel(QFrame):
         self._status_label.setStyleSheet(self._status_style(color))
 
     def set_context(self, context: dict) -> None:
-        """Same context dict the inline working-context card composes from."""
-        self._mission.setText(str(context.get("objective") or "No active mission"))
-        self._working.setText(str(context.get("project") or "—"))
+        """Update the cognitive dashboard from a partial context payload."""
+        objective = str(context.get("objective") or "No active goal")
+        project = str(context.get("project") or "—")
         memories = context.get("memories") or 0
+        self._mission.setText(objective)
+        self._working.setText(project)
+        self._state.setText(str(context.get("state") or ("Working" if context else "Idle")))
+        self._focus.setText(str(context.get("focus") or project or "—"))
         self._memory.setText(f"{memories} relevant memories" if memories else "—")
+        self._perception.setText(str(context.get("perception") or "Local environment"))
+        self._current_chat.setText(str(context.get("chat") or "—"))
+        self._recent_activity.setText(str(context.get("activity") or "Nothing yet"))
+        self._insight.setText(str(context.get("insight") or "I'm here."))
+
+    def set_current_chat(self, title: str) -> None:
+        self._current_chat.setText(title or "—")
+
+    def set_current_state(self, state: str, insight: str = "") -> None:
+        self._state.setText(state or "Idle")
+        if insight:
+            self._insight.setText(insight)
 
     def clear_context(self) -> None:
         self.set_context({})

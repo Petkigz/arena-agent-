@@ -6,12 +6,12 @@ from typing import Optional
 
 import numpy as np
 
-from backend.voice.orchestrator import VoicePipeline, VoiceState
+from backend.voice.orchestrator import VoicePipeline, VoicePipelineStartupError, VoiceState
 from backend.voice.remote_audio import RemoteAudioBuffer
 from backend.voice.stt import SpeechToTextService
 from backend.websocket_server import ws_manager
 import backend.message_router as message_router_module
-from app.perception.piper_voice import synthesize_piper
+from app.perception.piper_voice import get_last_piper_error, synthesize_piper
 from app.settings_store import get_settings
 from app.utils.logger import app_logger
 
@@ -85,9 +85,31 @@ class VoiceService:
             on_transcript=self._handle_transcript,
             on_state_change=self._handle_state_change,
             on_audio_ready=self._handle_audio_ready,
+            on_error=self._handle_pipeline_error,
         )
 
-        await self.pipeline.start()
+        try:
+            await self.pipeline.start()
+        except Exception:
+            # Voice startup is transactional: do not leave a failed pipeline
+            # attached to the service or retain a conversation id that appears
+            # active after startup failed.  VoicePipeline.start() performs its
+            # own component cleanup; this clears the service-level ownership.
+            failed_pipeline = self.pipeline
+            self.pipeline = None
+            self._enabled = False
+            self.current_conversation_id = None
+            if failed_pipeline is not None:
+                try:
+                    await failed_pipeline.stop()
+                except Exception as cleanup_error:
+                    app_logger.error(
+                        "Voice startup cleanup failed after the original error: %s",
+                        cleanup_error,
+                        exc_info=True,
+                    )
+            raise
+
         self._enabled = True
 
         app_logger.info(f"Voice service started for conversation {conversation_id}")
@@ -252,20 +274,55 @@ class VoiceService:
         """A complete utterance was detected from the remote device."""
         asyncio.create_task(self._transcribe_remote_utterance(audio))
 
-    def _get_remote_stt(self) -> Optional[SpeechToTextService]:
-        """Lazily create + start a standalone STT for remote audio."""
+    def _get_remote_stt(self) -> SpeechToTextService:
+        """Lazily create + start the required STT for remote audio."""
         if self._remote_stt is None:
             try:
                 self._remote_stt = SpeechToTextService(model_size="base")
                 self._remote_stt.start()
-            except Exception as e:
-                app_logger.warning(f"Could not start remote STT: {e}")
+            except Exception as exc:
                 self._remote_stt = None
+                raise VoicePipelineStartupError(
+                    "remote_stt",
+                    f"{type(exc).__name__}: {exc}",
+                    "Install faster-whisper and ensure the selected Whisper model "
+                    "can be loaded locally before sending remote voice audio.",
+                ) from exc
 
         stt = self._remote_stt
-        if stt is None or stt.model is None:
-            return None
+        if stt is None or stt.model is None or not stt.is_running:
+            reason = getattr(stt, "last_error", None) or (
+                "STT start() returned without loading a running Whisper model"
+            )
+            raise VoicePipelineStartupError(
+                "remote_stt",
+                str(reason),
+                "Install faster-whisper and ensure the selected Whisper model "
+                "can be loaded locally before sending remote voice audio.",
+            )
         return stt
+
+    async def _report_voice_error(self, error: VoicePipelineStartupError) -> None:
+        """Surface a voice component failure to every client in the conversation."""
+        if not self.current_conversation_id:
+            return
+        await ws_manager.broadcast_to_conversation(
+            self.current_conversation_id,
+            {
+                "type": "voice_status",
+                "conversation_id": self.current_conversation_id,
+                "status": "error",
+                **error.as_dict(),
+                "message": str(error),
+            },
+        )
+        await ws_manager.broadcast_to_conversation(
+            self.current_conversation_id,
+            {
+                "type": "voice_state",
+                "state": VoiceState.IDLE.value,
+            },
+        )
 
     async def _transcribe_remote_utterance(self, audio: np.ndarray) -> None:
         """Transcribe a remote utterance and route it through the same path as a
@@ -335,20 +392,29 @@ class VoiceService:
         except Exception as e:
             app_logger.warning(f"Prosody analysis failed (best-effort): {e}")
 
-        stt = self._get_remote_stt()
-        if stt is None:
-            app_logger.warning("STT unavailable — remote audio not transcribed (install faster-whisper)")
-            # Even without STT, if prosody detected strong emotion, provide empathetic feedback
-            if prosody_emotion in ("anger", "sadness", "fear") and prosody_intensity > 0.6:
-                await self._speak_feedback(
-                    "I hear you — it sounds like you're feeling something. Could you say that again?"
-                )
-            return
-
         try:
+            stt = self._get_remote_stt()
+            if stt is None:  # Defensive guard for injected/legacy providers.
+                raise VoicePipelineStartupError(
+                    "remote_stt",
+                    "The remote STT provider returned no service instance",
+                    "Install faster-whisper and ensure the selected Whisper model "
+                    "can be loaded locally before sending remote voice audio.",
+                )
             result = await stt.transcribe_async(audio, sample_rate=16000)
-        except Exception as e:
-            app_logger.error(f"Remote transcription failed: {e}")
+        except VoicePipelineStartupError as exc:
+            app_logger.error("Remote voice input refused: %s", exc)
+            await self._report_voice_error(exc)
+            return
+        except Exception as exc:
+            error = VoicePipelineStartupError(
+                "remote_stt",
+                f"{type(exc).__name__}: {exc}",
+                "Inspect the Whisper model/runtime error and correct it before "
+                "sending remote voice audio again.",
+            )
+            app_logger.error("Remote transcription failed: %s", error)
+            await self._report_voice_error(error)
             return
 
         text = (result.get("text") or "").strip()
@@ -407,6 +473,10 @@ class VoiceService:
                 # Provide feedback for unrecognized commands
                 await self._speak_feedback("I didn't understand that. Try saying 'help' for commands.")
 
+    async def _handle_pipeline_error(self, error: VoicePipelineStartupError):
+        """Forward local pipeline runtime failures to the connected clients."""
+        await self._report_voice_error(error)
+
     async def _handle_state_change(self, old_state: VoiceState, new_state: VoiceState):
         """Handle voice pipeline state change."""
         if not self.current_conversation_id:
@@ -462,76 +532,46 @@ class VoiceService:
         })
 
         try:
-            # V3 fix: honor saved voice_speed for remote/phone path, not hardcoded 1.0
+            # Honor the configured voice and speed.  Piper is the selected
+            # remote TTS component; if it cannot synthesize, report that exact
+            # failure instead of substituting an OS engine and hiding it.
             try:
                 speed = float(get_settings().get("voice_speed") or 1.0)
             except Exception:
                 speed = 1.0
             voice_id = str(get_settings().get("voice") or "") or None
             result = await asyncio.to_thread(synthesize_piper, text, voice_id, speed, 16000)
-            if result is not None:
-                audio, _sr = result
-                pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
-                await ws_manager.send_audio_to_conversation(conv_id, pcm)
-                # Hold SPEAKING while the client plays the audio (int16 @ 16 kHz).
-                await asyncio.sleep(len(pcm) / 32000.0 + 0.25)
-            else:
-                # Piper model not installed — fall back to the OS TTS driver
-                # (pyttsx3; SAPI5 on Windows) so spoken replies still work.
-                # Live complaint: 'audio reply seems not available' — the WS
-                # voice path used Piper ONLY, so machines without a Piper
-                # voice model got silent replies.
-                pcm = await asyncio.to_thread(self._synthesize_wav_to_pcm16k, text)
-                if pcm:
-                    await ws_manager.send_audio_to_conversation(conv_id, pcm)
-                    await asyncio.sleep(len(pcm) / 32000.0 + 0.25)
-                else:
-                    app_logger.warning(
-                        "Voice reply skipped: no TTS engine produced audio "
-                        "(install piper-tts + a voice model, or a system TTS driver)."
-                    )
-        except Exception as e:
-            app_logger.error(f"Voice reply TTS failed: {e}")
+            if result is None:
+                reason = get_last_piper_error() or "Piper returned no audio"
+                raise VoicePipelineStartupError(
+                    "remote_tts",
+                    reason,
+                    "Install piper-tts and the selected .onnx voice model with its "
+                    ".onnx.json config, then retry the voice request.",
+                )
+
+            audio, _sr = result
+            pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
+            await ws_manager.send_audio_to_conversation(conv_id, pcm)
+            # Hold SPEAKING while the client plays the audio (int16 @ 16 kHz).
+            await asyncio.sleep(len(pcm) / 32000.0 + 0.25)
+        except VoicePipelineStartupError as exc:
+            app_logger.error("Remote voice reply refused: %s", exc)
+            await self._report_voice_error(exc)
+        except Exception as exc:
+            error = VoicePipelineStartupError(
+                "remote_tts",
+                f"{type(exc).__name__}: {exc}",
+                "Inspect the Piper synthesis/runtime error and correct it before "
+                "retrying the voice request.",
+            )
+            app_logger.error("Voice reply TTS failed: %s", error)
+            await self._report_voice_error(error)
 
         await ws_manager.broadcast_to_conversation(conv_id, {
             "type": "voice_state",
             "state": VoiceState.IDLE.value,
         })
-
-    @staticmethod
-    def _synthesize_wav_to_pcm16k(text: str) -> Optional[bytes]:
-        """Synthesize via the piper→pyttsx3 fallback chain and return 16 kHz
-        mono int16 PCM (what the WS voice clients expect), or None when no
-        engine produced audio."""
-        import wave as _wave
-        try:
-            from app.perception.text_to_speech import LocalTextToSpeech
-            res = LocalTextToSpeech.synthesize_speech(text)
-            if not res or not res.get("success") or not res.get("file_path"):
-                return None
-            with _wave.open(res["file_path"], "rb") as w:
-                n_channels = w.getnchannels()
-                sample_width = w.getsampwidth()
-                frame_rate = w.getframerate()
-                raw = w.readframes(w.getnframes())
-            if sample_width != 2:
-                app_logger.warning(f"TTS fallback: unsupported sample width {sample_width}")
-                return None
-            samples = np.frombuffer(raw, dtype=np.int16)
-            if n_channels == 2:
-                samples = samples.reshape(-1, 2).mean(axis=1).astype(np.int16)
-            elif n_channels != 1:
-                return None
-            if frame_rate != 16000:
-                duration = len(samples) / float(frame_rate)
-                n_out = max(1, int(duration * 16000))
-                positions = np.linspace(0.0, len(samples) - 1.0, n_out)
-                resampled = np.interp(positions, np.arange(len(samples)), samples.astype(np.float64))
-                samples = np.clip(resampled, -32768, 32767).astype(np.int16)
-            return samples.tobytes()
-        except Exception as exc:
-            app_logger.warning(f"Voice reply TTS fallback failed: {exc}")
-            return None
 
     def _parse_voice_command(self, transcript: str) -> Optional[str]:
         """Parse voice transcript into command.

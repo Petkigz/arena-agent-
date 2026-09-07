@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.arena.voice.ui.theme.ArenaRadius
 import com.arena.voice.ui.theme.Elevation
 import com.arena.voice.ui.theme.Spacing
@@ -54,6 +55,7 @@ fun BeanieComposer(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val listeningToken = SharedPresenceTokens.forStatus(LocalContext.current, PresenceStatus.LISTENING)
     val canSend = enabled && value.isNotBlank()
 
     Surface(
@@ -121,7 +123,7 @@ fun BeanieComposer(
                     Icons.Default.Mic,
                     contentDescription = "Voice input",
                     tint = if (listening) {
-                        PresenceStatus.LISTENING.color
+                        listeningToken.color
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },

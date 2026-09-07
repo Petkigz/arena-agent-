@@ -51,6 +51,86 @@ class StrategyScore:
     consecutive_failures: int  # current streak of failures
 
 
+@dataclass(frozen=True)
+class UsefulnessScore:
+    """Owner usefulness events kept separate from correctness outcomes."""
+    goal_type: str
+    action_type: str
+    total_feedback: int
+    helpful: int
+    partially_helpful: int
+    not_helpful: int
+    usefulness_rate: float
+    outcome_signal_counts: Dict[str, int]
+
+
+class StrategyUsefulnessStore:
+    """Read validated owner usefulness events for bounded strategy influence.
+
+    Feedback is joined to the trace's recorded strategy identity. It never
+    reads or rewrites verified correctness, execution truth, or strategy
+    outcome rows. A single event is descriptive only; at least two explicit
+    owner events are required before selection is adjusted.
+    """
+
+    MIN_FEEDBACK_FOR_INFLUENCE = 2
+    MAX_USEFULNESS_WEIGHT = 0.15
+
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        self.db_path = db_path
+
+    def score_strategy(self, goal_type: str, action_type: str) -> Optional[UsefulnessScore]:
+        if not self.db_path:
+            return None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            rows = conn.execute("""
+                SELECT feedback.usefulness, feedback.outcome_signal
+                FROM cognitive_trace_usefulness AS feedback
+                JOIN cognitive_traces AS trace
+                  ON trace.trace_id = feedback.trace_id
+                WHERE trace.strategy_goal_type = ?
+                  AND trace.strategy_action_type = ?
+                ORDER BY feedback.created_at ASC
+            """, (str(goal_type), str(action_type))).fetchall()
+            conn.close()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            # Feedback support or strategy identity may not exist in an older
+            # database. Absence is unmeasured, not evidence of usefulness.
+            return None
+        if not rows:
+            return None
+        helpful = sum(1 for usefulness, _ in rows if usefulness == "helpful")
+        partial = sum(1 for usefulness, _ in rows if usefulness == "partially_helpful")
+        not_helpful = sum(1 for usefulness, _ in rows if usefulness == "not_helpful")
+        signals: Dict[str, int] = {}
+        for _, signal in rows:
+            signals[str(signal or "unknown")] = signals.get(str(signal or "unknown"), 0) + 1
+        total = len(rows)
+        rate = (helpful + (0.5 * partial)) / total
+        return UsefulnessScore(
+            goal_type=str(goal_type),
+            action_type=str(action_type),
+            total_feedback=total,
+            helpful=helpful,
+            partially_helpful=partial,
+            not_helpful=not_helpful,
+            usefulness_rate=rate,
+            outcome_signal_counts=signals,
+        )
+
+    def adjustment_factor(self, goal_type: str, action_type: str) -> float:
+        score = self.score_strategy(goal_type, action_type)
+        if score is None or score.total_feedback < self.MIN_FEEDBACK_FOR_INFLUENCE:
+            return 1.0
+        centered = (score.usefulness_rate - 0.5) * 2.0
+        adjustment = 1.0 + centered * self.MAX_USEFULNESS_WEIGHT
+        return max(
+            1.0 - self.MAX_USEFULNESS_WEIGHT,
+            min(1.0 + self.MAX_USEFULNESS_WEIGHT, adjustment),
+        )
+
+
 class StrategyOutcomeStore:
     """
     SQLite-backed store for strategy outcomes.

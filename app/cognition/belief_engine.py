@@ -48,6 +48,9 @@ class RevisionResult:
     alternatives: tuple[Any, ...] = ()
     is_stale: bool = False
     evidence_count: int = 0
+    hypothesis_count: int = 0
+    hypotheses_bounded: bool = True
+    has_competing_hypotheses: bool = False
 
 class BeliefEngine:
     """
@@ -142,6 +145,7 @@ class BeliefEngine:
         self.hypotheses.upsert(subject, predicate, value, score=score, rationale=rationale)
         ranked = self.hypotheses.rank(subject, predicate)
         best = ranked[0]
+        hypothesis_state = self.hypotheses.snapshot(subject, predicate)
 
         is_stale = self.beliefs.is_stale(subject, predicate) if admissible else False
 
@@ -158,6 +162,9 @@ class BeliefEngine:
             alternatives=tuple(h.value for h in ranked[1:]),
             is_stale=is_stale,
             evidence_count=evidence_count,
+            hypothesis_count=hypothesis_state["count"],
+            hypotheses_bounded=bool(hypothesis_state["bounded"]),
+            has_competing_hypotheses=bool(hypothesis_state["competing"]),
         )
 
     def inspect(self, subject: str, predicate: str, now: Optional[datetime] = None) -> Optional[RevisionResult]:
@@ -182,6 +189,7 @@ class BeliefEngine:
             return None  # No evidence at all
 
         best = ranked[0] if ranked else None
+        hypothesis_state = self.hypotheses.snapshot(subject, predicate)
         is_stale = self.beliefs.is_stale(subject, predicate, now=now) if belief else False
         return RevisionResult(
             subject=subject,
@@ -196,7 +204,14 @@ class BeliefEngine:
             alternatives=tuple(h.value for h in ranked[1:]) if ranked else (),
             is_stale=is_stale,
             evidence_count=len(belief.evidence) if belief else 0,
+            hypothesis_count=hypothesis_state["count"],
+            hypotheses_bounded=bool(hypothesis_state["bounded"]),
+            has_competing_hypotheses=bool(hypothesis_state["competing"]),
         )
+
+    def hypothesis_snapshot(self, subject: str, predicate: str) -> Dict[str, Any]:
+        """Expose bounded hypothesis state without promoting it to belief."""
+        return self.hypotheses.snapshot(subject, predicate)
 
     def maintain(self, now: Optional[datetime] = None) -> int:
         """

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { MessageBubble, ChatInput, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
+import { MessageBubble, ChatInput, ChatHeader, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
 import { BeanieOrbPanel, ListeningIndicator } from '../../components/beanie';
 import { ReactiveBeanieOrb } from '../../components/presence';
 import { EmptyState } from '../../components/ui';
-import { MessageCircle, Share2, ShieldAlert } from 'lucide-react';
+import { MessageCircle, ShieldAlert } from 'lucide-react';
 import { useConversationStore, useMultiModalStore } from '../../stores';
 import {
   webSocketService,
@@ -30,9 +30,19 @@ export function ChatPage() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [beanieActive, setBeanieActive] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [connectionStatus, setConnectionStatus] = useState<
+    'disconnected' | 'connecting' | 'connected' | 'reconnecting'
+  >(webSocketService.status);
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequestEvent | null>(null);
   const [approvalResult, setApprovalResult] = useState<ApprovalResultEvent | null>(null);
   const [authorizedExecutionBusy, setAuthorizedExecutionBusy] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = webSocketService.onStatusChange((status) => {
+      setConnectionStatus(status);
+    });
+    return unsubscribe;
+  }, []);
 
   // Track the voice pipeline state so the floating listening indicator reflects it.
   useEffect(() => {
@@ -341,24 +351,12 @@ export function ChatPage() {
     <div className="relative h-full flex flex-col">
       {/* Floating voice-state indicator (listening / thinking / speaking) */}
       <ListeningIndicator state={voiceState} />
-      {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-border-subtle bg-background-primary">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-text-primary">{currentConversation.title}</h1>
-            {currentConversation.projectId && (
-              <p className="text-sm text-text-muted mt-0.5">Project: {currentConversation.projectId}</p>
-            )}
-          </div>
-          <button
-            onClick={() => setShowShareMenu(true)}
-            className="p-2 text-text-muted hover:text-text-primary hover:bg-background-secondary rounded-lg transition-colors"
-            title="Share conversation"
-          >
-            <Share2 className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+      <ChatHeader
+        conversationTitle={currentConversation.title}
+        connectionStatus={connectionStatus}
+        presenceStatus={voiceState}
+        onShare={() => setShowShareMenu(true)}
+      />
 
       {/* Owner approval is separate from execution. */}
       {approvalRequest && (

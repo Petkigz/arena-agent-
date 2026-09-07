@@ -44,6 +44,13 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.3"
     }
+    // Package the canonical root token file so presence colors and timing are
+    // consumed at runtime instead of copied into a second Android palette.
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(rootProject.file("../design"))
+        }
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

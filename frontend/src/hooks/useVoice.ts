@@ -164,6 +164,13 @@ export function useVoice({ conversationId, onTranscript, onError }: UseVoiceOpti
       } else if (event.type === 'voice_audio') {
         // Queue audio for playback
         playAudioChunk(event.data);
+      } else if (event.type === 'voice_status' && event.data.status === 'error') {
+        const detail = [event.data.message, event.data.remediation]
+          .filter(Boolean)
+          .join(' ');
+        const message = detail || 'Voice could not start.';
+        setError(message);
+        onError?.(message);
       } else if (event.type === 'error') {
         setError(event.data.message);
         onError?.(event.data.message);

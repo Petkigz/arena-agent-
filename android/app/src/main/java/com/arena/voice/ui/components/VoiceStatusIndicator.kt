@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.arena.voice.ui.theme.ArenaRadius
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * The single voice indicator — one more reactive surface of the SAME
@@ -20,6 +21,9 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun VoiceStatusIndicator(status: PresenceStatus) {
+    val token = SharedPresenceTokens.forStatus(LocalContext.current, status)
+    // status.color remains the compile-time enum contract; token.color is the
+    // runtime value consumed by this surface from design/tokens.json.
     val label = when (status) {
         PresenceStatus.LISTENING -> "Listening…"
         PresenceStatus.THINKING -> "Thinking…"
@@ -36,7 +40,7 @@ fun VoiceStatusIndicator(status: PresenceStatus) {
             Box(
                 Modifier
                     .size(8.dp)
-                    .background(status.color, CircleShape),
+                    .background(token.color, CircleShape),
             )
             Spacer(Modifier.width(8.dp))
             Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)

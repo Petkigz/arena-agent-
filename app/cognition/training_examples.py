@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 import threading
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -51,6 +51,7 @@ class TrainingExampleCandidate:
     created_at: str
     updated_at: str
     review_note: str = ""
+    strategy_update: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -109,8 +110,14 @@ def _content_hash(skill: str, prompt: str, response: str) -> str:
 class TrainingExampleStore:
     MIN_APPROVED_FOR_EXPORT = 5
 
-    def __init__(self, db_path: Optional[str | Path] = None) -> None:
+    def __init__(
+        self,
+        db_path: Optional[str | Path] = None,
+        *,
+        trace_db_path: Optional[str | Path] = None,
+    ) -> None:
         self.db_path = str(db_path or (settings.DATA_DIR / "training_examples.db"))
+        self.trace_db_path = str(trace_db_path or settings.DB_PATH)
         self._lock = threading.RLock()
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.db_path) as conn:
@@ -174,6 +181,79 @@ class TrainingExampleStore:
             ).fetchone()
             return self._row(row) if row else None
 
+    def _linked_trace(self, trace_id: str) -> Optional[Dict[str, Any]]:
+        """Read the original durable trace for an owner correction link."""
+        if not trace_id:
+            return None
+        trace_path = Path(self.trace_db_path)
+        if not trace_path.exists():
+            raise KeyError(f"Trace not found: {trace_id}")
+        with sqlite3.connect(trace_path) as conn:
+            columns = {row[1] for row in conn.execute(
+                "PRAGMA table_info(cognitive_traces)"
+            ).fetchall()}
+            required = {"trace_id", "session_id", "user_input", "assistant_reply"}
+            if not required.issubset(columns):
+                raise KeyError(f"Trace not found: {trace_id}")
+            row = conn.execute(
+                "SELECT trace_id, session_id, user_input, assistant_reply "
+                "FROM cognitive_traces WHERE trace_id=?",
+                (trace_id,),
+            ).fetchone()
+        if not row:
+            raise KeyError(f"Trace not found: {trace_id}")
+        return {
+            "trace_id": row[0],
+            "session_id": row[1],
+            "user_input": row[2],
+            "assistant_reply": row[3],
+        }
+
+    @staticmethod
+    def _owner_correction_strategy_update(
+        strategy_store: Any,
+        *,
+        goal_type: str,
+        action_type: str,
+        correction: str,
+    ) -> Dict[str, Any]:
+        """Record a correction as a measured strategy failure.
+
+        This deliberately reuses StrategyOutcomeStore. It does not create a
+        second correction database or alter selection after a single sample.
+        """
+        if not strategy_store or not goal_type or not action_type:
+            return {
+                "applied": False,
+                "generalized": False,
+                "reason": "goal_type and action_type are required for strategy linkage",
+            }
+        try:
+            strategy_store.record_outcome(
+                goal_type=goal_type,
+                action_type=action_type,
+                success=False,
+                latency_ms=0.0,
+                surprisal=1.0,
+                goal_text=f"Owner correction: {correction}"[:200],
+            )
+            score = strategy_store.score_strategy(goal_type, action_type)
+            attempts = score.total_attempts if score else 0
+            return {
+                "applied": True,
+                "generalized": attempts >= 2,
+                "correction_count": attempts,
+                "strategy_attempts": attempts,
+                "adjustment_factor": strategy_store.adjustment_factor(goal_type, action_type),
+            }
+        except Exception as exc:
+            audit_logger.error("Owner correction strategy linkage failed", exc_info=True)
+            return {
+                "applied": False,
+                "generalized": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
     def propose_verified(
         self,
         *,
@@ -236,36 +316,78 @@ class TrainingExampleStore:
         response: str,
         skill_name: str,
         note: str = "",
+        source_trace_id: str = "",
+        source_session_id: str = "",
+        action_type: str = "owner_correction",
+        goal_type: str = "",
+        strategy_store: Any = None,
     ) -> Optional[TrainingExampleCandidate]:
+        """Create a pending owner-reviewed correction candidate.
+
+        When ``source_trace_id`` is supplied, the original durable trace must
+        exist and is linked through the candidate's source fields. The
+        candidate remains pending until the existing review/decision/export
+        flow approves it. Optional strategy linkage records a measured failure
+        in StrategyOutcomeStore; it never auto-trains or auto-approves.
+        """
+        linked_trace = self._linked_trace(source_trace_id) if source_trace_id else None
+        if linked_trace:
+            source_session_id = source_session_id or str(linked_trace["session_id"] or "")
+            prompt = prompt or str(linked_trace["user_input"] or "")
+
         prompt_clean, prompt_redactions = redact_training_text(prompt)
         response_clean, response_redactions = redact_training_text(response)
         if len(prompt_clean) < 3 or len(response_clean) < 3:
             return None
         skill = _safe_skill(skill_name)
+        strategy_update = self._owner_correction_strategy_update(
+            strategy_store,
+            goal_type=str(goal_type or ""),
+            action_type=str(action_type or "owner_correction"),
+            correction=note or response_clean,
+        )
         digest = _content_hash(skill, prompt_clean, response_clean)
         existing = self._get_by_hash(digest)
         if existing:
+            # The candidate is deduplicated, but every explicit correction may
+            # still contribute one measured strategy outcome.
+            existing.strategy_update = strategy_update
             return existing
         now = _now()
+        evidence = ["owner_correction"]
+        if source_trace_id:
+            evidence.append(f"source_trace:{source_trace_id}")
+        if goal_type:
+            evidence.append(f"goal_type:{goal_type}")
         candidate = TrainingExampleCandidate(
             candidate_id=f"train_{uuid4().hex[:12]}",
             skill_name=skill,
             prompt=prompt_clean,
             response=response_clean,
-            action_type="owner_correction",
+            action_type=str(action_type or "owner_correction"),
             status=TrainingExampleStatus.PENDING,
             source_type="owner_correction",
-            source_session_id="",
-            source_trace_id="",
-            verification_reason="Explicit owner-provided correction",
-            evidence=["owner_correction"],
+            source_session_id=str(source_session_id or ""),
+            source_trace_id=str(source_trace_id or ""),
+            verification_reason=(
+                "Explicit owner-provided correction linked to a durable trace"
+                if source_trace_id else "Explicit owner-provided correction"
+            ),
+            evidence=evidence,
             redactions=sorted(set(prompt_redactions + response_redactions)),
             content_hash=digest,
             created_at=now,
             updated_at=now,
             review_note=note,
         )
+        candidate.strategy_update = strategy_update
         self._save(candidate)
+        audit_logger.info(
+            "Owner correction candidate proposed: %s trace=%s strategy=%s",
+            candidate.candidate_id,
+            candidate.source_trace_id or "unlinked",
+            strategy_update.get("generalized", False),
+        )
         return candidate
 
     def _save(self, candidate: TrainingExampleCandidate) -> None:

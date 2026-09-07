@@ -93,4 +93,39 @@ def test_introspection_uses_trace_facts_not_hidden_reasoning(tmp_path):
     assert report["facts"]["goal_verified"] is True
     assert report["facts"]["actions"] == ["created note 4"]
     assert any("chain-of-thought" in item for item in report["unknowns"])
+    assert report["grounding"] == {}
     assert "thought" not in " ".join(report["explanation"]).lower()
+
+
+def test_introspection_exposes_persisted_response_grounding(tmp_path):
+    path = tmp_path / "grounded-traces.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute("""CREATE TABLE cognitive_traces (
+            trace_id TEXT, session_id TEXT, user_input TEXT, assistant_reply TEXT,
+            actions_json TEXT, model_used TEXT, latency_ms REAL, vram_pressure REAL,
+            ram_pressure REAL, attention_focus TEXT, belief_confidence REAL,
+            gate_decision TEXT, prediction_surprisal REAL, reflection_lesson TEXT,
+            goal_verified INTEGER, created_at TEXT,
+            grounding_result_json TEXT NOT NULL DEFAULT '{}'
+        )""")
+        conn.execute(
+            "INSERT INTO cognitive_traces VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "trace-grounded", "session-1", "Calculate 2 + 2", "The result is 4.",
+                json.dumps([]), "test-model", 12.0, 0.0, 10.0,
+                "arithmetic", 1.0, "passed", 0.0, "", 1,
+                "2026-08-23T00:00:00+00:00",
+                json.dumps({
+                    "status": "verified",
+                    "supported": True,
+                    "authoritative_facts": ["2 + 2 = 4"],
+                    "recovery_applied": False,
+                }),
+            ),
+        )
+
+    report = GroundedIntrospection.explain_trace(path, "trace-grounded")
+    assert report["grounding"]["status"] == "verified"
+    assert report["facts"]["grounding"]["authoritative_facts"] == ["2 + 2 = 4"]
+    assert any("2 + 2 = 4" in item for item in report["explanation"])
+    assert "chain-of-thought" in " ".join(report["unknowns"])

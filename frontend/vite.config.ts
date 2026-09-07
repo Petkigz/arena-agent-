@@ -13,6 +13,11 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
+  server: {
+    host: '0.0.0.0',
+    // Arena previews use a generated host; do not reject that browser origin.
+    allowedHosts: true,
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

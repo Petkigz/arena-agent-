@@ -241,7 +241,9 @@ def test_d1_e2e_wrong_model_reply_is_not_achieved():
         res = CognitivePipeline.process_chat(user_text=D1_TEXT)
     assert res["goal_lifecycle_state"] == "failed"
     assert res["goal_verified"] is False
-    assert res["assistant_reply"] == "17 * 24 is 396."
+    assert res["assistant_reply"].startswith("17 * 24 is 396.")
+    assert "Epistemic status:" in res["assistant_reply"]
+    assert res["epistemic_presentation"]["confidence_label"] in {"Tentative", "Unknown"}
 
 
 def test_d1_e2e_correct_reply_from_evidence_achieves():
@@ -251,3 +253,6 @@ def test_d1_e2e_correct_reply_from_evidence_achieves():
         res = CognitivePipeline.process_chat(user_text=D1_TEXT)
     assert res["goal_lifecycle_state"] == "achieved"
     assert res["goal_verified"] is True
+    assert res["assistant_reply"].startswith("17 * 24 = 408")
+    assert "Epistemic status:" in res["assistant_reply"]
+    assert res["epistemic_presentation"]["confidence_label"] in {"Highly confident", "Moderately confident"}

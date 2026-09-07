@@ -5,7 +5,12 @@ from backend.voice.wake_word import WakeWordDetector
 from backend.voice.vad import VoiceActivityDetector
 from backend.voice.stt import SpeechToTextService
 from backend.voice.tts import TextToSpeechService
-from backend.voice.orchestrator import VoicePipeline, VoiceOrchestrator, VoiceState
+from backend.voice.orchestrator import (
+    VoicePipeline,
+    VoiceOrchestrator,
+    VoiceState,
+    VoicePipelineStartupError,
+)
 from backend.voice.service import VoiceService, voice_service
 
 __all__ = [
@@ -17,6 +22,7 @@ __all__ = [
     "VoicePipeline",
     "VoiceOrchestrator",
     "VoiceState",
+    "VoicePipelineStartupError",
     "VoiceService",
     "voice_service",
 ]

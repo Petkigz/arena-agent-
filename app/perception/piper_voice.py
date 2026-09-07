@@ -17,9 +17,10 @@ files (each with an optional sibling ``*.onnx.json`` config):
 The scan is recursive, so a model nested in its own subfolder (e.g.
 ``piper_models/en_US-lessac-medium/en_US-lessac-medium.onnx``) is still found.
 
-This module is deliberately dependency-defensive: it degrades to ``None`` with a
-log line (never raises) if ``piper-tts`` or ``soundfile`` are missing, so
-callers can fall back to ``pyttsx3`` / a beep.
+This module is deliberately dependency-defensive: it returns ``None`` with a
+preserved root-cause diagnostic if ``piper-tts`` or ``soundfile`` are missing.
+Callers that require speech must surface that diagnostic; this module does not
+fabricate audio or select another speech engine.
 """
 
 from __future__ import annotations
@@ -59,6 +60,12 @@ _VOICE_RE = re.compile(
 # Loaded PiperVoice instances, keyed by resolved model path (loading is expensive).
 _voice_cache: Dict[str, object] = {}
 _models_cache: Optional[List[Dict]] = None
+_last_error: Optional[str] = None
+
+
+def get_last_piper_error() -> Optional[str]:
+    """Return the root cause from the most recent failed Piper operation."""
+    return _last_error
 
 
 def _candidate_dirs() -> List[Path]:
@@ -189,8 +196,10 @@ def resolve_voice_id(voice_id: Optional[str]) -> str:
 
 def _get_voice(model_path: Path) -> Optional[object]:
     """Load (and cache) a PiperVoice for a given .onnx path."""
+    global _last_error
     if not PIPER_AVAILABLE:
-        app_logger.warning("piper-tts Python package is not importable; TTS unavailable")
+        _last_error = "The piper-tts Python package is not importable"
+        app_logger.warning(f"{_last_error}; TTS unavailable")
         return None
 
     key = str(model_path)
@@ -203,14 +212,22 @@ def _get_voice(model_path: Path) -> Optional[object]:
         app_logger.info(f"Loaded Piper voice: {model_path}")
         return voice
     except Exception as e:
-        app_logger.error(f"Failed to load Piper voice {model_path}: {e}")
+        _last_error = f"Failed to load Piper voice {model_path}: {type(e).__name__}: {e}"
+        app_logger.error(_last_error)
         return None
+
+
+def load_piper_voice(model_path: Path) -> Optional[object]:
+    """Load a Piper model for startup validation and return the cached voice."""
+    return _get_voice(Path(model_path))
 
 
 def _decode_wav(buf: object, source: str) -> Optional[Tuple[np.ndarray, int]]:
     """Decode WAV bytes via soundfile -> (float32 mono, sample_rate)."""
     if not SOUNDFILE_AVAILABLE:
-        app_logger.warning("soundfile not importable; cannot decode Piper output")
+        global _last_error
+        _last_error = "The soundfile package is not importable, so Piper output cannot be decoded"
+        app_logger.warning(_last_error)
         return None
     try:
         data = buf if isinstance(buf, (bytes, bytearray)) else getattr(buf, "read", None)
@@ -222,7 +239,8 @@ def _decode_wav(buf: object, source: str) -> Optional[Tuple[np.ndarray, int]]:
             audio = audio[:, 0]
         return np.asarray(audio, dtype=np.float32), int(sr)
     except Exception as e:
-        app_logger.debug(f"Piper WAV decode failed ({source}): {e}")
+        _last_error = f"Piper WAV decode failed ({source}): {type(e).__name__}: {e}"
+        app_logger.debug(_last_error)
         return None
 
 
@@ -289,10 +307,13 @@ def _synthesize_raw(voice: object, text: str, length_scale: float) -> Optional[T
             samples = np.frombuffer(b"".join(chunks), dtype=np.int16)
 
         if samples.size == 0:
+            global _last_error
+            _last_error = "Piper returned an empty audio stream"
             return None
         return samples.astype(np.float32) / 32768.0, sr
     except Exception as e:
-        app_logger.error(f"Piper synthesize() failed: {e}")
+        _last_error = f"Piper synthesis failed: {type(e).__name__}: {e}"
+        app_logger.error(_last_error)
         return None
 
 
@@ -324,23 +345,32 @@ def synthesize_piper(
 ) -> Optional[Tuple[np.ndarray, int]]:
     """Synthesize ``text`` to ``(float32 mono samples, sample_rate)``.
 
-    Returns ``None`` (with a log line) when Piper or the model is unavailable,
-    so callers can fall back gracefully.  If ``target_sample_rate`` is given,
-    the audio is resampled to that rate (e.g. 16000 for the raw WS stream).
+    Returns ``None`` with :func:`get_last_piper_error` retaining the root cause
+    when Piper or the selected model is unavailable.  Callers that require
+    speech must report that failure; this helper does not manufacture audio or
+    select an unrelated engine.  If ``target_sample_rate`` is given, the audio
+    is resampled to that rate (e.g. 16000 for the raw WS stream).
     """
+    global _last_error
+    _last_error = None
     if not PIPER_AVAILABLE:
-        app_logger.warning("piper-tts not available; skipping Piper synthesis")
+        _last_error = "The piper-tts Python package is not available"
+        app_logger.warning(_last_error)
         return None
 
     text = (text or "").strip()
     if not text:
+        _last_error = "No text was provided for Piper synthesis"
         return None
 
     model = find_model_for_voice(voice_id or resolve_voice_id(None))
     if model is None:
+        _last_error = (
+            f"No Piper voice model was found for '{voice_id or DEFAULT_VOICE_ID}'"
+        )
         app_logger.warning(
-            f"No Piper voice model found for '{voice_id}'. "
-            f"Drop a .onnx (and .onnx.json) into ~/piper_models or set ARENA_PIPER_MODEL_DIR."
+            f"{_last_error}. Drop a .onnx (and .onnx.json) into ~/piper_models "
+            "or set ARENA_PIPER_MODEL_DIR."
         )
         return None
     if not model.get("has_config"):
@@ -356,7 +386,8 @@ def synthesize_piper(
 
     result = _synthesize_raw(voice, text, length_scale)
     if result is None:
-        app_logger.error(f"Piper synthesis returned no audio for voice '{model['id']}'")
+        _last_error = _last_error or f"Piper synthesis returned no audio for voice '{model['id']}'"
+        app_logger.error(_last_error)
         return None
 
     audio, sr = result

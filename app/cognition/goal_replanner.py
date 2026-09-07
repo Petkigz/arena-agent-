@@ -189,6 +189,8 @@ class GoalReplanner:
         failed_payload: Optional[Dict[str, Any]] = None,
         lesson_store: Optional[Any] = None,
         outcome_store: Optional[Any] = None,
+        usefulness_store: Optional[Any] = None,
+        analogical_memory: Optional[Any] = None,
         hardware_self_model: Optional[Dict[str, Any]] = None,
         resource_manager: Optional[Any] = None,
     ) -> Optional[ActionProposal]:
@@ -207,6 +209,8 @@ class GoalReplanner:
                 user_text, complexity=complexity, goal_rep=goal_rep, candidates=re_obs_candidates,
                 memory_store=memory_store, world_model=world_model, tool_registry=tool_registry,
                 outcome_store=outcome_store, lesson_store=lesson_store,
+                usefulness_store=usefulness_store,
+                analogical_memory=analogical_memory,
                 hardware_self_model=hardware_self_model, resource_manager=resource_manager,
             )
 
@@ -250,6 +254,8 @@ class GoalReplanner:
             user_text, complexity=complexity, goal_rep=goal_rep, candidates=plan_b_candidates,
             memory_store=memory_store, world_model=world_model, tool_registry=tool_registry,
             outcome_store=outcome_store, lesson_store=lesson_store,
+            usefulness_store=usefulness_store,
+            analogical_memory=analogical_memory,
             hardware_self_model=hardware_self_model, resource_manager=resource_manager,
         )
         audit_logger.info(f"GoalReplanner evaluated {len(plan_b_candidates)} Plan B branches, generated proposal '{replan_proposal.action_type}'")

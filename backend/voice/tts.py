@@ -13,7 +13,13 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from app.perception.piper_voice import PIPER_AVAILABLE, find_model_for_voice, synthesize_piper
+from app.perception.piper_voice import (
+    PIPER_AVAILABLE,
+    find_model_for_voice,
+    get_last_piper_error,
+    load_piper_voice,
+    synthesize_piper,
+)
 from app.utils.logger import app_logger
 
 # The raw PCM stream over the WebSocket is played back by the frontend at 16 kHz.
@@ -37,6 +43,8 @@ class TextToSpeechService:
 
         self.is_running = False
         self.model_path: Optional[Path] = None
+        self.model: Optional[object] = None
+        self.last_error: Optional[str] = None
 
         # Callbacks
         self.on_audio_ready: Optional[Callable[[np.ndarray], None]] = None
@@ -45,26 +53,47 @@ class TextToSpeechService:
 
     def _find_model(self):
         """Find the Piper voice model via the shared discovery helper."""
+        self.last_error = None
         model = find_model_for_voice(self.voice)
         if model:
             self.model_path = Path(model["path"])
             app_logger.info(f"Found Piper model: {self.model_path}")
         else:
             self.model_path = None
-            if PIPER_AVAILABLE:
-                app_logger.warning(
-                    f"Piper model '{self.voice}' not found. "
-                    f"TTS will not work until the .onnx (and .onnx.json) are installed. "
-                    f"Searched: see app.perception.piper_voice._candidate_dirs()"
-                )
+            self.last_error = (
+                f"Piper voice model '{self.voice}' was not found "
+                "(.onnx and .onnx.json are required)"
+            )
+            app_logger.error(
+                f"{self.last_error}. "
+                "Install the selected model before starting local voice."
+            )
 
     def start(self):
         """Start TTS service."""
         if self.is_running:
             return
 
+        if not PIPER_AVAILABLE:
+            self.last_error = "The piper-tts Python package is not available"
+            app_logger.error(
+                f"TTS service cannot start: {self.last_error}. "
+                "Install piper-tts before starting local voice."
+            )
+            return
+
         if not self.model_path:
-            app_logger.error("TTS service cannot start: model not found")
+            self.last_error = self.last_error or "Piper voice model is not available"
+            app_logger.error(f"TTS service cannot start: {self.last_error}")
+            return
+
+        self.last_error = None
+        self.model = load_piper_voice(self.model_path)
+        if self.model is None:
+            self.last_error = get_last_piper_error() or (
+                f"Piper could not load voice model '{self.model_path}'"
+            )
+            app_logger.error(f"TTS service cannot start: {self.last_error}")
             return
 
         self.is_running = True
@@ -73,6 +102,7 @@ class TextToSpeechService:
     def stop(self):
         """Stop TTS service."""
         self.is_running = False
+        self.model = None
         app_logger.info("TTS service stopped")
 
     def synthesize(self, text: str) -> Optional[np.ndarray]:
@@ -92,6 +122,7 @@ class TextToSpeechService:
             target_sample_rate=STREAM_SAMPLE_RATE,
         )
         if result is None:
+            self.last_error = get_last_piper_error() or "Piper returned no audio"
             return None
 
         audio, _sr = result

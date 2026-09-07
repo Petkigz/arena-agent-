@@ -296,6 +296,128 @@ class MemoryStore:
             app_logger.warning(f"Associative fusion failed; lexical ranking kept: {exc}")
             return None
 
+    def retrieve_context_records(
+        self,
+        query: str,
+        *,
+        limit: int = 8,
+        per_kind: int = 2,
+        kinds: tuple[str, ...] = ("semantic", "procedural", "lesson", "episodic"),
+    ) -> list[MemoryRecord]:
+        """Retrieve a bounded, typed context slice for the active runtime turn.
+
+        The runtime has several intentional memory kinds, but callers used to
+        either search the whole store without knowing what they retrieved or
+        fall back to the legacy global RAG database.  Querying each kind with a
+        small quota keeps episodic failures, durable facts, procedures, and
+        lessons visible without letting one kind crowd out the others.
+        Records remain historical evidence; this method never upgrades them to
+        current observations.
+        """
+        limit = max(1, min(int(limit), 32))
+        per_kind = max(1, min(int(per_kind), limit))
+        allowed = tuple(kind for kind in kinds if kind in self.VALID_KINDS)
+        records: list[MemoryRecord] = []
+        seen: set[str] = set()
+        for kind in allowed:
+            for record in self.search(query, kinds={kind}, limit=per_kind):
+                if record.memory_id in seen:
+                    continue
+                seen.add(record.memory_id)
+                records.append(record)
+                if len(records) >= limit:
+                    return records
+        return records
+
+    @staticmethod
+    def _age_hours(record: MemoryRecord, *, now: datetime | None = None) -> float | None:
+        """Return record age, or None when its timestamp cannot be trusted."""
+        try:
+            created = datetime.fromisoformat(str(record.created_at).replace("Z", "+00:00"))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            current = now or datetime.now(timezone.utc)
+            return max(0.0, (current - created.astimezone(timezone.utc)).total_seconds() / 3600.0)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    @classmethod
+    def context_metadata(
+        cls,
+        records: list[MemoryRecord],
+        *,
+        stale_after_hours: float | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Classify retrieved records without turning history into live truth.
+
+        A conflict is reported only for records sharing an explicit task ID but
+        disagreeing on verified outcome.  Free-form prose is not guessed into
+        a contradiction.  Age is a presentation/freshness marker; stale
+        records remain available for explanation and recovery.
+        """
+        by_task: dict[str, list[MemoryRecord]] = {}
+        for record in records:
+            if record.task_id and record.success is not None:
+                by_task.setdefault(record.task_id, []).append(record)
+        conflict_ids: set[str] = set()
+        for task_records in by_task.values():
+            outcomes = {(record.outcome, record.success) for record in task_records}
+            if len(outcomes) > 1:
+                conflict_ids.update(record.memory_id for record in task_records)
+
+        metadata: dict[str, dict[str, Any]] = {}
+        threshold = None if stale_after_hours is None else max(0.0, float(stale_after_hours))
+        for record in records:
+            age = cls._age_hours(record, now=now)
+            stale = bool(threshold is not None and age is not None and age > threshold)
+            metadata[record.memory_id] = {
+                "age_hours": None if age is None else round(age, 3),
+                "freshness": "stale" if stale else "historical",
+                "conflicting": record.memory_id in conflict_ids,
+            }
+        return metadata
+
+    @classmethod
+    def render_context(
+        cls,
+        records: list[MemoryRecord],
+        *,
+        max_chars: int = 3600,
+        stale_after_hours: float | None = None,
+    ) -> str:
+        """Render bounded provenance context with explicit stale/conflict flags."""
+        if not records:
+            return ""
+        metadata = cls.context_metadata(records, stale_after_hours=stale_after_hours)
+        lines = [
+            "[RUNTIME MEMORY CONTEXT — historical records, not current observation]"
+        ]
+        if any(item["conflicting"] for item in metadata.values()):
+            lines.append(
+                "[MEMORY CONFLICT NOTICE — records disagree about a verified "
+                "outcome; preserve both and seek fresh evidence instead of guessing]"
+            )
+        for record in records:
+            info = metadata[record.memory_id]
+            provenance = record.source or "unknown source"
+            if record.task_id:
+                provenance += f", task {record.task_id[:24]}"
+            outcome = ""
+            if record.outcome:
+                outcome = f", outcome={record.outcome}"
+            if record.success is not None:
+                outcome += f", verified_success={record.success}"
+            age = "unknown age" if info["age_hours"] is None else f"age_hours={info['age_hours']}"
+            flags = [info["freshness"]]
+            if info["conflicting"]:
+                flags.append("conflicting")
+            lines.append(
+                f"- {'/'.join(flags)} {record.kind}: {record.content[:700]} "
+                f"(provenance={provenance}{outcome}, {age}, recorded_at={record.created_at})"
+            )
+        return "\n".join(lines)[:max(1000, int(max_chars))]
+
     def list_by_task(self, task_id: str, *, limit: int = 50) -> list[MemoryRecord]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM cognitive_memory WHERE task_id = ? ORDER BY created_at DESC LIMIT ?", (task_id, max(1, min(limit, 200)))).fetchall()

@@ -29,13 +29,38 @@ class CoworkerBrain:
     )
 
     @classmethod
-    def evaluate_task_competence(cls, user_text: str) -> Dict[str, Any]:
+    def evaluate_task_competence(
+        cls,
+        user_text: str,
+        *,
+        memory_store: Optional[Any] = None,
+        world_model: Optional[Any] = None,
+        memory_context: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Evaluates whether the assistant has sufficient context/tools to execute the task competently
         or whether it should humbly request a quick learning input from the user.
+
+        The active CognitiveRuntime supplies its canonical memory and world
+        model.  The legacy global RAG path remains available for compatibility
+        callers that do not have a runtime context, but is not used by the
+        runtime ask path.
         """
         text_lower = user_text.lower().strip()
-        rag_context = SemanticRAGEngine.build_rag_context(user_text)
+        if memory_context is not None:
+            rag_context = memory_context
+        elif memory_store is not None:
+            try:
+                records = memory_store.retrieve_context_records(user_text, limit=8)
+                rag_context = memory_store.render_context(records)
+            except Exception as exc:
+                app_logger.warning(f"Runtime memory context unavailable: {exc}")
+                rag_context = ""
+        else:
+            rag_context = SemanticRAGEngine.build_rag_context(
+                user_text,
+                world_model=world_model,
+            )
 
         needs_more_context = False
         missing_area = ""
@@ -54,11 +79,24 @@ class CoworkerBrain:
         }
 
     @classmethod
-    def format_coworker_prompt(cls, user_text: str, executed_actions: Optional[List[str]] = None) -> str:
+    def format_coworker_prompt(
+        cls,
+        user_text: str,
+        executed_actions: Optional[List[str]] = None,
+        *,
+        memory_store: Optional[Any] = None,
+        world_model: Optional[Any] = None,
+        memory_context: Optional[str] = None,
+    ) -> str:
         """
         Generates system prompt instructions for the Coworker Partner persona with full environmental self-grounding.
         """
-        competence = cls.evaluate_task_competence(user_text)
+        competence = cls.evaluate_task_competence(
+            user_text,
+            memory_store=memory_store,
+            world_model=world_model,
+            memory_context=memory_context,
+        )
         env_grounding = EnvironmentGroundingEngine.generate_grounding_prompt_context()
 
         prompt = (
