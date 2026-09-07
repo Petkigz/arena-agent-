@@ -313,8 +313,19 @@ class SceneGraph:
             )
         graph = cls(revision=int(data.get("revision", 0)))
         graph.last_observation_id = data.get("last_observation_id")
+        # Load ALL objects before validating support relations: simulated
+        # scenes store objects in sorted order, so a supported object can
+        # appear before its support. add_or_update's eager validation would
+        # otherwise reject a well-formed round-trip (found via chained
+        # SceneCausalReplay: prediction scenes could never be cloned).
         for raw_object in data.get("objects", []):
-            graph.add_or_update(SceneObject.from_dict(raw_object))
+            obj = SceneObject.from_dict(raw_object)
+            graph.objects[obj.object_id] = obj
+        for obj in graph.objects.values():
+            if obj.support_id:
+                graph._set_relation(
+                    SceneRelation("supported_by", obj.object_id, obj.support_id, evidence_ids=obj.evidence_ids)
+                )
         for raw_relation in data.get("relations", []):
             graph._set_relation(SceneRelation.from_dict(raw_relation))
         return graph

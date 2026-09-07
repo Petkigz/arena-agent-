@@ -136,3 +136,32 @@ def test_causal_scene_replay_is_side_effect_free_and_prediction_only():
     assert replay.execution_performed is False
     assert replay.prediction.scene.object("top").support_id is None
     assert replay.causal_paths == (("scene:floor", "scene:top"),)
+
+
+def test_simulated_scene_round_trips_regardless_of_object_order():
+    """Regression: from_dict loaded objects one-by-one with eager relation
+    validation, so a simulated scene (objects stored in sorted order) whose
+    alphabetically-earlier object is supported by a later one failed to
+    clone/round-trip — blocking chained SceneCausalReplay interventions."""
+    scene = SceneGraph()
+    scene.add_or_update(SceneObject(
+        "table", "platform", x=0.0, y=1.5, width=10.0, height=1.0, static=True,
+    ))
+    scene.add_or_update(SceneObject(
+        "block", "block", x=2.0, y=2.5, width=2.0, height=1.0,
+    ))
+    predicted = PhysicsSimulator.simulate(scene, steps=2, dt=0.1)
+
+    # The simulated scene lists 'block' before its support 'table'.
+    restored = SceneGraph.from_dict(predicted.scene.to_dict())
+    assert restored.digest() == predicted.scene.digest()
+    assert restored.clone().digest() == predicted.scene.digest()
+    assert ("supported_by", "block", "table") in restored.relations
+
+    # A genuinely unknown support reference still fails closed.
+    broken = predicted.scene.to_dict()
+    broken["objects"][0]["support_id"] = "ghost"
+    import pytest as _pytest
+    from app.cognition.scene_graph import SceneGraphError
+    with _pytest.raises(SceneGraphError):
+        SceneGraph.from_dict(broken)

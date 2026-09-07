@@ -13,12 +13,12 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
 
     run = suite.run()
 
-    assert run.total_count == 36
+    assert run.total_count == 38
     assert run.passed_count == run.total_count
     assert run.regressions == []
     assert {check.category for check in run.checks} >= {
         "memory", "learning", "adaptation", "control", "perception", "planning",
-        "identity_adaptation", "calibration", "grounding", "phase1_evidence",
+        "identity_adaptation", "calibration", "grounding", "phase1_evidence", "causal",
     }
     assert {check.name for check in run.checks} >= {
         "identity_adaptation_governance",
@@ -35,6 +35,8 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
         "held_out_memory_compounding_baseline",
         "held_out_consolidation_improves_foreground",
         "held_out_pattern_transfer_advisory",
+        "held_out_causal_intervention_planning",
+        "held_out_physics_scene_families",
     }
     assert all(
         check.evaluation_scope == "held_out"
@@ -55,6 +57,14 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
     assert by_name["held_out_consolidation_improves_foreground"].metrics["incubation_scope"] == "owner_enabled_not_simulated"
     assert by_name["held_out_pattern_transfer_advisory"].metrics["baseline_suggestions"] == 0
     assert by_name["held_out_pattern_transfer_advisory"].metrics["advisory_only"] is True
+    assert by_name["held_out_causal_intervention_planning"].metrics["naive_plan_unstable_support"] == 1
+    assert by_name["held_out_causal_intervention_planning"].metrics["guided_plan_all_stable"] == 1
+    assert by_name["held_out_causal_intervention_planning"].metrics["independent_verification_stable"] == 1
+    assert by_name["held_out_causal_intervention_planning"].metrics["scene_digest_unchanged"] is True
+    assert by_name["held_out_causal_intervention_planning"].metrics["prediction_labeled"] is True
+    assert by_name["held_out_physics_scene_families"].metrics["deterministic_families"] == 3
+    assert by_name["held_out_physics_scene_families"].metrics["alternate_outcome_reproducible"] == 1
+    assert by_name["held_out_physics_scene_families"].metrics["boundary_labels_intact"] is True
     assert by_name["phase1_evidence_aggregation"].metrics["usefulness_feedback_count"] == 2
     assert by_name["phase1_task_evaluation_recording"].metrics["paired_improved_count"] == 1
     assert all(check.duration_ms >= 0 for check in run.checks)
@@ -62,7 +72,7 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
     restored = BenchmarkHistoryStore(tmp_path / "benchmarks.db").latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.passed_count == 36
+    assert restored.passed_count == 38
 
 
 def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):

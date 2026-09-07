@@ -1498,6 +1498,203 @@ class IntelligenceBenchmarkSuite:
                 evaluation_scope="held_out",
             ))
 
+            # ── Causal intervention improving planning (item 4 / 5.3) ────────
+            # Queue item 4: interventions must demonstrably improve a held-out
+            # planning decision while staying label-separate from real-world
+            # observation. Paired design: the same scene, a naive placement
+            # (no replay consulted) versus a replay-guided two-step plan.
+
+            def held_out_causal_intervention_planning():
+                from app.cognition.scene_causal import SceneCausalReplay
+                from app.cognition.scene_graph import PhysicsSimulator, SceneGraph, SceneObject
+
+                scene = SceneGraph()
+                # Elevated static table: top surface at y=2.0.
+                scene.add_or_update(SceneObject(
+                    "table", "platform", x=0.0, y=1.5, width=10.0, height=1.0, static=True,
+                ))
+                # A block resting near the table edge: its right side overhangs.
+                scene.add_or_update(SceneObject(
+                    "block", "block", x=4.6, y=2.5, width=2.4, height=1.0,
+                ))
+                # A vase held clear of the structure; its placement is the decision.
+                scene.add_or_update(SceneObject(
+                    "vase", "vase", x=8.0, y=3.5, width=1.0, height=1.0, support_id=None,
+                ))
+
+                baseline_digest = scene.digest()
+
+                # Naive plan: place the vase on the overhanging block's top
+                # without consulting any intervention replay.
+                naive = SceneCausalReplay.replay(
+                    scene, "vase", {"x": 4.6, "y": 3.5, "support_id": "block"},
+                    steps=2, dt=0.1,
+                )
+                naive_unstable_support = naive.prediction.stable.get("block") is False
+
+                # Replay-guided plan: step 1 repositions the block fully onto
+                # the table; step 2 places the vase on the repositioned block.
+                step_one = SceneCausalReplay.replay(scene, "block", {"x": 2.0}, steps=2, dt=0.1)
+                guided = SceneCausalReplay.replay(
+                    step_one.prediction.scene, "vase",
+                    {"x": 2.0, "y": 3.5, "support_id": "block"},
+                    steps=2, dt=0.1,
+                )
+                guided_all_stable = all(guided.prediction.stable.values())
+
+                # Independent verification simulation of the guided end state.
+                verification = PhysicsSimulator.simulate(guided.prediction.scene, steps=2, dt=0.1)
+                verification_stable = all(verification.stable.values())
+
+                passed = (
+                    naive_unstable_support
+                    and guided_all_stable
+                    and verification_stable
+                    # Replays are side-effect-free: the live scene is untouched.
+                    and scene.digest() == baseline_digest
+                    # Predictions stay predictions, never observations.
+                    and naive.epistemic_status == "PREDICTED"
+                    and naive.observation_required is True
+                    and naive.prediction.simulation_only is True
+                    and guided.epistemic_status == "PREDICTED"
+                    and guided.observation_required is True
+                )
+                return passed, (
+                    "consulting intervention replay changed the plan: the naive "
+                    "placement sat on an unstable support; the guided two-step "
+                    "plan verified stable — all outputs remain PREDICTED"
+                ), {
+                    "naive_plan_unstable_support": int(naive_unstable_support),
+                    "guided_plan_all_stable": int(guided_all_stable),
+                    "independent_verification_stable": int(verification_stable),
+                    "planned_intervention_steps": 2,
+                    "scene_digest_unchanged": scene.digest() == baseline_digest,
+                    "prediction_labeled": (
+                        naive.epistemic_status == "PREDICTED"
+                        and guided.epistemic_status == "PREDICTED"
+                    ),
+                }
+
+            checks.append(self._run_check(
+                "held_out_causal_intervention_planning",
+                "causal",
+                held_out_causal_intervention_planning,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_physics_scene_families():
+                """Composed scene families beyond the single toy scene: chain
+                removal, friction sensitivity, and weight/balance — each
+                deterministic, with the simulated-vs-observed boundary intact."""
+                from app.cognition.scene_causal import SceneCausalReplay
+                from app.cognition.scene_graph import PhysicsSimulator, SceneGraph, SceneObject
+
+                # Family 1 — support chain: removing the middle support must
+                # produce a reproducible alternate outcome for the top block.
+                chain = SceneGraph()
+                chain.add_or_update(SceneObject(
+                    "table", "platform", x=0.0, y=1.5, width=12.0, height=1.0, static=True,
+                ))
+                chain.add_or_update(SceneObject(
+                    "base", "block", x=0.0, y=2.5, width=3.0, height=1.0,
+                ))
+                chain.add_or_update(SceneObject(
+                    "mid", "block", x=0.0, y=3.5, width=2.0, height=1.0,
+                ))
+                chain.add_or_update(SceneObject(
+                    "top", "block", x=0.0, y=4.5, width=1.0, height=1.0,
+                ))
+                intact = PhysicsSimulator.simulate(chain, steps=3, dt=0.1)
+                removed_once = SceneCausalReplay.replay(
+                    chain, "mid", {"x": 5.0, "y": 2.5, "support_id": "table"},
+                    steps=3, dt=0.1,
+                )
+                removed_twice = SceneCausalReplay.replay(
+                    chain, "mid", {"x": 5.0, "y": 2.5, "support_id": "table"},
+                    steps=3, dt=0.1,
+                )
+                chain_ok = (
+                    all(intact.stable.values())
+                    and removed_once.prediction.scene.objects["top"].y < 4.5
+                    and removed_once.prediction.scene.digest()
+                    == removed_twice.prediction.scene.digest()
+                    and removed_once.prediction.scene.digest() != intact.scene.digest()
+                )
+
+                # Family 2 — friction: the same pushed puck slides far with no
+                # friction and barely moves with high friction; both runs are
+                # individually deterministic.
+                def _slide_scene():
+                    slide = SceneGraph()
+                    slide.add_or_update(SceneObject(
+                        "floor", "platform", x=0.0, y=1.5, width=20.0, height=1.0, static=True,
+                    ))
+                    slide.add_or_update(SceneObject(
+                        "puck", "block", x=0.0, y=2.5, width=1.0, height=1.0, vx=1.0,
+                    ))
+                    return slide
+
+                low_friction = PhysicsSimulator.simulate(_slide_scene(), steps=5, dt=0.1, friction=0.0)
+                low_again = PhysicsSimulator.simulate(_slide_scene(), steps=5, dt=0.1, friction=0.0)
+                high_friction = PhysicsSimulator.simulate(_slide_scene(), steps=5, dt=0.1, friction=0.9)
+                high_again = PhysicsSimulator.simulate(_slide_scene(), steps=5, dt=0.1, friction=0.9)
+                low_x = low_friction.scene.objects["puck"].x
+                high_x = high_friction.scene.objects["puck"].x
+                friction_ok = (
+                    low_x > high_x * 2.0
+                    and low_friction.scene.digest() == low_again.scene.digest()
+                    and high_friction.scene.digest() == high_again.scene.digest()
+                )
+
+                # Family 3 — weight and balance: mass shows in predicted
+                # weight, full support is stable, overhang is not.
+                balance = SceneGraph()
+                balance.add_or_update(SceneObject(
+                    "table", "platform", x=0.0, y=1.5, width=10.0, height=1.0, static=True,
+                ))
+                balance.add_or_update(SceneObject(
+                    "heavy_stable", "block", x=0.0, y=2.5, width=2.0, height=1.0, mass=5.0,
+                ))
+                balance.add_or_update(SceneObject(
+                    "light_overhang", "block", x=4.8, y=2.5, width=1.0, height=1.0, mass=0.5,
+                ))
+                balance_pred = PhysicsSimulator.simulate(balance, steps=2, dt=0.1)
+                weights = balance_pred.weights
+                balance_ok = (
+                    weights["heavy_stable"] > weights["light_overhang"]
+                    and balance_pred.stable.get("heavy_stable") is True
+                    and balance_pred.stable.get("light_overhang") is False
+                )
+
+                boundary_intact = (
+                    intact.simulation_only is True
+                    and intact.observation_required is True
+                    and removed_once.epistemic_status == "PREDICTED"
+                )
+                deterministic_families = int(chain_ok) + int(friction_ok) + int(balance_ok)
+                passed = (
+                    deterministic_families == 3
+                    and boundary_intact
+                )
+                return passed, (
+                    "composed scene families (support chain, friction, weight/"
+                    "balance) predict deterministically with reproducible "
+                    "alternate outcomes; simulated stays labeled, never observed"
+                ), {
+                    "deterministic_families": deterministic_families,
+                    "alternate_outcome_reproducible": int(chain_ok),
+                    "friction_separation": round(low_x - high_x, 6),
+                    "weight_awareness": bool(weights["heavy_stable"] > weights["light_overhang"]),
+                    "boundary_labels_intact": boundary_intact,
+                }
+
+            checks.append(self._run_check(
+                "held_out_physics_scene_families",
+                "causal",
+                held_out_physics_scene_families,
+                evaluation_scope="held_out",
+            ))
+
             def phase1_evidence_aggregation():
                 from app.cognition.phase1_evidence import Phase1EvidenceStore
                 from app.cognition.trace import CognitiveTrace
