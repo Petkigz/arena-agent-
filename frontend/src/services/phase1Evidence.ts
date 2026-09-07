@@ -1,4 +1,4 @@
-import { apiKeyHeader } from './api';
+import { requestJson as evidenceRequest } from './http';
 
 /**
  * Phase 1 evidence services — owner-visible measurement of collected
@@ -7,19 +7,6 @@ import { apiKeyHeader } from './api';
  * never scores maturity. Absence of evidence renders as absence.
  */
 
-async function evidenceRequest<T = Record<string, unknown>>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...apiKeyHeader(), ...(init.headers ?? {}) },
-  });
-  if (!response.ok) {
-    throw new Error(`Request failed (${response.status}): ${path}`);
-  }
-  return (await response.json()) as T;
-}
 
 export interface Phase1StrategyGroup {
   evaluations: number;

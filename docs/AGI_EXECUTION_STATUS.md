@@ -7,7 +7,7 @@
 
 ## Current owner-directed gate
 
-Feature work is paused for the [repository-wide dead-code/repetition audit](REPOSITORY_AUDIT.md).
+Feature work is paused for the [repository-wide dead-code/repetition audit](REPOSITORY_AUDIT.md) — re-run 2026-09-07 over the post-session tree (see the incremental section there): 0 dead symbols across five passes; the session's one duplication consolidated into `frontend/src/services/http.ts`; the knowledge/memory editor scaffold consolidation is proposed for owner decision.
 Unique unconnected features are retained by owner choice and listed explicitly;
 this does not make them working features or change their phase maturity. Review
 the audit and caller map before adding another implementation.

@@ -268,3 +268,75 @@ SPA and Playwright Chromium: `python -m pytest tests/e2e -m e2e -q`.
 Passing this audit's bounded checks is evidence of the repairs above. It is not
 proof that every dependency, external plugin, hardware path or future state is
 bug-free, and it is not permission to report “100% clean.”
+
+---
+
+## Incremental audit — 2026-09-07 (post-session tree, head `546f5f2`)
+
+**Trigger:** owner directive to re-scan the whole project for dead code and
+repetition before any further feature work, with specific suspicion on the
+session's own additions (evidence panel, in-chat corrections, benchmark checks,
+desktop/Android review slices, shutdown tests, maturity docs).
+
+**Method (five independent passes, all reproducible):**
+
+1. **Vulture 2.16** at 90% confidence over `app/ backend/ desktop/ scripts/`
+   → 5 candidates; manual review identified every one as an
+   **interface-mandated callback parameter** (pystray menu handler
+   `(icon, item_obj)`, Win32 `EnumWindowsProc(hwnd, lparam)`, PyAudio
+   `time_info`, balance-score pair) — none dead. At 60% confidence:
+   **0 unused imports**.
+2. **Zero-reference symbol sweep** — every function/class/method in production
+   Python cross-referenced by name against ALL repository text (code, strings,
+   tests, docs, CI): **0 symbols with zero references**.
+3. **Stricter code-only sweep** — same sweep counting references only in
+   executable code (py/ts/tsx/kt), so prose mentions no longer count as life:
+   **0 symbols with zero code references**.
+4. **Unreachable-statement scan** (AST: statements following `return`/`raise`
+   within a function): **0 findings**.
+5. **Repetition fingerprinting** — normalized 8-line sliding windows over
+   production Python, frontend TS/TSX (src, non-test), and Kotlin:
+   **38 cross-file pairs** share ≥1 window. Dispositions below.
+
+**Fixes applied this pass:**
+
+- `frontend/src/services/http.ts` (NEW): the byte-identical private fetch
+  helper (`cognitionRequest` / `evidenceRequest`) — the repetition this
+  session's item-2 slice introduced — is consolidated into one
+  `requestJson<T>` helper; both service modules now import it under their
+  previous local names (zero call-site churn, zero behavior change).
+  Frontend: 257 tests passed, build OK, lint 18 warnings / 0 errors (baseline).
+
+**Reviewed and accepted (documented rationale, not silent retention):**
+
+- `Phase0Run` (phase0_evaluation.py) ↔ `BenchmarkRun` (intelligence_benchmark.py):
+  same run-container shape and `to_dict` (9 shared windows), but different
+  check dataclasses, separate persistence schemas, and deliberate evaluator
+  isolation. Unifying would couple two independent evaluators for ~12 lines —
+  rejected as worse than the duplication.
+- Benchmark held-out causal checks construct their own small `SceneObject`
+  fixtures inline (same-file near-repetition): deliberate scenario isolation —
+  each held-out scenario must remain independently readable and tamper-proof
+  against shared-fixture drift.
+- Desktop (`desktop/pages/response_review.py`) vs web (`ResponseReviewBar`
+  components) vs Android (`ResponseReviewBar.kt`): three platform
+  implementations of one review flow over the SAME endpoints/stores —
+  cross-language platform clients, not consolidation candidates.
+
+**Reported for owner decision (real repetition, real refactor cost):**
+
+- `components/knowledge/NodeEditorModal.tsx` ↔ `components/memory/MemoryEditorModal.tsx`
+  (28 shared windows, ~200-line components) and
+  `components/knowledge/KnowledgeGraphView.tsx` ↔ `components/memory/MemoryBrowser.tsx`
+  (18 shared windows): the knowledge and memory editors/graphs are scaffold-level
+  copies. Consolidation means extracting shared editor/graph scaffolding — a
+  visual-regression-risky UI refactor on two owner-facing surfaces with no
+  component-test coverage. Per the standing rule (unique-feature refactors are
+  owner decisions), this is queued as a proposal, not silently executed.
+- Remaining ≤6-window pairs are conventional boilerplate (modal shells, settings
+  pages, agent scaffolds) and are individually below action threshold.
+
+**This pass's limits (unchanged from the audit's framing):** dynamic dispatch,
+string-keyed registrations, `getattr` wiring, third-party plugins, real
+inference, and native/device paths bound what static analysis plus the sandbox
+suite can prove. Android and browser e2e remain unexecutable in this sandbox.

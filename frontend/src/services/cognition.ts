@@ -1,4 +1,4 @@
-import { apiKeyHeader } from './api';
+import { requestJson as cognitionRequest } from './http';
 
 /**
  * Cognition services: the F1 cognitive-loop owner surfaces.
@@ -6,19 +6,6 @@ import { apiKeyHeader } from './api';
  * and the owner model. All calls go through the authenticated owner API.
  */
 
-async function cognitionRequest<T = Record<string, unknown>>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...apiKeyHeader(), ...(init.headers ?? {}) },
-  });
-  if (!response.ok) {
-    throw new Error(`Request failed (${response.status}): ${path}`);
-  }
-  return (await response.json()) as T;
-}
 
 // ── Owner Charter ───────────────────────────────────────────────────────────
 
