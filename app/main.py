@@ -2803,6 +2803,17 @@ def correction_measurements_endpoint(limit: int = Query(default=100, ge=1, le=50
     }
 
 
+@router.get("/benchmarks/phase1/evidence")
+def phase1_evidence_endpoint(limit: int = Query(default=5000, ge=1, le=5000)):
+    """Return owner-visible Phase 1 evidence aggregates without maturity scoring."""
+    from app.cognition.runtime import CognitiveRuntime
+    report = CognitiveRuntime.get_instance().phase1_evidence.report(limit=limit)
+    return {
+        "success": True,
+        "report": report,
+    }
+
+
 @router.post("/memory/rag-search")
 def rag_search_endpoint(req: RAGSearchRequest):
     results = SemanticRAGEngine.search_memories(req.query, limit=req.limit)

@@ -1246,6 +1246,77 @@ class IntelligenceBenchmarkSuite:
                 evaluation_scope="held_out",
             ))
 
+            def phase1_evidence_aggregation():
+                from app.cognition.phase1_evidence import Phase1EvidenceStore
+                from app.cognition.trace import CognitiveTrace
+
+                evidence_db = root / "phase1_evidence.db"
+                previous_db = settings.DB_PATH
+                settings.DB_PATH = evidence_db
+                try:
+                    verified = CognitiveTrace(
+                        user_input="Phase 1 verified task",
+                        session_id="phase1-evidence-verified",
+                        strategy_goal_type="knowledge_query",
+                        strategy_action_type="answer",
+                    )
+                    verified.finalize(
+                        reply="Verified response",
+                        actions=[],
+                        latency=1.0,
+                        goal_verified=True,
+                        grounding_result={"status": "verified", "unsupported_claims": []},
+                    )
+                    unknown = CognitiveTrace(
+                        user_input="Phase 1 unknown task",
+                        session_id="phase1-evidence-unknown",
+                        strategy_goal_type="knowledge_query",
+                        strategy_action_type="answer",
+                    )
+                    unknown.finalize(
+                        reply="Unknown response",
+                        actions=[],
+                        latency=1.0,
+                        goal_verified=False,
+                        grounding_result={
+                            "status": "unknown",
+                            "unsupported_claims": ["unsupported claim"],
+                        },
+                    )
+                    CognitiveTrace.record_usefulness_feedback(
+                        verified.trace_id,
+                        usefulness="helpful",
+                        outcome_signal="task_completed",
+                    )
+                    CognitiveTrace.record_usefulness_feedback(
+                        unknown.trace_id,
+                        usefulness="not_helpful",
+                        outcome_signal="correction_followup",
+                    )
+                finally:
+                    settings.DB_PATH = previous_db
+                report = Phase1EvidenceStore(evidence_db).report()
+                passed = bool(
+                    report["status"] == "measured"
+                    and report["trace_count"] == 2
+                    and report["verified_outcome_count"] == 1
+                    and report["unsupported_claim_count"] == 1
+                    and report["usefulness_feedback_count"] == 2
+                    and report["usefulness_evidence_sufficient"] is True
+                )
+                return passed, "owner-visible Phase 1 report separated outcomes, grounding, and usefulness", {
+                    "trace_count": report["trace_count"],
+                    "verified_outcome_count": report["verified_outcome_count"],
+                    "unsupported_claim_count": report["unsupported_claim_count"],
+                    "usefulness_feedback_count": report["usefulness_feedback_count"],
+                }
+
+            checks.append(self._run_check(
+                "phase1_evidence_aggregation",
+                "phase1_evidence",
+                phase1_evidence_aggregation,
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}
