@@ -253,29 +253,54 @@ class TestPlaybackThroughOpenFile:
         )
         return MasterAgentOrchestrator.execute_proposal(proposal, user_text).to_dict()
 
-    def test_open_file_tool_opens_with_platform_opener(self, tmp_path, monkeypatch):
-        """The real code path: a fake platform opener receives the file."""
+    @pytest.mark.parametrize("system,opener", [
+        ("Linux", "xdg-open"),
+        ("Darwin", "open"),
+        ("Windows", "os.startfile"),
+    ])
+    def test_open_file_tool_opens_with_platform_opener(self, tmp_path, monkeypatch, system, opener):
+        """Exercise each platform branch without launching a real application."""
+        import platform
         import app.tools.universal_filesystem as ufs
         target = tmp_path / "kaba.mp3"
         target.write_bytes(b"x")
         calls = []
+        monkeypatch.setattr(platform, "system", lambda: system)
         monkeypatch.setattr(
             ufs.subprocess, "Popen",
             lambda cmd, **kw: calls.append(cmd) or type("P", (), {"poll": lambda s: 0})())
+        monkeypatch.setattr(
+            ufs.os, "startfile", lambda path: calls.append(["os.startfile", path]),
+            raising=False,
+        )
         res = ufs.UniversalFilesystem.open_with_default_app(str(target))
         assert res["success"] is True, res
-        assert res["opener"] == "xdg-open"
-        assert calls == [["xdg-open", str(target)]]
+        assert res["opener"] == opener
+        assert calls == [[opener, str(target)]]
 
-    def test_open_file_honest_failure_names_the_reason(self, tmp_path):
+    @pytest.mark.parametrize("system,opener", [
+        ("Linux", "xdg-open"),
+        ("Darwin", "open"),
+        ("Windows", "os.startfile"),
+    ])
+    def test_open_file_honest_failure_names_the_reason(self, tmp_path, monkeypatch, system, opener):
+        """Missing-opener evidence is explicit, not an assumption about the host."""
+        import platform
         import app.tools.universal_filesystem as ufs
+
+        def missing_opener(*args, **kwargs):
+            raise FileNotFoundError(f"{opener} unavailable (test)")
+
         target = tmp_path / "kaba.mp3"
         target.write_bytes(b"x")
+        monkeypatch.setattr(platform, "system", lambda: system)
+        monkeypatch.setattr(ufs.subprocess, "Popen", missing_opener)
+        monkeypatch.setattr(ufs.os, "startfile", missing_opener, raising=False)
         res = ufs.UniversalFilesystem.open_with_default_app(str(target))
-        # This sandbox has no xdg-open: the failure must name exactly that,
-        # never fabricate success. (On Windows os.startfile exists.)
         assert res["success"] is False
-        assert "open" in str(res.get("error", "")).lower()
+        assert opener in res["error"]
+        assert "not found" in res["error"]
+        assert res["file_path"] == str(target)
 
     def test_open_file_requires_a_path(self):
         import app.tools.universal_filesystem as ufs
