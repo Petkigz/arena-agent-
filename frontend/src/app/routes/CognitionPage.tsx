@@ -16,6 +16,7 @@ import type {
   OwnerModelReport,
   OwnerQuestion,
 } from '../../services/cognition';
+import { Phase1EvidencePanel } from '../../components/evidence/Phase1EvidencePanel';
 
 /**
  * Cognition page: owner surfaces for the F1 cognitive loops.
@@ -238,6 +239,8 @@ export function CognitionPage() {
           </p>
         </section>
       )}
+
+      <Phase1EvidencePanel />
 
       {actionMessage && <p role="status" className="text-sm">{actionMessage}</p>}
     </div>
