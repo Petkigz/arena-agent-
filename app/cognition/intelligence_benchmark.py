@@ -1252,6 +1252,252 @@ class IntelligenceBenchmarkSuite:
                 evaluation_scope="held_out",
             ))
 
+            # ── Memory compounding vs. a no-compounding baseline (item 3) ────
+            # Queue item 3 / 3.4 / 6.4: repeated verified tasks must measurably
+            # improve LATER task behavior against an identical store that never
+            # learned — and the improvement must come with the honesty guards
+            # (idempotent consolidation, un-inflated success/outcome fields,
+            # retrieval never upgrading history to current observations).
+
+            def held_out_memory_compounding_baseline():
+                from app.cognition.memory import MemoryStore
+                from app.cognition.memory_learning import MemoryLearner
+                from app.cognition.goal_lifecycle import GoalLifecycleState
+
+                filler = (
+                    "Water the garden each morning",
+                    "Compress the weekly backups on Friday",
+                    "Chrome crashed while opening the dashboard",
+                )
+                baseline = MemoryStore(root / "compound_baseline.db")
+                learned = MemoryStore(root / "compound_learned.db")
+                for text in filler:
+                    baseline.add("semantic", text, importance=0.6)
+                    learned.add("semantic", text, importance=0.6)
+
+                # Prior verified experience with the SAME task, recorded the
+                # only way consolidation accepts (verifier-authored episodes).
+                learner = MemoryLearner(learned)
+                verification = SimpleNamespace(
+                    verified_success=True,
+                    final_state=GoalLifecycleState.ACHIEVED,
+                    met_conditions=["found = true"],
+                    failed_conditions=[],
+                    verification_reason="direct filesystem probe",
+                )
+                for goal in ("Find the Q3 budget report", "Locate the Q3 budget report file"):
+                    learner.record_verified_episode(
+                        goal=goal,
+                        action_type="search_files",
+                        verification_result=verification,
+                        task_type="search_intent",
+                    )
+                created = learner.consolidate_verified_episodes(
+                    learned.unconsolidated_episodes()
+                )
+                replay = learner.consolidate_verified_episodes(
+                    learned.unconsolidated_episodes()
+                )
+
+                query = "where is the q3 budget report"
+
+                def _relevant(store):
+                    records = store.retrieve_context_records(query, limit=8, per_kind=4)
+                    hits = [
+                        record for record in records
+                        if any(term in record.content.lower() for term in ("budget", "q3"))
+                    ]
+                    actionable = [
+                        record for record in hits
+                        if record.kind in ("semantic", "procedural", "lesson")
+                    ]
+                    return records, hits, actionable
+
+                base_records, base_hits, _ = _relevant(baseline)
+                learned_records, learned_hits, learned_actionable = _relevant(learned)
+                metadata = MemoryStore.context_metadata(learned_hits)
+
+                passed = (
+                    not base_hits
+                    and bool(learned_hits)
+                    and learned_hits[0].memory_id == learned_records[0].memory_id
+                    and bool(learned_actionable)
+                    and len(created) >= 2
+                    and not replay
+                    and all(
+                        record.success is True and record.outcome == "achieved"
+                        for record in learned_actionable
+                    )
+                    # Honest-context guard: retrieved history is labeled as
+                    # past evidence, never presented as current observation.
+                    and all(entry.get("freshness") == "historical" for entry in metadata.values())
+                )
+                return passed, (
+                    "repeated verified tasks retrieved against a no-compounding "
+                    "baseline: baseline miss, learned hit with durable kinds"
+                ), {
+                    "baseline_relevant_hits": len(base_hits),
+                    "learned_relevant_hits": len(learned_hits),
+                    "learned_top_hit_kind": learned_hits[0].kind if learned_hits else None,
+                    "learned_actionable_kinds": len(learned_actionable),
+                    "consolidated_records": len(created),
+                    "idempotent_replay_records": len(replay),
+                    "compounding_delta": len(learned_hits) - len(base_hits),
+                }
+
+            checks.append(self._run_check(
+                "held_out_memory_compounding_baseline",
+                "memory",
+                held_out_memory_compounding_baseline,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_consolidation_improves_foreground():
+                """Consolidation must let a NEW foreground query retrieve an
+                actionable fact the un-consolidated store cannot offer."""
+                from app.cognition.memory import MemoryStore
+                from app.cognition.memory_learning import MemoryLearner
+                from app.cognition.goal_lifecycle import GoalLifecycleState
+
+                verification = SimpleNamespace(
+                    verified_success=True,
+                    final_state=GoalLifecycleState.ACHIEVED,
+                    met_conditions=["found = true"],
+                    failed_conditions=[],
+                    verification_reason="direct filesystem probe",
+                )
+
+                def _populate(store):
+                    learner = MemoryLearner(store)
+                    for goal in (
+                        "Find the Q3 budget report",
+                        "Find the yearly budget summary",
+                    ):
+                        learner.record_verified_episode(
+                            goal=goal,
+                            action_type="search_files",
+                            verification_result=verification,
+                            task_type="search_intent",
+                        )
+                    return learner
+
+                baseline = MemoryStore(root / "foreground_baseline.db")
+                learned = MemoryStore(root / "foreground_learned.db")
+                _populate(baseline)
+                learned_learner = _populate(learned)
+                created = learned_learner.consolidate_verified_episodes(
+                    learned.unconsolidated_episodes()
+                )
+
+                # A NEW task in the same class — only the general concept
+                # (report finding) overlaps with the stored experience.
+                new_task_query = "find the audit report"
+
+                def _actionable_hits(store):
+                    return [
+                        record for record in store.retrieve_context_records(
+                            new_task_query, limit=8, per_kind=4,
+                        )
+                        if record.kind in ("semantic", "procedural", "lesson")
+                        and "search_files" in record.content
+                    ]
+
+                base_actionable = _actionable_hits(baseline)
+                learned_actionable = _actionable_hits(learned)
+                passed = (
+                    not base_actionable
+                    and bool(learned_actionable)
+                    and any(record.kind == "procedural" for record in learned_actionable)
+                    and len(created) >= 2
+                )
+                return passed, (
+                    "a new foreground query retrieved an actionable consolidated "
+                    "procedure the no-compounding store could not offer"
+                ), {
+                    "baseline_actionable_hits": len(base_actionable),
+                    "learned_actionable_hits": len(learned_actionable),
+                    "learned_kinds": sorted({r.kind for r in learned_actionable}),
+                    "consolidated_records": len(created),
+                    # The incubation half of 6.4 stays owner-enabled and is
+                    # deliberately not simulated here.
+                    "incubation_scope": "owner_enabled_not_simulated",
+                }
+
+            checks.append(self._run_check(
+                "held_out_consolidation_improves_foreground",
+                "memory",
+                held_out_consolidation_improves_foreground,
+                evaluation_scope="held_out",
+            ))
+
+            def held_out_pattern_transfer_advisory():
+                """Successful plans must transfer into later planning as
+                ADVISORY suggestions — never as execution authority."""
+                from app.cognition.planning_patterns import PlanningPatternStore
+                from app.cognition.skill_classifier import SkillClassifier
+                from app.cognition.strategy_outcomes import StrategyOutcomeStore
+
+                baseline_patterns = PlanningPatternStore(str(root / "pattern_baseline.db"))
+                learned_patterns = PlanningPatternStore(str(root / "pattern_learned.db"))
+                for _ in range(3):
+                    learned_patterns.record_sequence(
+                        "search_intent", ["search_files", "read_document"], success=True,
+                    )
+
+                base_suggestions = baseline_patterns.suggest_patterns("search_intent")
+                learned_suggestions = learned_patterns.suggest_patterns("search_intent")
+                top = learned_suggestions[0] if learned_suggestions else None
+
+                # Same-skill utility transfer: sibling outcomes lift a NEW
+                # action's planning weight only where history exists.
+                outcomes = StrategyOutcomeStore(str(root / "pattern_outcomes.db"))
+                for _ in range(3):
+                    outcomes.record_outcome(
+                        "search_intent", "search_files", True, surprisal=0.1,
+                    )
+                classifier = SkillClassifier()
+                fresh_adjustment = classifier.transfer_adjustment(
+                    "web_search",
+                    StrategyOutcomeStore(str(root / "pattern_outcomes_empty.db")),
+                    "search_intent",
+                )
+                learned_adjustment = classifier.transfer_adjustment(
+                    "web_search", outcomes, "search_intent",
+                )
+
+                # Advisory-by-construction: a suggestion carries a plan and a
+                # reason, never execution authority.
+                advisory = top is not None and not any(
+                    hasattr(top, attribute)
+                    for attribute in ("execute", "can_write", "authorize", "approved")
+                )
+                passed = (
+                    not base_suggestions
+                    and top is not None
+                    and top.pattern.action_sequence == ("search_files", "read_document")
+                    and top.relevance > 0
+                    and fresh_adjustment == 1.0
+                    and learned_adjustment > 1.0
+                    and advisory
+                )
+                return passed, (
+                    "successful plans advised a later task in the same class "
+                    "(baseline had nothing to advise); ActionGate still governs"
+                ), {
+                    "baseline_suggestions": len(base_suggestions),
+                    "learned_top_relevance": top.relevance if top else None,
+                    "fresh_transfer_adjustment": fresh_adjustment,
+                    "learned_transfer_adjustment": learned_adjustment,
+                    "advisory_only": advisory,
+                }
+
+            checks.append(self._run_check(
+                "held_out_pattern_transfer_advisory",
+                "planning",
+                held_out_pattern_transfer_advisory,
+                evaluation_scope="held_out",
+            ))
+
             def phase1_evidence_aggregation():
                 from app.cognition.phase1_evidence import Phase1EvidenceStore
                 from app.cognition.trace import CognitiveTrace
