@@ -62,9 +62,19 @@ class ProcessManager:
             return {"success": False, "error": f"Could not enumerate processes: {e}"}
 
         rows = []
+        filter_text = str(filter).lower().strip() if filter is not None else ""
         for proc in procs:
             snap = cls._snapshot(proc)
-            if filter and filter.lower() not in (snap.get("name") or "").lower():
+            # Process names are platform-dependent (for example, a pytest
+            # launcher may be named ``pytest`` while its executable/cmdline is
+            # Python). Search the executable and command line as well so the
+            # documented filter means "identify this process" rather than
+            # depending on one OS-specific name field.
+            searchable = " ".join(
+                str(snap.get(key) or "")
+                for key in ("name", "executable_path", "cmdline")
+            ).lower()
+            if filter_text and filter_text not in searchable:
                 continue
             rows.append(snap)
 

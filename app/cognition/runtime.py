@@ -3851,11 +3851,21 @@ class CognitiveRuntime:
                 truth = obs_state.get("execution_truth")
                 if isinstance(truth, dict):
                     truth["results"] = deterministic_answers
+            generated_reply = assistant_reply
             assistant_reply, answer_grounding = reconcile_response(
                 assistant_reply,
                 deterministic_answers=deterministic_answers,
                 observation_evidence=observation_evidence,
             )
+            # Keep the model's visible wording when deterministic evidence
+            # contradicts it. The verifier must see the actual delivered
+            # answer and mark the goal failed; replacing it before
+            # verification would turn a wrong answer into a false success.
+            # ``reconcile_response`` remains available for callers that want
+            # a corrected standalone response, while this runtime path keeps
+            # the audit trail faithful to what was generated.
+            if deterministic_answers and answer_grounding.status == "contradicted":
+                assistant_reply = generated_reply
             trace.grounding_result = answer_grounding.to_dict()
             verify_res = GoalVerifier.verify_goal_achievement(
                 goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state

@@ -325,7 +325,12 @@ class MessageRouter:
                 # Bind the visible answer to the durable trace so an owner can
                 # submit a correction against the exact response, not merely
                 # against the latest conversation turn.
-                runtime_result = self._last_cognitive_results.get(conversation_id, {})
+                # Some lightweight integrations construct a router with
+                # ``__new__`` and inject only the collaborators they need.
+                # Preserve the normal cache contract without making those
+                # valid adapter paths fail after the cognitive call succeeds.
+                runtime_results = getattr(self, "_last_cognitive_results", {})
+                runtime_result = runtime_results.get(conversation_id, {})
                 if runtime_result.get("trace_id"):
                     await ws_manager.send_to_conversation(conversation_id, {
                         "type": "cognitive_metadata",
@@ -463,6 +468,14 @@ class MessageRouter:
                         "\n\n[status: goal parked as waiting_for_evidence — no background "
                         "task is running. Ask me to re-check and I'll gather evidence again.]"
                     )
+                # The helper is also used as a reply-only adapter by legacy
+                # callers that do not bind a conversation. Those callers do
+                # not have a metadata channel for the structured epistemic
+                # presentation and historically received the generated text
+                # verbatim. Live conversation calls always provide an ID and
+                # keep the visible status plus the metadata event.
+                if conversation_id is None:
+                    reply = reply.split("\n\nEpistemic status:", 1)[0]
                 return reply
 
             # Cycle succeeded but produced no reply — surface the lifecycle state.

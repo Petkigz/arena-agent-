@@ -181,9 +181,9 @@ class ConsolidationCoordinator:
                 """
                 SELECT task_id
                 FROM cognitive_memory
-                WHERE task_id IS NOT NULL AND kind='episodic' AND source='goal_verifier' AND success=1
+                WHERE task_id IS NOT NULL AND kind='episodic' AND source='goal_verifier' AND success IS NOT NULL
                 GROUP BY task_id
-                HAVING COUNT(*) >= 2
+                HAVING SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) >= 1
                 ORDER BY MIN(created_at)
                 LIMIT ?
                 """,
@@ -205,9 +205,27 @@ class ConsolidationCoordinator:
                 continue
             successes = [record for record in verified if record.success is True]
             if len(successes) < 2:
+                self._event(
+                    run_id,
+                    "gist_skipped",
+                    subject_id=task_id,
+                    status="insufficient_evidence",
+                    detail={
+                        "reason": "at least two repeated verified successes are required",
+                        "verified_success_count": len(successes),
+                        "unknown_preserved": True,
+                    },
+                )
                 continue
             evidence_ids = sorted(record.memory_id for record in successes)
-            excerpt = " | ".join(record.content[:240] for record in sorted(successes, key=lambda item: item.memory_id)[:3])
+            # Preserve observed episode chronology instead of UUID order. UUID
+            # ordering is deterministic but unrelated to the evidence sequence
+            # and made derived gist content unstable relative to the stored
+            # history.
+            excerpt = " | ".join(
+                record.content[:240]
+                for record in sorted(successes, key=lambda item: (item.created_at, item.memory_id))[:3]
+            )
             content = (
                 f"Derived verified gist for task {task_id}: {excerpt}. "
                 "This is a consolidated historical pattern, not a current observation."
