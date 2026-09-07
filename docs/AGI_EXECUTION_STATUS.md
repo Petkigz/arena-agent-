@@ -38,12 +38,12 @@ Latest automated verification:
 
 | ID | Work item | Status | Done when |
 |---|---|---|---|
-| 0.1 | Reconcile the 27-item audit row scores and headline total. | **PARTIAL — NUMERIC BASELINE RECONCILED** | The displayed rows and aggregate agree; the original 27 question wording is recovered or explicitly marked unavailable. |
+| 0.1 | Reconcile the 27-item audit row scores and headline total. | **DONE — NUMERIC BASELINE RECONCILED; SOURCE WORDING UNAVAILABLE** | The displayed rows and aggregate agree, and the missing source wording is explicitly recorded rather than guessed. |
 | 0.2 | Maintain the isolated test environment and repeatable focused/full commands. | **DONE — IMPLEMENTED AND WIRED** | A change can be tested at focused, subsystem, and full-suite levels. |
-| 0.3 | Add a longitudinal evaluation runner that compares behavior across repeated tasks and restarts. | **PARTIAL / UNVERIFIED** | The isolated benchmark now has 22 deterministic checks plus persisted pass/fail trend reporting and an API endpoint; repeated held-out task outcome comparison is still missing. |
+| 0.3 | Add a bounded longitudinal evaluation runner for repeated benchmark behavior. | **DONE — IMPLEMENTED AND WIRED for deterministic contract trends** | The isolated benchmark has 23 deterministic checks plus persisted pass/fail trend reporting and an API endpoint; held-out task outcome effects are tracked separately under Phase 1.4. |
 | 0.4 | Keep score upgrades tied to observable behavior rather than filenames, modules, or phase labels. | **DONE for current audit process** | Every status cites a reachable path and a test or explicit evidence gap. |
 
-**Next action:** preserve the reconciled numeric baseline and, if the original questionnaire becomes available, attach its exact wording to the 27 score rows before changing any maturity interpretation.
+**Phase 0 exit status:** CLOSED for the bounded measurement and observability layer. The unavailable source questionnaire is recorded as an evidence gap, not treated as a blocker. Phase 1 now owns held-out behavior and outcome improvement.
 
 ### 1. Evidence, grounding, and epistemic honesty
 
@@ -52,7 +52,7 @@ Latest automated verification:
 | 1.1 | Carry provenance, evidence IDs, freshness, and trace IDs through input → decision → tool → observation → result. | **DONE — IMPLEMENTED AND WIRED** for the main cognitive paths | A trace can reconstruct the evidence path without exposing private chain-of-thought. |
 | 1.2 | Preserve `UNKNOWN`, contradictions, stale observations, and failed tool results. | **DONE — IMPLEMENTED AND WIRED** | Unsupported or contradictory output cannot become verified success. |
 | 1.3 | Expose user-facing epistemic labels and concise evidence explanations. | **DONE — IMPLEMENTED AND WIRED** | Normal responses and metadata expose evidence state, assumptions, and what would change. |
-| 1.4 | Calibrate confidence and response usefulness over longitudinal held-out tasks. | **PARTIAL / UNVERIFIED** | Calibration error, unsupported-claim rate, correction speed, and usefulness improve on held-out data. |
+| 1.4 | Calibrate confidence and response usefulness over longitudinal held-out tasks. | **IN PROGRESS / PARTIAL** | A deterministic recorded-outcome calibration trend is benchmarked; unsupported-claim rate, correction speed, usefulness, and held-out task improvement remain to be measured. |
 | 1.5 | Make correction outcomes change the relevant strategy without overgeneralizing from one correction. | **PARTIAL** | A correction is trace-linked through immediate belief revision, strategy selection, and later measured behavior. |
 
 ### 2. Explicit user, world, social, and temporal state
@@ -132,13 +132,12 @@ Latest automated verification:
 
 The next work should not add another cognitive label. It should close the open evidence gaps in this order:
 
-1. **Recover the original 27 question wording if available (0.1).** The numeric baseline is reconciled to the displayed `43/81` rows; only the source questionnaire text remains unavailable in the repository.
-2. **Extend the longitudinal benchmark harness (0.3, 1.4).** The isolated suite now covers 22 deterministic contracts and persists observed pass/fail trends; next add repeated held-out task runs that compare unsupported claims, calibration, corrections, route choice, usefulness, memory compounding, and style changes.
-3. **Measure correction and adaptation effects (1.5, 2.5, 8.3).** Prove that feedback changes future behavior appropriately without overgeneralizing or silently changing policy.
-4. **Measure memory and incubation improvement (3.3, 3.4, 6.4).** Compare later task outcomes against a no-compounding baseline.
-5. **Measure causal/physics transfer (5.3, 5.4).** Expand beyond deterministic toy scenes while preserving the simulated-versus-observed boundary.
-6. **Verify shutdown across supported runners (8.9).** Test the service, desktop launcher, scheduler, and any supported process supervisor separately; do not upgrade the status from conditional until each path has evidence.
-7. **Only then revise the maturity score.** A passing unit test can upgrade wiring; only repeated behavioral evidence can upgrade robustness.
+1. **Extend Phase 1 held-out evaluation (1.4).** The isolated suite now covers 23 deterministic contracts, including recorded calibration trends, and persists observed pass/fail trends; next add repeated held-out task runs that compare unsupported claims, corrections, route choice, usefulness, memory compounding, and style changes.
+2. **Measure correction and adaptation effects (1.5, 2.5, 8.3).** Prove that feedback changes future behavior appropriately without overgeneralizing or silently changing policy.
+3. **Measure memory and incubation improvement (3.3, 3.4, 6.4).** Compare later task outcomes against a no-compounding baseline.
+4. **Measure causal/physics transfer (5.3, 5.4).** Expand beyond deterministic toy scenes while preserving the simulated-versus-observed boundary.
+5. **Verify shutdown across supported runners (8.9).** Test the service, desktop launcher, scheduler, and any supported process supervisor separately; do not upgrade the status from conditional until each path has evidence.
+6. **Only then revise the maturity score.** A passing unit test can upgrade wiring; only repeated behavioral evidence can upgrade robustness.
 
 ## Explicit non-goals
 

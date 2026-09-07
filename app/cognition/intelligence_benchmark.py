@@ -827,6 +827,34 @@ class IntelligenceBenchmarkSuite:
                 shutdown_cooperation_boundary,
             ))
 
+            def confidence_calibration_history():
+                from app.cognition.confidence_calibrator import ConfidenceCalibrator
+
+                calibrator = ConfidenceCalibrator(str(root / "benchmark_calibration.db"))
+                for confidence, outcome in ((0.9, False), (0.9, False), (0.9, True)):
+                    calibrator.record("benchmark_search", confidence, outcome)
+                for confidence, outcome in ((0.6, True), (0.6, False), (0.6, True)):
+                    calibrator.record("benchmark_search", confidence, outcome)
+                report = calibrator.longitudinal_report()
+                passed = bool(
+                    report["evidence_sufficient"]
+                    and report["trend"] == "improving"
+                    and report["earlier_absolute_error"] > report["recent_absolute_error"]
+                    and report["actions"]["benchmark_search"]["samples"] == 6
+                )
+                return passed, "calibration trend is derived from recorded predictions and verified outcomes", {
+                    "trend": report["trend"],
+                    "earlier_error": report["earlier_absolute_error"],
+                    "recent_error": report["recent_absolute_error"],
+                    "samples": report["total_records"],
+                }
+
+            checks.append(self._run_check(
+                "confidence_calibration_history",
+                "calibration",
+                confidence_calibration_history,
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}
