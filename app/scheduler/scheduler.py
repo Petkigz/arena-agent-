@@ -59,4 +59,29 @@ class ProactiveScheduler:
         except Exception:
             return False
 
+    @classmethod
+    def shutdown(cls, wait: bool = False) -> bool:
+        """Stop the scheduler when the owner shuts the system down (8.9).
+
+        Shutdown-cooperation contract: background work must not outlive the
+        shutdown request — a killed process must never leave the autonomous
+        cycle running or dying mid-job at interpreter exit. Only an EXISTING
+        scheduler is stopped: a shutdown path that lazily CREATES a scheduler
+        thread would be the opposite of cooperation. Idempotent; the instance
+        reference is cleared first so a later get_scheduler() starts a fresh
+        scheduler with no stale jobs.
+        """
+        sched = cls._scheduler
+        if sched is None:
+            return False
+        cls._scheduler = None
+        try:
+            sched.shutdown(wait=wait)
+            app_logger.info(
+                "Proactive Background Task Scheduler stopped (shutdown cooperation).")
+            return True
+        except Exception as e:  # noqa: BLE001 — a broken scheduler must not block exit
+            app_logger.warning(f"Scheduler shutdown encountered an error (continuing): {e}")
+            return False
+
 scheduler_engine = ProactiveScheduler.get_scheduler()

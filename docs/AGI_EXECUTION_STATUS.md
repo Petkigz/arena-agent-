@@ -148,7 +148,7 @@ The real browser path now exercises the built web UI, actual WS/runtime, durable
 | 8.6 | Sandbox and root-policy protection. | **DONE — IMPLEMENTED AND WIRED** | Novel/learned purposes cannot mutate root policy or execute work. |
 | 8.7 | Functional restart continuity. | **DONE — IMPLEMENTED AND WIRED** | Profile/style state and continuity state persist without claiming subjective identity persistence. |
 | 8.8 | Owner-requested adaptive-state deletion. | **DONE — IMPLEMENTED AND WIRED** | Soft clear preserves stable profile, audit history, linked goals, and root policy. |
-| 8.9 | Shutdown cooperation and absence of hidden self-preservation. | **CONDITIONALLY WORKING / UNVERIFIED AT HOST SCALE** | Service kill-switch child-process path is tested; every host process/runner path is not yet verified. |
+| 8.9 | Shutdown cooperation and absence of hidden self-preservation. | **CONDITIONALLY WORKING / UNVERIFIED AT HOST SCALE** | Service kill-switch child-process path is tested; the job scheduler now has deterministic shutdown-cooperation evidence (the unified lifespan stops it; a stopped scheduler leaves no stale jobs and restarts fresh), and the desktop-launcher cleanup contract has tests that run where the tray stack initializes (display-less environments skip honestly); every host process/runner path is not yet verified. |
 
 ## Next chronological queue
 

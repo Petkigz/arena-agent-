@@ -232,6 +232,17 @@ async def lifespan(app: FastAPI):
         app_logger.info("Voice service stopped during shutdown")
     except Exception as e:
         app_logger.error(f"Error stopping voice service during shutdown: {e}")
+    # Shutdown cooperation (execution-status 8.9): stop the background job
+    # scheduler explicitly so the autonomous-cycle thread neither survives
+    # the shutdown request nor dies mid-job at interpreter exit. Jobs are
+    # individually bounded by the expiring autonomy lease, so a job killed
+    # at this boundary releases its slot by expiry rather than hanging.
+    try:
+        from app.scheduler import ProactiveScheduler
+        if ProactiveScheduler.shutdown(wait=False):
+            app_logger.info("Autonomous-cycle scheduler stopped during shutdown")
+    except Exception as e:
+        app_logger.error(f"Error stopping the job scheduler during shutdown: {e}")
 
 
 # ============================================================================
