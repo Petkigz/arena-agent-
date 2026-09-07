@@ -1123,6 +1123,18 @@ def intelligence_benchmark_history_endpoint(
     }
 
 
+@router.get("/benchmarks/intelligence/trend")
+def intelligence_benchmark_trend_endpoint(
+    limit: int = Query(20, ge=2, le=200),
+):
+    """Expose repeated benchmark observations without claiming intelligence gain."""
+    from app.cognition.runtime import CognitiveRuntime
+    return {
+        "success": True,
+        "trend": CognitiveRuntime.get_instance().intelligence_benchmarks.history_store.trend(limit),
+    }
+
+
 # ── Phase 0 evidence-centered evaluation ────────────────────────────────────
 @router.post("/benchmarks/phase0/run")
 def run_phase0_evaluation_endpoint():

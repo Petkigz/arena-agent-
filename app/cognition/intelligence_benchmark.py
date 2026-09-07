@@ -109,6 +109,71 @@ class BenchmarkHistoryStore:
             ))
         return results
 
+    def trend(self, limit: int = 20, *, minimum_runs: int = 2) -> Dict[str, Any]:
+        """Summarize repeated benchmark outcomes without claiming intelligence gain.
+
+        A single benchmark run can establish a contract result but cannot show
+        improvement. This report only compares pass/fail observations for the
+        same named checks across compatible isolated runs. It deliberately
+        avoids converting those observations into an AGI score or a causal
+        learning claim.
+        """
+        reports = self.history(limit=limit)
+        required_runs = max(2, int(minimum_runs))
+        if len(reports) < required_runs:
+            return {
+                "status": "insufficient_evidence",
+                "run_count": len(reports),
+                "required_runs": required_runs,
+                "checks": {},
+                "note": "Repeated compatible benchmark runs are required; no improvement claim was made.",
+            }
+        environments = {report.environment for report in reports}
+        if len(environments) != 1:
+            return {
+                "status": "incomparable_runs",
+                "run_count": len(reports),
+                "required_runs": required_runs,
+                "environments": sorted(environments),
+                "checks": {},
+                "note": "Runs from different benchmark environments are not compared.",
+            }
+
+        # history() is newest-first; reverse it to make the baseline explicit.
+        chronological = list(reversed(reports))
+        by_name: Dict[str, List[bool]] = {}
+        for report in chronological:
+            for check in report.checks:
+                by_name.setdefault(check.name, []).append(bool(check.passed))
+
+        checks: Dict[str, Dict[str, Any]] = {}
+        for name, outcomes in sorted(by_name.items()):
+            baseline = outcomes[0]
+            latest = outcomes[-1]
+            pass_rate = round(sum(outcomes) / len(outcomes), 4)
+            if latest and not baseline:
+                observed_change = "improved"
+            elif baseline and not latest:
+                observed_change = "regressed"
+            else:
+                observed_change = "stable"
+            checks[name] = {
+                "run_count": len(outcomes),
+                "passed_runs": sum(outcomes),
+                "pass_rate": pass_rate,
+                "baseline_passed": baseline,
+                "latest_passed": latest,
+                "observed_change": observed_change,
+            }
+        return {
+            "status": "measured",
+            "run_count": len(reports),
+            "required_runs": required_runs,
+            "environment": next(iter(environments)),
+            "checks": checks,
+            "note": "Observed benchmark pass/fail trend only; this is not an AGI score or causal learning claim.",
+        }
+
 
 class IntelligenceBenchmarkSuite:
     def __init__(self, history_store: Optional[BenchmarkHistoryStore] = None) -> None:

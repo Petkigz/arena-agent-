@@ -68,3 +68,43 @@ def test_history_does_not_call_pass_count_an_agi_percentage(tmp_path):
     assert "agi_score" not in report
     assert report["environment"] == "isolated_deterministic"
     assert report["passed_count"] <= report["total_count"]
+
+
+def test_trend_requires_repeated_runs_and_reports_observed_changes_only(tmp_path):
+    history = BenchmarkHistoryStore(tmp_path / "benchmarks.db")
+    suite = IntelligenceBenchmarkSuite(history)
+
+    assert history.trend()["status"] == "insufficient_evidence"
+    suite.run()
+    assert history.trend()["status"] == "insufficient_evidence"
+    suite.run()
+
+    trend = history.trend()
+    assert trend["status"] == "measured"
+    assert trend["run_count"] == 2
+    assert trend["checks"]["identity_adaptation_governance"]["observed_change"] == "stable"
+    assert "agi_score" not in trend
+    assert "causal" in trend["note"].lower()
+
+
+def test_trend_endpoint_exposes_persisted_observations(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from app.cognition.runtime import CognitiveRuntime
+    from app.main import intelligence_benchmark_trend_endpoint
+
+    history = BenchmarkHistoryStore(tmp_path / "benchmarks.db")
+    suite = IntelligenceBenchmarkSuite(history)
+    suite.run()
+    suite.run()
+    runtime = SimpleNamespace(
+        intelligence_benchmarks=SimpleNamespace(history_store=history),
+    )
+    monkeypatch.setattr(
+        CognitiveRuntime,
+        "get_instance",
+        classmethod(lambda cls: runtime),
+    )
+
+    result = intelligence_benchmark_trend_endpoint(limit=2)
+    assert result["success"] is True
+    assert result["trend"]["status"] == "measured"

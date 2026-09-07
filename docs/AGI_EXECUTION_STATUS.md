@@ -40,7 +40,7 @@ Latest automated verification:
 |---|---|---|---|
 | 0.1 | Reconcile the 27-item audit row scores and headline total. | **PARTIAL — NUMERIC BASELINE RECONCILED** | The displayed rows and aggregate agree; the original 27 question wording is recovered or explicitly marked unavailable. |
 | 0.2 | Maintain the isolated test environment and repeatable focused/full commands. | **DONE — IMPLEMENTED AND WIRED** | A change can be tested at focused, subsystem, and full-suite levels. |
-| 0.3 | Add a longitudinal evaluation runner that compares behavior across repeated tasks and restarts. | **PARTIAL / UNVERIFIED** | The isolated benchmark now has 22 deterministic checks, including identity-adaptation and shutdown-boundary checks; repeated held-out outcome comparison is still missing. |
+| 0.3 | Add a longitudinal evaluation runner that compares behavior across repeated tasks and restarts. | **PARTIAL / UNVERIFIED** | The isolated benchmark now has 22 deterministic checks plus persisted pass/fail trend reporting and an API endpoint; repeated held-out task outcome comparison is still missing. |
 | 0.4 | Keep score upgrades tied to observable behavior rather than filenames, modules, or phase labels. | **DONE for current audit process** | Every status cites a reachable path and a test or explicit evidence gap. |
 
 **Next action:** preserve the reconciled numeric baseline and, if the original questionnaire becomes available, attach its exact wording to the 27 score rows before changing any maturity interpretation.
@@ -133,7 +133,7 @@ Latest automated verification:
 The next work should not add another cognitive label. It should close the open evidence gaps in this order:
 
 1. **Recover the original 27 question wording if available (0.1).** The numeric baseline is reconciled to the displayed `43/81` rows; only the source questionnaire text remains unavailable in the repository.
-2. **Extend the longitudinal benchmark harness (0.3, 1.4).** The isolated suite now covers 22 deterministic contracts; next add repeated held-out task runs that compare unsupported claims, calibration, corrections, route choice, usefulness, memory compounding, and style changes.
+2. **Extend the longitudinal benchmark harness (0.3, 1.4).** The isolated suite now covers 22 deterministic contracts and persists observed pass/fail trends; next add repeated held-out task runs that compare unsupported claims, calibration, corrections, route choice, usefulness, memory compounding, and style changes.
 3. **Measure correction and adaptation effects (1.5, 2.5, 8.3).** Prove that feedback changes future behavior appropriately without overgeneralizing or silently changing policy.
 4. **Measure memory and incubation improvement (3.3, 3.4, 6.4).** Compare later task outcomes against a no-compounding baseline.
 5. **Measure causal/physics transfer (5.3, 5.4).** Expand beyond deterministic toy scenes while preserving the simulated-versus-observed boundary.
