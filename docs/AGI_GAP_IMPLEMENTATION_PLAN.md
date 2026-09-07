@@ -1,6 +1,6 @@
 # Arena Agent — AGI Gap Summary and Implementation Plan
 
-**Date:** 2026-09-06  
+**Date:** 2026-09-07
 **Branch:** `arena/01a07695-arena-agent`  
 **Basis:** repository-grounded audit of the existing cognitive runtime, memory, autonomy, social, grounding, verification, and safety paths.
 
@@ -578,6 +578,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 - Restart continuity: **implemented and wired** through the existing identity-continuity ledger and the new functional profile/style state; this is state continuity, not subjective identity persistence.
 - Owner-requested deletion: **implemented and wired** as an auditable soft-clear of adaptive proposals/style state; stable constraints, audit history, linked goals, and root policy remain protected.
 - Shutdown cooperation: the policy boundary and evidence-recording audit are **implemented**, but host-level shutdown behavior across every process/runner remains **unverified**. No self-preservation authority or hidden survival goal is implemented.
+- Verification (2026-09-07): the focused identity/adaptation, continuity, owner-decision, affect, consolidation, preference, and incubation tests passed (`42 passed`); the full repository suite passed (`3100 passed, 14 skipped, 4 deselected, 3 warnings`) in the isolated test environment. These results verify automated contracts only and do not upgrade the host-level shutdown classification.
 
 ### Exit criteria
 
