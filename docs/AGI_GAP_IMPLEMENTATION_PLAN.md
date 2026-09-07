@@ -73,7 +73,7 @@ Some of these can be implemented as functional, measurable analogues. Subjective
 
 ## 2. Audit baseline
 
-The earlier 27-item audit scored **42/81**, and the new five-domain audit scored **15/45**, for a combined **57/126**, or **1.36/3** on the deliberately conservative scale:
+The earlier 27-item audit is normalized to **43/81** because the displayed item scores sum to 43; the new five-domain audit scored **15/45**, for a working combined baseline of **58/126**, or **1.38/3** on the deliberately conservative scale. The original wording for the 27 individual questions is not preserved in the repository, so this is a numerical reconciliation rather than a recovery of the source questionnaire.
 
 - **0 — absent**
 - **1 — hardcoded, scaffolded, or manually triggered**

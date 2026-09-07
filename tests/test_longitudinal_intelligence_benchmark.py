@@ -13,18 +13,23 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
 
     run = suite.run()
 
-    assert run.total_count == 20
+    assert run.total_count == 22
     assert run.passed_count == run.total_count
     assert run.regressions == []
     assert {check.category for check in run.checks} >= {
-        "memory", "learning", "adaptation", "control", "perception", "planning"
+        "memory", "learning", "adaptation", "control", "perception", "planning",
+        "identity_adaptation",
+    }
+    assert {check.name for check in run.checks} >= {
+        "identity_adaptation_governance",
+        "shutdown_cooperation_boundary",
     }
     assert all(check.duration_ms >= 0 for check in run.checks)
 
     restored = BenchmarkHistoryStore(tmp_path / "benchmarks.db").latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.passed_count == 20
+    assert restored.passed_count == 22
 
 
 def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):
