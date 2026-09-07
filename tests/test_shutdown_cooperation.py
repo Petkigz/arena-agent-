@@ -160,3 +160,32 @@ def test_tray_cleanup_with_no_child_process_still_stops_icon(monkeypatch):
     tray.cleanup_and_exit(icon)
 
     assert icon.stopped is True
+
+
+# ── desktop launcher: process-level evidence ─────────────────────────────────
+
+def test_tray_cleanup_terminates_a_real_child_server_process(monkeypatch):
+    """The fake-process contracts above pin call ORDER; this test proves a
+    REAL child server process actually dies — the launcher path's counterpart
+    to the service path's child-process integration test. Deterministic and
+    headless-safe: only the tray icon is a stub."""
+    tray = _import_desktop_tray()
+
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        assert child.poll() is None  # a real, running child
+        monkeypatch.setattr(tray, "SERVER_PROCESS", child)
+        icon = _fake_icon()
+
+        tray.cleanup_and_exit(icon)
+
+        assert child.poll() is not None  # terminated within cleanup's 3s wait
+        assert icon.stopped is True
+    finally:
+        # Never leak the sleeper into CI if an assertion fired first.
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
