@@ -276,6 +276,15 @@ def test_adopted_purpose_bridge_creates_only_an_evaluated_goal(tmp_path):
     linked = runtime.identity_adaptation.get_purpose_proposal(proposal.proposal_id)
     assert linked.linked_goal_id == result["goal"]["goal_id"]
 
+    repeated = runtime.create_goal_from_adopted_purpose(
+        proposal.proposal_id,
+        trace_id="trace-purpose-goal-repeat",
+        evidence_ids=["e:goal-bridge-repeat"],
+    )
+    assert repeated["created_now"] is False
+    assert repeated["goal"]["goal_id"] == result["goal"]["goal_id"]
+    assert repeated["execution_authorized"] is False
+
 
 def test_identity_adaptation_persists_schema_and_audit_history(tmp_path):
     path = tmp_path / "identity.db"
