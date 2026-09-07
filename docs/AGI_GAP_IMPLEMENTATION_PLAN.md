@@ -576,6 +576,7 @@ This is related to Phase 1 but deserves its own acceptance criteria. An internal
 - Purpose and goal proposals: **implemented and wired** as owner-visible, provenance-typed records. Adoption requires an owner decision and leaves execution authority at `none`; an explicit owner-control bridge can create an evaluated record in the existing goal queue without approving or executing it.
 - Sandboxed novel subgoals: **implemented and wired** as records with `sandbox=true`, `root_policy_mutation=false`, and no execution authority. Transfer into an evaluated goal is **implemented and wired** through the existing goal generator; planning approval and per-action authorization remain **conditionally working** through their existing controls.
 - Restart continuity: **implemented and wired** through the existing identity-continuity ledger and the new functional profile/style state; this is state continuity, not subjective identity persistence.
+- Owner-requested deletion: **implemented and wired** as an auditable soft-clear of adaptive proposals/style state; stable constraints, audit history, linked goals, and root policy remain protected.
 - Shutdown cooperation: the policy boundary and evidence-recording audit are **implemented**, but host-level shutdown behavior across every process/runner remains **unverified**. No self-preservation authority or hidden survival goal is implemented.
 
 ### Exit criteria

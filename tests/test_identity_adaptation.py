@@ -94,6 +94,39 @@ def test_style_exposure_and_feedback_are_measurable_without_automatic_adaptation
         )
 
 
+def test_owner_soft_delete_resets_adaptation_without_erasing_audit_or_goals(tmp_path):
+    store = IdentityAdaptationStore(tmp_path / "identity.db", owner_decisions=FakeOwnerDecisions())
+    style = store.propose_style_change(
+        {"verbosity": "detailed"}, reason="measured", trace_id="trace-style", evidence_ids=["e:style"]
+    )
+    unlinked = store.propose_purpose(
+        title="Unlinked", description="An unlinked proposed purpose.", provenance="exploratory_proposal",
+        trace_id="trace-unlinked", evidence_ids=["e:unlinked"],
+    )
+    linked = store.propose_purpose(
+        title="Linked", description="An adopted purpose with an existing goal.", provenance="owner_requested",
+        trace_id="trace-linked", evidence_ids=["e:linked"],
+    )
+    store.adopt_purpose(linked.proposal_id, owner_decision_id="owner-adopt")
+    store.link_purpose_to_goal(linked.proposal_id, "goal-existing", trace_id="trace-link", evidence_ids=["e:goal"])
+    with pytest.raises(IdentityAdaptationError, match="owner decision rejected"):
+        store.clear_adaptive_state(
+            owner_decision_id="not-owner", trace_id="trace-delete", evidence_ids=["e:delete"]
+        )
+    result = store.clear_adaptive_state(
+        owner_decision_id="owner-delete", trace_id="trace-delete", evidence_ids=["e:delete"]
+    )
+    assert result["deletion_mode"] == "soft_clear"
+    assert result["stable_profile_preserved"] is True
+    assert result["audit_history_preserved"] is True
+    assert result["goal_records_untouched"] is True
+    assert store.style().style["verbosity"] == "standard"
+    assert store.style_proposals()[0].status == "deleted"
+    assert store.get_purpose_proposal(unlinked.proposal_id).status == "deleted"
+    protected = store.get_purpose_proposal(linked.proposal_id)
+    assert protected.status == "adopted" and protected.linked_goal_id == "goal-existing"
+
+
 def test_stable_profile_update_cannot_change_root_policy_and_requires_owner(tmp_path):
     store = IdentityAdaptationStore(tmp_path / "identity.db", owner_decisions=FakeOwnerDecisions())
     with pytest.raises(IdentityAdaptationError, match="root policy"):

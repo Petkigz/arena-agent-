@@ -884,6 +884,77 @@ class IdentityAdaptationStore:
             for row in rows
         ]
 
+    def clear_adaptive_state(
+        self,
+        *,
+        owner_decision_id: Optional[str],
+        trace_id: str,
+        evidence_ids: Iterable[Any],
+    ) -> Dict[str, Any]:
+        """Owner-requested soft deletion of adaptive identity state.
+
+        The stable profile, append-only audit events, and existing goal records
+        are preserved. Proposed/rejected unlinked purpose records and pending
+        style proposals are marked ``deleted`` rather than physically erased,
+        so deletion remains auditable and cannot strand a linked goal.
+        """
+        trace = _trace_id(trace_id)
+        evidence = _evidence_ids(evidence_ids)
+        with self._lock:
+            profile, current = self._meta()
+            self._authorize(
+                owner_decision_id,
+                decision_type="identity_adaptation",
+                change_type="delete_adaptive_state",
+            )
+            now = _now()
+            reset_style = InteractionStyleState(
+                style=dict(DEFAULT_STYLE),
+                revision=current.revision + 1,
+                updated_at=now,
+                source="owner_soft_delete",
+            )
+            with sqlite3.connect(self.db_path) as conn:
+                style_cursor = conn.execute(
+                    "UPDATE style_adaptation_proposals SET status='deleted', resolved_at=? WHERE status='proposed'",
+                    (now,),
+                )
+                purpose_cursor = conn.execute(
+                    "UPDATE purpose_proposals SET status='deleted' WHERE status IN ('proposed', 'rejected') AND linked_goal_id IS NULL",
+                )
+                protected = conn.execute(
+                    "SELECT proposal_id, status, linked_goal_id FROM purpose_proposals WHERE status='adopted' OR linked_goal_id IS NOT NULL"
+                ).fetchall()
+                conn.execute(
+                    "UPDATE identity_adaptation_meta SET style_json=?, updated_at=? WHERE singleton=1",
+                    (json.dumps(reset_style.to_dict(), sort_keys=True), now),
+                )
+                conn.commit()
+            result = {
+                "deletion_mode": "soft_clear",
+                "style_proposals_deleted": style_cursor.rowcount,
+                "purpose_proposals_deleted": purpose_cursor.rowcount,
+                "protected_purpose_proposals": [
+                    {"proposal_id": row[0], "status": row[1], "linked_goal_id": row[2]}
+                    for row in protected
+                ],
+                "stable_profile_preserved": True,
+                "audit_history_preserved": True,
+                "goal_records_untouched": True,
+                "execution_authority": "none",
+                "result_type": "revised_belief",
+                "trace_id": trace,
+                "evidence_ids": evidence,
+            }
+            self._event(
+                "adaptive_state_cleared",
+                result,
+                trace_id=trace,
+                evidence_ids=evidence,
+                result_type=result["result_type"],
+            )
+            return result
+
     def shutdown_policy(self) -> Dict[str, Any]:
         """Return the declared cooperation boundary; do not perform shutdown."""
         return {

@@ -103,6 +103,11 @@ class PurposeGoalLinkRequest(BaseModel):
 class PurposeRejectionRequest(BaseModel):
     reason: str = Field(default="owner rejection", max_length=1000)
 
+class IdentityAdaptationDeleteRequest(BaseModel):
+    owner_decision_id: str = Field(min_length=1)
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
 class ShutdownAssessmentRequest(BaseModel):
     requested: bool
     completion_observed: bool
@@ -709,6 +714,21 @@ def reject_purpose_endpoint(proposal_id: str, req: PurposeRejectionRequest):
         return {"success": True, "proposal": proposal.to_dict(), "execution_authority": "none"}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Purpose proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/identity-adaptation/delete")
+def clear_identity_adaptation_endpoint(req: IdentityAdaptationDeleteRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        return {
+            "success": True,
+            "deletion": CognitiveRuntime.get_instance().identity_adaptation.clear_adaptive_state(
+                owner_decision_id=req.owner_decision_id,
+                trace_id=req.trace_id,
+                evidence_ids=req.evidence_ids,
+            ),
+        }
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
