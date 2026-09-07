@@ -195,8 +195,12 @@ class TrainingExampleStore:
             required = {"trace_id", "session_id", "user_input", "assistant_reply"}
             if not required.issubset(columns):
                 raise KeyError(f"Trace not found: {trace_id}")
+            strategy_fields = ", ".join(
+                field if field in columns else "''"
+                for field in ("strategy_goal_type", "strategy_action_type")
+            )
             row = conn.execute(
-                "SELECT trace_id, session_id, user_input, assistant_reply "
+                f"SELECT trace_id, session_id, user_input, assistant_reply, {strategy_fields} "
                 "FROM cognitive_traces WHERE trace_id=?",
                 (trace_id,),
             ).fetchone()
@@ -207,6 +211,8 @@ class TrainingExampleStore:
             "session_id": row[1],
             "user_input": row[2],
             "assistant_reply": row[3],
+            "strategy_goal_type": row[4] or "",
+            "strategy_action_type": row[5] or "",
         }
 
     @staticmethod
@@ -216,17 +222,18 @@ class TrainingExampleStore:
         goal_type: str,
         action_type: str,
         correction: str,
+        source_trace_id: str = "",
     ) -> Dict[str, Any]:
         """Record a correction as a measured strategy failure.
 
         This deliberately reuses StrategyOutcomeStore. It does not create a
         second correction database or alter selection after a single sample.
         """
-        if not strategy_store or not goal_type or not action_type:
+        if not strategy_store or not goal_type or not action_type or not source_trace_id:
             return {
                 "applied": False,
                 "generalized": False,
-                "reason": "goal_type and action_type are required for strategy linkage",
+                "reason": "an exact trace, goal_type and action_type are required for strategy linkage",
             }
         try:
             strategy_store.record_outcome(
@@ -236,13 +243,15 @@ class TrainingExampleStore:
                 latency_ms=0.0,
                 surprisal=1.0,
                 goal_text=f"Owner correction: {correction}"[:200],
+                source_type="owner_correction", source_trace_id=source_trace_id,
             )
             score = strategy_store.score_strategy(goal_type, action_type)
             attempts = score.total_attempts if score else 0
+            corrections = strategy_store.correction_trace_count(goal_type, action_type)
             return {
                 "applied": True,
-                "generalized": attempts >= 2,
-                "correction_count": attempts,
+                "generalized": corrections >= 2,
+                "correction_count": corrections,
                 "strategy_attempts": attempts,
                 "adjustment_factor": strategy_store.adjustment_factor(goal_type, action_type),
             }
@@ -332,8 +341,16 @@ class TrainingExampleStore:
         """
         linked_trace = self._linked_trace(source_trace_id) if source_trace_id else None
         if linked_trace:
-            source_session_id = source_session_id or str(linked_trace["session_id"] or "")
+            source_session_id = str(linked_trace["session_id"] or "")
             prompt = prompt or str(linked_trace["user_input"] or "")
+            recorded_goal = linked_trace["strategy_goal_type"]
+            recorded_action = linked_trace["strategy_action_type"]
+            if goal_type and recorded_goal and goal_type != recorded_goal:
+                raise ValueError("goal_type does not match the linked trace")
+            if action_type not in ("", "owner_correction") and recorded_action and action_type != recorded_action:
+                raise ValueError("action_type does not match the linked trace")
+            goal_type = recorded_goal or goal_type
+            action_type = recorded_action or action_type
 
         prompt_clean, prompt_redactions = redact_training_text(prompt)
         response_clean, response_redactions = redact_training_text(response)
@@ -345,12 +362,13 @@ class TrainingExampleStore:
             goal_type=str(goal_type or ""),
             action_type=str(action_type or "owner_correction"),
             correction=note or response_clean,
+            source_trace_id=source_trace_id,
         )
         digest = _content_hash(skill, prompt_clean, response_clean)
         existing = self._get_by_hash(digest)
         if existing:
-            # The candidate is deduplicated, but every explicit correction may
-            # still contribute one measured strategy outcome.
+            # Training examples deduplicate by content. Strategy evidence is
+            # independently deduplicated by the exact source trace and context.
             existing.strategy_update = strategy_update
             return existing
         now = _now()

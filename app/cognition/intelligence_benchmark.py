@@ -1198,6 +1198,10 @@ class IntelligenceBenchmarkSuite:
                         latency=1.0,
                         goal_verified=False,
                     )
+                    second_trace = CognitiveTrace(
+                        user_input="Benchmark request", session_id="held-out-correction-second-task",
+                    )
+                    second_trace.finalize(reply="Another wrong interpretation.", actions=[], latency=1.0, goal_verified=False)
                 finally:
                     settings.DB_PATH = previous_db
                 trace_id = trace.trace_id
@@ -1219,7 +1223,9 @@ class IntelligenceBenchmarkSuite:
                 first = candidates.propose_owner_correction(**kwargs)
                 after_one = outcomes.adjustment_factor("device_question", "answer")
                 unrelated_before = outcomes.adjustment_factor("calendar_question", "answer")
-                second = candidates.propose_owner_correction(**kwargs)
+                retried = candidates.propose_owner_correction(**kwargs)
+                assert retried.strategy_update.get("generalized") is False
+                second = candidates.propose_owner_correction(**{**kwargs, "source_trace_id": second_trace.trace_id})
                 after_repeat = outcomes.adjustment_factor("device_question", "answer")
                 unrelated_after = outcomes.adjustment_factor("calendar_question", "answer")
                 passed = bool(

@@ -130,3 +130,13 @@ def test_zero_owner_budget_disables_curiosity_but_not_optimization(tmp_path):
 
     assert not any(goal.source in (GoalSource.CURIOSITY, GoalSource.INFORMATION_GAP) for goal in goals)
     assert any(goal.source == GoalSource.SYSTEM_OPTIMIZATION for goal in goals)
+
+
+def test_owner_corrections_are_not_verified_outcomes_for_autonomy(tmp_path):
+    store = StrategyOutcomeStore(tmp_path / "strategy.db")
+    for index in range(8):
+        store.record_outcome("search", "search_files", False, source_type="owner_correction",
+                             source_trace_id=f"trace-{index}")
+    profile = AdaptiveAutonomyCalibrator(tmp_path / "profile.json").calibrate(store)
+    assert profile.sample_count == 0
+    assert profile.source == "defaults_insufficient_samples"

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import sqlite3
 import json
+import hashlib
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -34,6 +36,8 @@ class StrategyOutcome:
     surprisal: float        # prediction error (0.0 = expected, 1.0 = total surprise)
     goal_text: str          # original user request (truncated)
     timestamp: str = field(default_factory=_now)
+    source_type: str = "task_outcome"
+    source_trace_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -70,7 +74,8 @@ class StrategyUsefulnessStore:
     Feedback is joined to the trace's recorded strategy identity. It never
     reads or rewrites verified correctness, execution truth, or strategy
     outcome rows. A single event is descriptive only; at least two explicit
-    owner events are required before selection is adjusted.
+    owner-rated traces are required before selection is adjusted. Revisions
+    to the same response remain in the audit log but contribute one sample.
     """
 
     MIN_FEEDBACK_FOR_INFLUENCE = 2
@@ -85,11 +90,17 @@ class StrategyUsefulnessStore:
         try:
             conn = sqlite3.connect(self.db_path)
             rows = conn.execute("""
+                WITH latest AS (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY trace_id ORDER BY created_at DESC, rowid DESC
+                    ) AS sample_rank
+                    FROM cognitive_trace_usefulness
+                )
                 SELECT feedback.usefulness, feedback.outcome_signal
-                FROM cognitive_trace_usefulness AS feedback
+                FROM latest AS feedback
                 JOIN cognitive_traces AS trace
                   ON trace.trace_id = feedback.trace_id
-                WHERE trace.strategy_goal_type = ?
+                WHERE feedback.sample_rank = 1 AND trace.strategy_goal_type = ?
                   AND trace.strategy_action_type = ?
                 ORDER BY feedback.created_at ASC
             """, (str(goal_type), str(action_type))).fetchall()
@@ -150,6 +161,7 @@ class StrategyOutcomeStore:
     def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = db_path
         self._outcomes: List[StrategyOutcome] = []
+        self._lock = threading.RLock()
         if self.db_path:
             self._init_db()
             self._load_from_db()
@@ -168,6 +180,11 @@ class StrategyOutcomeStore:
                 timestamp TEXT NOT NULL
             )
         """)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(strategy_outcomes)")}
+        for name, ddl in (("source_type", "TEXT NOT NULL DEFAULT 'task_outcome'"),
+                          ("source_trace_id", "TEXT NOT NULL DEFAULT ''")):
+            if name not in columns:
+                conn.execute(f"ALTER TABLE strategy_outcomes ADD COLUMN {name} {ddl}")
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_strategy_outcomes_goal_action
             ON strategy_outcomes(goal_type, action_type)
@@ -184,51 +201,85 @@ class StrategyOutcomeStore:
             return
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT outcome_id, goal_type, action_type, success, latency_ms, surprisal, goal_text, timestamp FROM strategy_outcomes ORDER BY timestamp")
-        for row in cursor.fetchall():
-            self._outcomes.append(StrategyOutcome(
-                outcome_id=row[0], goal_type=row[1], action_type=row[2],
-                success=bool(row[3]), latency_ms=row[4], surprisal=row[5],
-                goal_text=row[6], timestamp=row[7]
-            ))
+        cursor.execute("SELECT outcome_id, goal_type, action_type, success, latency_ms, surprisal, "
+                       "goal_text, timestamp, source_type, source_trace_id FROM strategy_outcomes ORDER BY timestamp")
+        self._outcomes = [self._from_row(row) for row in cursor.fetchall()]
         conn.close()
 
-    def _save_to_db(self, outcome: StrategyOutcome) -> None:
+    @staticmethod
+    def _from_row(row) -> StrategyOutcome:
+        return StrategyOutcome(
+            outcome_id=row[0], goal_type=row[1], action_type=row[2], success=bool(row[3]),
+            latency_ms=row[4], surprisal=row[5], goal_text=row[6], timestamp=row[7],
+            source_type=row[8], source_trace_id=row[9],
+        )
+
+    def _save_to_db(self, outcome: StrategyOutcome) -> StrategyOutcome:
         if not self.db_path:
-            return
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("""
-            INSERT OR REPLACE INTO strategy_outcomes
-            (outcome_id, goal_type, action_type, success, latency_ms, surprisal, goal_text, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (outcome.outcome_id, outcome.goal_type, outcome.action_type,
-              int(outcome.success), outcome.latency_ms, outcome.surprisal,
-              outcome.goal_text, outcome.timestamp))
-        conn.commit()
-        conn.close()
+            return outcome
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO strategy_outcomes
+                (outcome_id, goal_type, action_type, success, latency_ms, surprisal,
+                 goal_text, timestamp, source_type, source_trace_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (outcome.outcome_id, outcome.goal_type, outcome.action_type,
+                  int(outcome.success), outcome.latency_ms, outcome.surprisal,
+                  outcome.goal_text, outcome.timestamp, outcome.source_type, outcome.source_trace_id))
+            row = conn.execute(
+                "SELECT outcome_id, goal_type, action_type, success, latency_ms, surprisal, "
+                "goal_text, timestamp, source_type, source_trace_id FROM strategy_outcomes WHERE outcome_id=?",
+                (outcome.outcome_id,),
+            ).fetchone()
+            return self._from_row(row)
 
     def record_outcome(
         self,
         goal_type: str,
         action_type: str,
-        success: bool,
+        success: Optional[bool],
         latency_ms: float = 0.0,
         surprisal: float = 0.0,
-        goal_text: str = ""
-    ) -> StrategyOutcome:
-        """Record a completed task outcome."""
+        goal_text: str = "",
+        *, source_type: str = "task_outcome", source_trace_id: str = "",
+    ) -> Optional[StrategyOutcome]:
+        """Record a known task outcome, never turn UNKNOWN into a failure."""
+        if success is None:
+            return None
+        if not isinstance(success, bool):
+            raise ValueError("success must be True, False, or None (UNKNOWN)")
+        if source_type not in {"task_outcome", "owner_correction"}:
+            raise ValueError("Unknown strategy outcome source_type")
+        if source_type == "owner_correction" and not source_trace_id:
+            raise ValueError("An owner correction needs an exact source trace")
+        outcome_id = uuid4().hex[:12]
+        if source_type == "owner_correction":
+            scope = json.dumps([source_trace_id, goal_type, action_type], separators=(",", ":"))
+            outcome_id = "correction_" + hashlib.sha256(scope.encode()).hexdigest()[:24]
         outcome = StrategyOutcome(
-            outcome_id=uuid4().hex[:12],
+            outcome_id=outcome_id,
             goal_type=goal_type,
             action_type=action_type,
             success=success,
             latency_ms=latency_ms,
             surprisal=surprisal,
-            goal_text=goal_text[:200]
+            goal_text=goal_text[:200],
+            source_type=source_type, source_trace_id=source_trace_id,
         )
-        self._outcomes.append(outcome)
-        self._save_to_db(outcome)
+        with self._lock:
+            existing = next((item for item in self._outcomes if item.outcome_id == outcome_id), None)
+            if existing is not None:
+                return existing
+            outcome = self._save_to_db(outcome)
+            self._outcomes.append(outcome)
         return outcome
+
+    def correction_trace_count(self, goal_type: str, action_type: str) -> int:
+        return len({
+            item.source_trace_id for item in self._outcomes
+            if item.source_type == "owner_correction" and item.source_trace_id
+            and item.goal_type == goal_type and item.action_type == action_type
+        })
 
     def score_strategy(self, goal_type: str, action_type: str) -> Optional[StrategyScore]:
         """
@@ -239,6 +290,10 @@ class StrategyOutcomeStore:
             o for o in self._outcomes
             if o.goal_type == goal_type and o.action_type == action_type
         ]
+        # A single correction is local even when ordinary task history already
+        # exceeds MIN_ATTEMPTS. Retries/rewordings of one trace are one signal.
+        if self.correction_trace_count(goal_type, action_type) < self.MIN_ATTEMPTS_FOR_INFLUENCE:
+            matching = [item for item in matching if item.source_type != "owner_correction"]
         if not matching:
             return None
 

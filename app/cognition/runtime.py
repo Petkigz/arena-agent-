@@ -2638,6 +2638,8 @@ class CognitiveRuntime:
         prediction = self.prediction.predict_action(proposal.action_type, proposal.payload)
         proposal.predicted_outcome = proposal.predicted_outcome or prediction.expected_changes
         trace.predicted_outcome = proposal.predicted_outcome
+        trace.strategy_goal_type = intent_type
+        trace.strategy_action_type = proposal.action_type
 
         tracker.transition(
             GoalLifecycleState.EXECUTING,
@@ -2700,6 +2702,17 @@ class CognitiveRuntime:
             observation_empty=False if verification.verified_success else None,
         )
         trace.grounding_result = execution_grounding.to_dict()
+        observations = (observed_state or {}).get("observations") or {}
+        authorized_presentation = presentation_for_cycle(
+            goal_verified=verification.verified_success,
+            environment_observed=bool(observations) and observations.get("evidence_source") != "not_observed",
+            evidence_items=(verification.met_conditions or verification.failed_conditions),
+            failed=not verification.verified_success,
+            unknown=getattr(verification, "is_unknown", False) is True
+                or tracker.current_state == GoalLifecycleState.WAITING_FOR_EVIDENCE,
+            action_type=proposal.action_type,
+        )
+        assistant_reply = _apply_epistemic_presentation(trace, assistant_reply, authorized_presentation)
         try:
             agency_evidence = list(verification.met_conditions or [])
             if observation_error:
@@ -2780,7 +2793,8 @@ class CognitiveRuntime:
         try:
             self.confidence_calibrator.record(
                 proposal.action_type, prediction.confidence,
-                verification.verified_success, surprisal=surprisal,
+                None if getattr(verification, "is_unknown", False) is True else verification.verified_success,
+                surprisal=surprisal,
                 goal_type=intent_type,
             )
         except Exception as exc:
@@ -2839,7 +2853,7 @@ class CognitiveRuntime:
             self.outcomes.record_outcome(
                 goal_type=intent_type,
                 action_type=proposal.action_type,
-                success=verification.verified_success,
+                success=None if getattr(verification, "is_unknown", False) is True else verification.verified_success,
                 latency_ms=latency,
                 surprisal=surprisal,
                 goal_text=goal_text,
@@ -2960,6 +2974,7 @@ class CognitiveRuntime:
             "session_id": session_id,
             "model_used": trace.model_used,
             "grounding": execution_grounding.to_dict(),
+            "epistemic_presentation": authorized_presentation.to_dict(),
             "controlled_execution_id": execution.get("controlled_execution_id"),
             "cancel_requested": execution.get("cancel_requested", False),
             "cancellation_observed": execution.get("cancellation_observed", False),
@@ -3047,6 +3062,8 @@ class CognitiveRuntime:
             complexity_requested=complexity,
             session_id=cycle_session_id,
             model_used="deterministic_local",
+            strategy_goal_type="reminder",
+            strategy_action_type="schedule_turn_reminder",
         )
         trace.finalize(
             reply=reply,
@@ -3418,6 +3435,7 @@ class CognitiveRuntime:
             user_text, complexity=complexity, memory_store=self.memory, world_model=self.world, tool_registry=self.registry
         )
         query_pred = goal_rep.primary_intent_type
+        trace.strategy_goal_type = str(query_pred or "")
         tracker.transition(GoalLifecycleState.UNDERSTOOD, f"Parsed goal in domain '{goal_rep.target_domain}'")
 
         # P2 AGI: Long-horizon goal decomposition — if goal is complex, break into sub-goals and track as project
@@ -3646,6 +3664,7 @@ class CognitiveRuntime:
         # 5. DECISION ROUTER (100% Authoritative ReasoningAction Routing):
         # Branch A: ANSWER / Direct Conversational Q&A
         if reasoning_action == ReasoningAction.ANSWER:
+            trace.strategy_action_type = "formulate_answer"
             tracker.transition(GoalLifecycleState.EXECUTING, "Formulating direct conversational answer.")
             system_instruction = CoworkerBrain.format_coworker_prompt(
                 user_text,
@@ -3798,8 +3817,29 @@ class CognitiveRuntime:
                     complexity,
                 ),
             )
-            assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", "Done.")
-            if llm_res.get("simulated") or llm_res.get("id") == "chat-simulated":
+            from app.llm import extract_reply
+            assistant_reply = extract_reply(llm_res, fallback="")
+            llm_unavailable = bool(
+                llm_res.get("simulated") or llm_res.get("id") == "chat-simulated"
+                or llm_res.get("success") is False or not assistant_reply.strip()
+            )
+            response_model = llm_res.get("model", "fast")
+            evidence_only_reply = False
+            if llm_unavailable and deterministic_answers:
+                # Strong tools, thin model: an already computed result does not
+                # need a working language model to be delivered honestly. It
+                # still goes through the same independent verifier below.
+                facts = [
+                    f"{answer.get('expression', 'Result')} = {answer.get('value_str') or answer['value']}"
+                    for answer in deterministic_answers if answer.get("value") is not None
+                ]
+                if facts:
+                    assistant_reply = "; ".join(facts) + (
+                        ". Computed locally; the language model is unavailable."
+                    )
+                    response_model = "deterministic_local"
+                    evidence_only_reply = True
+            if llm_unavailable and not evidence_only_reply:
                 tracker.transition(
                     GoalLifecycleState.DEFERRED,
                     "Local language model unavailable; no conversational answer was generated.",
@@ -3869,18 +3909,14 @@ class CognitiveRuntime:
                 deterministic_answers=deterministic_answers,
                 observation_evidence=observation_evidence,
             )
-            # Keep the model's visible wording when deterministic evidence
-            # contradicts it. The verifier must see the actual delivered
-            # answer and mark the goal failed; replacing it before
-            # verification would turn a wrong answer into a false success.
-            # ``reconcile_response`` remains available for callers that want
-            # a corrected standalone response, while this runtime path keeps
-            # the audit trail faithful to what was generated.
-            if deterministic_answers and answer_grounding.status == "contradicted":
-                assistant_reply = generated_reply
+            # Verify the original generated answer, retaining failure for a
+            # contradicted attempt. Deliver the explicit deterministic repair
+            # instead of repeating the wrong number. The original wording is
+            # preserved in grounding.generated_response, not silently erased.
+            verification_reply = generated_reply if answer_grounding.recovery_applied else assistant_reply
             trace.grounding_result = answer_grounding.to_dict()
             verify_res = GoalVerifier.verify_goal_achievement(
-                goal_rep, [], assistant_reply, tracker=tracker, observed_state=obs_state
+                goal_rep, [], verification_reply, tracker=tracker, observed_state=obs_state
             )
             trace.goal_verified = verify_res.verified_success
             try:
@@ -3917,11 +3953,14 @@ class CognitiveRuntime:
             trace.route_comparison["correction_outcome"] = (
                 "verified_success"
                 if trace.route_comparison.get("correction_applied") and verify_res.verified_success
+                else "unknown" if getattr(verify_res, "is_unknown", False) is True
+                and trace.route_comparison.get("correction_applied")
                 else "verified_failure"
                 if trace.route_comparison.get("correction_applied") else "no_correction"
             )
 
             latency = (time.time() - start_time) * 1000
+            trace.model_used = response_model
             trace.finalize(
                 reply=assistant_reply,
                 actions=[],
@@ -3955,7 +3994,8 @@ class CognitiveRuntime:
                 "goal_lifecycle_state": tracker.current_state.value,
                 "prediction_surprisal": 0.0,
                 "latency_ms": round(latency, 2),
-                "model_used": llm_res.get("model", "fast"),
+                "model_used": response_model,
+                "llm_available": not llm_unavailable,
                 "grounding": answer_grounding.to_dict(),
                 "epistemic_presentation": answer_presentation.to_dict(),
                 "route_comparison": dict(trace.route_comparison),
@@ -3973,6 +4013,7 @@ class CognitiveRuntime:
 
         # Branch B: INVESTIGATE / Bounded Probe Evidence Gathering Loop
         elif reasoning_action == ReasoningAction.INVESTIGATE:
+            trace.strategy_action_type = "investigate"
             tracker.transition(GoalLifecycleState.EXECUTING, "Running bounded probe investigation loop.")
             investigation_summary = f"Gathered evidence from {len(loop_trace.results)} probe(s)" if loop_trace.results else "Diagnostic investigation completed."
             if loop_trace.results:
@@ -4086,6 +4127,8 @@ class CognitiveRuntime:
             trace.route_comparison["correction_outcome"] = (
                 "verified_success"
                 if trace.route_comparison.get("correction_applied") and verify_res.verified_success
+                else "unknown" if getattr(verify_res, "is_unknown", False) is True
+                and trace.route_comparison.get("correction_applied")
                 else "verified_failure"
                 if trace.route_comparison.get("correction_applied") else "no_correction"
             )
@@ -4515,12 +4558,16 @@ class CognitiveRuntime:
             pred = WorldPrediction(action_type=proposal.action_type, expected_changes=proposal.predicted_outcome)
         trace.predicted_outcome = proposal.predicted_outcome
         
+        # Fit corrections against the raw predictor, not its already adjusted
+        # output; UNKNOWN outcomes must not become negative calibration samples.
+        raw_prediction_confidence = pred.confidence
         # Phase 5: Confidence calibration - adjust prediction confidence based on historical accuracy
         try:
             calibrated_confidence = self.confidence_calibrator.calibrate(
                 action_type=fine_action_type,
                 raw_confidence=pred.confidence,
-                context={"skill_type": skill_type, "complexity": complexity_level.value}
+                context={"skill_type": skill_type, "complexity": complexity_level.value,
+                         "goal_type": goal_rep.primary_intent_type if goal_rep else "unknown"}
             )
             if calibrated_confidence != pred.confidence:
                 app_logger.info(f"Confidence Calibration: {pred.confidence:.2f} → {calibrated_confidence:.2f}")
@@ -4805,7 +4852,8 @@ class CognitiveRuntime:
         trace.prediction_surprisal = surprisal
         try:
             self.confidence_calibrator.record(
-                proposal.action_type, pred.confidence, verify_res.verified_success,
+                proposal.action_type, raw_prediction_confidence,
+                None if getattr(verify_res, "is_unknown", False) is True else verify_res.verified_success,
                 surprisal=surprisal,
                 goal_type=goal_rep.primary_intent_type if goal_rep else "unknown",
             )
@@ -4956,7 +5004,8 @@ class CognitiveRuntime:
             trace.route_comparison.update({
                 "correction_outcome": (
                     "verified_success"
-                    if verify_res.verified_success else "verified_failure"
+                    if verify_res.verified_success else
+                    "unknown" if getattr(verify_res, "is_unknown", False) is True else "verified_failure"
                 ),
                 "correction_measurement": (
                     "single_cycle_verified_outcome; not calibration or adaptation"
@@ -5026,7 +5075,7 @@ class CognitiveRuntime:
             self.outcomes.record_outcome(
                 goal_type=goal_type,
                 action_type=fine_action_type,
-                success=verify_res.verified_success,
+                success=None if getattr(verify_res, "is_unknown", False) is True else verify_res.verified_success,
                 latency_ms=round(latency, 2),
                 surprisal=surprisal,
                 goal_text=user_text

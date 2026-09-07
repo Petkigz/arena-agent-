@@ -149,3 +149,64 @@ def test_feedback_endpoints_reject_absent_trace_and_invalid_submission_id(feedba
     }).status_code == 422
     with pytest.raises(ValueError, match="submission_id"):
         CognitiveTrace.record_usefulness_feedback(traces[0].trace_id, usefulness="helpful", submission_id="short")
+
+
+def test_corrections_require_distinct_traces_even_with_existing_task_history(feedback_environment, tmp_path, monkeypatch):
+    from app.cognition.runtime import CognitiveRuntime
+    from app.cognition.strategy_outcomes import StrategyOutcomeStore
+    from app.cognition.training_examples import TrainingExampleStore
+    from app.cognition.correction_measurements import CorrectionMeasurementStore
+
+    client, _, traces, trace_db = feedback_environment
+    outcomes = StrategyOutcomeStore(tmp_path / "strategy.db")
+    for _ in range(5):
+        outcomes.record_outcome("search_intent", "search_files", True)
+    baseline = outcomes.adjustment_factor("search_intent", "search_files")
+    runtime = SimpleNamespace(
+        training_examples=TrainingExampleStore(tmp_path / "candidates.db", trace_db_path=trace_db),
+        outcomes=outcomes,
+        correction_measurements=CorrectionMeasurementStore(tmp_path / "corrections.db", trace_db_path=trace_db),
+    )
+    monkeypatch.setattr(CognitiveRuntime, "get_instance", classmethod(lambda cls: runtime))
+    payload = {"trace_id": traces[0].trace_id, "response": "The corrected response from the owner."}
+    path = "/loras/training-candidates/owner-correction"
+    for _ in range(3):
+        result = client.post(path, json=payload)
+        assert result.status_code == 200
+        candidate = result.json()["candidate"]
+        assert candidate["status"] == "pending"
+        assert candidate["action_type"] == "search_files"
+        assert candidate["strategy_update"]["generalized"] is False
+        assert candidate["strategy_update"]["correction_count"] == 1
+        assert outcomes.adjustment_factor("search_intent", "search_files") == baseline
+    # Deduplication and the local-signal boundary survive an actual store reopen.
+    restored = StrategyOutcomeStore(tmp_path / "strategy.db")
+    assert restored.correction_trace_count("search_intent", "search_files") == 1
+    assert restored.adjustment_factor("search_intent", "search_files") == baseline
+    runtime.outcomes = restored
+    second = client.post(path, json={**payload, "trace_id": traces[1].trace_id})
+    assert second.status_code == 200
+    assert second.json()["candidate"]["strategy_update"]["generalized"] is True
+    assert second.json()["correction_measurement"]["trace_id"] == traces[1].trace_id
+    assert restored.adjustment_factor("search_intent", "search_files") < baseline
+    assert restored.adjustment_factor("unrelated_goal", "search_files") == 1.0
+    # An owner cannot accidentally target an unrelated strategy on this trace.
+    conflict = client.post(path, json={**payload, "action_type": "send_email"})
+    assert conflict.status_code == 400
+    with sqlite3.connect(trace_db) as conn:
+        assert conn.execute("SELECT SUM(goal_verified) FROM cognitive_traces").fetchone()[0] == 0
+
+
+def test_introspection_http_route_returns_the_recorded_response(feedback_environment):
+    from app.api.self_awareness import router
+    _, _, traces, _ = feedback_environment
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get(f"/self-awareness/introspection/{traces[0].trace_id}")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["facts"]["request"] == traces[0].user_input
+        assert body["facts"]["response"] == traces[0].assistant_reply
+        assert body["facts"]["trace_id"] == traces[0].trace_id
+        assert client.get("/self-awareness/introspection/missing-trace").status_code == 404

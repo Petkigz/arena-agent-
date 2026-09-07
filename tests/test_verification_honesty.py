@@ -241,7 +241,10 @@ def test_d1_e2e_wrong_model_reply_is_not_achieved():
         res = CognitivePipeline.process_chat(user_text=D1_TEXT)
     assert res["goal_lifecycle_state"] == "failed"
     assert res["goal_verified"] is False
-    assert res["assistant_reply"].startswith("17 * 24 is 396.")
+    assert "408" in res["assistant_reply"]
+    assert "396" not in res["assistant_reply"]
+    assert res["grounding"]["generated_response"] == "17 * 24 is 396."
+    assert res["grounding"]["recovery_applied"] is True
     assert "Epistemic status:" in res["assistant_reply"]
     assert res["epistemic_presentation"]["confidence_label"] in {"Tentative", "Unknown"}
 
@@ -256,3 +259,26 @@ def test_d1_e2e_correct_reply_from_evidence_achieves():
     assert res["assistant_reply"].startswith("17 * 24 = 408")
     assert "Epistemic status:" in res["assistant_reply"]
     assert res["epistemic_presentation"]["confidence_label"] in {"Highly confident", "Moderately confident"}
+
+
+def test_real_deterministic_evidence_is_delivered_even_without_a_language_model(monkeypatch):
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+    monkeypatch.setenv("ARENA_LLM_DISABLED", "1")
+    result = CognitivePipeline.process_chat(user_text=D1_TEXT)
+    assert "408" in result["assistant_reply"]
+    assert result["goal_verified"] is True
+    assert result["model_used"] == "deterministic_local"
+    assert result["llm_available"] is False
+    assert result["grounding"]["status"] == "verified"
+
+
+def test_failed_model_response_without_deterministic_evidence_stays_unknown():
+    from app.cognition.cognitive_pipeline import CognitivePipeline
+    for model_name in ("fast", "deterministic_local"):
+        # A provider's model name is not proof of a deterministic computation.
+        unavailable = {"success": False, "model": model_name,
+                       "choices": [{"message": {"content": "Provider failure"}}]}
+        with patch("app.llm.llm_client.generate_chat_completion", return_value=unavailable):
+            result = CognitivePipeline.process_chat("Tell me about fractals")
+        assert result["goal_verified"] is False
+        assert result["epistemic_presentation"]["confidence_label"] == "Unknown"

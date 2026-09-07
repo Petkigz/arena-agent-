@@ -7,6 +7,7 @@ subjective-identity claims are made or implied by these surfaces.
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
+from app.config import settings
 
 router = APIRouter()
 

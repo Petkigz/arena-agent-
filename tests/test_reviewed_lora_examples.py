@@ -132,7 +132,13 @@ def test_owner_correction_links_trace_and_measures_repeated_strategy_failures(tm
     }
 
     first = store.propose_owner_correction(**kwargs)
-    second = store.propose_owner_correction(**kwargs)
+    replay = store.propose_owner_correction(**kwargs)
+    assert replay.strategy_update["generalized"] is False
+    assert replay.strategy_update["correction_count"] == 1
+    with sqlite3.connect(trace_db) as conn:
+        conn.execute("INSERT INTO cognitive_traces VALUES (?, ?, ?, ?)",
+                     ("trace-owner-2", "session-owner-2", "Which device?", "Another wrong response."))
+    second = store.propose_owner_correction(**{**kwargs, "source_trace_id": "trace-owner-2"})
 
     assert first.source_trace_id == "trace-owner-1"
     assert first.source_session_id == "session-owner-1"

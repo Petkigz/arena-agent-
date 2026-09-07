@@ -99,3 +99,32 @@ def test_counterfactual_branch_carries_usefulness_adjustment_without_authority()
     # The simulation only changes consideration utility; it does not create
     # authorization or execution evidence.
     assert not hasattr(slow, "authorization_id")
+
+
+def test_repeated_ratings_of_one_trace_never_become_independent_learning_samples(tmp_path, monkeypatch):
+    db_path = tmp_path / "ratings.db"
+    monkeypatch.setattr("app.config.settings.DB_PATH", db_path)
+    first = _persist_strategy_trace(db_path)
+    store = StrategyUsefulnessStore(str(db_path))
+    for _ in range(4):
+        CognitiveTrace.record_usefulness_feedback(first.trace_id, usefulness="helpful")
+    assert len(CognitiveTrace.list_usefulness_feedback(first.trace_id)) == 4
+    assert store.score_strategy("knowledge_query", "web_search").total_feedback == 1
+    assert store.adjustment_factor("knowledge_query", "web_search") == 1.0
+    # A later rating revises this response's assessment, not its sample count.
+    CognitiveTrace.record_usefulness_feedback(first.trace_id, usefulness="not_helpful")
+    assert store.score_strategy("knowledge_query", "web_search").not_helpful == 1
+    second = _persist_strategy_trace(db_path)
+    CognitiveTrace.record_usefulness_feedback(second.trace_id, usefulness="not_helpful")
+    assert store.adjustment_factor("knowledge_query", "web_search") < 1.0
+
+
+def test_unknown_goals_cannot_teach_strategy_failure(tmp_path):
+    from app.cognition.strategy_outcomes import StrategyOutcomeStore
+    path = str(tmp_path / "outcomes.db")
+    store = StrategyOutcomeStore(path)
+    for _ in range(4):
+        assert store.record_outcome("search", "search_files", None) is None
+    assert store.total_recorded() == 0
+    assert StrategyOutcomeStore(path).total_recorded() == 0
+    assert store.adjustment_factor("search", "search_files") == 1.0

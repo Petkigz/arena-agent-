@@ -152,6 +152,10 @@ def test_authorized_execution_runs_observation_verification_and_learning():
 
 def test_authorized_execution_reports_tool_success_separately_from_unknown_goal():
     runtime = _runtime()
+    from app.cognition.confidence_calibrator import ConfidenceCalibrator
+    from app.cognition.strategy_outcomes import StrategyOutcomeStore
+    runtime.confidence_calibrator = ConfidenceCalibrator()
+    runtime.outcomes = StrategyOutcomeStore()
     proposal = ActionProposal(
         action_type="create_note",
         payload={"query": "Create something that needs external confirmation"},
@@ -164,6 +168,7 @@ def test_authorized_execution_reports_tool_success_separately_from_unknown_goal(
         tracker.transition(GoalLifecycleState.WAITING_FOR_EVIDENCE, "missing external evidence")
         return SimpleNamespace(
             verified_success=False,
+            is_unknown=True,
             failed_conditions=[],
             met_conditions=[],
             verification_reason="External confirmation unavailable",
@@ -205,6 +210,9 @@ def test_authorized_execution_reports_tool_success_separately_from_unknown_goal(
     assert result["goal_verified"] is False
     assert result["verification_unknown"] is True
     assert result["requires_new_authorization_for_retry"] is True
+
+    assert runtime.confidence_calibrator.total_records() == 0
+    assert runtime.outcomes.total_recorded() == 0
 
 
 def test_gate_failure_never_reaches_interpreter_or_capability_execution():

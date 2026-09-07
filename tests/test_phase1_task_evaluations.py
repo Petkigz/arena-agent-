@@ -131,3 +131,34 @@ def test_task_evaluation_endpoints_round_trip_owner_observation(tmp_path, monkey
     assert listed["success"] is True
     assert listed["report"]["known_outcome_count"] == 1
     assert listed["evaluations"][0]["usefulness"] == "helpful"
+
+
+def test_one_trace_cannot_be_both_halves_of_an_improved_pair(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.config.settings.DB_PATH", tmp_path / "traces.db")
+    trace = _make_trace(tmp_path / "traces.db", "one response")
+    store = Phase1TaskEvaluationStore(tmp_path / "eval.db", trace_db_path=tmp_path / "traces.db")
+    for condition, outcome in [("baseline", "failure"), ("adapted", "success")]:
+        store.record(task_key="same-response", trace_id=trace.trace_id, observed_outcome=outcome, condition=condition)
+    report = store.report()
+    assert report["paired_comparison_count"] == 0
+    assert report["paired_improved_count"] == 0
+    assert report["known_outcome_trace_count"] == 1
+    assert report["evidence_sufficient"] is False
+
+
+def test_unknown_outcomes_and_repeat_assessments_do_not_inflate_success_evidence(tmp_path, monkeypatch):
+    path = tmp_path / "traces.db"
+    monkeypatch.setattr("app.config.settings.DB_PATH", path)
+    trace = _make_trace(path, "unobserved response")
+    store = Phase1TaskEvaluationStore(tmp_path / "eval.db", trace_db_path=path)
+    for _ in range(3):
+        store.record(task_key="unobserved-task", trace_id=trace.trace_id, observed_outcome="unknown",
+                     strategy_goal_type="search", strategy_action_type="search_files")
+    report = store.report()
+    assert len(store.history()) == 3
+    assert report["recorded_evaluation_count"] == 3
+    assert report["evaluation_count"] == 1
+    assert report["evidence_sufficient"] is False
+    assert report["strategies"]["search|search_files"]["success_rate"] is None
+    latest = store.record(task_key="unobserved-task", trace_id=trace.trace_id, observed_outcome="success")
+    assert store.history(limit=1)[0].evaluation_id == latest.evaluation_id

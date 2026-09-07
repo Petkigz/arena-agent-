@@ -94,3 +94,15 @@ def test_unstructured_prose_is_not_rewritten_without_authoritative_evidence():
     assert reply == "This might be the right explanation."
     assert result.status == "unknown"
     assert result.recovery_applied is False
+
+
+def test_empty_deterministic_entries_cannot_fabricate_verification():
+    _, result = reconcile_response("The answer is 42", deterministic_answers=[{"value": None}])
+    assert result.status == "unknown"
+    assert result.supported is False
+
+
+def test_repair_keeps_the_original_visible_claim_for_the_audit_trail():
+    _, result = reconcile_response("I found three files", observation_empty=True)
+    assert result.generated_response == "I found three files"
+    assert result.recovery_applied is True

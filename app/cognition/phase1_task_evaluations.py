@@ -240,11 +240,11 @@ class Phase1TaskEvaluationStore:
             params.append(str(trace_id))
         if filters:
             query += " WHERE " + " AND ".join(filters)
-        query += " ORDER BY created_at ASC LIMIT ?"
+        query += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
         params.append(bounded_limit)
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
-        return [self._from_row(row) for row in rows]
+        return [self._from_row(row) for row in reversed(rows)]
 
     @staticmethod
     def _from_row(row) -> Phase1TaskEvaluation:
@@ -259,7 +259,14 @@ class Phase1TaskEvaluationStore:
     def report(
         self, *, limit: int = 5000, split: str = "held_out", trace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        evaluations = self.history(limit=limit, split=split, trace_id=trace_id)
+        recorded = self.history(limit=limit, split=split, trace_id=trace_id)
+        # Keep all append-only records in history; a changed assessment of one
+        # response/condition replaces its statistical sample, not its audit row.
+        latest = {(item.trace_id, item.task_key, item.condition): item for item in recorded}
+        evaluations = list(latest.values())
+        known_traces = {
+            item.trace_id for item in evaluations if item.observed_outcome in {"success", "failure"}
+        }
         outcome_counts = Counter(item.observed_outcome for item in evaluations)
         usefulness_counts = Counter(
             item.usefulness for item in evaluations if item.usefulness != "unknown"
@@ -272,17 +279,18 @@ class Phase1TaskEvaluationStore:
             for item in evaluations
         )
         strategy_groups: Dict[str, Dict[str, int]] = defaultdict(
-            lambda: {"evaluations": 0, "successes": 0}
+            lambda: {"evaluations": 0, "known_outcomes": 0, "successes": 0}
         )
         for item in evaluations:
             strategy = "|".join((item.strategy_goal_type, item.strategy_action_type)).strip("|")
             if strategy:
                 strategy_groups[strategy]["evaluations"] += 1
                 strategy_groups[strategy]["successes"] += int(item.observed_outcome == "success")
+                strategy_groups[strategy]["known_outcomes"] += int(item.observed_outcome in {"success", "failure"})
         for group in strategy_groups.values():
             group["success_rate"] = round(
-                group["successes"] / group["evaluations"], 4
-            ) if group["evaluations"] else 0.0
+                group["successes"] / group["known_outcomes"], 4
+            ) if group["known_outcomes"] else None
 
         by_task: Dict[str, Dict[str, Phase1TaskEvaluation]] = defaultdict(dict)
         for item in evaluations:
@@ -294,10 +302,14 @@ class Phase1TaskEvaluationStore:
                 continue
             baseline = conditions["baseline"]
             adapted = conditions["adapted"]
+            if baseline.trace_id == adapted.trace_id:
+                continue
             if baseline.observed_outcome not in {"success", "failure"} or adapted.observed_outcome not in {"success", "failure"}:
                 continue
             paired.append({
                 "task_key": task_key,
+                "baseline_trace_id": baseline.trace_id,
+                "adapted_trace_id": adapted.trace_id,
                 "baseline_outcome": baseline.observed_outcome,
                 "adapted_outcome": adapted.observed_outcome,
                 "observed_change": (
@@ -311,8 +323,10 @@ class Phase1TaskEvaluationStore:
         return {
             "status": "measured" if evaluations else "insufficient_evidence",
             "split": split,
+            "recorded_evaluation_count": len(recorded),
             "evaluation_count": len(evaluations),
-            "evidence_sufficient": len(evaluations) >= 2,
+            "known_outcome_trace_count": len(known_traces),
+            "evidence_sufficient": len(known_traces) >= 2,
             "known_outcome_count": known_outcomes,
             "outcome_counts": dict(sorted(outcome_counts.items())),
             "outcome_success_rate": round(
@@ -331,8 +345,11 @@ class Phase1TaskEvaluationStore:
             "paired_improved_count": improved,
             "paired_regressed_count": regressed,
             "paired_observations": paired[:100],
+            "window": {"order": "most_recent", "record_limit": max(1, min(int(limit), 5000))},
             "note": (
                 "Outcomes and paired changes are owner-recorded observations. "
+                "Repeated assessments of one response/condition are one statistical sample; "
+                "pairs require distinct traces and UNKNOWN is excluded from success-rate denominators. "
                 "They are descriptive and do not establish causality, generalization, "
                 "or an AGI score."
             ),

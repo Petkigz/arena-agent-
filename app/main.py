@@ -2334,10 +2334,12 @@ def create_owner_correction_endpoint(req: OwnerCorrectionRequest):
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if candidate is None:
         raise HTTPException(status_code=400, detail="Prompt and response must each contain at least 3 characters")
     measurement = runtime.correction_measurements.record(
-        trace_id=candidate.source_trace_id,
+        trace_id=req.trace_id or candidate.source_trace_id,
         correction_type=req.correction_type,
         expected_effect=(
             "repeated evidence may adjust the linked strategy"

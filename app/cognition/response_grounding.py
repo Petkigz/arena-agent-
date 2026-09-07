@@ -21,6 +21,8 @@ class ResponseGrounding:
     authoritative_facts: List[str] = field(default_factory=list)
     recovery_applied: bool = False
     replacement_reason: str = ""
+    # Original visible response retained on repair; not private model reasoning.
+    generated_response: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -74,7 +76,10 @@ def reconcile_response(
     reply = str(reply or "")
     facts: List[str] = []
     mismatches: List[str] = []
-    answers = [item for item in (deterministic_answers or []) if isinstance(item, dict)]
+    answers = [
+        item for item in (deterministic_answers or [])
+        if isinstance(item, dict) and item.get("value") is not None
+    ]
     for answer in answers:
         value = answer.get("value")
         if value is None:
@@ -97,6 +102,7 @@ def reconcile_response(
             unsupported_claims=["generated answer omitted or contradicted an authoritative result"],
             authoritative_facts=facts,
             recovery_applied=True,
+            generated_response=reply[:8000],
             replacement_reason="deterministic evidence contradicted the generated response",
         )
 
@@ -152,6 +158,7 @@ def reconcile_response(
             unsupported_claims=["positive discovery claim conflicts with an empty observation"],
             authoritative_facts=["the observation returned no matching results"],
             recovery_applied=True,
+            generated_response=reply[:8000],
             replacement_reason="empty observation contradicted a positive discovery claim",
         )
 

@@ -106,7 +106,10 @@ class AdaptiveAutonomyCalibrator:
     def calibrate(self, outcome_store: Any) -> AdaptiveAutonomyProfile:
         """Update thresholds from verified strategy outcomes, bounded conservatively."""
         try:
-            outcomes = outcome_store.all_outcomes(limit=500)
+            outcomes = [
+                item for item in outcome_store.all_outcomes(limit=500)
+                if getattr(item, "source_type", "task_outcome") != "owner_correction"
+            ]
         except Exception:
             outcomes = []
         if len(outcomes) < self.MIN_SAMPLES:

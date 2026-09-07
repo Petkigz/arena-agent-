@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sqlite3
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -62,6 +63,7 @@ class CalibrationReport:
     correction_factors: Dict[int, float]  # bin_index → correction factor
     ece: float                        # Expected Calibration Error
     timestamp: str = field(default_factory=_now)
+    evidence_sufficient: bool = False
 
 
 # ── Confidence Calibrator ────────────────────────────────────────────
@@ -87,7 +89,7 @@ class ConfidenceCalibrator:
     def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = db_path
         self._records: List[CalibrationRecord] = []
-        self._correction_cache: Dict[str, Dict[int, float]] = {}  # action_type → {bin → factor}
+        self._correction_cache: Dict[Tuple[Optional[str], Optional[str]], Dict[int, float]] = {}
         if self.db_path:
             self._init_db()
             self._load_from_db()
@@ -152,11 +154,17 @@ class ConfidenceCalibrator:
         self,
         action_type: str,
         predicted_confidence: float,
-        actual_outcome: bool,
+        actual_outcome: Optional[bool],
         surprisal: float = 0.0,
         goal_type: str = ""
-    ) -> CalibrationRecord:
-        """Record a prediction-outcome pair for calibration tracking."""
+    ) -> Optional[CalibrationRecord]:
+        """Record a known outcome; missing observation is not a negative sample."""
+        if actual_outcome is None:
+            return None
+        if not isinstance(actual_outcome, bool):
+            raise ValueError("actual_outcome must be True, False, or None (UNKNOWN)")
+        if not math.isfinite(predicted_confidence):
+            raise ValueError("predicted_confidence must be finite")
         predicted_confidence = max(0.0, min(1.0, predicted_confidence))
         record = CalibrationRecord(
             record_id=uuid4().hex[:12],
@@ -170,20 +178,23 @@ class ConfidenceCalibrator:
         self._save_to_db(record)
 
         # Invalidate correction cache for this action type
-        self._correction_cache.pop(action_type, None)
-        self._correction_cache.pop("global", None)
+        self._correction_cache.clear()
 
         return record
 
     def compute_bins(
         self,
-        action_type: Optional[str] = None
+        action_type: Optional[str] = None,
+        goal_type: Optional[str] = None,
     ) -> List[CalibrationBin]:
         """Compute calibration bins from recorded data."""
         # Filter records
         records = self._records
         if action_type:
             records = [r for r in records if r.action_type == action_type]
+
+        if goal_type is not None:
+            records = [r for r in records if r.goal_type == goal_type]
 
         # Build bins
         bin_data: Dict[int, List[Tuple[float, bool]]] = {i: [] for i in range(NUM_BINS)}
@@ -225,17 +236,18 @@ class ConfidenceCalibrator:
 
     def compute_correction_factors(
         self,
-        action_type: Optional[str] = None
+        action_type: Optional[str] = None,
+        goal_type: Optional[str] = None,
     ) -> Dict[int, float]:
         """
         Compute correction factors per bin.
         Factor = actual_rate / predicted_rate (clamped to [0.5, 1.5])
         """
-        key = action_type or "global"
+        key = (action_type, goal_type)
         if key in self._correction_cache:
             return self._correction_cache[key]
 
-        bins = self.compute_bins(action_type)
+        bins = self.compute_bins(action_type, goal_type)
         factors: Dict[int, float] = {}
 
         for b in bins:
@@ -258,36 +270,39 @@ class ConfidenceCalibrator:
         Apply calibration correction to a raw confidence prediction.
         Returns adjusted confidence that better reflects actual success rate.
 
-        `context` is accepted for forward-compatibility (the runtime passes
-        skill_type / complexity); the current binning-based calibration does not
-        yet consume it, but accepting it prevents the call from failing.
+        If a task class is supplied, only that action/task-class history is
+        eligible. Absence of matching samples leaves the estimate unchanged;
+        unrelated actions are never used as a fallback.
         """
+        if not math.isfinite(raw_confidence):
+            raise ValueError("raw_confidence must be finite")
         raw_confidence = max(0.0, min(1.0, raw_confidence))
         bin_idx = self._bin_index(raw_confidence)
-
-        # Try action-specific corrections first
-        action_factors = self.compute_correction_factors(action_type)
+        goal_type = (context or {}).get("goal_type")
+        action_factors = self.compute_correction_factors(action_type, goal_type)
         factor = action_factors.get(bin_idx, 1.0)
-
-        # If no action-specific data, try global corrections
-        if factor == 1.0 and action_type != "global":
-            global_factors = self.compute_correction_factors(None)
-            factor = global_factors.get(bin_idx, 1.0)
 
         calibrated = raw_confidence * factor
         return max(0.0, min(1.0, round(calibrated, 4)))
 
     def generate_report(
         self,
-        action_type: Optional[str] = None
+        action_type: Optional[str] = None,
+        goal_type: Optional[str] = None,
     ) -> CalibrationReport:
         """Generate a full calibration report."""
         records = self._records
         if action_type:
             records = [r for r in records if r.action_type == action_type]
 
-        bins = self.compute_bins(action_type)
-        factors = self.compute_correction_factors(action_type)
+        if goal_type is not None:
+            records = [r for r in records if r.goal_type == goal_type]
+        bins = self.compute_bins(action_type, goal_type)
+        factors = self.compute_correction_factors(action_type, goal_type)
+        occupied = [b for b in bins if b.total_predictions]
+        sufficient = bool(occupied) and all(
+            b.total_predictions >= self.MIN_RECORDS_PER_BIN for b in occupied
+        )
 
         # Expected Calibration Error (weighted average of bin errors)
         total_weighted_error = 0.0
@@ -302,9 +317,10 @@ class ConfidenceCalibrator:
             total_records=len(records),
             bins=bins,
             overall_calibration_error=round(ece, 4),
-            is_calibrated=ece < self.CALIBRATION_THRESHOLD,
+            is_calibrated=sufficient and ece < self.CALIBRATION_THRESHOLD,
             correction_factors=factors,
             ece=round(ece, 4),
+            evidence_sufficient=sufficient,
         )
 
     def longitudinal_report(self) -> Dict[str, Any]:
@@ -318,7 +334,7 @@ class ConfidenceCalibrator:
                 "samples": report.total_records,
                 "ece": report.ece,
                 "is_calibrated": report.is_calibrated,
-                "evidence_sufficient": report.total_records >= self.MIN_RECORDS_PER_BIN,
+                "evidence_sufficient": report.evidence_sufficient,
             }
 
         midpoint = len(self._records) // 2
@@ -342,7 +358,7 @@ class ConfidenceCalibrator:
             "total_records": global_report.total_records,
             "ece": global_report.ece,
             "is_calibrated": global_report.is_calibrated,
-            "evidence_sufficient": global_report.total_records >= self.MIN_RECORDS_PER_BIN,
+            "evidence_sufficient": global_report.evidence_sufficient,
             "earlier_absolute_error": earlier,
             "recent_absolute_error": recent,
             "trend": trend,

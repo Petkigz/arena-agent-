@@ -195,6 +195,11 @@ class GroundedIntrospection:
                 columns = {item[1] for item in conn.execute("PRAGMA table_info(cognitive_traces)").fetchall()}
                 presentation_row = None
                 grounding_row = None
+                response_row = None
+                if "assistant_reply" in columns:
+                    response_row = conn.execute(
+                        "SELECT assistant_reply FROM cognitive_traces WHERE trace_id=?", (trace_id,),
+                    ).fetchone()
                 if "epistemic_presentation_json" in columns:
                     presentation_row = conn.execute(
                         "SELECT epistemic_presentation_json FROM cognitive_traces WHERE trace_id=?",
@@ -233,6 +238,8 @@ class GroundedIntrospection:
             "goal_verified": bool(row[8]), "attention_focus": row[9],
             "created_at": row[10],
         }
+        if response_row is not None:
+            facts["response"] = response_row[0]
         explanation = [
             f"The recorded gate decision was '{row[5]}'.",
             f"The trace recorded {len(actions)} executed action(s).",

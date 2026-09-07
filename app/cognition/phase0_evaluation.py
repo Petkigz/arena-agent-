@@ -368,7 +368,10 @@ class Phase0EvaluationSuite:
                     "strategy_store": outcomes,
                 }
                 first = store.propose_owner_correction(**kwargs)
-                second = store.propose_owner_correction(**kwargs)
+                repeated_same_trace = store.propose_owner_correction(**kwargs)
+                assert repeated_same_trace.strategy_update["generalized"] is False
+                _, second_trace_id = self._create_trace(root, verified=False)
+                second = store.propose_owner_correction(**{**kwargs, "source_trace_id": second_trace_id})
                 passed = (
                     first is not None
                     and second is not None
