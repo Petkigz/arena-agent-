@@ -1317,6 +1317,81 @@ class IntelligenceBenchmarkSuite:
                 phase1_evidence_aggregation,
             ))
 
+            def phase1_task_evaluation_recording():
+                from app.cognition.phase1_task_evaluations import Phase1TaskEvaluationStore
+                from app.cognition.trace import CognitiveTrace
+
+                trace_db = root / "phase1_task_evaluation_traces.db"
+                previous_db = settings.DB_PATH
+                settings.DB_PATH = trace_db
+                try:
+                    baseline_trace = CognitiveTrace(
+                        user_input="Held-out task baseline",
+                        session_id="phase1-task-baseline",
+                    )
+                    baseline_trace.finalize(
+                        reply="Baseline response",
+                        actions=[],
+                        latency=1.0,
+                        goal_verified=False,
+                    )
+                    adapted_trace = CognitiveTrace(
+                        user_input="Held-out task adapted",
+                        session_id="phase1-task-adapted",
+                    )
+                    adapted_trace.finalize(
+                        reply="Adapted response",
+                        actions=[],
+                        latency=1.0,
+                        goal_verified=True,
+                    )
+                finally:
+                    settings.DB_PATH = previous_db
+                store = Phase1TaskEvaluationStore(
+                    root / "phase1_task_evaluations.db",
+                    trace_db_path=trace_db,
+                )
+                store.record(
+                    task_key="benchmark-task",
+                    trace_id=baseline_trace.trace_id,
+                    observed_outcome="failure",
+                    usefulness="not_helpful",
+                    condition="baseline",
+                    strategy_goal_type="knowledge_query",
+                    strategy_action_type="answer",
+                    evidence_ids=["benchmark:baseline"],
+                )
+                store.record(
+                    task_key="benchmark-task",
+                    trace_id=adapted_trace.trace_id,
+                    observed_outcome="success",
+                    usefulness="helpful",
+                    condition="adapted",
+                    strategy_goal_type="knowledge_query",
+                    strategy_action_type="answer",
+                    evidence_ids=["benchmark:adapted"],
+                )
+                report = store.report()
+                passed = bool(
+                    report["status"] == "measured"
+                    and report["evaluation_count"] == 2
+                    and report["paired_comparison_count"] == 1
+                    and report["paired_improved_count"] == 1
+                    and report["known_usefulness_count"] == 2
+                )
+                return passed, "owner-recorded held-out task pairs remain descriptive and trace-linked", {
+                    "evaluation_count": report["evaluation_count"],
+                    "paired_comparison_count": report["paired_comparison_count"],
+                    "paired_improved_count": report["paired_improved_count"],
+                    "known_usefulness_count": report["known_usefulness_count"],
+                }
+
+            checks.append(self._run_check(
+                "phase1_task_evaluation_recording",
+                "phase1_evidence",
+                phase1_task_evaluation_recording,
+            ))
+
         previous_by_name = {
             check.name: check for check in previous.checks
         } if previous else {}

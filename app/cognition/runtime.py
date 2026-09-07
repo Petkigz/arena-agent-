@@ -158,6 +158,11 @@ class CognitiveRuntime:
         )
         from app.cognition.phase1_evidence import Phase1EvidenceStore
         self.phase1_evidence = Phase1EvidenceStore(path)
+        from app.cognition.phase1_task_evaluations import Phase1TaskEvaluationStore
+        self.phase1_task_evaluations = Phase1TaskEvaluationStore(
+            db_path=str(Path(path).parent / "phase1_task_evaluations.db") if path else "data/phase1_task_evaluations.db",
+            trace_db_path=path,
+        )
         from app.cognition.adaptive_autonomy import AdaptiveAutonomyCalibrator
         self.adaptive_autonomy = AdaptiveAutonomyCalibrator(
             path=str(Path(path).parent / "adaptive_autonomy.json") if path else "data/adaptive_autonomy.json"

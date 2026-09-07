@@ -319,6 +319,21 @@ class TraceUsefulnessRequest(BaseModel):
     retrieval_useful: Optional[bool] = None
     note: str = ""
 
+class Phase1TaskEvaluationRequest(BaseModel):
+    """Owner-recorded held-out task outcome; measurement only."""
+    task_key: str
+    trace_id: str
+    observed_outcome: str
+    usefulness: str = "unknown"
+    split: str = "held_out"
+    condition: str = "single"
+    correction_received: bool = False
+    strategy_goal_type: str = ""
+    strategy_action_type: str = ""
+    route: str = ""
+    evidence_ids: List[str] = Field(default_factory=list, max_length=20)
+    note: str = ""
+
 class NotificationRequest(BaseModel):
     title: str
     message: str
@@ -2811,6 +2826,53 @@ def phase1_evidence_endpoint(limit: int = Query(default=5000, ge=1, le=5000)):
     return {
         "success": True,
         "report": report,
+    }
+
+
+@router.post("/benchmarks/phase1/tasks/evaluations")
+def record_phase1_task_evaluation_endpoint(req: Phase1TaskEvaluationRequest):
+    """Record an owner-observed Phase 1 task result without changing runtime truth."""
+    from app.cognition.runtime import CognitiveRuntime
+    store = CognitiveRuntime.get_instance().phase1_task_evaluations
+    try:
+        evaluation = store.record(
+            task_key=req.task_key,
+            trace_id=req.trace_id,
+            observed_outcome=req.observed_outcome,
+            usefulness=req.usefulness,
+            split=req.split,
+            condition=req.condition,
+            correction_received=req.correction_received,
+            strategy_goal_type=req.strategy_goal_type,
+            strategy_action_type=req.strategy_action_type,
+            route=req.route,
+            evidence_ids=req.evidence_ids,
+            note=req.note,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "evaluation": evaluation.to_dict()}
+
+
+@router.get("/benchmarks/phase1/tasks/evaluations")
+def phase1_task_evaluations_endpoint(
+    limit: int = Query(default=5000, ge=1, le=5000),
+    split: str = Query(default="held_out"),
+):
+    """Return owner-recorded task evaluations and descriptive comparisons."""
+    from app.cognition.runtime import CognitiveRuntime
+    store = CognitiveRuntime.get_instance().phase1_task_evaluations
+    try:
+        report = store.report(limit=limit, split=split)
+        history = [item.to_dict() for item in store.history(limit=limit, split=split)]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "report": report,
+        "evaluations": history,
     }
 
 

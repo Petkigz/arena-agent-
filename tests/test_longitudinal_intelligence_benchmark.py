@@ -13,7 +13,7 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
 
     run = suite.run()
 
-    assert run.total_count == 32
+    assert run.total_count == 33
     assert run.passed_count == run.total_count
     assert run.regressions == []
     assert {check.category for check in run.checks} >= {
@@ -45,12 +45,13 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
     assert by_name["held_out_correction_measurement"].metrics["latency_ms"] == 125.0
     assert by_name["held_out_correction_non_generalization"].metrics["unrelated_context_after_repeat"] == 1.0
     assert by_name["phase1_evidence_aggregation"].metrics["usefulness_feedback_count"] == 2
+    assert by_name["phase1_task_evaluation_recording"].metrics["paired_improved_count"] == 1
     assert all(check.duration_ms >= 0 for check in run.checks)
 
     restored = BenchmarkHistoryStore(tmp_path / "benchmarks.db").latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.passed_count == 32
+    assert restored.passed_count == 33
 
 
 def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):
