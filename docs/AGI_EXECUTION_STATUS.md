@@ -29,7 +29,7 @@ The numerical discrepancy is now reconciled in favor of the displayed item rows.
 Latest automated verification:
 
 - Focused Phase 8-related tests: **46 passed**.
-- Full repository suite: **3104 passed, 14 skipped, 4 deselected, 3 warnings**.
+- Full repository suite: **3106 passed, 14 skipped, 4 deselected, 3 warnings**.
 - These results verify automated contracts; they do not prove general intelligence, subjective experience, or all-host shutdown behavior.
 
 ## Chronological execution plan
