@@ -148,6 +148,7 @@ class PurposeProposal:
     result_type: str = "generated_hypothesis"
     root_policy_mutation: bool = False
     execution_authority: str = "none"
+    linked_goal_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -235,10 +236,16 @@ class IdentityAdaptationStore:
                     adopted_at TEXT,
                     result_type TEXT NOT NULL,
                     root_policy_mutation INTEGER NOT NULL,
-                    execution_authority TEXT NOT NULL
+                    execution_authority TEXT NOT NULL,
+                    linked_goal_id TEXT
                 )
                 """
             )
+            purpose_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(purpose_proposals)").fetchall()
+            }
+            if "linked_goal_id" not in purpose_columns:
+                conn.execute("ALTER TABLE purpose_proposals ADD COLUMN linked_goal_id TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS identity_adaptation_events (
@@ -616,12 +623,18 @@ class IdentityAdaptationStore:
         )
         with self._lock, sqlite3.connect(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO purpose_proposals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                """
+                INSERT INTO purpose_proposals
+                (proposal_id, title, description, provenance, sandbox, status, trace_id,
+                 evidence_json, created_at, owner_decision_id, adopted_at, result_type,
+                 root_policy_mutation, execution_authority, linked_goal_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
                     proposal.proposal_id, proposal.title, proposal.description, proposal.provenance,
                     1 if proposal.sandbox else 0, proposal.status, proposal.trace_id,
                     json.dumps(proposal.evidence_ids), proposal.created_at, None, None,
-                    proposal.result_type, 0, proposal.execution_authority,
+                    proposal.result_type, 0, proposal.execution_authority, None,
                 ),
             )
             conn.commit()
@@ -637,7 +650,7 @@ class IdentityAdaptationStore:
     def _get_purpose(self, proposal_id: str) -> Optional[PurposeProposal]:
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
-                "SELECT proposal_id, title, description, provenance, sandbox, status, trace_id, evidence_json, created_at, owner_decision_id, adopted_at, result_type, root_policy_mutation, execution_authority FROM purpose_proposals WHERE proposal_id=?",
+                "SELECT proposal_id, title, description, provenance, sandbox, status, trace_id, evidence_json, created_at, owner_decision_id, adopted_at, result_type, root_policy_mutation, execution_authority, linked_goal_id FROM purpose_proposals WHERE proposal_id=?",
                 (proposal_id,),
             ).fetchone()
         if row is None:
@@ -646,7 +659,7 @@ class IdentityAdaptationStore:
             proposal_id=row[0], title=row[1], description=row[2], provenance=row[3], sandbox=bool(row[4]),
             status=row[5], trace_id=row[6], evidence_ids=json.loads(row[7]), created_at=row[8],
             owner_decision_id=row[9], adopted_at=row[10], result_type=row[11],
-            root_policy_mutation=bool(row[12]), execution_authority=row[13],
+            root_policy_mutation=bool(row[12]), execution_authority=row[13], linked_goal_id=row[14],
         )
 
     def adopt_purpose(self, proposal_id: str, *, owner_decision_id: Optional[str]) -> PurposeProposal:
@@ -678,6 +691,51 @@ class IdentityAdaptationStore:
             )
             return adopted
 
+    def link_purpose_to_goal(
+        self,
+        proposal_id: str,
+        goal_id: str,
+        *,
+        trace_id: str,
+        evidence_ids: Iterable[Any],
+    ) -> PurposeProposal:
+        """Link an adopted purpose to an existing goal record.
+
+        Linking is deliberately separate from adoption and does not approve or
+        execute the goal. The existing owner-governed goal queue and per-action
+        gates remain authoritative.
+        """
+        trace = _trace_id(trace_id)
+        evidence = _evidence_ids(evidence_ids)
+        normalized_goal_id = str(goal_id or "").strip()
+        if not normalized_goal_id:
+            raise IdentityAdaptationError("purpose-to-goal links require goal_id")
+        with self._lock:
+            proposal = self._get_purpose(proposal_id)
+            if proposal is None:
+                raise KeyError(proposal_id)
+            if proposal.status != "adopted":
+                raise IdentityAdaptationError("only an adopted purpose can link to a goal")
+            if proposal.linked_goal_id and proposal.linked_goal_id != normalized_goal_id:
+                raise IdentityAdaptationError("purpose is already linked to a different goal")
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "UPDATE purpose_proposals SET linked_goal_id=? WHERE proposal_id=?",
+                    (normalized_goal_id, proposal_id),
+                )
+                conn.commit()
+            linked = PurposeProposal(
+                **{**proposal.to_dict(), "linked_goal_id": normalized_goal_id}
+            )
+            self._event(
+                "purpose_goal_linked",
+                linked.to_dict(),
+                trace_id=trace,
+                evidence_ids=evidence,
+                result_type="revised_belief",
+            )
+            return linked
+
     def reject_purpose(self, proposal_id: str, *, reason: str = "owner rejection") -> PurposeProposal:
         with self._lock:
             proposal = self._get_purpose(proposal_id)
@@ -696,6 +754,10 @@ class IdentityAdaptationStore:
                 result_type="revised_belief",
             )
             return PurposeProposal(**{**proposal.to_dict(), "status": "rejected"})
+
+    def get_purpose_proposal(self, proposal_id: str) -> Optional[PurposeProposal]:
+        with self._lock:
+            return self._get_purpose(proposal_id)
 
     def purpose_proposals(self, status: Optional[str] = None, limit: int = 100) -> List[PurposeProposal]:
         query = "SELECT proposal_id FROM purpose_proposals"

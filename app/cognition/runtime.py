@@ -489,6 +489,95 @@ class CognitiveRuntime:
             "owner_policy_revision":owner_control_store.get_policy().revision,
         },self.boot_id,expected_change_types=expected_change_types,owner_decision_id=owner_decision_id)
 
+    def create_goal_from_adopted_purpose(
+        self,
+        proposal_id: str,
+        *,
+        trace_id: str,
+        evidence_ids: List[str],
+    ) -> Dict[str, Any]:
+        """Bridge an owner-adopted purpose into the existing goal queue.
+
+        This creates only a proposed/evaluated goal. It does not approve the
+        goal, authorize an action, or execute anything. The purpose provenance
+        remains in the identity-adaptation record linked to the goal ID.
+        """
+        from app.cognition.autonomous_goal_generator import (
+            AutonomousGoal,
+            GoalPriority,
+            GoalSource,
+            IntrinsicMotivation,
+        )
+
+        normalized_evidence = [str(item).strip() for item in (evidence_ids or []) if str(item).strip()]
+        if not str(trace_id or "").strip() or not normalized_evidence:
+            raise ValueError("purpose-derived goals require a trace_id and evidence_ids")
+        proposal = self.identity_adaptation.get_purpose_proposal(proposal_id)
+        if proposal is None:
+            raise KeyError(proposal_id)
+        if proposal.status != "adopted":
+            raise ValueError("purpose must be owner-adopted before it can enter the goal queue")
+        if proposal.linked_goal_id:
+            existing = self.goal_generator.get_goal(proposal.linked_goal_id)
+            if existing is None:
+                raise ValueError("purpose links to a missing goal record")
+            return {
+                "proposal": proposal.to_dict(),
+                "goal": existing.to_dict(),
+                "created_now": False,
+                "execution_authorized": False,
+                "planning_approval_required": existing.status.value != "approved",
+            }
+
+        source_map = {
+            "owner_requested": GoalSource.OWNER_DIRECTIVE,
+            "safety_required": GoalSource.MAINTENANCE,
+            "system_maintenance": GoalSource.MAINTENANCE,
+            "learned_strategy": GoalSource.COMPETENCE_IMPROVEMENT,
+            "exploratory_proposal": GoalSource.CURIOSITY,
+        }
+        motivation_map = {
+            "owner_requested": IntrinsicMotivation.HELPFULNESS,
+            "safety_required": IntrinsicMotivation.HELPFULNESS,
+            "system_maintenance": IntrinsicMotivation.MASTERY,
+            "learned_strategy": IntrinsicMotivation.COMPETENCE,
+            "exploratory_proposal": IntrinsicMotivation.CURIOSITY,
+        }
+        goal = AutonomousGoal(
+            title=proposal.title,
+            description=(
+                f"{proposal.description} [purpose_proposal:{proposal.proposal_id}; "
+                f"provenance:{proposal.provenance}; sandbox:{proposal.sandbox}]"
+            ),
+            source=source_map[proposal.provenance],
+            motivation=motivation_map[proposal.provenance],
+            priority=GoalPriority.LOW,
+            target_state="Owner-adopted purpose evaluated through existing goal controls",
+            current_state="Purpose proposal adopted; goal planning not yet approved",
+            success_criteria=["Goal is evaluated through the existing autonomous-goal path"],
+            estimated_effort="unknown",
+            trigger_observation=f"purpose_proposal:{proposal.proposal_id}",
+            user_benefit="Owner-visible purpose proposal converted into a separately governed goal record",
+            system_benefit="Preserve purpose provenance without creating a second execution system",
+        )
+        if not self.goal_generator.add_goal(goal):
+            raise RuntimeError("existing autonomous goal queue rejected the purpose-derived goal")
+        goal = self.goal_generator.evaluate_goal(goal)
+        linked = self.identity_adaptation.link_purpose_to_goal(
+            proposal_id,
+            goal.goal_id,
+            trace_id=trace_id,
+            evidence_ids=normalized_evidence,
+        )
+        return {
+            "proposal": linked.to_dict(),
+            "goal": goal.to_dict(),
+            "created_now": True,
+            "execution_authorized": False,
+            "planning_approval_required": True,
+            "note": "Goal creation is separate from planning approval and per-action authorization.",
+        }
+
     def refresh_commitments(self) -> Dict[str, Any]:
         """Reconcile persistent projects into the commitment ledger."""
         synced = []

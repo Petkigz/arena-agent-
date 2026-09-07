@@ -96,6 +96,10 @@ class PurposeProposalRequest(BaseModel):
 class PurposeDecisionRequest(BaseModel):
     owner_decision_id: str = Field(min_length=1)
 
+class PurposeGoalLinkRequest(BaseModel):
+    trace_id: str = Field(min_length=1)
+    evidence_ids: List[str] = Field(min_length=1, max_length=50)
+
 class PurposeRejectionRequest(BaseModel):
     reason: str = Field(default="owner rejection", max_length=1000)
 
@@ -677,6 +681,23 @@ def adopt_purpose_endpoint(proposal_id: str, req: PurposeDecisionRequest):
         raise HTTPException(status_code=404, detail="Purpose proposal not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@router.post("/owner-control/purpose-proposals/{proposal_id}/create-goal")
+def create_goal_from_purpose_endpoint(proposal_id: str, req: PurposeGoalLinkRequest):
+    from app.cognition.runtime import CognitiveRuntime
+    try:
+        return {
+            "success": True,
+            **CognitiveRuntime.get_instance().create_goal_from_adopted_purpose(
+                proposal_id, trace_id=req.trace_id, evidence_ids=req.evidence_ids,
+            ),
+        }
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Purpose proposal or linked goal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 @router.post("/owner-control/purpose-proposals/{proposal_id}/reject")
 def reject_purpose_endpoint(proposal_id: str, req: PurposeRejectionRequest):

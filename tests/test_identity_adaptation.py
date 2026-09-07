@@ -136,6 +136,14 @@ def test_purpose_proposals_are_provenance_typed_sandboxed_and_owner_visible(tmp_
     adopted = store.adopt_purpose(proposal.proposal_id, owner_decision_id="owner-purpose")
     assert adopted.status == "adopted"
     assert adopted.execution_authority == "none"
+    linked = store.link_purpose_to_goal(
+        proposal.proposal_id, "goal-purpose-1", trace_id="trace-link", evidence_ids=["e:goal-link"]
+    )
+    assert linked.linked_goal_id == "goal-purpose-1"
+    with pytest.raises(IdentityAdaptationError, match="different goal"):
+        store.link_purpose_to_goal(
+            proposal.proposal_id, "goal-purpose-2", trace_id="trace-link-2", evidence_ids=["e:goal-link-2"]
+        )
 
     with pytest.raises(IdentityAdaptationError, match="unsupported goal provenance"):
         store.propose_purpose(
