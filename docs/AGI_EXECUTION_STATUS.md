@@ -1,7 +1,7 @@
 # Arena AGI Execution Status
 
 **Date:** 2026-09-07  
-**Branch:** `arena/01a07ad8-arena-agent`
+**Branch:** `arena/01a07c3e-arena-agent`
 
 **Purpose:** A chronological, repository-grounded work queue. This document separates “the path exists” from “the behavior is robustly demonstrated.” It is the operational companion to `AGI_GAP_IMPLEMENTATION_PLAN.md`.
 
@@ -36,10 +36,10 @@ The numerical discrepancy is now reconciled in favor of the displayed item rows.
 
 Latest automated verification:
 
-- Focused Phase 8-related tests: **46 passed**.
-- Full repository suite (2026-09-07 collection follow-up): **3152 passed, 14 skipped, 5 deselected, 3 warnings**.
-- Frontend: **249 tests passed**; production build passed; lint **0 errors, 18 existing warnings**.
-- Real Chromium/server integration: **5 e2e tests passed** in isolated stores (including response review, restart, explanation, and correction editor). These are contract tests; no owner held-out outcomes were fabricated.
+- Focused Phase 8-related tests: **46 passed** (recorded earlier session run).
+- Full repository suite (2026-09-07, latest — includes the 36-check intelligence benchmark): **3,196 passed, 18 skipped, 3 warnings**.
+- Frontend (2026-09-07): **255 tests passed** (31 files); production build passed; lint **0 errors, 18 existing warnings** (documented baseline).
+- Real Chromium/server integration: **5 e2e tests passed** in isolated stores (recorded in an earlier session with a browser-capable environment; the current agent sandbox cannot install browsers, so e2e was not re-runnable there). These are contract tests; no owner held-out outcomes were fabricated.
 - The inherited CI failure in the file-opener test was fixed by explicit platform/opener mocks; GitHub passed the backend commits. The frontend CI template (`scripts/ci/frontend.yml`) now matches the local test/build/lint checks. Activation remains blocked because the GitHub App connection lacks workflow-edit permission; the active workflow is unchanged.
 - New regression coverage proves response/trace persistence, retry-safe submissions, exact-trace history, truth-field preservation, web metadata/token/history races, and explicit owner feedback controls.
 - These results verify automated contracts; they do not prove general intelligence, subjective experience, or all-host shutdown behavior.
