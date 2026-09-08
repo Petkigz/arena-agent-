@@ -864,13 +864,30 @@ class AutonomousGoalGenerator:
         # Check ethical assessment first
         ethical_assessment = self.ethical_system.assess_goal(goal)
         
-        # Reject if ethically problematic
+        # Owner directive (2026-09-07): the system does NOT suppress ideas on
+        # its own moral judgment, and there are no "bad" ideas to filter — only
+        # actions whose risk class requires the owner's explicit approval or
+        # denial. An ethics-rejected goal is therefore SURFACED to the owner
+        # with its concerns attached (never auto-selected), and the owner
+        # decides via owner_decide_goal. The P0 boundary is unchanged:
+        # goal approval ≠ action approval; Level-3 actions still require
+        # explicit owner approval at execution time via ActionGate.
         from app.cognition.ethical_reasoning import EthicalVerdict
         if ethical_assessment.verdict == EthicalVerdict.REJECTED:
-            app_logger.warning(
-                f"Goal rejected for ethical reasons: {goal.title} - {ethical_assessment.reasoning}"
+            app_logger.info(
+                f"Goal surfaced to owner with ethical concerns (owner decides, "
+                f"not suppressed): {goal.title} - {ethical_assessment.reasoning}"
             )
-            goal.status = GoalStatus.REJECTED
+            goal.requires_owner_approval = True
+            concern_note = (
+                "[Owner decision required — surfaced, not suppressed] "
+                f"Ethical assessment ({ethical_assessment.verdict.value}, "
+                f"harm: {ethical_assessment.overall_harm_level.value}): "
+                f"{ethical_assessment.reasoning}"
+            )
+            goal.description = (
+                f"{concern_note}\n{goal.description}" if goal.description else concern_note
+            )
             self.update_goal(goal)
             return False
         

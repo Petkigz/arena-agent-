@@ -266,6 +266,19 @@ class MessageRouter:
             except Exception as exc:
                 app_logger.warning(f"In-chat correction handling failed (message continues): {exc}")
 
+            # In-chat permission: "go ahead" / "no, don't" decides the
+            # conversation's pending approval request through the EXISTING
+            # single-use approval store — same store, grants, and audit as the
+            # approval buttons. The turn itself still flows below; failures
+            # never break the chat flow.
+            try:
+                from backend.chat_corrections import apply_chat_approval_decision
+                decision_event = apply_chat_approval_decision(conversation_id, content)
+                if decision_event:
+                    await ws_manager.send_to_conversation(conversation_id, decision_event)
+            except Exception as exc:
+                app_logger.warning(f"In-chat approval decision failed (message continues): {exc}")
+
             # The assistant reply gets its OWN id: clients match streamed tokens and
             # action steps against it. Sharing the user's id would make other
             # clients append the reply onto the sender's message bubble.

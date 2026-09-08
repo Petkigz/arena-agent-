@@ -12,6 +12,22 @@ Unique unconnected features are retained by owner choice and listed explicitly;
 this does not make them working features or change their phase maturity. Review
 the audit and caller map before adding another implementation.
 
+**Owner policy directive (2026-09-07, standing):** the system does not suppress
+ideas on its own moral judgment, and it does not filter options as "good" or
+"bad" — the owner decides what affects the owner. Ideas and options always
+surface; ethical assessment annotates and routes to owner decision
+(`approve_goal` now surfaces ethics-rejected goals flagged
+`requires_owner_approval` with their concerns attached, instead of silently
+rejecting them). The only gate is risk class: dangerous (Level-3) actions
+require the owner's explicit approval or denial — never a refusal in the
+owner's place. Approval is conversational: an explicit in-chat "just go ahead
+with this" / "no, don't" decides the conversation's pending approval request
+through the existing single-use, audited approval store (conservative
+prefix-matched markers; ambiguity decides nothing; binding is
+same-conversation, same-request, once). The honesty invariants are unchanged:
+attempted ≠ succeeded, UNKNOWN is preserved, and the fabrication guards
+("I won't invent it") remain — those are truth boundaries, not moral filters.
+
 ## Status legend
 
 - **DONE — IMPLEMENTED AND WIRED:** The path is reachable from the active runtime or owner-control surface and has regression coverage.

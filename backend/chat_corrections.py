@@ -261,3 +261,104 @@ def record_chat_correction(
         "generalized": generalized,
         "duplicate": False,
     }
+
+
+# ── In-chat permissions ──────────────────────────────────────────────────────
+# Owner directive (2026-09-07): the owner converses permissions the way one
+# human tells another — "just go ahead with this" approves the conversation's
+# pending request, "no, don't" denies it. The decision runs through the
+# EXISTING single-use approval store (same store, same grants, same audit as
+# the approval buttons); it binds ONLY to a request already pending in the
+# SAME conversation, and approval markers are prefix-matched conservatively.
+# A message that matches both directions decides nothing.
+
+_APPROVE_PREFIXES = (
+    "go ahead", "just go ahead", "just do it", "yes do it", "yes, do it", "do it",
+    "approve", "approved", "i approve", "permission granted",
+    "you have my permission", "granted",
+)
+
+_DENY_PREFIXES = (
+    "don't do it", "do not do it", "don't proceed", "do not proceed",
+    "deny it", "denied", "i deny", "no, don't", "no don't",
+    "cancel that approval", "cancel the approval", "stop",
+)
+
+
+def detect_chat_approval_decision(content: str) -> Optional[Dict[str, Any]]:
+    """Return ``{"approved": bool, "signal": str}`` for an explicit in-chat
+    permission utterance, ``None`` when nothing unambiguous is said.
+
+    Prefix-matched on normalized text on purpose: an approval that was not
+    clearly said must not fire. A message matching BOTH directions decides
+    nothing (ambiguity never grants authority)."""
+    if not content or not content.strip():
+        return None
+    lowered = " ".join(content.lower().split())
+    approve_hit = next((m for m in _APPROVE_PREFIXES if lowered.startswith(m)), None)
+    deny_hit = next((m for m in _DENY_PREFIXES if lowered.startswith(m)), None)
+    if approve_hit and deny_hit:
+        app_logger.info(
+            f"In-chat permission utterance matched both directions ('{approve_hit}' "
+            f"/ '{deny_hit}'); deciding nothing"
+        )
+        return None
+    if approve_hit:
+        return {"approved": True, "signal": approve_hit}
+    if deny_hit:
+        return {"approved": False, "signal": deny_hit}
+    return None
+
+
+def apply_chat_approval_decision(
+    conversation_id: str, content: str,
+) -> Optional[Dict[str, Any]]:
+    """Decide the conversation's pending approval request conversationally.
+
+    Binds to the LATEST request still pending in THIS conversation — never to
+    another conversation, never retroactively, never twice (a decided request
+    is no longer pending, so a repeated utterance is a no-op). Approval mints
+    the same single-use, short-TTL authorization grant the approval buttons
+    mint. Returns the ``approval_result`` event payload for the room, or
+    ``None`` when there is no explicit decision or nothing pending."""
+    detected = detect_chat_approval_decision(content)
+    if detected is None:
+        return None
+
+    from app.cognition.approval_store import approval_store
+
+    pending_in_conversation = [
+        req for req in approval_store.list_pending()
+        if req.conversation_id == conversation_id
+    ]
+    if not pending_in_conversation:
+        app_logger.info(
+            f"In-chat permission utterance in {conversation_id} had no pending "
+            f"request to decide ('{detected['signal']}')"
+        )
+        return None
+    target = pending_in_conversation[-1]  # list_pending sorts oldest->newest
+
+    req = approval_store.decide(
+        target.action_id,
+        detected["approved"],
+        note=f"in-chat permission ('{detected['signal']}')",
+    )
+    if req is None:
+        return None
+    app_logger.info(
+        f"In-chat {'approval' if detected['approved'] else 'denial'} of "
+        f"'{req.action_type}' ({req.action_id}) in {conversation_id}"
+    )
+    return {
+        "type": "approval_result",
+        "action_id": req.action_id,
+        "status": "approved" if detected["approved"] else "denied",
+        "authorization_id": req.authorization_id,
+        "authorization_scope": {
+            "action_type": req.action_type,
+            "payload": req.payload,
+            "single_use": True,
+        } if req.authorization_id else None,
+        "via": "chat",
+    }

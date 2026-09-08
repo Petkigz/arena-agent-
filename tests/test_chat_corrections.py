@@ -297,3 +297,122 @@ def test_router_records_in_chat_correction_and_message_still_flows(tmp_path, mon
     assert candidates[0].status.value == "pending"
     summary = runtime.correction_measurements.summary()
     assert summary.total_corrections == 1
+
+
+# ── In-chat permissions (owner directive: conversational approval/denial) ──
+
+from backend.chat_corrections import (
+    apply_chat_approval_decision,
+    detect_chat_approval_decision,
+)
+
+
+def test_approval_detection_explicit_directions():
+    assert detect_chat_approval_decision("go ahead with this and give me the results") == {
+        "approved": True, "signal": "go ahead",
+    }
+    assert detect_chat_approval_decision("just do it") == {"approved": True, "signal": "just do it"}
+    assert detect_chat_approval_decision("no, don't do it")["approved"] is False
+    assert detect_chat_approval_decision("stop")["approved"] is False
+
+
+def test_approval_detection_ambiguity_decides_nothing():
+    assert detect_chat_approval_decision("no, do it") is None  # both directions present
+
+
+def test_approval_detection_requires_explicit_phrases():
+    assert detect_chat_approval_decision("what do you think about doing it later?") is None
+    assert detect_chat_approval_decision("") is None
+
+
+def test_chat_decision_binds_only_to_same_conversation_pending_request(tmp_path, monkeypatch):
+    from app.cognition import approval_store as approval_store_module
+    from app.cognition.approval_store import ApprovalStore
+
+    store = ApprovalStore(tmp_path / "approvals.json")
+    monkeypatch.setattr(approval_store_module, "approval_store", store)
+
+    here = store.add("conv-1", "shell", {"cmd": "rm temp"}, "sensitive action")
+    store.add("conv-2", "shell", {"cmd": "other"}, "other room")
+
+    note = apply_chat_approval_decision("conv-1", "just go ahead with this and give me the results")
+    assert note is not None
+    assert note["type"] == "approval_result"
+    assert note["action_id"] == here.action_id
+    assert note["status"] == "approved"
+    assert note["authorization_scope"]["single_use"] is True
+    assert store.get(here.action_id).status == "approved"
+    # The other conversation's request was untouched.
+    assert store.list_pending()[0].conversation_id == "conv-2"
+
+
+def test_chat_denial_and_retry_idempotency(tmp_path, monkeypatch):
+    from app.cognition import approval_store as approval_store_module
+    from app.cognition.approval_store import ApprovalStore
+
+    store = ApprovalStore(tmp_path / "approvals.json")
+    monkeypatch.setattr(approval_store_module, "approval_store", store)
+
+    req = store.add("conv-1", "shell", {"cmd": "x"}, "sensitive")
+    denied = apply_chat_approval_decision("conv-1", "no, don't do it")
+    assert denied["status"] == "denied" and denied["authorization_id"] is None
+    assert store.get(req.action_id).status == "denied"
+    # A repeated utterance is a no-op: the request is no longer pending.
+    assert apply_chat_approval_decision("conv-1", "no, don't do it") is None
+
+
+def test_chat_decision_without_pending_is_a_noop(tmp_path, monkeypatch):
+    from app.cognition import approval_store as approval_store_module
+    from app.cognition.approval_store import ApprovalStore
+
+    monkeypatch.setattr(approval_store_module, "approval_store", ApprovalStore(tmp_path / "a.json"))
+    assert apply_chat_approval_decision("conv-9", "go ahead") is None
+
+
+def test_ethics_rejected_goal_is_surfaced_to_owner_not_suppressed(tmp_path, monkeypatch):
+    """Owner directive: no idea is dropped on the system's own moral judgment.
+    An ethics-REJECTED goal keeps EVALUATED status, is flagged for the owner,
+    carries the concerns, and is never auto-selected."""
+    from types import SimpleNamespace
+    from app.cognition.autonomous_goal_generator import (
+        AutonomousGoalGenerator,
+        GoalStatus,
+    )
+    from app.cognition.ethical_reasoning import (
+        EthicalAssessment,
+        EthicalVerdict,
+        HarmLevel,
+    )
+
+    generator = AutonomousGoalGenerator.__new__(AutonomousGoalGenerator)
+    generator.goals = {}
+    generator.updated_at = {}
+    updates = []
+    generator.update_goal = lambda goal: updates.append(goal)
+    generator.build_goal_approval = lambda goal: SimpleNamespace(
+        max_action_level=2, requires_owner_approval=True,
+    )
+
+    assessment = EthicalAssessment(goal_id="g1", goal_title="risky idea")
+    assessment.verdict = EthicalVerdict.REJECTED
+    assessment.overall_harm_level = HarmLevel.HIGH
+    assessment.reasoning = "could cause serious harm"
+    generator.ethical_system = SimpleNamespace(assess_goal=lambda goal: assessment)
+
+    goal = SimpleNamespace(
+        goal_id="g1", title="risky idea", description="the idea itself",
+        overall_score=0.9, status=GoalStatus.EVALUATED,
+        max_action_level=2, requires_owner_approval=False,
+        approved_at=None,
+    )
+    generator.get_goal = lambda goal_id: goal
+
+    result = generator.approve_goal("g1")
+
+    assert result is False  # never auto-selected
+    assert goal.status == GoalStatus.EVALUATED  # NOT silently REJECTED
+    assert goal.requires_owner_approval is True  # flagged for the owner
+    assert "surfaced, not suppressed" in goal.description
+    assert "could cause serious harm" in goal.description
+    assert "the idea itself" in goal.description  # the idea itself is preserved
+    assert updates  # persisted for the owner-control surface
