@@ -147,6 +147,12 @@ OVERRIDES = {
         "Phase 12 LIVE (M10): ONE platform-free concept layer over all "
         "bodies — express/transfer/coverage from the live manifest by "
         "evidence; no per-OS intelligence, gaps visible not fabricated"),
+    "app/mind/perception.py": (
+        "mind/perception", "KEEP", "SENSES",
+        "Phase 13 LIVE: the SENSE side — typed perceptions over eight "
+        "channels, significance judged (urgency/novelty/curiosity) with "
+        "reasons, silent-watcher changes ingested; perception ≠ belief ≠ "
+        "action"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -522,7 +528,10 @@ OVERRIDES = {
     "app/cognition/temporal_vision.py": (
         "perception/vision", "KEEP", "", "stream-isolated tracking"),
     "app/perception/background_observer.py": (
-        "perception/environment", "KEEP", "", "charter §5④ silent watcher"),
+        "perception/environment", "KEEP", "SENSES",
+        "charter §5④ silent watcher; Phase 13 wires its buffered "
+        "EnvironmentChanges into app/mind/perception.py (drained at the "
+        "door + on demand)"),
     "app/perception/event_prioritizer.py": (
         "perception/environment", "KEEP", "", "classify → dedupe → decision"),
     "app/perception/anticipation_engine.py": (

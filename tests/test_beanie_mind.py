@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -109,8 +109,12 @@ def test_ledger_failure_never_fails_the_cycle(mind):
 
 def test_observe_records_and_never_acts(mind):
     out = mind.observe("screen_watcher", {"event": "popup appeared"})
-    assert out == {"success": True, "recorded": True,
-                   "source": "screen_watcher", "acted": False}
+    # the Phase-1 contract is preserved exactly; Phase 13 adds the
+    # perception pass on top (judged, never acted)
+    assert out["success"] is True and out["recorded"] is True
+    assert out["source"] == "screen_watcher" and out["acted"] is False
+    assert out["perception"]["acted"] is False
+    assert out["perception"]["epistemic_kind"] == "perception"
     entry = mind.entries(limit=1)[0]
     assert entry["modality"] == "observation"
     assert "popup appeared" in entry["summary"]

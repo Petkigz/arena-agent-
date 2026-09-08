@@ -506,6 +506,30 @@ generalize the concept to Android or Linux.
 
 ## Phase 13 — Continuous Perception
 
+> ✅ **LIVE 2026-09-08:** `app/mind/perception.py` — `Perception`: the SENSE
+> side of the embodiment diagram. screen / camera / audio / phone / desktop /
+> network / environment / owner channels become TYPED perceptions (the
+> epistemic label 'perception' rides every record — a perception is not a
+> belief and never an action). Each perception enters the Phase-6 loop as an
+> `observation` experience: novelty decides storage (novel → knowledge,
+> repeated → rehearsed — the loop's dedupe IS the roadmap's "don't react to
+> everything"). Significance is computed from three evidence sources with
+> surfaced REASONS: urgency (the probe declared it), novelty (the loop
+> called it novel), and curiosity (it touches an open unknown — scanned
+> broadly, because buried unknowns are exactly what perceptions should
+> surface). The existing silent watcher (`BackgroundObserver`, already
+> probing every 30s) is wired in: `drain_background_observer()` ingests its
+> buffered `EnvironmentChange`s as perceptions — automatically at the door
+> on every interaction, and on demand. Live-verified: novel screen event →
+> significant; the SAME event again → background (no re-reaction); a
+> perception touching a buried open unknown flagged significant AND closed
+> the unknown through the knowledge path. Owner-visible:
+> `POST /mind/perception`, `POST /mind/perception/drain`,
+> `GET /mind/perception` (36 `/mind/*` endpoints). Kill switch
+> `ARENA_PERCEPTION=0` gates the door drain; the owner surface keeps
+> working. Guarded by `tests/test_mind_perception.py` (12 tests; the
+> pre-existing `tests/test_perception.py` speech tests stay untouched).
+
 screen, camera, microphone, phone state, desktop state, network/environment →
 perception → attention → significance. Beanie shouldn't react to everything. She
 should determine: "Is this relevant to what we're doing?" That gives you an

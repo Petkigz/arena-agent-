@@ -7,8 +7,22 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–12 ✅ complete.**
-Phase 12 (true OS-level generalization, M10) is LIVE:
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–13 ✅ complete.**
+Phase 13 (continuous perception) is LIVE: `app/mind/perception.py` — the
+SENSE side. Eight typed sense channels; every perception enters the Phase-6
+loop as an observation experience (novel → knowledge, repeated → rehearsed:
+dedupe = don't react to everything); significance judged from urgency /
+novelty / curiosity with surfaced reasons; the existing silent watcher's
+buffered environment changes ingest at the door each interaction and on
+demand. Live-verified: same event twice → first significant, second
+background; a perception touching a BURIED open unknown flagged significant
+and closed the unknown via the knowledge path. Perception ≠ belief ≠ action.
+Owner-visible: `POST /mind/perception`, `POST /mind/perception/drain`,
+`GET /mind/perception`. Kill switch `ARENA_PERCEPTION=0`. Guarded by
+`tests/test_mind_perception.py` (12 tests; the pre-existing
+`tests/test_perception.py` speech tests are untouched and still green).
+
+Earlier in this gate: Phase 12 (true OS-level generalization, M10) LIVE —
 `app/mind/os_concepts.py` — one platform-free concept layer (open/close/
 copy/search/…/communicate) over all bodies, with embodiment mapping derived
 from the live manifest by term evidence. `express()` returns concept +
@@ -126,12 +140,13 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). Now 33 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+resolved). Now 36 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
 preview/ledger, the Phase-6 learning door/landscape/ledger, the Phase-7
 procedures/teaching-session windows, the Phase-8 media learning door, the
 Phase-9 curiosity landscape/investigate/resolve, the Phase-10 imagination
-simulate/compare/ledger, the Phase-11 motor-plan/body-image windows, and
-the Phase-12 OS concept express/transfer/vocabulary windows); guarded by
+simulate/compare/ledger, the Phase-11 motor-plan/body-image windows, the
+Phase-12 OS concept express/transfer/vocabulary windows, and the Phase-13
+perception intake/drain/stream windows); guarded by
 `tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module

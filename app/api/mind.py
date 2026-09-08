@@ -414,3 +414,35 @@ def mind_os_concepts() -> dict:
     """The platform-free concept vocabulary with per-body coverage — where
     her bodies agree and where they differ."""
     return BeanieMind.get_instance().os_concepts.concepts()
+
+
+# ── Phase 13: continuous perception ────────────────────────────────────────
+class PerceiveIn(BaseModel):
+    modality: str = Field(min_length=1, max_length=30)
+    content: str = Field(min_length=1, max_length=2000)
+    source: str = ""
+    urgent: bool = False
+
+
+@router.post("/mind/perception")
+def mind_perceive(body: PerceiveIn) -> dict:
+    """Register a typed perception (screen/desktop/phone/camera/audio/
+    network/environment/owner). Judged for significance; never acted on."""
+    return BeanieMind.get_instance().perception.perceive(
+        body.modality, body.content, source=body.source, urgent=body.urgent)
+
+
+@router.post("/mind/perception/drain")
+def mind_perception_drain(limit: int = Query(default=20, ge=1, le=200)) -> dict:
+    """Ingest buffered changes from the silent background watcher into
+    perceptions, now."""
+    return BeanieMind.get_instance().perception.drain_background_observer(
+        limit=limit)
+
+
+@router.get("/mind/perception")
+def mind_perception_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The perception stream: what she has perceived, and what she judged
+    significant, with reasons."""
+    p = BeanieMind.get_instance().perception
+    return {"success": True, **p.stats(), "stream": p.stream(limit=limit)}

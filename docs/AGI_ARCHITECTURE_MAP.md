@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 370 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 371 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 — the target architecture itself, all KEEP).
 
 ---
 
@@ -184,7 +184,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–12 are LIVE (Phases 1–12 complete).**
+**Status 2026-09-08: steps 1–13 are LIVE (Phases 1–13 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -254,10 +254,16 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     derived from the live manifest by evidence; procedures (explicit or
     Phase-7 taught) transfer across bodies with resolved-or-gap honesty.
     10 tests in `tests/test_os_concepts.py`; 33 `/mind/*` endpoints total.
-13. **Open (roadmap order):** Phase 13 continuous perception (the SENSE
-    side of the embodiment diagram; M8 attention significance arbitrates
-    what deserves thought); then M9 generalization eval, per the owner's
-    sequencing.
+13. ✅ **Phase 13 LIVE (2026-09-08)** — `perception.py`: the SENSE side.
+    Eight typed channels; perceptions enter the Phase-6 loop (novel →
+    knowledge, repeated → rehearsed); significance = urgency / novelty /
+    curiosity with surfaced reasons; the silent watcher's buffered changes
+    ingest at the door + on demand. Kill switch `ARENA_PERCEPTION=0`.
+    12 tests in `tests/test_mind_perception.py`; 36 `/mind/*` endpoints.
+14. **Open (roadmap order):** Phase 14 attention (M8: current task / owner
+    speaking / important change / anomaly / unfinished goal / learned
+    curiosity arbitration over the perception stream); then M9
+    generalization eval, per the owner's sequencing.
 
 ---
 

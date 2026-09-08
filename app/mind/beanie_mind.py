@@ -39,6 +39,7 @@ from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.os_concepts import OSConceptLayer
+from app.mind.perception import Perception
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
 from app.mind.teaching import DemonstrationTeaching
@@ -88,6 +89,7 @@ class BeanieMind:
         self._imagination: Optional[Imagination] = None
         self._embodiment: Optional[Embodiment] = None
         self._os_concepts: Optional[OSConceptLayer] = None
+        self._perception: Optional[Perception] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -290,6 +292,15 @@ class BeanieMind:
                 self._os_concepts = OSConceptLayer(self)
             return self._os_concepts
 
+    @property
+    def perception(self) -> Perception:
+        """Phase 13: the SENSE side — typed perceptions, significance
+        judged, never reacted to blindly."""
+        with self._lock:
+            if self._perception is None:
+                self._perception = Perception(self)
+            return self._perception
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -315,6 +326,7 @@ class BeanieMind:
         """
         self._record_entry(modality, conversation_id, user_text)
         self._run_world_first(user_text, modality)
+        self._drain_perceptions()
         result = self.runtime.process_cognitive_cycle(
             user_text=user_text,
             session_id=conversation_id,
@@ -401,6 +413,17 @@ class BeanieMind:
         except Exception:
             pass
 
+    def _drain_perceptions(self) -> None:
+        """Phase 13: while she is awake to the world, buffered environment
+        changes from the silent watcher become perceptions. Best-effort;
+        perception never fails the task."""
+        if str(getattr(settings, "ARENA_PERCEPTION", "1")) == "0":
+            return
+        try:
+            self.perception.drain_background_observer()
+        except Exception as exc:
+            app_logger.warning(f"Perception drain skipped (non-fatal): {exc}")
+
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;
         curiosity never breaks the brief."""
@@ -430,7 +453,22 @@ class BeanieMind:
             if hint:
                 summary = f"observation from {source}: {str(hint)[:_MAX_SUMMARY]}"
         self._record_entry("observation", conversation_id, summary)
-        return {"success": True, "recorded": True, "source": source, "acted": False}
+        # Phase 13: the observation also becomes a typed perception judged
+        # for significance (best-effort; recording never fails the door).
+        perception_note: Optional[Dict[str, Any]] = None
+        try:
+            modality = "owner"
+            if isinstance(payload, dict) and payload.get("modality"):
+                modality = str(payload["modality"])
+            perception_note = self.perception.perceive(
+                modality, summary, source=source)
+        except Exception as exc:
+            app_logger.warning(f"Perception pass skipped (non-fatal): {exc}")
+        result: Dict[str, Any] = {"success": True, "recorded": True,
+                                  "source": source, "acted": False}
+        if perception_note is not None:
+            result["perception"] = perception_note
+        return result
 
     # ── entry ledger ─────────────────────────────────────────────────────
     def _record_entry(self, modality: str, conversation_id: Optional[str], summary: str) -> None:

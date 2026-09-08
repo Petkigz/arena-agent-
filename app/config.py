@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     ARENA_TEACHING: str = "1"  # "0" disables Phase-7 conversational teaching ("watch this")
     ARENA_CURIOSITY: str = "1"  # "0" disables Phase-9 automatic UNKNOWN registration/resolution
     ARENA_IMAGINATION: str = "1"  # "0" disables Phase-10 automatic prediction-vs-reality comparison
+    ARENA_PERCEPTION: str = "1"  # "0" disables Phase-13 perception intake at the mind door
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard
