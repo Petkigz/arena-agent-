@@ -102,19 +102,91 @@ async def train_wake_word(request: WakeWordTrainingRequest):
             error="One or more wake-word samples are invalid base64 audio",
         )
 
-    requirements = (
-        "Install and integrate a real openWakeWord custom training pipeline, "
-        "then validate the generated ONNX model against held-out positive and negative samples."
+    # REAL training (owner live test 2026-09-08): build a local
+    # sample-correlation wake model from the owner's own recordings.
+    # Honest about the method: not a neural openWakeWord model — a mel
+    # template matched by normalized correlation, calibrated on the
+    # owner's samples. It runs fully local and actually detects.
+    from backend.voice.sample_wake_model import (
+        SampleAudioError,
+        SamplePackWakeModel,
+        pcm16_wav_to_float,
     )
-    app_logger.warning(
-        f"Custom wake-word training requested for '{request.wake_word}' but no verified trainer is configured"
+
+    decoded: list = []
+    invalid = 0
+    for sample in request.samples:
+        try:
+            encoded = sample.audio.split(",", 1)[-1]
+            raw = base64.b64decode(encoded, validate=True)
+            decoded.append(pcm16_wav_to_float(raw))
+        except SampleAudioError:
+            invalid += 1
+        except Exception:
+            invalid += 1
+    if len(decoded) < 5:
+        return WakeWordTrainingResponse(
+            success=False,
+            samples_validated=len(decoded),
+            error=(
+                f"Only {len(decoded)} of {len(request.samples)} samples are "
+                f"decodable 16-bit PCM WAV ({invalid} invalid). Record from "
+                f"the trainer so samples are converted to WAV first."
+            ),
+        )
+
+    try:
+        trained = SamplePackWakeModel.train(request.wake_word.strip(), decoded)
+    except SampleAudioError as exc:
+        return WakeWordTrainingResponse(
+            success=False,
+            samples_validated=len(decoded),
+            error=f"Training failed: {exc}",
+        )
+
+    model_id = uuid.uuid4().hex[:12]
+    pack_path = WAKEWORD_DIR / f"{model_id}.npz"
+    trained.save(pack_path)
+    accuracy = round(min(trained.self_scores), 4) if trained.self_scores else None
+    entry = WakeWordModel(
+        id=model_id,
+        name=f"{request.wake_word.strip()} (trained {datetime.now().strftime('%Y-%m-%d %H:%M')})",
+        wake_word=request.wake_word.strip(),
+        model_path=str(pack_path),
+        created_at=datetime.now().isoformat(),
+        sample_count=len(decoded),
+        accuracy=accuracy,
+    )
+    wakeword_models[model_id] = entry
+    try:
+        from app.utils import decision_trace
+
+        decision_trace.record(
+            "wake_word_training",
+            "model_trained",
+            f"sample-correlation pack trained on {len(decoded)} samples",
+            model_id=model_id,
+            phrase=request.wake_word.strip(),
+            threshold=trained.threshold,
+        )
+    except Exception:
+        pass
+    app_logger.info(
+        f"Custom wake word trained: '{entry.wake_word}' ({len(decoded)} samples, "
+        f"threshold={trained.threshold:.2f}) -> {pack_path.name}"
     )
     return WakeWordTrainingResponse(
-        success=False,
-        available=False,
-        samples_validated=valid_samples,
-        requirements=requirements,
-        error="Custom wake-word training is unavailable; no model was created.",
+        success=True,
+        model_id=model_id,
+        model_path=str(pack_path),
+        accuracy=accuracy,
+        available=True,
+        samples_validated=len(decoded),
+        requirements=(
+            "Method: local sample-correlation (mel template), not a neural "
+            "openWakeWord model. Activate it, then restart voice so the "
+            "detector loads the pack."
+        ),
     )
 
 
@@ -159,10 +231,23 @@ async def activate_wake_word_model(model_id: str):
     
     # Activate this model
     model.is_active = True
-    
+
+    # A trained sample pack becomes the LIVE wake word: the pipeline reads
+    # the shared setting on start, so point it at custom:<model_id>.
+    if model.model_path.endswith(".npz"):
+        try:
+            from app.settings_store import update_settings
+
+            update_settings({
+                "wake_word": f"custom:{model_id}",
+                "wakeWord": f"custom:{model_id}",
+            })
+        except Exception as exc:
+            app_logger.warning(f"Could not point the voice pipeline at the pack: {exc}")
+
     app_logger.info(f"Activated wake word model: {model_id}")
     
-    return {"success": True, "message": f"Activated model '{model.name}'"}
+    return {"success": True, "message": f"Activated model '{model.name}'", "wake_word": f"custom:{model_id}" if model.model_path.endswith(".npz") else model_id}
 
 
 @router.delete("/models/{model_id}")

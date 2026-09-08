@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     BROWSER_DISK_SAFETY_MARGIN_MB: int = 512  # Free space kept unreserved beneath transfers
     ARENA_ASSOCIATIVE_MEMORY: str = "1"  # "0" disables vector-associative recall
     ARENA_BACKGROUND_OBSERVER: str = "1"  # "0" disables the read-only environment watcher
+    ARENA_SCREEN_WATCHER: str = "1"  # "0" disables the desktop-awareness probe (screenshots stay local)
+    ARENA_PARKED_RECHECK: str = "1"  # "0" disables automatic re-checks of parked goals
+    ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     ARENA_EMBEDDING_URL: str = ""  # LM Studio base URL for real embeddings (optional)
     ARENA_EMBEDDING_MODEL: str = ""  # e.g. text-embedding-nomic-embed-text-v1.5
     # Uncertainty questions (F1.2): low calibrated confidence asks the owner.

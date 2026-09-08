@@ -307,7 +307,15 @@ class LocalLLMClient:
                             for t in tokens) else 0.0
         specialism = 0.0
         if "coder" in lower or "-code" in lower:
+            # Owner finding (2026-09-08 live test): a 30B coder hijacked the
+            # chat routes and failed every non-coding task while a 9B general
+            # model sat unused — raw size must not outrank specialism. A code
+            # specialist's parameter count counts at 25% for general chat
+            # roles (30B coder ≈ 7.5B general), ON TOP of the flat -1.5. A
+            # coder is still picked when it is the ONLY chat-capable model —
+            # never excluded, just honestly outranked by general models.
             specialism -= 1.5
+            params *= 0.25
         if "-vl" in lower or "vision" in lower:
             specialism -= 4.0
         family = 0.5
@@ -337,7 +345,25 @@ class LocalLLMClient:
         eligible = [(s, c) for s, c in scored if s is not None]
         if not eligible:
             return None
-        return min(eligible, key=lambda sc: (-sc[0], sc[1]))[1]
+        chosen = min(eligible, key=lambda sc: (-sc[0], sc[1]))[1]
+        # The owner asked to SEE why a model was picked (2026-09-08 live test:
+        # a coder model hijacked chat silently). Record the ranking.
+        try:
+            from app.utils import decision_trace
+
+            decision_trace.record(
+                "model_selection",
+                chosen,
+                f"role-scored best loaded model for the '{role}' route "
+                f"(requested='{requested or 'auto'}')",
+                scores={
+                    c: round(s, 2) for s, c in sorted(
+                        eligible, key=lambda sc: (-sc[0], sc[1]))[:6]
+                },
+            )
+        except Exception:
+            pass
+        return chosen
 
     def _resolve_model(
         self, requested: str, role: str = "main",

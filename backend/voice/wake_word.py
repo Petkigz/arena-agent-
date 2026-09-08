@@ -24,7 +24,10 @@ class WakeWordDetector:
     ):
         # Map wake word names to available models
         available_models = ["hey_jarvis", "hey_mycroft", "alexa", "timer", "weather"]
-        if wake_word not in available_models:
+        # Owner-trained sample packs pass through untouched — the old
+        # normalization crushed every custom name to hey_jarvis, silently
+        # ignoring the owner's trained model (live test 2026-09-08).
+        if wake_word not in available_models and not str(wake_word).lower().startswith("custom:"):
             # Default to hey_jarvis if requested wake word not available
             wake_word = "hey_jarvis"
         
@@ -44,6 +47,31 @@ class WakeWordDetector:
         self.last_error = None
         if self.is_running:
             return
+
+        # Owner-trained sample pack (custom:<model_id>) — no openWakeWord
+        # model download, just load the trained template.
+        if str(self.wake_word).lower().startswith("custom:"):
+            try:
+                from backend.api.wakeword_routes import WAKEWORD_DIR
+                from backend.voice.sample_wake_model import SamplePackWakeModel
+
+                model_id = str(self.wake_word).split(":", 1)[1]
+                pack_path = WAKEWORD_DIR / f"{model_id}.npz"
+                if not pack_path.exists():
+                    raise FileNotFoundError(f"trained model not found: {pack_path}")
+                self.model = SamplePackWakeModel.load(pack_path)
+                self.is_running = True
+                app_logger.info(
+                    f"Wake word detector started (custom pack: {self.model.phrase}, "
+                    f"{self.model.sample_count} samples)"
+                )
+                return
+            except Exception as e:
+                self.last_error = f"{type(e).__name__}: {e}"
+                self.model = None
+                self.is_running = False
+                app_logger.error(f"Failed to load custom wake word pack: {self.last_error}")
+                return
 
         if OWWModel is None:
             self.last_error = "openWakeWord is not installed"
@@ -107,6 +135,15 @@ class WakeWordDetector:
         Returns:
             True if wake word detected, False otherwise
         """
+        # Custom sample packs take the fast path (no openWakeWord inference).
+        try:
+            from backend.voice.sample_wake_model import SamplePackWakeModel
+
+            if isinstance(self.model, SamplePackWakeModel):
+                return bool(self.model.process(audio_chunk))
+        except ImportError:
+            pass
+
         if not self.is_running or self.model is None:
             return False
 

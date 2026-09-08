@@ -224,6 +224,33 @@ class ActionGate:
                         decision_stage=proposal.decision_stage,
                     )
 
+            # Charter §2 (live test 2026-09-08): a DESTRUCTIVE OS plan must
+            # never ride the Level-2 auto-run. Whatever the manifest declares
+            # for os_control_execute, a plan whose risk_level is destructive
+            # escalates to Level 3 — the owner approves it in chat or it
+            # does not run. Asking is cheap; an unapproved recursive delete
+            # is not.
+            if act_key == "os_control_execute":
+                plan_payload = proposal.payload.get("plan") or {}
+                if str(plan_payload.get("risk_level", "")).lower() == "destructive":
+                    manifest_level = 3
+                    audit_logger.warning(
+                        f"ActionGate ESCALATED 'os_control_execute' to Level 3 "
+                        f"(destructive plan, owner approval required): "
+                        f"{str(plan_payload.get('command'))[:120]}"
+                    )
+                    try:
+                        from app.utils import decision_trace
+                        decision_trace.record(
+                            "action_gate",
+                            "escalated_to_owner_approval",
+                            "destructive OS plan cannot auto-run at Level 2",
+                            action_type=act_key,
+                            command=str(plan_payload.get("command"))[:200],
+                        )
+                    except Exception:
+                        pass
+
             if manifest_level is not None:
                 proposal.safety_level = max(proposal.safety_level, manifest_level)
                 owner_decision = owner_control_store.evaluate(act_key, manifest_level)

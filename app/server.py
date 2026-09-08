@@ -225,6 +225,45 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app_logger.warning(f"Background observer not started: {e}")
 
+    # Parked goals are re-checked automatically (owner live test 2026-09-08:
+    # goals sat at "waiting_for_evidence" forever with nothing running).
+    try:
+        if str(getattr(settings, "ARENA_PARKED_RECHECK", "1")) != "0":
+            from app.scheduler import ProactiveScheduler
+            from app.cognition import parked_goal_recheck
+
+            import asyncio as _asyncio
+
+            parked_goal_recheck.set_main_loop(_asyncio.get_running_loop())
+            ProactiveScheduler.schedule_recurring(
+                "parked_goal_recheck",
+                parked_goal_recheck.parked_goal_recheck_tick,
+                interval_seconds=120,
+            )
+            app_logger.info("Parked-goal auto-recheck scheduled (every 120s)")
+    except Exception as e:
+        app_logger.warning(f"Parked-goal recheck not scheduled: {e}")
+
+    # Desktop life (charter §5 ⑥): the dashboard opens when the server comes
+    # live. ARENA_AUTO_OPEN_DASHBOARD=0 keeps a headless server headless.
+    try:
+        if str(getattr(settings, "ARENA_AUTO_OPEN_DASHBOARD", "1")) != "0":
+            import threading as _threading
+            import webbrowser as _webbrowser
+
+            def _open_dashboard() -> None:
+                try:
+                    _webbrowser.open("http://127.0.0.1:8000")
+                except Exception:
+                    pass
+
+            _timer = _threading.Timer(1.5, _open_dashboard)
+            _timer.daemon = True
+            _timer.start()
+            app_logger.info("Dashboard auto-open scheduled (http://127.0.0.1:8000)")
+    except Exception as e:
+        app_logger.warning(f"Dashboard auto-open not scheduled: {e}")
+
     if API_KEY_ENABLED:
         app_logger.info(
             f"Arena started (CORS: {CORS_ORIGINS}, Auth: ENABLED — all routes + WS require X-API-Key)"
@@ -371,6 +410,17 @@ def create_app() -> FastAPI:
     # is required for voice replies to actually play in the web/desktop UIs.
     _static_dir = Path(__file__).parent / "static"
     if _static_dir.exists():
+        # The workspace (screenshots, captures) must be reachable at
+        # /static/workspace/... — the live test (2026-09-08) captured screens
+        # into data/workspace/screenshots and the UI got 404s. Registered
+        # BEFORE the generic /static mount so it wins path matching.
+        _workspace_dir = settings.DATA_DIR / "workspace"
+        _workspace_dir.mkdir(parents=True, exist_ok=True)
+        app.mount(
+            "/static/workspace",
+            StaticFiles(directory=str(_workspace_dir)),
+            name="static-workspace",
+        )
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
     _audio_dir = settings.DATA_DIR / "audio"
     _audio_dir.mkdir(parents=True, exist_ok=True)

@@ -197,9 +197,19 @@ Emit ONLY the JSON object, no markdown, no explanation.
 """
 
 DANGEROUS_PATTERNS = re.compile(
-    r"\b(format|rm\s+-rf|del\s+/[sq]|shutdown\s+(/s|-s)|diskpart|cipher\s+/w|"
-    r"reg\s+delete\s+HKLM\\SYSTEM|Remove-Item\s+-Recurse\s+-Force\s+C:\\|"
-    r"del\s+C:\\Windows|rd\s+/s\s+/q\s+C:\\|mkfs|dd\s+if=)"
+    r"\b(format|del\s+/[sq]|shutdown\s+(/s|-s)|diskpart|cipher\s+/w|"
+    r"reg\s+delete\s+HKLM\\SYSTEM|"
+    r"del\s+C:\\Windows|mkfs|dd\s+if=|"
+    # ANY recursive delete is destructive regardless of path or flag order —
+    # a live test (2026-09-08) ran `Remove-Item -Path ...\Desktop\neww
+    # -Recurse -Force` at Level 2 without asking because only the C:\ root
+    # variant matched. Recursive deletion of ANY tree asks the owner first.
+    # A bare `rm -r` flag token is matched lexically; a filename that merely
+    # contains "rf" may rarely ask unnecessarily — asking is cheap, an
+    # unapproved recursive delete is not (charter §2).
+    r"Remove-Item[^|;&>\n]*-Recurse|(?:^|\s)rm\s+-[a-su-z-]*r[a-z-]*(?=[\s|;&>]|$)|"
+    r"(?:^|\s)rd\s+/s|(?:^|\s)rmdir\s+/s|"
+    r"rm\s+-rf|rd\s+/s\s+/q\s+C:\\)"
     , re.I
 )
 

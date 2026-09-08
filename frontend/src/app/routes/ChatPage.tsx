@@ -49,10 +49,21 @@ export function ChatPage() {
   }, []);
 
   // Track the voice pipeline state so the floating listening indicator reflects it.
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   useEffect(() => {
     const unsubscribe = webSocketService.subscribe((event) => {
       if (event.type === 'voice_state') {
-        setVoiceState(event.data.state as VoiceState);
+        const nextState = event.data.state as VoiceState;
+        setVoiceState(nextState);
+        // A fresh listening phase starts a clean transcript.
+        if (nextState === 'listening' || nextState === 'recording') {
+          if (nextState === 'listening') setVoiceTranscript('');
+        } else if (nextState === 'idle' || nextState === 'stopped') {
+          setVoiceTranscript('');
+        }
+      } else if (event.type === 'voice_transcript') {
+        setVoiceTranscript(event.data.text);
+        if (event.data.is_final) setVoiceState('processing');
       }
     });
     return unsubscribe;
@@ -375,17 +386,19 @@ export function ChatPage() {
       {/* Floating voice-state indicator (listening / thinking / speaking) */}
       <ListeningIndicator state={voiceState} />
 
-      {/* Voice-first (charter §5): while a live voice state is active, the full
-          voice surface is the primary UI; text remains the backup channel. */}
-      {(voiceState === 'listening' || voiceState === 'recording') && (
+      {/* Voice-first (charter §5): while the voice session is live, the voice
+          surface is the primary UI — a controlled DISPLAY of the existing
+          session (it starts no second mic). The backend already sends the
+          transcript as a message and speaks the reply; text stays the backup. */}
+      {voiceState !== 'idle' && voiceState !== 'stopped' && (
         <VoiceOverlay
           conversationId={currentConversation.id}
-          onClose={() => setVoiceState('idle')}
-          onTranscript={(text, isFinal) => {
-            if (isFinal && text.trim()) {
-              setVoiceState('idle');
-              void handleSendMessage(text);
-            }
+          state={voiceState}
+          transcript={voiceTranscript}
+          onClose={() => {
+            webSocketService.stopVoiceInput(currentConversation.id);
+            setVoiceState('idle');
+            setVoiceTranscript('');
           }}
         />
       )}

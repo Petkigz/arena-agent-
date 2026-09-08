@@ -213,6 +213,17 @@ class MessageRouter:
             return
 
         app_logger.info(f"Processing user message in {conversation_id}: {content[:80]}...")
+        message_source = str(message.get("source") or "text")
+        try:
+            from app.utils import decision_trace
+            decision_trace.record(
+                "message_router", "user_message_received",
+                f"source={message_source}",
+                conversation_id=conversation_id,
+                content=str(content)[:200],
+            )
+        except Exception:
+            pass
 
         # Delivery guarantee: the sender's socket joins the conversation it is
         # messaging. Clients may send to a room they never joined (e.g. a
@@ -410,6 +421,16 @@ class MessageRouter:
                         "done": is_done,
                     })
                     await asyncio.sleep(0.02)  # Simulate natural typing speed
+
+                # Voice feedback loop (owner live test 2026-09-08: "no voice
+                # feedback"): when the message arrived by voice, the reply is
+                # SPOKEN through the active voice service — voice is the
+                # primary channel, text is the visible backup.
+                if message_source == "voice" and self.voice_service is not None:
+                    try:
+                        await self.voice_service.speak_reply(response_text)
+                    except Exception as speak_exc:
+                        app_logger.warning(f"Voice reply speak failed: {speak_exc}")
                 return response_text
 
             except asyncio.CancelledError:

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Any, Optional
 import httpx
 import os
+from pathlib import Path
 import socket
 import uuid
 from datetime import datetime
@@ -2868,6 +2869,64 @@ def environment_observations_endpoint(limit: int = Query(default=20, ge=1, le=20
     }
 
 
+@router.get("/debug/decisions")
+def decision_trace_endpoint(
+    limit: int = Query(default=100, ge=1, le=500),
+    component: str = Query(default=""),
+):
+    """The tiniest-detail decision log the owner asked for: every recorded
+    decision (model selection, routing, escalations, re-checks) with its
+    reason. Also appended to <data>/logs/decisions.jsonl."""
+    from app.utils import decision_trace
+
+    return {
+        "decisions": decision_trace.recent(limit=limit, component=component),
+        "log_file": str(decision_trace._log_path()),
+        "note": (
+            "Every consequential decision with its why. Disable with "
+            "ARENA_DECISION_TRACE=0; raise app log detail with "
+            "ARENA_LOG_LEVEL=DEBUG."
+        ),
+    }
+
+
+@router.get("/cognition/screen/current")
+def screen_current_endpoint():
+    """The watcher's latest desktop capture (local file, served from
+    /static/workspace). Honest when the screen watcher is off or cannot run."""
+    try:
+        from app.config import settings
+
+        shots_dir = Path(settings.DATA_DIR) / "workspace" / "screenshots"
+        watch_files = sorted(shots_dir.glob("watch_*.png"))
+        if not watch_files:
+            return {
+                "available": False,
+                "note": (
+                    "No screen captures yet — the desktop-awareness probe "
+                    "captures periodically while the background watcher runs "
+                    "(ARENA_SCREEN_WATCHER=1, mss+Pillow installed)."
+                ),
+            }
+        latest = watch_files[-1]
+        from datetime import datetime, timezone
+
+        stat = latest.stat()
+        return {
+            "available": True,
+            "url": f"/static/workspace/screenshots/{latest.name}",
+            "captured_at": datetime.fromtimestamp(
+                stat.st_mtime, tz=timezone.utc
+            ).isoformat(),
+            "bytes": stat.st_size,
+            "note": "Local desktop observation; screenshots stay on this machine.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return {"available": False, "note": f"Screen watcher state unavailable: {exc}"}
+
+
 @router.get("/benchmarks/phase1/evidence")
 def phase1_evidence_endpoint(limit: int = Query(default=5000, ge=1, le=5000)):
     """Return owner-visible Phase 1 evidence aggregates without maturity scoring."""
@@ -3151,6 +3210,13 @@ app.include_router(_vault_router, dependencies=[Depends(_legacy_verify_request)]
 # Mount assets on ASGI applications, never on APIRouter (FastAPI drops those
 # during include_router). The unified entry point mounts these paths itself.
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
+_workspace_dir = settings.DATA_DIR / "workspace"
+_workspace_dir.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/static/workspace",
+    StaticFiles(directory=str(_workspace_dir)),
+    name="static-workspace",
+)
 if os.path.exists(_static_dir):
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 _legacy_audio_dir = settings.DATA_DIR / "audio"

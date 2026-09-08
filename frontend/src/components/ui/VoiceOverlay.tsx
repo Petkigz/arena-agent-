@@ -5,17 +5,29 @@ interface VoiceOverlayProps {
   conversationId: string;
   onClose: () => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
+  /** Controlled mode (chat surface): the overlay DISPLAYS the existing voice
+   * session — it never starts its own mic or websocket. Live test 2026-09-08:
+   * a second useVoice client here fought the page's session and froze. */
+  state?: string;
+  transcript?: string;
+  error?: string;
 }
 
-export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOverlayProps) {
-  const {
-    voiceState,
-    isListening,
-    startListening,
-    stopListening,
-    transcript,
-    error,
-  } = useVoice({ conversationId, onTranscript });
+export function VoiceOverlay({ conversationId, onClose, onTranscript, state, transcript: controlledTranscript, error: controlledError }: VoiceOverlayProps) {
+  const controlled = typeof state === 'string';
+  const internal = useVoice(
+    controlled
+      ? { conversationId, onTranscript: () => {} }
+      : { conversationId, onTranscript }
+  );
+  const voiceState = controlled ? (state as string) : internal.voiceState;
+  const isListening = controlled
+    ? state === 'listening' || state === 'recording'
+    : internal.isListening;
+  const startListening = internal.startListening;
+  const stopListening = controlled ? onClose : internal.stopListening;
+  const transcript = controlled ? (controlledTranscript ?? '') : internal.transcript;
+  const error = controlled ? (controlledError ?? '') : internal.error;
 
   const getStateLabel = () => {
     switch (voiceState) {
@@ -56,7 +68,7 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-background-secondary rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-background-primary rounded-lg shadow-xl max-w-md w-full mx-4 border border-border-subtle">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
@@ -95,7 +107,15 @@ export function VoiceOverlay({ conversationId, onClose, onTranscript }: VoiceOve
 
           {/* Controls */}
           <div className="flex gap-3">
-            {!isListening ? (
+            {controlled ? (
+              <button
+                onClick={onClose}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-accent-error hover:bg-accent-error text-white rounded-lg transition-colors"
+              >
+                <MicOff className="w-5 h-5" />
+                {voiceState === 'speaking' ? 'Stop' : 'Stop voice'}
+              </button>
+            ) : !isListening ? (
               <button
                 onClick={startListening}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-accent-primary hover:bg-accent-primary text-white rounded-lg transition-colors"

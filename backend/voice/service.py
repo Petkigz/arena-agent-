@@ -32,7 +32,13 @@ def _map_wake_word(wake_word: Optional[str]) -> str:
     """Resolve a user wake-word phrase to a Picovoice model name."""
     if not wake_word:
         return "hey_jarvis"
-    return _WAKE_WORD_MAP.get(wake_word.strip().lower(), "hey_jarvis")
+    text = wake_word.strip()
+    # Owner-trained sample packs (custom:<model_id>) must reach the detector
+    # unchanged — the old map crushed every unknown name to hey_jarvis, which
+    # silently ignored the owner's trained model (live test 2026-09-08).
+    if text.lower().startswith("custom:"):
+        return text
+    return _WAKE_WORD_MAP.get(text.lower(), "hey_jarvis")
 
 
 class VoiceService:
@@ -505,6 +511,14 @@ class VoiceService:
             await self.pipeline.speak(text)
         except Exception as e:
             app_logger.error(f"Failed to speak feedback: {e}")
+
+    async def speak_reply(self, text: str) -> None:
+        """Public entry: speak an assistant reply for the active conversation.
+
+        Used by the message router when a voice-originated message gets its
+        reply, so the owner HEARS the answer (voice-first, charter §5).
+        """
+        await self._speak_reply(text)
 
     async def _speak_reply(self, text: str) -> None:
         """Speak a cognitive reply: broadcast SPEAKING, stream TTS audio, then IDLE.

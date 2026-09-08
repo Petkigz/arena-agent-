@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
@@ -296,6 +297,96 @@ class BackgroundObserver:
         return all_changes
 
 
+# ── Screen probe: the watcher that SEES the desktop (owner vision) ───
+# The owner's stated vision: "something that would watch the PC and know
+# what's happening — I see the desktop". This probe captures the screen
+# periodically (locally, never uploaded), hashes the image, and surfaces
+# screen changes as observations. Without mss/Pillow it reports honestly
+# unavailable instead of pretending.
+
+class ScreenProbe(EnvironmentProbe):
+    """Periodic local desktop capture -> 'screen' state + change events."""
+
+    name = "screen"
+    KEEP_LAST = 20  # prune old watch captures so the disk never fills
+
+    def __init__(
+        self,
+        min_interval_s: float = 60.0,
+        output_dir: Optional[Any] = None,
+        capturer: Optional[Callable[[], Optional[Dict[str, Any]]]] = None,
+    ) -> None:
+        super().__init__(self.name)
+        self._min_interval = max(0.0, float(min_interval_s))
+        self._last_capture_ts = 0.0
+        self._output_dir = Path(output_dir) if output_dir else None
+        self._capturer = capturer
+        self._unavailable_reason = ""
+
+    def _default_capture(self) -> Optional[Dict[str, Any]]:
+        try:
+            import hashlib
+
+            import mss
+            from PIL import Image
+        except ImportError as exc:
+            self._unavailable_reason = f"{type(exc).__name__}: {exc}"
+            return None
+        try:
+            out_dir = self._output_dir
+            if out_dir is None:
+                from app.config import settings
+
+                out_dir = Path(settings.DATA_DIR) / "workspace" / "screenshots"
+            out_dir = Path(out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            path = out_dir / f"watch_{int(time.time())}.png"
+            with mss.mss() as sct:
+                shot = sct.grab(sct.monitors[1])
+                img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+                img.save(path)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+            self._prune(out_dir)
+            return {
+                "path": str(path),
+                "sha256_16": digest,
+                "width": int(shot.size[0]),
+                "height": int(shot.size[1]),
+            }
+        except Exception as exc:
+            self._unavailable_reason = f"{type(exc).__name__}: {exc}"
+            return None
+
+    @staticmethod
+    def _prune(out_dir: Path) -> None:
+        try:
+            watch_files = sorted(out_dir.glob("watch_*.png"))
+            for old in watch_files[: max(0, len(watch_files) - ScreenProbe.KEEP_LAST)]:
+                old.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    def probe(self) -> Dict[str, Any]:
+        now = time.time()
+        if now - self._last_capture_ts < self._min_interval:
+            # Throttled: report the last known state unchanged so the base
+            # detector emits no change event.
+            return dict(self._last_state)
+        self._last_capture_ts = now
+        if self._capturer is not None:
+            capture = self._capturer()
+        else:
+            capture = self._default_capture()
+        if capture is None:
+            return {
+                "screen": {
+                    "available": False,
+                    "reason": self._unavailable_reason or "capture failed",
+                }
+            }
+        return {"screen": capture}
+
+
 # ── Server wiring (charter §5: the silent watcher) ───────────────────
 # The server lifespan creates this when ARENA_BACKGROUND_OBSERVER is enabled
 # (default on). Read-only probes only: the observer notices, prioritizes, and
@@ -357,4 +448,14 @@ def build_default_observer(interval: float = BackgroundObserver.DEFAULT_INTERVAL
     observer = BackgroundObserver(interval=interval, on_change=_on_change_prioritize)
     observer.add_probe(ProcessProbe())
     observer.add_probe(SystemResourceProbe())
+    # The watcher that SEES the desktop (owner vision): local screen captures
+    # surfaced as observations. Off with ARENA_SCREEN_WATCHER=0; honest
+    # "unavailable" observation when mss/Pillow are missing.
+    try:
+        from app.config import settings as _settings
+
+        if str(getattr(_settings, "ARENA_SCREEN_WATCHER", "1")) != "0":
+            observer.add_probe(ScreenProbe())
+    except Exception:
+        pass
     return observer
