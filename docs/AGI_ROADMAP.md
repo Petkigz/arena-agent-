@@ -246,6 +246,32 @@ The last one is important. Beanie should know: "I remember doing this" versus
 
 ## Phase 6 — General Learning Engine
 
+> ✅ **LIVE 2026-09-08:** `app/mind/learning_loop.py` — ONE deterministic
+> loop (`GeneralLearningEngine`) that every experience passes through:
+> observe → interpret → compare with existing knowledge → detect novelty →
+> form hypothesis → test → observe outcome → update model → store knowledge
+> → update confidence. Every KIND of experience enters through the same mind
+> door (`BeanieMind.learn`): actions, conversations, corrections,
+> observations, media, demonstrations, experiments — and Phase-8 media
+> learners will submit through this same door, not build their own loops.
+>
+> Honesty rules ARE the engine: `success` must be evidence the caller has —
+> verified True, verified False, or UNKNOWN (attempted ≠ succeeded, never
+> guessed); reinforcement rehearses knowledge instead of duplicating it;
+> contradictions become explicit hypotheses + lessons, never silent
+> overwrites. The door consumes it two ways automatically: every completed
+> cognitive cycle is submitted as an `action` experience (success taken ONLY
+> from `goal_verified` — a missing verdict stays UNKNOWN), and every recorded
+> owner chat correction is fed as a `correction` experience (lessons). The
+> engine writes through the Phase-5 unified memory (provenance-tagged,
+> deduped) and feeds verified outcomes to the Phase-5 confidence calibrator.
+> Fail-open: learning never fails the task that produced it. Kill switch:
+> `ARENA_LEARNING_LOOP=0`. Owner-visible: `POST /mind/learn`,
+> `GET /mind/learning` (the learning landscape), `GET /mind/learning/events`
+> (the ledger). Guarded by `tests/test_learning_loop.py` (16 tests), incl.
+> the typed-intake, novelty, contradiction→hypothesis, experiment verdict,
+> dedupe-rehearsal, calibration, and auto-door contracts.
+
 The learning loop: experience → observe → interpret → compare with existing
 knowledge → detect novelty → form hypothesis → test → observe outcome → update
 model → store knowledge → update confidence.

@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from app.config import settings
 from app.mind.identity import BeanieIdentity
+from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
@@ -74,6 +75,7 @@ class BeanieMind:
         self._self_model: Optional[SelfModelFacade] = None
         self._memory: Optional[UnifiedMemory] = None
         self._world_first: Optional[WorldFirstReasoning] = None
+        self._learning: Optional[GeneralLearningEngine] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -197,6 +199,21 @@ class BeanieMind:
         """Recent world-first briefs, newest first (owner-inspectable)."""
         return list(reversed(self._briefs[-int(limit):]))
 
+    @property
+    def learning(self) -> GeneralLearningEngine:
+        """Phase 6: the one learning loop every experience passes through."""
+        with self._lock:
+            if self._learning is None:
+                self._learning = GeneralLearningEngine(self)
+            return self._learning
+
+    def learn(self, experience: Dict[str, Any]) -> Dict[str, Any]:
+        """The canonical learning door (mirrors process() for inputs). Every
+        kind of experience — action outcomes, conversations, corrections,
+        observations, media, demonstrations, experiments — enters here and runs
+        the same ten-stage loop."""
+        return self.learning.learn(experience)
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -227,7 +244,34 @@ class BeanieMind:
             session_id=conversation_id,
             **cycle_kwargs,
         )
+        self._learn_from_cycle(user_text, modality, result)
         return result
+
+    def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
+        """Phase 6: a completed cycle is an experience. Success is taken ONLY
+        from the verifier's word (goal_verified) — attempted ≠ succeeded, and
+        a missing verdict stays UNKNOWN rather than being guessed. Best-effort:
+        learning never fails the task."""
+        if str(getattr(settings, "ARENA_LEARNING_LOOP", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        verified = result.get("goal_verified")
+        if verified is not None and not isinstance(verified, bool):
+            verified = None
+        experience = {
+            "kind": "action",
+            "content": user_text,
+            "source": f"cycle:{modality}",
+            "outcome": str(result.get("goal_lifecycle_state") or "") or None,
+            "success": verified,  # True / False / None(unknown) — never guessed
+            "predicted_confidence": result.get("predicted_confidence"),
+            "goal_type": str(result.get("reasoning_action") or ""),
+        }
+        try:
+            self.learning.learn(experience)
+        except Exception as exc:
+            app_logger.warning(f"Cycle experience not learned (non-fatal): {exc}")
 
     def _run_world_first(self, user_text: str, modality: str) -> None:
         """Assemble + deliver the Phase-2 brief. Never raises into the door."""

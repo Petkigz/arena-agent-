@@ -111,6 +111,12 @@ OVERRIDES = {
         "Phase 2 LIVE: world-first brief (world → self → memory) assembled "
         "before capability identification — the tool_matcher demotion's "
         "counterpart (M6 consumption resolved)"),
+    "app/mind/learning_loop.py": (
+        "mind/learning", "KEEP", "LEARNING",
+        "Phase 6 LIVE: the ONE general learning loop every experience passes "
+        "through (observe → interpret → compare → novelty → hypothesis → "
+        "test → outcome → update model → store → confidence); success is "
+        "evidence only — attempted ≠ succeeded"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),

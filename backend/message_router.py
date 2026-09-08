@@ -274,6 +274,9 @@ class MessageRouter:
                         "conversation_id": conversation_id,
                         **correction_note,
                     })
+                    # Phase 6 (AGI roadmap): owner corrections also enter the
+                    # mind's general learning loop — mistakes are data.
+                    self._feed_correction_to_mind(correction_note, content)
             except Exception as exc:
                 app_logger.warning(f"In-chat correction handling failed (message continues): {exc}")
 
@@ -445,6 +448,23 @@ class MessageRouter:
                     "message": f"Error processing message: {str(e)}"
                 })
                 return None
+
+    def _feed_correction_to_mind(self, correction_note: Dict[str, Any], content: str) -> None:
+        """Phase 6: route a recorded owner correction into the mind's general
+        learning loop. Duplicates are skipped (already detected upstream).
+        Best-effort — learning never breaks the chat flow."""
+        if not correction_note or correction_note.get("duplicate"):
+            return
+        try:
+            from app.mind import BeanieMind
+            BeanieMind.get_instance(runtime=self.runtime).learn({
+                "kind": "correction",
+                "content": content,
+                "source": "owner_chat_correction",
+                "outcome": str(correction_note.get("correction_type") or "correction"),
+            })
+        except Exception as exc:
+            app_logger.warning(f"Correction not fed to learning loop (non-fatal): {exc}")
 
     async def _call_cognitive_runtime(
         self,

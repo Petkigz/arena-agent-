@@ -7,8 +7,28 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5 ✅ complete.**
-Phase 2 (world-first thinking) is LIVE: `app/mind/world_first.py` assembles a
+**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6 ✅ complete.**
+Phase 6 (general learning engine) is LIVE: `app/mind/learning_loop.py` —
+ONE deterministic loop every experience passes through (observe → interpret
+→ compare → novelty → hypothesis → test → outcome → update model → store →
+confidence), entered through the mind door (`BeanieMind.learn`) for all seven
+experience kinds (action, conversation, correction, observation, media,
+demonstration, experiment). Honesty rules ARE the engine: `success` is only
+ever evidence (True / False / UNKNOWN — attempted ≠ succeeded, never
+guessed); reinforcement rehearses instead of duplicating; contradictions
+become explicit hypotheses + lessons. The door consumes it automatically —
+every completed cycle is submitted as an `action` experience (success taken
+ONLY from `goal_verified`), and every recorded owner chat correction feeds a
+`correction` experience. Writes go through the Phase-5 unified memory
+(provenance-tagged, deduped) and verified outcomes feed the Phase-5
+confidence calibrator. Fail-open + kill switch (`ARENA_LEARNING_LOOP=0`).
+Owner-visible: `POST /mind/learn`, `GET /mind/learning`,
+`GET /mind/learning/events`. Guarded by `tests/test_learning_loop.py`
+(16 tests); live-boot verified against the real server (startup smoke cycles
+were captured automatically with UNKNOWN success where the verifier gave no
+verdict — the loop never guessed).
+
+Earlier in this gate: Phase 2 (world-first thinking) LIVE — `app/mind/world_first.py` assembles a
 deterministic provenance-tagged brief (world → self → memory, in that order)
 at the mind door before any capability is identified; delivery through the
 brain's working-memory scratchpad with the attention gate's decision recorded;
@@ -26,8 +46,9 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). 16 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
-preview/ledger); guarded by `tests/test_beanie_mind.py` (21) +
+resolved). Now 19 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+preview/ledger and the Phase-6 learning door/landscape/ledger); guarded by
+`tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
 freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).

@@ -208,3 +208,37 @@ def mind_briefs(limit: int = Query(default=20, ge=1, le=100)) -> dict:
     first), with the attention-gate delivery decision for each."""
     mind = BeanieMind.get_instance()
     return {"success": True, "briefs": mind.briefs(limit=limit)}
+
+
+# ── Phase 6: general learning ──────────────────────────────────────────────
+class ExperienceIn(BaseModel):
+    kind: str = Field(min_length=1, max_length=30)
+    content: str = Field(min_length=1, max_length=4000)
+    source: str = Field(min_length=1, max_length=120)
+    outcome: Optional[str] = None
+    success: Optional[bool] = None
+    prediction: Optional[str] = None
+    predicted_confidence: Optional[float] = None
+    action_type: Optional[str] = None
+    goal_type: Optional[str] = None
+
+
+@router.post("/mind/learn")
+def mind_learn(body: ExperienceIn) -> dict:
+    """Submit an experience to the one learning loop (action outcome,
+    conversation, correction, observation, media, demonstration, experiment).
+    success must be evidence the caller has — never a guess."""
+    return BeanieMind.get_instance().learn(body.model_dump(exclude_none=True))
+
+
+@router.get("/mind/learning")
+def mind_learning_stats() -> dict:
+    """The learning landscape: experiences by kind and novelty."""
+    return {"success": True, **BeanieMind.get_instance().learning.stats()}
+
+
+@router.get("/mind/learning/events")
+def mind_learning_events(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """Recent learning events, newest first (owner-inspectable)."""
+    return {"success": True,
+            "events": BeanieMind.get_instance().learning.events(limit=limit)}

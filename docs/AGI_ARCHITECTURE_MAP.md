@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 363 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 364 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6 — the target architecture itself, all KEEP).
 
 ---
 
@@ -130,9 +130,13 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 > **Status 2026-09-08:** M1 (identity), M2 (BeanieState), M3 (meta-memory),
 > M5 (social memory) and **M6 (world-first reasoning path)** are LIVE in
 > `app/mind/` (Phases 1, 2, 3, 4, 5): the door now assembles a world → self →
-> memory brief before the cycle identifies capabilities. M4 is partial
-> (milestone seed; no narrative layer). Remaining build list: M4-completion,
-> M7–M11.
+> memory brief before the cycle identifies capabilities. **Phase 6 is also
+> LIVE** though it had no M-row of its own: `app/mind/learning_loop.py` is the
+> ONE general learning loop every experience passes through — the door
+> auto-submits verified/unverified cycle outcomes and owner corrections; it
+> feeds M11's spirit (failures become data) without claiming M11 resolved.
+> M4 is partial (milestone seed; no narrative layer). Remaining build list:
+> M4-completion, M7–M11.
 
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
@@ -196,9 +200,17 @@ Per the roadmap's restructuring order, the first build step after this freeze:
    it through working memory (the cycle's existing prompt channel), attention
    gate decisions recorded (M6 resolved). 11 tests in `tests/test_world_first.py`;
    16 `/mind/*` endpoints total.
-6. **Open (roadmap order):** Phase 6 general learning loop around BeanieState;
-   then M7 demonstration learning ("Beanie, watch this"), M8 attention
-   significance, M9 generalization eval, per the owner's sequencing.
+6. ✅ **Phase 6 LIVE (2026-09-08)** — `learning_loop.py`: one deterministic
+   loop for every experience (action, conversation, correction, observation,
+   media, demonstration, experiment); the door auto-submits cycle outcomes
+   (success = `goal_verified` ONLY — missing verdict stays UNKNOWN) and owner
+   chat corrections; writes land in the Phase-5 unified memory and verified
+   outcomes feed the Phase-5 calibrator. Fail-open + kill switch
+   (`ARENA_LEARNING_LOOP=0`). 16 tests in `tests/test_learning_loop.py`;
+   19 `/mind/*` endpoints total.
+7. **Open (roadmap order):** Phase 7 learning from the owner ("Beanie, watch
+   this") → M7 demonstration learning; then M8 attention significance, M9
+   generalization eval, per the owner's sequencing.
 
 ---
 
