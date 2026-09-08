@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 369 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 370 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 — the target architecture itself, all KEEP).
 
 ---
 
@@ -139,9 +139,11 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 > auto-submits verified/unverified cycle outcomes and owner corrections; it
 > feeds M11's spirit (failures become data) without claiming M11 resolved.
 > M4 is partial (milestone seed; no narrative layer). Remaining build list:
-> M4-completion, M8–M10. (M11 — the prediction↔reality loop — is LIVE with
-> Phase 10: `app/mind/imagination.py` connects `prediction_engine.py` to the
-> learning loop, so failures become training data.)
+> M4-completion, M8, M9. (M10 — OS concept-verb abstraction — is LIVE with
+> Phase 12: `app/mind/os_concepts.py`; M11 — the prediction↔reality loop —
+> is LIVE with Phase 10: `app/mind/imagination.py` connects
+> `prediction_engine.py` to the learning loop, so failures become training
+> data.)
 
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
@@ -154,7 +156,7 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 | M7 | ~~**Demonstration learning**~~ ✅ LIVE 2026-09-08 — `app/mind/teaching.py`: "Beanie, watch this" → steps → her proposal → owner's "yes" → generalized procedure (Phase 7; integrates `skill_teaching_engine.py` as the durable store) | P7 | ~~`skill_teaching_engine.py` (form-driven)~~ |
 | M8 | **Attention significance system** — current task / owner speaking / anomaly / unfinished goal arbitration | P13, P14 | `attention_manager.py` (43 lines) + observer/prioritizer feeds |
 | M9 | **Generalization evaluation** — tasks A–G (teach-once-adapt, tutorial-transfer, unfamiliar-error, environment-change, incomplete-instruction, learn-from-failure, cross-OS transfer) | P24 | `intelligence_benchmark.py` (regression-style only) |
-| M10 | **OS concept-verb abstraction** — open/copy/navigate/… as platform-free concepts with embodiment mapping | P12 | `os_control_planner.py` seed |
+| M10 | ~~**OS concept-verb abstraction**~~ ✅ LIVE 2026-09-08 — `app/mind/os_concepts.py`: open/copy/navigate/… as platform-free concepts with embodiment mapping derived from the live manifest; procedures transfer across bodies (Phase 12) | P12 | ~~`os_control_planner.py` seed~~ |
 | M11 | ~~**Prediction↔reality comparison loop**~~ ✅ LIVE 2026-09-08 — `app/mind/imagination.py`: simulate-before-acting + compare-vs-reality ledger + confirmed/refuted training data through the Phase-6 loop (Phase 10; `prediction_engine.py` wired) | P10 | ~~`prediction_engine.py` + `execution_truth.py` (not connected)~~ |
 
 Every M-item is testable in isolation and none requires deleting existing code —
@@ -182,7 +184,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–11 are LIVE (Phases 1–11 complete).**
+**Status 2026-09-08: steps 1–12 are LIVE (Phases 1–12 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -247,10 +249,15 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     (pc/android/web), authority surfaced as requires_owner_approval, plans
     never execution, motor gaps → open unknowns. 9 tests in
     `tests/test_embodiment.py`; 30 `/mind/*` endpoints total.
-12. **Open (roadmap order):** Phase 12 true OS-level generalization (M10:
-    OS concept-verb abstraction with embodiment mapping — learn it on
-    Windows, generalize to Android/Linux); then M8 attention significance,
-    M9 generalization eval, per the owner's sequencing.
+12. ✅ **Phase 12 LIVE (2026-09-08)** — `os_concepts.py` (M10 resolved):
+    one platform-free concept layer over all bodies; per-body mapping
+    derived from the live manifest by evidence; procedures (explicit or
+    Phase-7 taught) transfer across bodies with resolved-or-gap honesty.
+    10 tests in `tests/test_os_concepts.py`; 33 `/mind/*` endpoints total.
+13. **Open (roadmap order):** Phase 13 continuous perception (the SENSE
+    side of the embodiment diagram; M8 attention significance arbitrates
+    what deserves thought); then M9 generalization eval, per the owner's
+    sequencing.
 
 ---
 

@@ -38,6 +38,7 @@ from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
+from app.mind.os_concepts import OSConceptLayer
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
 from app.mind.teaching import DemonstrationTeaching
@@ -86,6 +87,7 @@ class BeanieMind:
         self._curiosity: Optional[CuriosityEngine] = None
         self._imagination: Optional[Imagination] = None
         self._embodiment: Optional[Embodiment] = None
+        self._os_concepts: Optional[OSConceptLayer] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -277,6 +279,16 @@ class BeanieMind:
             if self._embodiment is None:
                 self._embodiment = Embodiment(self)
             return self._embodiment
+
+    @property
+    def os_concepts(self) -> OSConceptLayer:
+        """Phase 12: one platform-free concept layer over all bodies
+        (M10) — express intents as concepts, transfer procedures across
+        bodies."""
+        with self._lock:
+            if self._os_concepts is None:
+                self._os_concepts = OSConceptLayer(self)
+            return self._os_concepts
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(

@@ -7,8 +7,21 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–11 ✅ complete.**
-Phase 11 (embodied intelligence) is LIVE: `app/mind/embodiment.py` — the
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–12 ✅ complete.**
+Phase 12 (true OS-level generalization, M10) is LIVE:
+`app/mind/os_concepts.py` — one platform-free concept layer (open/close/
+copy/search/…/communicate) over all bodies, with embodiment mapping derived
+from the live manifest by term evidence. `express()` returns concept +
+per-body map with evidence; `transfer()` re-expresses explicit steps or a
+Phase-7 taught procedure on a target body — resolved capability or visible
+gap, never a fabricated embodiment; coverage decides generalization. Live-
+verified: communicate = pc×6 + android×1; open = pc×5 + web×3 with an
+honest android gap; the taught 'organize-files' procedure transfers with
+non-OS steps flagged. The layer expresses/maps, never executes.
+Owner-visible: `POST /mind/os/express`, `POST /mind/os/transfer`,
+`GET /mind/os/concepts`. Guarded by `tests/test_os_concepts.py` (10 tests).
+
+Earlier in this gate: Phase 11 (embodied intelligence) LIVE — `app/mind/embodiment.py` — the
 existing 184 capabilities are now her motor system. She reasons in concept
 terms ("interact with my phone"); deterministic concept expansion + a
 term-overlap manifest scan (evidence on every candidate) + the existing
@@ -113,12 +126,13 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). Now 30 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+resolved). Now 33 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
 preview/ledger, the Phase-6 learning door/landscape/ledger, the Phase-7
 procedures/teaching-session windows, the Phase-8 media learning door, the
 Phase-9 curiosity landscape/investigate/resolve, the Phase-10 imagination
-simulate/compare/ledger, and the Phase-11 motor-plan/body-image windows);
-guarded by `tests/test_beanie_mind.py` (21) +
+simulate/compare/ledger, the Phase-11 motor-plan/body-image windows, and
+the Phase-12 OS concept express/transfer/vocabulary windows); guarded by
+`tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
 freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).

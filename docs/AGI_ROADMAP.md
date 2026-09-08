@@ -472,6 +472,29 @@ capability layer figures out how.
 
 ## Phase 12 — True OS-Level Generalization
 
+> ✅ **LIVE 2026-09-08:** `app/mind/os_concepts.py` — `OSConceptLayer`
+> (M10 resolved). No WindowsTool / MacTool / LinuxTool / AndroidTool as
+> separate intelligence: ONE platform-free concept layer — open, close,
+> move, copy, rename, search, install, configure, read, write, observe,
+> click, type, navigate, communicate — with embodiment mapping derived from
+> the LIVE tool manifest by term evidence (no hand-catalogued platform
+> tables to rot). `express(intent)` returns the concept, its meaning, the
+> target, and the per-body capability map (pc / android / web) with matched
+> terms on every mapping; `generalizes` is decided by coverage (≥2 bodies),
+> never claimed. `transfer(to_platform, steps|procedure)` is the roadmap's
+> crown jewel: explicit steps OR a Phase-7 taught procedure, re-expressed
+> for the target body — every step resolves to a capability or is flagged
+> as a VISIBLE gap (generalization you can inspect, not a claim). Live
+> against the real body: communicate covers pc×6 + android×1 (phone_sms via
+> sms evidence); open covers pc×5 + web×3 with an honest android gap; the
+> Phase-7-taught 'organize-files' procedure transfers to android with its
+> non-OS steps honestly flagged. The layer expresses and maps — it never
+> executes (Phase-11 doctrine). Owner-visible: `POST /mind/os/express`,
+> `POST /mind/os/transfer`, `GET /mind/os/concepts` (33 `/mind/*`
+> endpoints). Guarded by `tests/test_os_concepts.py` (10 tests, incl.
+> taught-procedure transfer and a manifest whose handlers explode if
+> executed).
+
 Don't build WindowsTool / MacTool / LinuxTool / AndroidTool as separate
 intelligence. Build an **OS abstraction** where Beanie understands concepts such
 as: open, close, move, copy, rename, search, install, configure, read, write,

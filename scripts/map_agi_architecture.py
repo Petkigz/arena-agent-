@@ -142,6 +142,11 @@ OVERRIDES = {
         "Phase 11 LIVE: the 184 capabilities as her motor system — concepts "
         "in, ranked pathways out (plans only, never execution); authority "
         "surfaced, motor gaps become unknowns"),
+    "app/mind/os_concepts.py": (
+        "mind/motor", "KEEP", "EMBODIMENT",
+        "Phase 12 LIVE (M10): ONE platform-free concept layer over all "
+        "bodies — express/transfer/coverage from the live manifest by "
+        "evidence; no per-OS intelligence, gaps visible not fabricated"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -342,8 +347,10 @@ OVERRIDES = {
     "app/cognition/project_scheduler.py": (
         "mind/decision", "INTEGRATE", "PLANNERS", ""),
     "app/cognition/os_control_planner.py": (
-        "embodiment/os-abstraction", "INTEGRATE", "",
-        "seed of the Phase-12 OS concept abstraction (one planner, all OSes)"),
+        "embodiment/os-abstraction", "INTEGRATE", "EMBODIMENT",
+        "the platform-command executor UNDER the Phase-12 concept layer "
+        "(app/mind/os_concepts.py owns the platform-free abstraction; this "
+        "plans the per-OS shell command when the cycle acts)"),
     "app/cognition/plan_control.py": (
         "owner-authority/plan-review", "KEEP", "", ""),
     "app/cognition/plan_freshness.py": (

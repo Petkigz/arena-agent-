@@ -381,3 +381,36 @@ def mind_embodiment(concept: Optional[str] = Query(default=None, max_length=200)
     """Her body image: what her body can do, grouped by category,
     optionally filtered by concept."""
     return BeanieMind.get_instance().embodiment.body_map(concept)
+
+
+# ── Phase 12: OS concept layer (one mind, many bodies) ─────────────────────
+class ExpressIn(BaseModel):
+    intent: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/mind/os/express")
+def mind_os_express(body: ExpressIn) -> dict:
+    """Intent → platform-free concept + per-body capability mapping
+    (pc / android / web), derived from the live manifest by evidence."""
+    return BeanieMind.get_instance().os_concepts.express(body.intent)
+
+
+class TransferIn(BaseModel):
+    to_platform: str = Field(min_length=1, max_length=20)
+    steps: Optional[List[str]] = None
+    procedure: Optional[str] = None
+
+
+@router.post("/mind/os/transfer")
+def mind_os_transfer(body: TransferIn) -> dict:
+    """Learned on one body, generalized to another: every step resolves to
+    a capability on the target body, or is flagged as a visible gap."""
+    return BeanieMind.get_instance().os_concepts.transfer(
+        body.to_platform, steps=body.steps, procedure=body.procedure)
+
+
+@router.get("/mind/os/concepts")
+def mind_os_concepts() -> dict:
+    """The platform-free concept vocabulary with per-body coverage — where
+    her bodies agree and where they differ."""
+    return BeanieMind.get_instance().os_concepts.concepts()
