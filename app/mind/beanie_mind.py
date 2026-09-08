@@ -39,6 +39,7 @@ from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
 from app.mind.attention import Attention
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
+from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
 from app.mind.self_facade import SelfModelFacade
@@ -92,6 +93,7 @@ class BeanieMind:
         self._os_concepts: Optional[OSConceptLayer] = None
         self._perception: Optional[Perception] = None
         self._attention: Optional[Attention] = None
+        self._motivation: Optional[Motivation] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -313,6 +315,16 @@ class BeanieMind:
                 self._attention = Attention(self)
             return self._attention
 
+    @property
+    def motivation(self) -> Motivation:
+        """Phase 15: goals from evidence — curiosity, parked goals, owner
+        speech, environment, verified failures, learned rhythms — evaluated,
+        prioritized, and proposed as questions. Suggests only; never acts."""
+        with self._lock:
+            if self._motivation is None:
+                self._motivation = Motivation(self)
+            return self._motivation
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -340,6 +352,7 @@ class BeanieMind:
         self._run_world_first(user_text, modality)
         self._drain_perceptions()
         self._run_attention(user_text)
+        self._run_motivation(user_text)
         result = self.runtime.process_cognitive_cycle(
             user_text=user_text,
             session_id=conversation_id,
@@ -448,6 +461,18 @@ class BeanieMind:
             self.attention.review(task=user_text)
         except Exception as exc:
             app_logger.warning(f"Attention review skipped (non-fatal): {exc}")
+
+    def _run_motivation(self, user_text: str) -> None:
+        """Phase 15: gather candidate goals from her own evidence, rank
+        them, and — only when the top one earned it and the cooldown
+        elapsed — propose once. Best-effort; motivation never fails the
+        task, and proposing is a question, never an action."""
+        if str(getattr(settings, "ARENA_MOTIVATION", "1")) == "0":
+            return
+        try:
+            self.motivation.refresh(task=user_text)
+        except Exception as exc:
+            app_logger.warning(f"Motivation refresh skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

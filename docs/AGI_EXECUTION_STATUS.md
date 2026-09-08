@@ -7,8 +7,27 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–14 ✅ complete.**
-Phase 14 (attention — M8 attention significance) is LIVE:
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–15 ✅ complete.**
+Phase 15 (motivation and goals) is LIVE: `app/mind/motivation.py` — goals
+from evidence, never from randomness. Six real sources in her own state:
+open unknowns, parked goals waiting for evidence (live
+`parked_goal_recheck` feed), goal-shaped owner speech, attention's
+important-change/anomaly verdicts, verified-false attempts (learning
+opportunities), learned-rhythm anticipations (needs). Relevance = named
+contributions (source base / recurrence / recency / task overlap);
+repeated evidence compounds recurrence instead of duplicating goals.
+`propose()` builds the ask from the goal's own evidence — the roadmap's
+sentence live-verified ("You said: '…organize the project files…'. It's
+still open — do you want me to handle that?"). Proposing is a question
+(`acted: False`); accepted goals execute through the normal door under
+owner authority (goal approval ≠ action authorization); declined goals are
+never re-proposed. The door auto-proposes only when the top candidate
+earns score ≥5.0 and a 10-interaction cooldown elapsed — autonomous but
+careful. Owner-visible: `GET /mind/goals`, `POST /mind/goals/propose`,
+`POST /mind/goals/decide`. Kill switch `ARENA_MOTIVATION=0`. Guarded by
+`tests/test_mind_motivation.py` (15 tests).
+
+Earlier in this gate: Phase 14 (attention — M8 attention significance) LIVE:
 `app/mind/attention.py` — the arbitrator between perception and thought.
 Every perception is classified onto the roadmap ladder from EVIDENCE on the
 record (owner channel → owner_speaking; probe urgency → important_change;

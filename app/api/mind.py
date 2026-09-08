@@ -476,3 +476,29 @@ def mind_attention_focus(limit: int = Query(default=50, ge=1, le=500)) -> dict:
             "snapshot": a.snapshot(),
             "advisories": a.advisories(),
             "history": a.focus_history(limit=limit)}
+
+
+# ── Phase 15: motivation and goals ─────────────────────────────────────────
+@router.get("/mind/goals")
+def mind_goals(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The goal ledger: candidate goals from her own evidence, their
+    relevance and status. Goals are evidence-derived, never random."""
+    m = BeanieMind.get_instance().motivation
+    return {"success": True, **m.stats(),
+            "prioritized": m.prioritize(limit=limit),
+            "ledger": m.goals(limit=limit)}
+
+
+@router.post("/mind/goals/propose")
+def mind_goals_propose(goal_id: Optional[int] = None) -> dict:
+    """Turn the top candidate (or a specific goal) into an owner-facing
+    question built from its evidence. A proposal is a question, never an
+    action."""
+    return BeanieMind.get_instance().motivation.propose(goal_id)
+
+
+@router.post("/mind/goals/decide")
+def mind_goals_decide(goal_id: int, accept: bool) -> dict:
+    """The owner answers a proposal. Accepted goals execute through the
+    normal door under her authority; declined goals are never re-proposed."""
+    return BeanieMind.get_instance().motivation.decide(goal_id, accept)

@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 372 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 373 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 — the target architecture itself, all KEEP).
 
 ---
 
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–14 are LIVE (Phases 1–14 complete).**
+**Status 2026-09-08: steps 1–15 are LIVE (Phases 1–15 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -271,12 +271,21 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     Decides only — `acted: False` on every verdict. Kill switch
     `ARENA_ATTENTION=0`. 16 tests in `tests/test_mind_attention.py`;
     38 `/mind/*` paths (41 routes) total.
-15. **Open (roadmap order):** Phase 15 motivation and goals (candidate
-    goals from needs/curiosity/unfinished goals/owner goals/environment +
-    learning opportunities → relevance → prioritize → act), then social /
-    personality / owner authority / self-reflection / self-improvement /
-    model evolution / voice-first UI / one-mind desktop+Android, and M9
-    generalization eval (P24), per the owner's sequencing.
+15. ✅ **Phase 15 LIVE (2026-09-08)** — `motivation.py`: goals from
+    evidence only — six real sources (open unknowns, parked goals, owner
+    speech, attention verdicts, verified failures, learned rhythms);
+    relevance = named contributions; recurrence compounds; proposals are
+    questions built from the goal's own evidence (`acted: False`);
+    accepted goals execute through the normal door under owner authority;
+    auto-propose only when earned (score ≥5.0) and cooled (10
+    interactions). Kill switch `ARENA_MOTIVATION=0`. 15 tests in
+    `tests/test_mind_motivation.py`; 41 `/mind/*` paths (44 routes) total.
+16. **Open (roadmap order):** Phase 16 social intelligence (persistent
+    owner model: preferences, habits, communication style, goals,
+    routines, boundaries), then personality / owner authority /
+    self-reflection / self-improvement / model evolution / voice-first UI
+    / one-mind desktop+Android, and M9 generalization eval (P24), per the
+    owner's sequencing.
 
 ---
 

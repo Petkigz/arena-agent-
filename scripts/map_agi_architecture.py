@@ -159,6 +159,13 @@ OVERRIDES = {
         "— roadmap ladder from evidence on the record, repeats demoted, "
         "watermark review, one open unknown surfaced when quiet, "
         "popup-over-task advisory; decides only, never acts"),
+    "app/mind/motivation.py": (
+        "mind/motivation", "KEEP", "MOTIVATION",
+        "Phase 15 LIVE: goals from evidence only (open unknowns, parked "
+        "goals, owner speech, attention verdicts, verified failures, "
+        "learned rhythms) — relevance as named contributions, recurrence "
+        "compounds, proposals are questions (acted: False), accepted goals "
+        "execute through the normal door under owner authority"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -404,11 +411,17 @@ OVERRIDES = {
 
     # ── MOTIVATION / CURIOSITY (Phases 9, 15) ────────────────────────────
     "app/cognition/autonomous_goal_generator.py": (
-        "mind/motivation", "INTEGRATE", "", ""),
+        "mind/motivation", "INTEGRATE", "MOTIVATION",
+        "Phase 7 seed (GoalSource/AutonomousGoal + store), LIVE via the "
+        "owner-control autonomy API; Phase 15 built the authoritative "
+        "evidence-first goal organ app/mind/motivation.py — goals from "
+        "evidence, never random"),
     "app/cognition/autonomous_goal_executor.py": (
-        "mind/motivation", "INTEGRATE", "", ""),
+        "mind/motivation", "INTEGRATE", "MOTIVATION",
+        "execution-plan seed under the authority layer; Phase-15 accepted "
+        "goals execute through the normal door, not around it"),
     "app/cognition/periodic_autonomous_cycle.py": (
-        "mind/motivation", "INTEGRATE", "", ""),
+        "mind/motivation", "INTEGRATE", "MOTIVATION", ""),
     "app/cognition/learning_progress.py": (
         "mind/motivation", "KEEP", "", "curiosity: explore growing competence"),
     "app/cognition/information_gain.py": (
@@ -416,7 +429,10 @@ OVERRIDES = {
     "app/cognition/phase7_preferences.py": (
         "mind/motivation", "INTEGRATE", "", "preference & novelty evaluation"),
     "app/cognition/parked_goal_recheck.py": (
-        "mind/motivation", "KEEP", "", "wired in server lifespan"),
+        "mind/motivation", "KEEP", "MOTIVATION",
+        "wired in server lifespan; Phase 15 LIVE: its parked "
+        "(waiting_for_evidence) goals feed app/mind/motivation.py as the "
+        "unfinished_goal evidence source"),
     "app/cognition/attention_manager.py": (
         "mind/attention", "INTEGRATE", "ATTENTION",
         "43-line seed, LIVE in the cognitive cycle (runtime.py:159) as the "

@@ -589,7 +589,35 @@ Beanie can eventually say: "You mentioned yesterday that you wanted to organize
 the project. I noticed the files are still scattered. Do you want me to handle
 that?" That's useful autonomous behavior.
 
-## Phase 16 — Social Intelligence
+## Phase 15 — Motivation and Goals
+
+> ✅ **LIVE 2026-09-08:** `app/mind/motivation.py` — goals from evidence,
+> never from randomness. `gather()` collects candidate goals from SIX real
+> evidence sources in her own state: open unknowns (curiosity), parked
+> goals waiting for evidence (unfinished — fed by the live
+> `parked_goal_recheck` store), goal-shaped owner speech in the door
+> ledger (owner goals), attention's important-change/anomaly verdicts
+> (environment), VERIFIED-false attempts in the learning ledger (learning
+> opportunities — unverified ≠ opportunity), and the anticipation engine's
+> learned-rhythm predictions (needs; honest silence until ≥3 occurrences).
+> Relevance is a sum of NAMED contributions (source base / recurrence /
+> recency / current-task overlap) — inspectable, not vibes; repeated
+> evidence compounds recurrence instead of duplicating goals. `propose()`
+> builds the owner-facing ask from the goal's own evidence — the roadmap's
+> own sentence was live-verified: owner said "organize the project files"
+> → "You said: '…organize the project files…'. It's still open — do you
+> want me to handle that?" Proposing is a question (`acted: False`);
+> accepted goals stay on the books and execute through the normal door,
+> where owner authority applies (goal approval ≠ action authorization);
+> declined goals are never re-proposed. The door pass auto-proposes only
+> when the top candidate earns score ≥5.0 AND a 10-interaction cooldown
+> elapsed — autonomous, but careful. Owner-visible: `GET /mind/goals`,
+> `POST /mind/goals/propose`, `POST /mind/goals/decide` (41 `/mind/*`
+> paths; 44 routes). Kill switch `ARENA_MOTIVATION=0` gates the door
+> refresh; the owner surface keeps working. Guarded by
+> `tests/test_mind_motivation.py` (15 tests).
+
+Introduce autonomous goals carefully — not randomly generated tasks. Instead:
 
 Because the goal is helper + secretary + friend, build an owner model:
 preferences, habits, communication style, goals, routines, interests,
