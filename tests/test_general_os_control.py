@@ -96,3 +96,72 @@ def test_os_plan_is_structured_not_freeform_shell():
     assert d["shell"] == "powershell"
     assert d["risk_level"] == "reversible"
     assert d["verify_command"]  # always has a verification plan
+
+
+def test_dangerous_command_is_surfaced_for_owner_approval_not_silently_dropped():
+    """Owner policy (2026-09-07): dangerous != refused. A dangerous-pattern
+    command must produce a plan with risk_level forced to 'destructive' so the
+    action gate routes it to Level-3 owner approval — never a silent None."""
+    import json
+    from app.cognition.os_control_planner import plan_os_action
+
+    dangerous_plan = json.dumps({
+        "command": "format c:",
+        "description": "Format the C drive",
+        "verify_command": "",
+        "risk_level": "reversible",  # LLM claim must NOT downrate the pattern
+    })
+
+    def fake_llm(messages=None, complexity="main", **kw):
+        return {"choices": [{"message": {"content": dangerous_plan}}]}
+
+    plan = plan_os_action(
+        "format the c drive", llm_client=type("L", (), {"generate_chat_completion": staticmethod(fake_llm)}),
+    )
+    assert plan is not None, "dangerous command must be surfaced, not vanished"
+    assert plan.risk_level == "destructive"
+    assert "Owner approval required" in plan.description
+    assert plan.command == "format c:"
+
+
+def test_leak_alias_defers_destructive_plans_without_executing(monkeypatch):
+    """The ungated os_control_plan leak alias must never auto-execute a
+    destructive plan — it defers with requires_owner_approval."""
+    import json
+    from app.cognition import os_control_planner as ocp
+
+    executed = []
+
+    def fake_execute(plan, runner=None):
+        executed.append(plan)
+        return {"success": True}
+
+    monkeypatch.setattr(ocp, "execute_os_plan", fake_execute)
+
+    destructive_plan = json.dumps({
+        "command": "rd /s /q C:\\Windows",
+        "description": "delete windows",
+        "verify_command": "",
+        "risk_level": "reversible",
+    })
+
+    def fake_llm(messages=None, complexity="main", **kw):
+        return {"choices": [{"message": {"content": destructive_plan}}]}
+
+    plan = ocp.plan_os_action(
+        "delete windows", llm_client=type("L", (), {"generate_chat_completion": staticmethod(fake_llm)}),
+    )
+    assert plan is not None and plan.risk_level == "destructive"
+
+    # The alias handler re-plans internally, so patch the planner it calls.
+    monkeypatch.setattr(ocp, "plan_os_action", lambda text, llm_client=None: plan)
+
+    from app.tools.manifest import build_tool_manifest
+    entry = build_tool_manifest()["os_control_plan"]
+    result = entry["handler"]({
+        "request": "delete windows", "query": "", "user_text": "", "goal_text": "",
+    })
+    # Deferral: nothing executed, typed requires-approval result.
+    assert executed == []
+    assert result["requires_owner_approval"] is True
+    assert result["refused"] is True

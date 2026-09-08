@@ -250,20 +250,32 @@ def plan_os_action(user_text: str, llm_client=None) -> Optional[OSActionPlan]:
         if not command:
             return None
 
-        # Safety: refuse obviously destructive patterns regardless of what
-        # the LLM says about risk.
-        if DANGEROUS_PATTERNS.search(command):
-            audit_logger.warning(f"OS planner refused dangerous command: {command[:120]}")
-            return None
+        # Owner policy (2026-09-07): dangerous is NOT refused and must NOT
+        # vanish silently — dangerous requires the owner's explicit approval
+        # or denial. A dangerous-pattern command is surfaced as a plan with
+        # risk_level FORCED to "destructive" (regardless of what the LLM
+        # claimed), which the action gate routes to Level-3 owner approval.
+        # The one ungated consumer (the os_control_plan leak alias in the
+        # manifest) defers destructive plans instead of executing them.
+        dangerous = bool(DANGEROUS_PATTERNS.search(command))
+        if dangerous:
+            audit_logger.warning(
+                f"OS planner surfaced dangerous command for owner approval: {command[:120]}"
+            )
+        destructive = dangerous or str(parsed.get("risk_level", "")).lower() == "destructive"
+
+        description = str(parsed.get("description", ""))[:500]
+        if dangerous:
+            description = "[Owner approval required — dangerous pattern detected] " + description
 
         return OSActionPlan(
             plan_id=f"osplan_{uuid.uuid4().hex[:12]}",
             user_request=user_text,
             command=command,
             shell=shell,
-            description=str(parsed.get("description", ""))[:500],
+            description=description,
             verify_command=str(parsed.get("verify_command", "")).strip(),
-            risk_level="destructive" if str(parsed.get("risk_level", "")).lower() == "destructive" else "reversible",
+            risk_level="destructive" if destructive else "reversible",
             platform=platform_name,
         )
     except Exception as exc:

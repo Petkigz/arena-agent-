@@ -66,8 +66,14 @@ def test_planner_uses_main_when_available():
     assert calls == ["main"]  # no fallback needed
 
 
-def test_planner_refuses_dangerous_commands():
+def test_planner_surfaces_dangerous_commands_for_owner_approval():
+    """Owner policy (2026-09-07): dangerous != refused. The plan is surfaced
+    with risk_level forced to 'destructive' so the action gate routes it to
+    Level-3 owner approval — the silent None drop is gone."""
     evil = json.dumps({"command": "rm -rf /", "description": "bad",
                        "verify_command": "", "risk_level": "reversible"})
     plan = plan_os_action("delete everything", llm_client=type("L", (), {"generate_chat_completion": staticmethod(_Reply(evil))}))
-    assert plan is None
+    assert plan is not None
+    assert plan.risk_level == "destructive"
+    assert "Owner approval required" in plan.description
+    assert plan.command == "rm -rf /"

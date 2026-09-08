@@ -369,6 +369,23 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
                 "success": False,
                 "error": f"OS-control planner could not produce a command for: {request_text}",
             }
+        # Owner policy (2026-09-07): this alias is an UNGATED direct-execute
+        # path, so a destructive plan must never run here. Defer it: the normal
+        # runtime path surfaces the same request as an os_control_execute
+        # proposal, which the action gate routes to Level-3 owner approval
+        # (approvable conversationally). This is a deferral to the owner, not
+        # a suppression — the plan itself is still produced and logged.
+        if plan.risk_level == "destructive":
+            return {
+                "success": False,
+                "refused": True,
+                "requires_owner_approval": True,
+                "error": (
+                    "Destructive OS plan deferred to owner approval — the "
+                    "command is surfaced through the gated runtime path."
+                ),
+                "command": plan.command[:200],
+            }
         return execute_os_plan(plan)
     DisposableSandbox = _LazyImportProxy("app.tools.disposable_sandbox", "DisposableSandbox")
     DocumentManager = _LazyImportProxy("app.tools.doc_manager", "DocumentManager")
