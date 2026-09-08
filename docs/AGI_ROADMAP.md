@@ -358,6 +358,31 @@ happen, and what can I generalize from it?"
 
 ## Phase 9 — Curiosity / Exploration
 
+> ✅ **LIVE 2026-09-08:** `app/mind/curiosity.py` — `CuriosityEngine`, the
+> internal UNKNOWN system. Ignorance becomes a RECORD: every gap a
+> world-first brief surfaces ("not yet in world model") is registered
+> automatically at the door; topics normalize ("The Document" ≡ "the
+> document"), and re-encounters COMPOUND (repeated ignorance outranks
+> one-off ignorance). Before asking the owner, she investigates her own
+> memory first (same evidence gate as the learning loop — recall-broad
+> search, term-overlap verdicts). Resolution paths are counted separately:
+> `knowledge` (incoming experience through the Phase-6 door matched the
+> unknown), `investigation` (real memory evidence found), `owner` (you
+> answered). Uncertainty ↓ and knowledge ↑ are ledger facts, not vibes.
+> Honesty rules: an unknown with no evidence stays OPEN and the engine
+> names the next honest step ("ask the owner"); filler tokens from gap
+> extraction ("really", "where") are rejected — noise is not curiosity;
+> resolved unknowns that recur REOPEN. Owner-visible: `GET /mind/curiosity`
+> (landscape + priorities), `POST /mind/curiosity/investigate`,
+> `POST /mind/curiosity/resolve` (25 `/mind/*` endpoints total). Fail-open
+> + kill switch `ARENA_CURIOSITY=0` (gates the automatic feeds; the owner
+> surface keeps working). Live-verified: unfamiliar request → open unknowns,
+> re-ask → compounding, one teaching sentence → three unknowns resolved via
+> the knowledge path. Guarded by `tests/test_curiosity.py` (11 tests).
+> Deferred to embodiment (Phases 11–13): autonomous experiments/screen
+> inspection as investigation actions — the roadmap's "try a harmless
+> experiment" needs the motor system.
+
 Give her an internal UNKNOWN system. She encounters something unfamiliar:
 "I don't understand X." Instead of immediately asking you: UNKNOWN → investigate.
 She can search, inspect, experiment, compare sources, observe, ask you, try a

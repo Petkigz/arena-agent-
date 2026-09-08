@@ -127,6 +127,11 @@ OVERRIDES = {
         "Phase 8 LIVE: images/video/audio/web enter the ONE Phase-6 loop as "
         "media experiences — deterministic observation first; watching is "
         "never verification (success=None)"),
+    "app/mind/curiosity.py": (
+        "mind/curiosity", "KEEP", "CURIOSITY",
+        "Phase 9 LIVE: the internal UNKNOWN system — brief gaps become "
+        "records, encounters compound, investigation searches memory first, "
+        "resolution paths counted (knowledge/investigation/owner)"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),

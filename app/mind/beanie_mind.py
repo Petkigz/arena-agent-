@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.config import settings
+from app.mind.curiosity import CuriosityEngine
 from app.mind.identity import BeanieIdentity
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
@@ -80,6 +81,7 @@ class BeanieMind:
         self._learning: Optional[GeneralLearningEngine] = None
         self._teaching: Optional[DemonstrationTeaching] = None
         self._media_learning: Optional[MediaLearning] = None
+        self._curiosity: Optional[CuriosityEngine] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -216,7 +218,20 @@ class BeanieMind:
         kind of experience — action outcomes, conversations, corrections,
         observations, media, demonstrations, experiments — enters here and runs
         the same ten-stage loop."""
-        return self.learning.learn(experience)
+        rec = self.learning.learn(experience)
+        # Phase 9: incoming knowledge can close open unknowns. Best-effort —
+        # curiosity bookkeeping never fails the learning itself.
+        if isinstance(rec, dict) and rec.get("success"):
+            self._close_unknowns_from_knowledge(rec.get("content") or "")
+        return rec
+
+    def _close_unknowns_from_knowledge(self, content: str) -> None:
+        if str(getattr(settings, "ARENA_CURIOSITY", "1")) == "0":
+            return
+        try:
+            self.curiosity.notify_knowledge(content)
+        except Exception as exc:
+            app_logger.warning(f"Curiosity notification skipped (non-fatal): {exc}")
 
     @property
     def teaching(self) -> DemonstrationTeaching:
@@ -233,6 +248,14 @@ class BeanieMind:
             if self._media_learning is None:
                 self._media_learning = MediaLearning(self)
             return self._media_learning
+
+    @property
+    def curiosity(self) -> CuriosityEngine:
+        """Phase 9: the internal UNKNOWN system."""
+        with self._lock:
+            if self._curiosity is None:
+                self._curiosity = CuriosityEngine(self)
+            return self._curiosity
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
@@ -308,6 +331,10 @@ class BeanieMind:
                 "delivery_reason": delivery.get("reason"),
                 "rendered": brief.get("rendered", ""),
             })
+            # Phase 9: gaps in the world model are unknowns — register them
+            # so curiosity compounds and investigation can close them later.
+            self._feed_gaps_to_curiosity(
+                (brief.get("world") or {}).get("gaps") or [], user_text)
         except Exception as exc:  # the door must never fail on context
             record.update({"delivered": False,
                            "delivery_reason": f"brief failed: {type(exc).__name__}: {exc}"})
@@ -325,6 +352,19 @@ class BeanieMind:
             )
         except Exception:
             pass
+
+    def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
+        """Phase 9: 'not yet in world model' → open unknowns. Best-effort;
+        curiosity never breaks the brief."""
+        if str(getattr(settings, "ARENA_CURIOSITY", "1")) == "0":
+            return
+        for gap in gaps[:6]:
+            try:
+                self.curiosity.register(
+                    str(gap), source="world_first_gap",
+                    context=str(user_text or "")[:120])
+            except Exception as exc:
+                app_logger.warning(f"Gap not registered as unknown (non-fatal): {exc}")
 
     def observe(
         self,

@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 366 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 367 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9 — the target architecture itself, all KEEP).
 
 ---
 
@@ -224,10 +224,17 @@ Per the roadmap's restructuring order, the first build step after this freeze:
    capabilities). Deterministic observation first; watching is never
    verification (success=None); every failure typed. 10 tests in
    `tests/test_media_learning.py`; 22 `/mind/*` endpoints total.
-9. **Open (roadmap order):** Phase 9 curiosity / exploration (the UNKNOWN
-   system — gaps surfaced by world-first briefs become drive); then M8
-   attention significance, M9 generalization eval, per the owner's
-   sequencing.
+9. ✅ **Phase 9 LIVE (2026-09-08)** — `curiosity.py`: the internal UNKNOWN
+   system. Brief gaps register automatically; topics normalize; encounters
+   compound; investigate = memory-first with the same evidence gate as the
+   learning loop; resolution paths counted (knowledge / investigation /
+   owner); no-evidence unknowns stay open; recurrences reopen. Fail-open +
+   kill switch (`ARENA_CURIOSITY=0`). 11 tests in
+   `tests/test_curiosity.py`; 25 `/mind/*` endpoints total.
+10. **Open (roadmap order):** Phase 10 reasoning and imagination
+    (deterministic simulation over the world model before acting); then M8
+    attention significance, M9 generalization eval, per the owner's
+    sequencing.
 
 ---
 

@@ -290,3 +290,36 @@ def mind_learn_media(body: MediaLearnIn) -> dict:
     existing LLM analysers. Watching is never counted as verification."""
     return BeanieMind.get_instance().media_learning.learn_from_media(
         body.target, focus=body.focus, context=body.context, deep=body.deep)
+
+
+# ── Phase 9: curiosity / the UNKNOWN system ────────────────────────────────
+@router.get("/mind/curiosity")
+def mind_curiosity(limit: int = Query(default=10, ge=1, le=100)) -> dict:
+    """What Beanie knows she doesn't know: open unknowns by priority
+    (encounters first, recency second) + the resolution ledger."""
+    mind = BeanieMind.get_instance()
+    return {"success": True, **mind.curiosity.stats(),
+            "top": mind.curiosity.curiosities(limit=limit)}
+
+
+class InvestigateIn(BaseModel):
+    topic: Optional[str] = None
+
+
+@router.post("/mind/curiosity/investigate")
+def mind_curiosity_investigate(body: InvestigateIn) -> dict:
+    """Investigate before asking: search her own memory for the top open
+    unknown (or a named one). Real evidence closes it; no evidence keeps it
+    open and names the next honest step."""
+    return BeanieMind.get_instance().curiosity.investigate(body.topic)
+
+
+class ResolveUnknownIn(BaseModel):
+    topic: str = Field(min_length=1, max_length=200)
+    answer: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/mind/curiosity/resolve")
+def mind_curiosity_resolve(body: ResolveUnknownIn) -> dict:
+    """The owner answers an open unknown."""
+    return BeanieMind.get_instance().curiosity.resolve(body.topic, body.answer)
