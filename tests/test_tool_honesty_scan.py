@@ -37,19 +37,31 @@ from app.tools.universal_filesystem import UniversalFilesystem
 # 1+2. app_inventory: honest launch + no blind command fallback
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_unmatched_short_query_is_not_blindly_executed():
+def test_unmatched_short_query_is_not_blindly_executed(monkeypatch):
     """'user accounts' (≤6 words, not installed, not on PATH) must be reported
-    as not found — not executed as a shell command that fails silently."""
-    SystemAppInventory._cached_apps = [
-        {"app_name": "totally unrelated app", "executable_path": "/bin/true",
-         "source_category": "test"}
-    ]
-    try:
-        result = SystemAppInventory.launch_any_app("user accounts")
-        assert result["success"] is False
-        assert "no installed application matches" in result["error"].lower()
-    finally:
-        SystemAppInventory._cached_apps = []
+    as not found — not executed as a shell command that fails silently.
+    The freshness rule (2026-09-08) rescans on a miss, so the scan is pinned
+    to a controlled inventory to keep the miss deterministic."""
+    import time
+
+    def fake_scan():
+        SystemAppInventory._cached_apps = [
+            {"app_name": "totally unrelated app", "executable_path": "/bin/true",
+             "source_category": "test"}
+        ]
+        SystemAppInventory._cache_ts = time.time()
+        return {"success": True, "total_apps_count": 1,
+                "applications": SystemAppInventory._cached_apps}
+
+    monkeypatch.setattr(SystemAppInventory, "scan_installed_applications", classmethod(
+        lambda cls: fake_scan()))
+    # Earlier tests may leave a fresh real-host cache; force the controlled
+    # rescan path so the miss is deterministic regardless of suite order.
+    SystemAppInventory._cached_apps = []
+    SystemAppInventory._cache_ts = 0.0
+    result = SystemAppInventory.launch_any_app("user accounts")
+    assert result["success"] is False
+    assert "no installed application matches" in result["error"].lower()
 
 
 def test_windows_start_failure_is_reported_not_swallowed():

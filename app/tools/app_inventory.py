@@ -48,9 +48,29 @@ class SystemAppInventory:
     Universal System Application Discovery & Enumeration Engine.
     Scans the entire host OS (Windows Start Menu/Registry, Linux .desktop/PATH, macOS /Applications, Android ADB)
     to enumerate every installed application, count them, and launch/operate ANY app on demand.
+
+    Freshness (owner requirement 2026-09-08): the inventory must reflect what
+    is installed NOW, not what was installed when the server started. The
+    cache expires (TTL) and ANY matching miss triggers one immediate rescan
+    before the tool admits an app is missing — a newly installed app must be
+    findable seconds after installation.
     """
 
     _cached_apps: List[Dict[str, Any]] = []
+    _cache_ts: float = 0.0
+    CACHE_TTL_S: float = 600.0  # rescan at most every 10 minutes
+
+    @classmethod
+    def _cache_age(cls) -> float:
+        import time as _time
+
+        return max(0.0, _time.time() - cls._cache_ts)
+
+    @staticmethod
+    def _normalize_name(name: str) -> str:
+        """Letters+digits only, lowercase — 'Richie TV' and 'RichieTV' and
+        'richie-tv' all fold to the same key."""
+        return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
     @classmethod
     def _init_db_table(cls):
@@ -202,6 +222,9 @@ class SystemAppInventory:
                     pass
 
         cls._cached_apps = list(discovered_apps.values())
+        import time as _time
+
+        cls._cache_ts = _time.time()
 
         # Save into SQLite table
         with db._get_connection() as conn:
@@ -231,6 +254,69 @@ class SystemAppInventory:
         if not cls._cached_apps:
             cls.scan_installed_applications()
         return len(cls._cached_apps)
+
+    FUZZY_THRESHOLD = 0.6       # auto-launch confidence
+    SUGGEST_THRESHOLD = 0.45    # worth showing as 'did you mean ...?'
+
+    @classmethod
+    def _match_app(cls, query_clean: str):
+        """Best match for an app query against the CURRENT cache.
+
+        Tiers: exact -> punctuation/space-insensitive exact -> query-inside-
+        app-name substring (MATCH DIRECTION MATTERS: 'firef' -> 'Mozilla
+        Firefox' is valid; a long sentence containing an app name is not) ->
+        fuzzy similarity (difflib on normalized names, tolerant of typos and
+        spelling drift like 'richst tv' -> 'Richie TV').
+
+        Returns (matched_app_or_None, close_matches_ranked) — close_matches
+        feed the honest 'which one did you mean?' ask on a total miss.
+        """
+        import difflib
+
+        query_norm = cls._normalize_name(query_clean)
+        if not query_norm:
+            return None, []
+
+        # Tier 1: exact name.
+        for item in cls._cached_apps:
+            if item["app_name"].lower() == query_clean:
+                return item, []
+
+        scored = []
+        for item in cls._cached_apps:
+            a_name = item["app_name"]
+            a_name_l = a_name.lower()
+            a_norm = cls._normalize_name(a_name)
+            # Tier 2: normalized exact ('richie tv' == 'RichieTV').
+            if a_norm == query_norm:
+                return item, []
+            # Tier 3: query inside the app name (short query, longer name).
+            if len(query_clean) <= len(a_name_l) and query_clean in a_name_l:
+                scored.append((1.0 - len(query_clean) / max(1, len(a_name_l)) * 0.1, item))
+                continue
+            # Tier 4: fuzzy similarity on normalized names.
+            ratio = difflib.SequenceMatcher(None, query_norm, a_norm).ratio()
+            # Token containment bonus: every query word appears in the name.
+            q_tokens = [t for t in query_clean.split() if t]
+            if q_tokens and all(t in a_name_l for t in q_tokens):
+                ratio = max(ratio, 0.75)
+            if ratio >= cls.SUGGEST_THRESHOLD:
+                scored.append((ratio, item))
+
+        if not scored:
+            return None, []
+        scored.sort(key=lambda ri: (-ri[0], ri[1]["app_name"].lower()))
+        best_score, best = scored[0]
+        close_matches = [it for _, it in scored[:3]]
+        if best_score < cls.FUZZY_THRESHOLD:
+            # Not confident enough to auto-launch — the top candidates still
+            # feed the honest 'which one did you mean?' ask.
+            return None, close_matches
+        app_logger.info(
+            f"Fuzzy app match: '{query_clean}' -> '{best['app_name']}' "
+            f"(score {best_score:.2f})"
+        )
+        return best, close_matches
 
     @classmethod
     def launch_any_app(cls, app_query: str) -> Dict[str, Any]:
@@ -263,25 +349,27 @@ class SystemAppInventory:
         if not allowed:
             return {"success": False, "error": f"Policy Blocked: {reason}", "authority_level": level}
 
-        # Search for exact or fuzzy match. MATCH DIRECTION MATTERS: a short
-        # app query matching inside a longer installed name is valid
-        # ('firef' -> 'Mozilla Firefox'), but a LONG query containing an app
-        # name is a sentence ('now in contrrol panel open user accounts'
-        # contains 'control panel') and must NOT match.
-        matched_app = None
-        for item in cls._cached_apps:
-            a_name = item["app_name"].lower()
-            if query_clean == a_name:
-                matched_app = item
-                break
+        matched_app, close_matches = cls._match_app(query_clean)
+
         if matched_app is None:
-            # Substring: only the QUERY inside the APP NAME (short query,
-            # longer installed name). Never the reverse.
-            for item in cls._cached_apps:
-                a_name = item["app_name"].lower()
-                if len(query_clean) <= len(a_name) and query_clean in a_name:
-                    matched_app = item
-                    break
+            # Owner requirement (2026-09-08): a miss may just mean the app was
+            # installed AFTER the last scan. Rescan NOW and retry before
+            # telling the owner it does not exist.
+            scan_res = cls.scan_installed_applications()
+            app_logger.info(
+                f"App '{app_query}' not in cached inventory — re-scanned "
+                f"({scan_res.get('total_apps_count', 0)} apps) and retried."
+            )
+            try:
+                from app.utils import decision_trace
+
+                decision_trace.record(
+                    "app_inventory", "miss_rescan_retry",
+                    f"query '{app_query[:60]}' missed; inventory rescanned live",
+                )
+            except Exception:
+                pass
+            matched_app, close_matches = cls._match_app(query_clean)
 
         if not matched_app:
             # Direct Command Fallback — but ONLY for queries that resolve to a
@@ -292,14 +380,25 @@ class SystemAppInventory:
                 query_clean if os.path.exists(query_clean) else None
             )
             if resolved is None:
+                # Honest ambiguity ask: name the closest installed apps so the
+                # owner can answer with one word.
+                suggestions = [c["app_name"] for c in (close_matches or [])[:3]]
+                detail = (
+                    f"Closest installed apps: {', '.join(suggestions)}. "
+                    "Which one did you mean?"
+                ) if suggestions else (
+                    "Nothing similar is installed. If you just installed it, "
+                    "tell me the exact name from its shortcut."
+                )
                 return {
                     "success": False,
                     "refused": True,
                     "app_name": query_clean,
+                    "close_matches": suggestions,
                     "error": (
-                        f"No installed application matches '{app_query}' and it does not "
-                        "resolve to an executable on PATH. It is probably not installed "
-                        "(or is not an app name)."
+                        f"No installed application matches '{app_query}' "
+                        f"(inventory re-scanned just now) and it does not "
+                        f"resolve to an executable on PATH. {detail}"
                     ),
                 }
             matched_app = {

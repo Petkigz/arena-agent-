@@ -167,6 +167,56 @@ def _no_media_playback_capability() -> bool:
     return True
 from app.cognition.execution_result import ExecutionResult, ExecutionStatus
 
+# ── App-name extraction (owner live test 2026-09-08) ─────────────────────
+# 'hey theres an app on my pc called richst tv open it' — the app name sat
+# BEFORE the verb, so the old verb-first regex captured 'it' and the agent
+# asked 'which application?'. Extraction now handles both orders plus the
+# 'called/named X' pattern.
+GENERIC_APP_WORDS = frozenset({
+    "app", "application", "the app", "it", "that", "them",
+    "please", "now", "something", "program", "software",
+})
+
+_VERB_TAIL_RE = re.compile(
+    r"\s+(?:open|launch|start|run|please|and|now|for me)\b.*$", re.I
+)
+_VERB_FIRST_RE = re.compile(
+    r"(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-.\s]+)",
+    re.I,
+)
+_CALLED_RE = re.compile(
+    r"\b(?:called|named)\s+([a-zA-Z0-9_\-.\s]+)", re.I
+)
+
+
+def extract_app_query(user_text: str) -> str:
+    """Extract the application name from an open/launch request. Returns ''
+    when nothing app-like is named (the caller asks, never guesses)."""
+    text = str(user_text or "").lower().strip()
+
+    def _acceptable(candidate: str) -> str:
+        candidate = _VERB_TAIL_RE.sub("", candidate or "").strip(" \"'.,!?")
+        if not candidate or candidate.strip() in GENERIC_APP_WORDS:
+            return ""
+        return candidate
+
+    # Pattern 1: '... called X' / '... named X' (name before the verb).
+    called = _CALLED_RE.search(text)
+    if called:
+        candidate = _acceptable(called.group(1))
+        if candidate:
+            return candidate
+
+    # Pattern 2: verb-first ('open firefox', 'launch the calculator').
+    verb = _VERB_FIRST_RE.search(text)
+    if verb:
+        candidate = _acceptable(verb.group(1))
+        if candidate:
+            return candidate
+
+    return ""
+
+
 class MasterAgentOrchestrator:
     """
     Unified Master Agent & All-in-One Autonomous Router.
@@ -203,16 +253,10 @@ class MasterAgentOrchestrator:
 
             app_name = payload.get("app_name") or payload.get("app") or payload.get("app_query") or payload.get("query")
             if not app_name:
-                match = re.search(r'(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-\s]+)', user_text.lower())
-                app_name = match.group(1).strip() if match else ""
-                # A capture that is ONLY a generic placeholder names nothing
-                # ('open the app' must not launch an app literally named
-                # 'app' — same invention family as the old explorer default).
-                if app_name.lower().strip() in {
-                    "app", "application", "the app", "it", "that", "them",
-                    "please", "now", "something",
-                }:
-                    app_name = ""
+                # Shared extraction (module level, tested directly): handles
+                # verb-first AND 'called/named X' orders, filters generic
+                # placeholders — never guesses a default app.
+                app_name = extract_app_query(user_text)
             if not app_name:
                 # P0 bottleneck #9: NEVER invent a default application. The
                 # old 'explorer' fallback turned an ambiguous request into a
