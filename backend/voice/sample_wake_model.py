@@ -23,11 +23,10 @@ import json
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 
-from app.utils.logger import app_logger
 
 _SAMPLE_RATE = 16000
 _N_MELS = 40

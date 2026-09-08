@@ -31,6 +31,18 @@ def pytest_terminal_summary(terminalreporter):
 # remove the variable locally.
 os.environ.setdefault("ARENA_LLM_DISABLED", "1")
 
+# ── Background-life hermeticity (owner live-test slice, 2026-09-08) ──────
+# The resurrection slice gives the server real background life: scheduled
+# parked-goal re-checks, dashboard auto-open, the desktop screen watcher,
+# and the decision-trace file. Left on during tests they reach into
+# unrelated test state (a re-check runs a full cognitive cycle mid-test;
+# the trace file lands in the repo). CI's fresh DB made this visible.
+# The features themselves stay ON for the owner (config defaults "1").
+os.environ.setdefault("ARENA_PARKED_RECHECK", "0")
+os.environ.setdefault("ARENA_AUTO_OPEN_DASHBOARD", "0")
+os.environ.setdefault("ARENA_DECISION_TRACE", "0")
+os.environ.setdefault("ARENA_SCREEN_WATCHER", "0")
+
 
 @pytest.fixture(autouse=True)
 def _reset_interpreter_domain_cache():
