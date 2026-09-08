@@ -7,8 +7,26 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–16 ✅ complete.**
-Phase 16 (social intelligence) is LIVE: `app/mind/social.py` — the
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–17 ✅ complete.**
+Phase 17 (personality development) is LIVE: `app/mind/personality.py` —
+the developing personality, never a hard-coded mask. Basic identity
+(Phase-1 record) plus traits DERIVED from her real ledgers with evidence
+and observation counts: experience profile, epistemic calibration
+(confirmed/refuted), curiosity stance, her OWN communication pattern
+(reply samples at the door — ≥5 to describe, ≥10 for an early-vs-late
+trend), values learned from the owner (explicit statements only — never
+system morals), adaptation to the owner's measured style. An empty life =
+basic identity + honest "no traits yet." `derive()` snapshots + diffs:
+`changes()` is the verifiable record of "Beanie has changed." Live-
+verified: empty → trait formed → changed → stable, all from ledger
+evidence. Describing herself performs nothing (`acted: False`). The self
+room gains an additive personality surface (Phase-1 pin preserved).
+Owner-visible: `GET /mind/personality`, `POST /mind/personality/derive`.
+Kill switch `ARENA_PERSONALITY=0`. Guarded by
+`tests/test_mind_personality.py` (16 tests).
+
+Earlier in this gate: Phase 16 (social intelligence) LIVE —
+`app/mind/social.py` — the
 persistent owner relationship model. Facets from what the owner SAID only
 (explicit markers, evidence on every facet): preferences, boundaries
 (recorded exactly as said), emotion cues, people (registered in the

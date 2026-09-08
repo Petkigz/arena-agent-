@@ -522,3 +522,24 @@ def mind_social_note(body: SocialNoteIn) -> dict:
     """Extract owner-model facets from one utterance (preferences,
     boundaries, emotion cues, people, interests). Listening never acts."""
     return BeanieMind.get_instance().social.note(body.text)
+
+
+# ── Phase 17: personality development ──────────────────────────────────────
+@router.get("/mind/personality")
+def mind_personality_profile() -> dict:
+    """The developing personality: basic identity plus traits derived from
+    her real ledgers — experiences, calibration, curiosity, her own reply
+    patterns, the owner's values, adaptation. Nothing invented."""
+    p = BeanieMind.get_instance().personality
+    return {"success": True, "profile": p.profile(),
+            "values": p.values(),
+            "communication": p.communication_patterns(),
+            "changes": p.changes()}
+
+
+@router.post("/mind/personality/derive")
+def mind_personality_derive() -> dict:
+    """Re-derive the profile from the ledgers now, snapshot it, and report
+    what changed since the last snapshot — the verifiable record of
+    'Beanie has changed'."""
+    return BeanieMind.get_instance().personality.derive()

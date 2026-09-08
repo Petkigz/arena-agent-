@@ -651,6 +651,27 @@ relationship model.
 
 ## Phase 17 — Personality Development
 
+> ✅ **LIVE 2026-09-08:** `app/mind/personality.py` — the developing
+> personality; never a hard-coded mask. The profile is DERIVED on demand
+> from her real ledgers: basic identity (the Phase-1 BeanieIdentity record
+> — what she starts from) plus traits that only exist with evidence:
+> experience profile (learning ledger), epistemic calibration (imagination
+> confirmed-vs-refuted), curiosity stance (open/resolved unknowns), her OWN
+> communication pattern (replies sampled at the door — ≥5 samples to
+> describe it, ≥10 to claim an early-vs-late trend: measurable change),
+> values learned from the owner (explicit statements only — the owner's
+> values only, never system morals), and adaptation to the owner's measured
+> style (Phase 16). An empty life yields the basic identity and the honest
+> statement that no traits formed yet. `derive()` snapshots the profile and
+> diffs it against the previous snapshot — `changes()` is the verifiable
+> record of "Beanie has changed" (live-verified: trait formed → changed →
+> stable). The state skeleton's self room gains an additive personality
+> surface (Phase-1 identity pin preserved). Owner-visible:
+> `GET /mind/personality`, `POST /mind/personality/derive` (45 `/mind/*`
+> paths; 48 routes). Kill switch `ARENA_PERSONALITY=0` gates the door
+> pass; the owner surface keeps working. Guarded by
+> `tests/test_mind_personality.py` (16 tests).
+
 Don't hard-code the personality forever. Start with a basic identity. Then:
 interactions → experiences → preferences → communication patterns → values
 learned from owner → personality development. You should eventually be able to

@@ -42,6 +42,7 @@ from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
+from app.mind.personality import Personality
 from app.mind.social import Social
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
@@ -96,6 +97,7 @@ class BeanieMind:
         self._attention: Optional[Attention] = None
         self._motivation: Optional[Motivation] = None
         self._social: Optional[Social] = None
+        self._personality: Optional[Personality] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -338,6 +340,17 @@ class BeanieMind:
                 self._social = Social(self)
             return self._social
 
+    @property
+    def personality(self) -> Personality:
+        """Phase 17: the developing personality — basic identity plus
+        traits derived from her real ledgers (experiences, calibration,
+        curiosity, her own reply patterns, the owner's values, adaptation).
+        Describes observed behavior; performs nothing."""
+        with self._lock:
+            if self._personality is None:
+                self._personality = Personality(self)
+            return self._personality
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -373,6 +386,7 @@ class BeanieMind:
             **cycle_kwargs,
         )
         self._learn_from_cycle(user_text, modality, result)
+        self._run_personality(user_text, result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -499,6 +513,23 @@ class BeanieMind:
             self.social.note(user_text)
         except Exception as exc:
             app_logger.warning(f"Social pass skipped (non-fatal): {exc}")
+
+    def _run_personality(self, user_text: str, result: Any) -> None:
+        """Phase 17: the owner's words may carry values (owner's values
+        only), and her own reply is a sample of her communication pattern.
+        Both become evidence for the developing personality. Best-effort;
+        never fails the task."""
+        if str(getattr(settings, "ARENA_PERSONALITY", "1")) == "0":
+            return
+        try:
+            self.personality.note(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Personality value pass skipped (non-fatal): {exc}")
+        try:
+            if isinstance(result, dict):
+                self.personality.record_reply(result.get("assistant_reply"))
+        except Exception as exc:
+            app_logger.warning(f"Reply sample skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

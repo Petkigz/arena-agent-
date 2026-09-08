@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 374 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 375 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 — the target architecture itself, all KEEP).
 
 ---
 
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–16 are LIVE (Phases 1–16 complete).**
+**Status 2026-09-08: steps 1–17 are LIVE (Phases 1–17 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -288,12 +288,24 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     People register in the Phase-5 social store with provenance. Kill
     switch `ARENA_SOCIAL=0`. 15 tests in `tests/test_mind_social.py`;
     43 `/mind/*` paths (46 routes) total.
-17. **Open (roadmap order):** Phase 17 personality development (basic
-    identity → interactions → experiences → preferences → communication
-    patterns → values), then owner authority / self-reflection /
-    self-improvement / model evolution / voice-first UI / one-mind
-    desktop+Android, and M9 generalization eval (P24), per the owner's
-    sequencing.
+17. ✅ **Phase 17 LIVE (2026-09-08)** — `personality.py`: the developing
+    personality, never a hard-coded mask. Basic identity (Phase-1
+    BeanieIdentity) plus traits DERIVED from her real ledgers with evidence
+    and observation counts: experience profile (learning ledger), epistemic
+    calibration (imagination confirmed/refuted), curiosity stance, her OWN
+    communication pattern (reply samples at the door, ≥5 to describe,
+    ≥10 for an early-vs-late trend), values learned from the owner
+    (explicit value statements only — the owner's values, never system
+    morals), adaptation to the owner's measured style (Phase 16). `derive()`
+    snapshots and diffs: `changes()` is the verifiable record of "Beanie
+    has changed." Kill switch `ARENA_PERSONALITY=0`. 16 tests in
+    `tests/test_mind_personality.py`; 45 `/mind/*` paths (48 routes) total.
+18. **Open (roadmap order):** Phase 18 owner authority (always allowed /
+    ask first / never do — typed `requires_owner_approval` answered
+    conversationally; risk patterns decide WHEN to ask), then
+    self-reflection / self-improvement / model evolution / voice-first UI
+    / one-mind desktop+Android, and M9 generalization eval (P24), per the
+    owner's sequencing.
 
 ---
 

@@ -121,6 +121,15 @@ class BeanieState:
                 data["capabilities_by_safety_level"] = caps.get("by_safety_level")
             except Exception:
                 pass
+            # Phase 17: the developing personality — identity plus traits
+            # derived from evidence (additive; the Phase-1/4 keys above
+            # keep their contract).
+            try:
+                personality = self.mind.personality.snapshot()
+                if personality:
+                    data["personality"] = personality
+            except Exception:
+                pass
         probed = _probe(getattr(rt, "self_model", None))
         if probed:
             data["self_model"] = probed

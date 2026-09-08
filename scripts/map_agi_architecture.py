@@ -183,8 +183,9 @@ OVERRIDES = {
         "compat aliases (PipelineBridge); stop building on it"),
     "app/memory/coworker_brain.py": (
         "mind/identity", "INTEGRATE", "AUTHORITY",
-        "persona string only — the seed of 'I am Beanie'; must become a real "
-        "identity record inside the Mind"),
+        "persona string only — the seed of 'I am Beanie'; superseded as the "
+        "identity record by BeanieIdentity (Phase 1), which Phase 17 uses "
+        "as the basic identity its derived personality starts from"),
     "app/agents/master_agent.py": (
         "embodiment/action-execution", "DEMOTE", "AUTHORITY",
         "action executor (hands); must not be perceived as a brain"),
@@ -241,7 +242,9 @@ OVERRIDES = {
         "models/self", "MERGE", "SELF", ""),
     "app/cognition/identity_adaptation.py": (
         "models/self", "MERGE", "SELF",
-        "owner-governed identity adaptation — personality-development seed"),
+        "owner-governed identity adaptation — personality-development seed; "
+        "Phase 17 built the authoritative derived-personality organ "
+        "app/mind/personality.py"),
     "app/cognition/self_recovery.py": (
         "models/self", "MERGE", "SELF", ""),
     "app/api/self_awareness.py": (
@@ -659,6 +662,13 @@ OVERRIDES = {
         "said, routines/style/history MEASURED from the door ledger and "
         "claimed only with enough evidence; never pretends to be human, "
         "never cold-reads"),
+    "app/mind/personality.py": (
+        "mind/personality", "KEEP", "PERSONALITY",
+        "Phase 17 LIVE: the DEVELOPING personality — basic identity plus "
+        "traits derived from her real ledgers (experiences, calibration, "
+        "curiosity, her own reply patterns, the owner's values only, "
+        "adaptation); derive() snapshots + diffs = the verifiable record "
+        "of 'Beanie has changed'; describes, performs nothing"),
     "app/cognition/social_cognition.py": (
         "learning/social", "INTEGRATE", "SOCIAL",
         "Phase 16 seed (mental-state/emotion/relationship engine); the "

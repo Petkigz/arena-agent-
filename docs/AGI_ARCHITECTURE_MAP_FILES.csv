@@ -8,7 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,,,Phase 20 material: one mechanism of self-improvement
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
-app/api/mind.py,524,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
+app/api/mind.py,545,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -92,7 +92,7 @@ app/cognition/goal_replanner.py,263,mind/decision,INTEGRATE,PLANNERS,Goal Reasse
 app/cognition/goal_verifier.py,873,mind/cognition-core,KEEP,,Goal Verification Engine.,
 app/cognition/guard_visibility.py,155,mind/cognition-core,KEEP,,"Guard-refusal visibility (owner vision charter §6, raw-input item).",charter §6
 app/cognition/hypotheses.py,142,mind/reasoning,INTEGRATE,BELIEF,Bounded competing hypotheses for evidence-driven reasoning.,
-app/cognition/identity_adaptation.py,1066,models/self,MERGE,SELF,Owner-governed identity adaptation and purpose proposals.,owner-governed identity adaptation — personality-development seed
+app/cognition/identity_adaptation.py,1066,models/self,MERGE,SELF,Owner-governed identity adaptation and purpose proposals.,owner-governed identity adaptation — personality-development seed; Phase 17 built the authoritative derived-personality organ app/mind/personality.py
 app/cognition/identity_continuity.py,79,models/self,MERGE,SELF,Restart-aware continuity checks for Arena's functional identity state.,
 app/cognition/incubation_queue.py,556,mind/imagination,KEEP,,"Owner-visible, bounded incubation queue for safe background reasoning.",bounded background reasoning
 app/cognition/inference_profile.py,370,infrastructure/inference,KEEP,,Owner-managed local inference profile with measured recommendations.,
@@ -165,20 +165,20 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,69,infrastructure/config,KEEP,,,
+app/config.py,70,infrastructure/config,KEEP,,,
 app/database.py,465,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,771,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
 app/main.py,3224,infrastructure/entry,KEEP,,,127 core REST routes
 app/memory/__init__.py,0,memory,INTEGRATE,,,memory subsystem; folds into the unified memory facade
-app/memory/coworker_brain.py,109,mind/identity,INTEGRATE,AUTHORITY,,persona string only — the seed of 'I am Beanie'; must become a real identity record inside the Mind
+app/memory/coworker_brain.py,109,mind/identity,INTEGRATE,AUTHORITY,,"persona string only — the seed of 'I am Beanie'; superseded as the identity record by BeanieIdentity (Phase 1), which Phase 17 uses as the basic identity its derived personality starts from"
 app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
-app/mind/__init__.py,42,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/__init__.py,44,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
 app/mind/attention.py,350,mind/attention,KEEP,ATTENTION,Attention — Phase 14 (Beanie AGI roadmap): M8 attention significance.,"Phase 14 LIVE (M8): the arbitrator between perception and thought — roadmap ladder from evidence on the record, repeats demoted, watermark review, one open unknown surfaced when quiet, popup-over-task advisory; decides only, never acts"
-app/mind/beanie_mind.py,626,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/beanie_mind.py,657,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
 app/mind/curiosity.py,304,mind/curiosity,KEEP,CURIOSITY,CuriosityEngine — Phase 9 (Beanie AGI roadmap): the internal UNKNOWN,"Phase 9 LIVE: the internal UNKNOWN system — brief gaps become records, encounters compound, investigation searches memory first, resolution paths counted (knowledge/investigation/owner)"
 app/mind/embodiment.py,247,mind/motor,KEEP,EMBODIMENT,Embodiment — Phase 11 (Beanie AGI roadmap): the existing capabilities,"Phase 11 LIVE: the 184 capabilities as her motor system — concepts in, ranked pathways out (plans only, never execution); authority surfaced, motor gaps become unknowns"
 app/mind/identity.py,201,mind/identity,KEEP,AUTHORITY,"BeanieIdentity — the ""I am Beanie"" record (MISSING item M1, Phase 1).",Phase 1 LIVE: 'I am Beanie' as persisted state (M1)
@@ -189,9 +189,10 @@ app/mind/memory_facade.py,298,memory,KEEP,MEMORY,"UnifiedMemory — Phase 5 (Bea
 app/mind/motivation.py,447,mind/motivation,KEEP,MOTIVATION,"Motivation — Phase 15 (Beanie AGI roadmap): goals from evidence, never","Phase 15 LIVE: goals from evidence only (open unknowns, parked goals, owner speech, attention verdicts, verified failures, learned rhythms) — relevance as named contributions, recurrence compounds, proposals are questions (acted: False), accepted goals execute through the normal door under owner authority"
 app/mind/os_concepts.py,291,mind/motor,KEEP,EMBODIMENT,OSConceptLayer — Phase 12 (Beanie AGI roadmap): true OS-level,"Phase 12 LIVE (M10): ONE platform-free concept layer over all bodies — express/transfer/coverage from the live manifest by evidence; no per-OS intelligence, gaps visible not fabricated"
 app/mind/perception.py,242,mind/perception,KEEP,SENSES,Perception — Phase 13 (Beanie AGI roadmap): continuous perception.,"Phase 13 LIVE: the SENSE side — typed perceptions over eight channels, significance judged (urgency/novelty/curiosity) with reasons, silent-watcher changes ingested; perception ≠ belief ≠ action"
+app/mind/personality.py,384,mind/personality,KEEP,PERSONALITY,"Personality — Phase 17 (Beanie AGI roadmap): a personality that develops,","Phase 17 LIVE: the DEVELOPING personality — basic identity plus traits derived from her real ledgers (experiences, calibration, curiosity, her own reply patterns, the owner's values only, adaptation); derive() snapshots + diffs = the verifiable record of 'Beanie has changed'; describes, performs nothing"
 app/mind/self_facade.py,224,models/self,KEEP,SELF,SelfModelFacade — Phase 4 (Beanie AGI roadmap): a genuine self model.,Phase 4 LIVE: genuine self-assessment (knowledge/confidence/possible_actions) + capability awareness (authority ≠ intelligence)
 app/mind/social.py,323,mind/social,KEEP,SOCIAL,Social — Phase 16 (Beanie AGI roadmap): the persistent owner model.,"Phase 16 LIVE: the persistent OWNER relationship model — facets (preference/boundary/emotion/interest/person) from what the owner said, routines/style/history MEASURED from the door ledger and claimed only with enough evidence; never pretends to be human, never cold-reads"
-app/mind/state.py,331,mind/cognition-core,KEEP,STATE,"BeanieState — the unified internal-state skeleton (MISSING item M2, Phase 1).","Phase 1 LIVE: BeanieState skeleton — 15 rooms, honestly marked (M2)"
+app/mind/state.py,340,mind/cognition-core,KEEP,STATE,"BeanieState — the unified internal-state skeleton (MISSING item M2, Phase 1).","Phase 1 LIVE: BeanieState skeleton — 15 rooms, honestly marked (M2)"
 app/mind/teaching.py,336,mind/learning,KEEP,LEARNING,DemonstrationTeaching — Phase 7 (Beanie AGI roadmap): learning from the,Phase 7 LIVE: conversation is the teaching interface ('watch this') — M7 resolved; confirmed procedures integrate the taught-skills store and enter the Phase-6 loop as verified demonstrations
 app/mind/world_facade.py,274,models/world,KEEP,WORLD,WorldModelFacade — Phase 3 (Beanie AGI roadmap): reasoning ABOUT the world.,Phase 3 LIVE: ontology + pre-action understanding over the existing WorldModel (the verification-side store stays authoritative)
 app/mind/world_first.py,188,mind/reasoning,KEEP,TOOL-FIRST,WorldFirstReasoning — Phase 2 (Beanie AGI roadmap): world-first thinking.,Phase 2 LIVE: world-first brief (world → self → memory) assembled before capability identification — the tool_matcher demotion's counterpart (M6 consumption resolved)
@@ -365,7 +366,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,793,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,803,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

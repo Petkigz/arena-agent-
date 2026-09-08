@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     ARENA_ATTENTION: str = "1"  # "0" disables Phase-14 attention arbitration at the mind door
     ARENA_MOTIVATION: str = "1"  # "0" disables Phase-15 motivation refresh at the mind door
     ARENA_SOCIAL: str = "1"  # "0" disables Phase-16 owner-model pass at the mind door
+    ARENA_PERSONALITY: str = "1"  # "0" disables Phase-17 personality evidence pass at the mind door
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard
