@@ -81,12 +81,26 @@ def _log_elevation_status(is_elevated=None, platform=None, logger=None) -> None:
         is_elevated = _windows_is_elevated()
     log = logger or app_logger
     if is_elevated:
-        log.warning(
-            "Arena is running ELEVATED (administrator). No feature requires "
-            "admin rights, and every file/OS-control action — including "
-            "mistakes — would execute with full system access. Recommended: "
-            "restart from a normal (non-elevated) PowerShell."
-        )
+        try:
+            acknowledged = str(getattr(settings, "ARENA_ELEVATED_ACKNOWLEDGED", "0")) == "1"
+        except Exception:
+            acknowledged = False
+        if acknowledged:
+            # Owner decision (2026-09-08): elevated operation is intended —
+            # the agent acts with the owner's full authority on purpose.
+            log.info(
+                "Arena is running ELEVATED (administrator) — acknowledged by "
+                "owner policy (ARENA_ELEVATED_ACKNOWLEDGED=1). Actions execute "
+                "with this machine's full authority by design."
+            )
+        else:
+            log.warning(
+                "Arena is running ELEVATED (administrator). No feature requires "
+                "admin rights, and every file/OS-control action — including "
+                "mistakes — would execute with full system access. Recommended: "
+                "restart from a normal (non-elevated) PowerShell, or set "
+                "ARENA_ELEVATED_ACKNOWLEDGED=1 if elevated operation is intended."
+            )
     else:
         log.info(
             "Arena is running with standard user privileges (recommended) — "

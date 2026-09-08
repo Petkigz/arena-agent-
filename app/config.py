@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     ARENA_SCREEN_WATCHER: str = "1"  # "0" disables the desktop-awareness probe (screenshots stay local)
     ARENA_PARKED_RECHECK: str = "1"  # "0" disables automatic re-checks of parked goals
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
+    CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
+    ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard
+    ARENA_ELEVATED_ACKNOWLEDGED: str = "0"  # "1" = owner accepts elevated operation; warning becomes INFO
     ARENA_EMBEDDING_URL: str = ""  # LM Studio base URL for real embeddings (optional)
     ARENA_EMBEDDING_MODEL: str = ""  # e.g. text-embedding-nomic-embed-text-v1.5
     # Uncertainty questions (F1.2): low calibrated confidence asks the owner.

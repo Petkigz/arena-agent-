@@ -76,6 +76,21 @@ Your built `frontend\dist` is untracked, so it survives the reset. (Anything
 you changed locally and did not commit is gone — the clone is not meant to
 hold local edits.)
 
+## 1c. Owner operating choices (baked into config)
+
+- **Elevated is intended:** run from the admin PowerShell if that's how you
+  want it. Set `set ARENA_ELEVATED_ACKNOWLEDGED=1` before starting and the
+  warning becomes a plain INFO line — no nagging.
+- **Model lanes (your plan):** conversational → the fast lane (3b-class),
+  heavy work → the main lane (best general loaded, e.g. 9b), coding tasks →
+  the loaded code specialist. Pin a coder with `set CODE_MODEL=<loaded id>`
+  or leave `auto` (biggest loaded *coder is picked only for code tasks; it
+  can no longer hijack chat).
+- **"Working on it" is banned:** if it didn't actually run anything, it must
+  say so and ask you to say "do it". If it ran something that did NOT verify,
+  the reply carries the real verification status — a "done" claim can never
+  stand alone against the machine's evidence.
+
 ## 2. Start it
 
 ```bash

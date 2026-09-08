@@ -42,6 +42,7 @@ os.environ.setdefault("ARENA_PARKED_RECHECK", "0")
 os.environ.setdefault("ARENA_AUTO_OPEN_DASHBOARD", "0")
 os.environ.setdefault("ARENA_DECISION_TRACE", "0")
 os.environ.setdefault("ARENA_SCREEN_WATCHER", "0")
+os.environ.setdefault("ARENA_ANNOUNCEMENT_GUARD", "0")
 
 
 @pytest.fixture(autouse=True)

@@ -365,6 +365,27 @@ class LocalLLMClient:
             pass
         return chosen
 
+    def select_loaded_code_model(self, loaded: Optional[List[str]]) -> Optional[str]:
+        """Best loaded CODE specialist for code routes (owner model plan
+        2026-09-08: coder for coding tasks, general models for everything
+        else). Ranked by full parameter count (no chat-tuning bonus — a
+        code specialist IS the point here), ties by lexicographic id.
+        None when no code specialist is loaded -> caller uses the main lane."""
+        candidates = []
+        for m in (loaded or []):
+            lower = str(m).lower()
+            if "coder" in lower or "-code" in lower or "code-" in lower:
+                params = 0.0
+                for token in re.split(r"[^a-z0-9.]+", lower):
+                    mm = re.fullmatch(r"(\d+(?:\.\d+)?)b", token)
+                    if mm:
+                        params = float(mm.group(1))
+                        break
+                candidates.append((params, str(m)))
+        if not candidates:
+            return None
+        return sorted(candidates, key=lambda pc: (-pc[0], pc[1]))[0][1]
+
     def _resolve_model(
         self, requested: str, role: str = "main",
     ) -> "Tuple[str, Optional[Dict[str, Any]]]":
@@ -413,6 +434,8 @@ class LocalLLMClient:
             return settings.FAST_MODEL
         elif request_complexity == "main":
             return settings.MAIN_MODEL
+        elif request_complexity == "code":
+            return settings.CODE_MODEL
         return request_complexity
 
     def set_model_override(self, model: Optional[str]) -> None:
@@ -456,6 +479,37 @@ class LocalLLMClient:
         """
         requested_model = self.route_request(complexity)
         role = complexity if complexity in ("fast", "main") else "main"
+        if complexity == "code":
+            # Owner model plan (2026-09-08): coding tasks go to the loaded
+            # code specialist. CODE_MODEL pins one; "auto" picks the biggest
+            # loaded coder; no coder loaded -> honest main-lane fallback.
+            role = "main"
+            pinned = str(getattr(settings, "CODE_MODEL", "auto") or "auto").strip()
+            if pinned.lower() not in ("", "auto"):
+                requested_model = pinned
+            else:
+                code_pick = self.select_loaded_code_model(self.list_loaded_models())
+                if code_pick:
+                    requested_model = code_pick
+                    app_logger.info(
+                        f"Code lane: using code specialist '{code_pick}' "
+                        f"(set CODE_MODEL to a loaded id to pin one)."
+                    )
+                    try:
+                        from app.utils import decision_trace
+
+                        decision_trace.record(
+                            "model_lane", "code_lane",
+                            "coding task routed to the loaded code specialist",
+                            model=code_pick,
+                        )
+                    except Exception:
+                        pass
+                else:
+                    requested_model = settings.MAIN_MODEL
+                    app_logger.info(
+                        "Code lane: no code specialist loaded; using the main lane."
+                    )
         if str(requested_model or "").strip().lower() in ("", "auto"):
             # MAIN_MODEL/FAST_MODEL=auto: scan the loaded models and use
             # the best one for the route (role-scored). Observable as a

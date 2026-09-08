@@ -712,6 +712,27 @@ class CognitiveRuntime:
         )
         return goal_rep.primary_intent_type
 
+    # Owner model plan (2026-09-08): coder for coding tasks, 3b-class for
+    # conversation, best general for heavy work. These action types ARE
+    # coding work regardless of phrasing.
+    _CODE_ACTION_TYPES = {
+        "local_execute", "evaluate_pure_code", "write_code",
+        "code_execution", "execute_code", "git_commit",
+    }
+
+    _CODE_TASK_RE = re.compile(
+        r"\b(code|script|program|function|debug|refactor|compile|python|"
+        r"javascript|typescript|regex|algorithm|bash script|powershell script|"
+        r"sql query|write me an app|fix the bug|unit test)\b",
+        re.I,
+    )
+
+    @staticmethod
+    def _looks_like_code_task(user_text: str) -> bool:
+        """Deterministic coding-task detection for the model lane (cheap,
+        no LLM): the owner routes code work to the code specialist."""
+        return bool(CognitiveRuntime._CODE_TASK_RE.search(str(user_text or "")))
+
     def generate_candidate_action_proposal(self, user_text: str, complexity: str = "fast", goal_rep: Optional[Any] = None) -> ActionProposal:
         from app.cognition.action_planner import ActionPlanner
         res = ActionPlanner.plan_and_evaluate_action(
@@ -3156,6 +3177,19 @@ class CognitiveRuntime:
 
         if isinstance(result, dict):
             result = dict(result)
+            # Completion honesty (owner live test 2026-09-08): a finished
+            # cycle may never promise unexecuted work or claim an outcome
+            # the machine did not verify.
+            try:
+                from app.cognition.completion_honesty import enforce_completion_honesty
+
+                result = enforce_completion_honesty(result)
+                if result.get("announcement_guard") and result.get("trace_id"):
+                    CognitiveTrace.update_persisted_reply(
+                        str(result["trace_id"]), str(result.get("assistant_reply") or "")
+                    )
+            except Exception as exc:
+                app_logger.warning(f"Completion-honesty guard skipped: {exc}")
             result["due_reminders"] = due_reminders
             result["conversation_turn"] = conversation_turn
             if due_reminders:
@@ -3660,6 +3694,25 @@ class CognitiveRuntime:
             "correction_outcome": "pending_verification",
         }
 
+        # Owner model plan (2026-09-08): the reply/plan generation lane for
+        # coding tasks is the code specialist (see llm.py code lane).
+        task_kind = "code" if (
+            self._looks_like_code_task(user_text)
+            or (forced_proposal is not None and forced_proposal.action_type in self._CODE_ACTION_TYPES)
+        ) else ""
+        if task_kind == "code":
+            app_logger.info("Code task detected: reply generation uses the code lane.")
+            try:
+                from app.utils import decision_trace
+
+                decision_trace.record(
+                    "model_lane", "code_task_detected",
+                    "coding task (text heuristic or code action)",
+                    user_text=user_text[:160],
+                )
+            except Exception:
+                pass
+
         # 5. DECISION ROUTER (100% Authoritative ReasoningAction Routing):
         # Branch A: ANSWER / Direct Conversational Q&A
         if reasoning_action == ReasoningAction.ANSWER:
@@ -3810,7 +3863,8 @@ class CognitiveRuntime:
             # evidence and answering need very different room to think.
             from app.llm import output_budget
             llm_res = llm_client.generate_chat_completion(
-                messages=messages, complexity=complexity,
+                messages=messages,
+                complexity=("code" if task_kind else complexity),
                 max_tokens=output_budget(
                     "evidence_answer" if observation_evidence else "conversational",
                     complexity,
@@ -4055,7 +4109,8 @@ class CognitiveRuntime:
             # Investigation produced evidence; the reply reconciles it.
             from app.llm import output_budget
             llm_res = llm_client.generate_chat_completion(
-                messages=messages, complexity=complexity,
+                messages=messages,
+                complexity=("code" if task_kind else complexity),
                 max_tokens=output_budget("evidence_answer", complexity),
             )
             assistant_reply = llm_res.get("choices", [{}])[0].get("message", {}).get("content", investigation_summary)

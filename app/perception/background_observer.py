@@ -305,14 +305,21 @@ class BackgroundObserver:
 # unavailable instead of pretending.
 
 class ScreenProbe(EnvironmentProbe):
-    """Periodic local desktop capture -> 'screen' state + change events."""
+    """Periodic local desktop capture -> 'screen' state + change events.
+
+    Resource-light by design (owner decision 2026-09-08: keep vision only
+    while it is cheap — process probes stay the continuous layer):
+    captures land in MEMORY, only a hash is kept per cycle, and a PNG is
+    written ONLY when the screen actually changed. Default cadence is one
+    grab per 5 minutes; retention is 5 changed shots."""
 
     name = "screen"
-    KEEP_LAST = 20  # prune old watch captures so the disk never fills
+    KEEP_LAST = 5   # keep only the last few CHANGED shots
+    DEFAULT_MIN_INTERVAL_S = 300.0
 
     def __init__(
         self,
-        min_interval_s: float = 60.0,
+        min_interval_s: float = DEFAULT_MIN_INTERVAL_S,
         output_dir: Optional[Any] = None,
         capturer: Optional[Callable[[], Optional[Dict[str, Any]]]] = None,
     ) -> None:
@@ -322,14 +329,13 @@ class ScreenProbe(EnvironmentProbe):
         self._output_dir = Path(output_dir) if output_dir else None
         self._capturer = capturer
         self._unavailable_reason = ""
+        self._last_saved_hash = ""
+        self._last_saved_path = ""
 
     def _default_capture(self) -> Optional[Dict[str, Any]]:
         try:
-            import hashlib
-
-            import mss
-            from PIL import Image
-        except ImportError as exc:
+            png_bytes, digest, width, height = self._grab_bytes()
+        except Exception as exc:
             self._unavailable_reason = f"{type(exc).__name__}: {exc}"
             return None
         try:
@@ -340,18 +346,26 @@ class ScreenProbe(EnvironmentProbe):
                 out_dir = Path(settings.DATA_DIR) / "workspace" / "screenshots"
             out_dir = Path(out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
-            path = out_dir / f"watch_{int(time.time())}.png"
-            with mss.mss() as sct:
-                shot = sct.grab(sct.monitors[1])
-                img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
-                img.save(path)
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+            # In-memory grab: hash first, write only when the screen changed.
+            if digest == self._last_saved_hash and self._last_saved_path:
+                # Screen unchanged: keep the existing file, no disk write,
+                # return the SAME state so no change event fires.
+                return {
+                    "path": self._last_saved_path,
+                    "sha256_16": digest,
+                    "width": width,
+                    "height": height,
+                }
+            path = out_dir / f"watch_{int(time.time())}_{digest[:8]}.png"
+            path.write_bytes(png_bytes)
             self._prune(out_dir)
+            self._last_saved_hash = digest
+            self._last_saved_path = str(path)
             return {
                 "path": str(path),
                 "sha256_16": digest,
-                "width": int(shot.size[0]),
-                "height": int(shot.size[1]),
+                "width": width,
+                "height": height,
             }
         except Exception as exc:
             self._unavailable_reason = f"{type(exc).__name__}: {exc}"
@@ -365,6 +379,24 @@ class ScreenProbe(EnvironmentProbe):
                 old.unlink(missing_ok=True)
         except Exception:
             pass
+
+    def _grab_bytes(self):
+        """One raw screen grab as PNG bytes + size. Separated so tests can
+        stub the display access."""
+        import hashlib as _hashlib
+        import io as _io
+
+        import mss
+        from PIL import Image
+
+        with mss.mss() as sct:
+            shot = sct.grab(sct.monitors[1])
+            img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+        buffer = _io.BytesIO()
+        img.save(buffer, format="PNG", optimize=False)
+        png_bytes = buffer.getvalue()
+        digest = _hashlib.sha256(png_bytes).hexdigest()[:16]
+        return png_bytes, digest, int(shot.size[0]), int(shot.size[1])
 
     def probe(self) -> Dict[str, Any]:
         now = time.time()
