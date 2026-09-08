@@ -57,6 +57,25 @@ Start **LM Studio** with your model loaded (default it listens on
 
 ---
 
+## 1b. If checkout shows `D` lines or import fails with ModuleNotFoundError
+
+If `git checkout` prints a list of `D <file>` lines, or the server dies with
+`ModuleNotFoundError: No module named 'app...'` for a file that exists on
+GitHub, your local working tree is damaged (crashed runs can leave files
+deleted locally; `git pull` never restores local deletions). Force the disk
+to match the branch exactly:
+
+```powershell
+git fetch origin
+git reset --hard origin/arena/01a07c3e-arena-agent
+git status          # must print nothing — no D lines
+python -c "import app.server; print('import OK')"   # pre-flight, ~10 s
+```
+
+Your built `frontend\dist` is untracked, so it survives the reset. (Anything
+you changed locally and did not commit is gone — the clone is not meant to
+hold local edits.)
+
 ## 2. Start it
 
 ```bash
