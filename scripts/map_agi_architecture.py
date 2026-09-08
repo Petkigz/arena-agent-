@@ -137,6 +137,11 @@ OVERRIDES = {
         "Phase 10 LIVE: simulate before acting (prediction + own verified "
         "history + open unknowns + counsel); compare prediction vs reality "
         "into a ledger + confirmed/refuted training data (M11 resolved)"),
+    "app/mind/embodiment.py": (
+        "mind/motor", "KEEP", "EMBODIMENT",
+        "Phase 11 LIVE: the 184 capabilities as her motor system — concepts "
+        "in, ranked pathways out (plans only, never execution); authority "
+        "surfaced, motor gaps become unknowns"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -367,9 +372,10 @@ OVERRIDES = {
         "capabilities/registry", "KEEP", "",
         "single capability authority — called BY the mind, never as it"),
     "app/cognition/tool_matcher.py": (
-        "capabilities/registry", "DEMOTE", "TOOL-FIRST",
+        "capabilities/registry", "DEMOTE", "EMBODIMENT",
         "manifest-first routing IS the tool-first thinking Phase 2 replaces; "
-        "keep as capability resolution invoked AFTER world reasoning"),
+        "Phase 11 gives it the demoted job for real: primary capability "
+        "resolver inside app/mind/embodiment.py (concepts → motor pathways)"),
     "app/cognition/capability_resolver.py": (
         "capabilities/registry", "KEEP", "", ""),
     "app/cognition/capability_factory.py": (

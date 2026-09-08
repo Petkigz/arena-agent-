@@ -7,8 +7,21 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ✅ complete.**
-Phase 10 (reasoning and imagination) is LIVE: `app/mind/imagination.py` —
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–11 ✅ complete.**
+Phase 11 (embodied intelligence) is LIVE: `app/mind/embodiment.py` — the
+existing 184 capabilities are now her motor system. She reasons in concept
+terms ("interact with my phone"); deterministic concept expansion + a
+term-overlap manifest scan (evidence on every candidate) + the existing
+tool_matcher as primary resolver + embodiment labels (pc/android/web). The
+organ PLANS, never executes (one cognitive authority keeps acting);
+authority ≠ intelligence — unauthorized pathways surface as
+requires_owner_approval; missing pathways are honest None AND open
+curiosity unknowns. Live-verified against the real body (phone concepts →
+android pathways; body image 184/23). Owner-visible:
+`POST /mind/embodiment/plan`, `GET /mind/embodiment`. Guarded by
+`tests/test_embodiment.py` (9 tests).
+
+Earlier in this gate: Phase 10 (reasoning and imagination) LIVE — `app/mind/imagination.py` —
 the epistemic ladder (perception/belief/hypothesis/prediction/simulation/
 reality) as labeled states; `simulate()` runs a candidate action in her head
 (prediction via the existing PredictionEngine + her own verified history +
@@ -100,12 +113,12 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). Now 28 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+resolved). Now 30 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
 preview/ledger, the Phase-6 learning door/landscape/ledger, the Phase-7
 procedures/teaching-session windows, the Phase-8 media learning door, the
-Phase-9 curiosity landscape/investigate/resolve, and the Phase-10
-imagination simulate/compare/ledger); guarded by
-`tests/test_beanie_mind.py` (21) +
+Phase-9 curiosity landscape/investigate/resolve, the Phase-10 imagination
+simulate/compare/ledger, and the Phase-11 motor-plan/body-image windows);
+guarded by `tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
 freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).

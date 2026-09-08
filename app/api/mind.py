@@ -361,3 +361,23 @@ def mind_imagination(limit: int = Query(default=20, ge=1, le=200)) -> dict:
     mind = BeanieMind.get_instance()
     return {"success": True, **mind.imagination.stats(),
             "records": mind.imagination.records(limit=limit)}
+
+
+# ── Phase 11: embodied intelligence (the motor system) ─────────────────────
+class MotorPlanIn(BaseModel):
+    intent: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/mind/embodiment/plan")
+def mind_embodiment_plan(body: MotorPlanIn) -> dict:
+    """Concept → motor pathways. She says what she needs in concept terms
+    ("interact with my phone"); the capability layer figures out how.
+    Plans only — execution stays with the cycle's authorization path."""
+    return BeanieMind.get_instance().embodiment.motor_plan(body.intent)
+
+
+@router.get("/mind/embodiment")
+def mind_embodiment(concept: Optional[str] = Query(default=None, max_length=200)) -> dict:
+    """Her body image: what her body can do, grouped by category,
+    optionally filtered by concept."""
+    return BeanieMind.get_instance().embodiment.body_map(concept)

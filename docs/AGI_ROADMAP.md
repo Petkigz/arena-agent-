@@ -432,6 +432,28 @@ Now failures become training data for intelligence, rather than just bugs.
 
 ## Phase 11 — Embodied Intelligence
 
+> ✅ **LIVE 2026-09-08:** `app/mind/embodiment.py` — `Embodiment`: the
+> existing 184 capabilities became her motor system. The roadmap's key
+> change is real: she reasons in CONCEPT terms ("I need to interact with my
+> phone") and the capability layer figures out how — deterministic concept
+> expansion (phone → android/adb/sms/…), a term-overlap scan of the tool
+> manifest with evidence on every candidate (matched terms, score), the
+> existing `tool_matcher` promoted as primary resolver where it fires, and
+> embodiment labels (pc / android / web) per pathway. Live-verified against
+> the REAL body: "interact with my phone" → phone_call / phone_sms /
+> phone_command (all android); "read the document I was editing" →
+> read_document; body image = 184 capabilities across 23 categories.
+> Honesty rules: the organ PLANS, it never EXECUTES — acting stays with the
+> cycle's proposal/authorization/verification path (one cognitive
+> authority); authority ≠ intelligence — pathways she understands but isn't
+> authorized for surface as `requires_owner_approval` (never hidden, never
+> refused); a missing motor pathway is an honest None AND becomes an open
+> unknown in the curiosity system (motor gaps are ignorance too).
+> Owner-visible: `POST /mind/embodiment/plan`, `GET /mind/embodiment`
+> (30 `/mind/*` endpoints total). Guarded by `tests/test_embodiment.py`
+> (9 tests, incl. a manifest whose handlers explode if the motor system
+> ever executes one).
+
 ```
                   BEANIE MIND
                        │

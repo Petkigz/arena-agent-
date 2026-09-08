@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from app.config import settings
 from app.mind.curiosity import CuriosityEngine
+from app.mind.embodiment import Embodiment
 from app.mind.identity import BeanieIdentity
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
@@ -84,6 +85,7 @@ class BeanieMind:
         self._media_learning: Optional[MediaLearning] = None
         self._curiosity: Optional[CuriosityEngine] = None
         self._imagination: Optional[Imagination] = None
+        self._embodiment: Optional[Embodiment] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -266,6 +268,15 @@ class BeanieMind:
             if self._imagination is None:
                 self._imagination = Imagination(self)
             return self._imagination
+
+    @property
+    def embodiment(self) -> Embodiment:
+        """Phase 11: concepts in, ranked motor pathways out — never
+        execution (the cycle's authorization path keeps acting)."""
+        with self._lock:
+            if self._embodiment is None:
+                self._embodiment = Embodiment(self)
+            return self._embodiment
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(

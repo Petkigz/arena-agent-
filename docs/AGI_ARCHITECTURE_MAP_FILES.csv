@@ -8,7 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,,,Phase 20 material: one mechanism of self-improvement
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
-app/api/mind.py,363,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
+app/api/mind.py,383,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -154,7 +154,7 @@ app/cognition/strategic_planning.py,733,mind/decision,MERGE,PLANNERS,Phase 13: L
 app/cognition/strategy_outcomes.py,380,learning/experience,INTEGRATE,,Phase 1B: Strategy Outcome Tracking & Outcome-Influenced Selection.,
 app/cognition/structured_lessons.py,363,learning/experience,INTEGRATE,,Phase 1C: Structured Lesson Extraction & Behavior Change.,
 app/cognition/temporal_vision.py,382,perception/vision,KEEP,,Deterministic temporal object tracking across visual frames.,stream-isolated tracking
-app/cognition/tool_matcher.py,862,capabilities/registry,DEMOTE,TOOL-FIRST,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; keep as capability resolution invoked AFTER world reasoning
+app/cognition/tool_matcher.py,862,capabilities/registry,DEMOTE,EMBODIMENT,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; Phase 11 gives it the demoted job for real: primary capability resolver inside app/mind/embodiment.py (concepts → motor pathways)
 app/cognition/tool_registry.py,935,capabilities/registry,KEEP,,Unified Tool Capability Registry with Gate Verification & Event Emissions.,"single capability authority — called BY the mind, never as it"
 app/cognition/trace.py,345,evaluation/trace,KEEP,,Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry.,
 app/cognition/training_examples.py,540,learning/consolidation,KEEP,,Owner-reviewed continual-learning examples from verified outcomes.,owner-reviewed LoRA candidates
@@ -176,9 +176,10 @@ app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
-app/mind/__init__.py,35,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
-app/mind/beanie_mind.py,478,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/__init__.py,36,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/beanie_mind.py,489,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
 app/mind/curiosity.py,304,mind/curiosity,KEEP,CURIOSITY,CuriosityEngine — Phase 9 (Beanie AGI roadmap): the internal UNKNOWN,"Phase 9 LIVE: the internal UNKNOWN system — brief gaps become records, encounters compound, investigation searches memory first, resolution paths counted (knowledge/investigation/owner)"
+app/mind/embodiment.py,247,mind/motor,KEEP,EMBODIMENT,Embodiment — Phase 11 (Beanie AGI roadmap): the existing capabilities,"Phase 11 LIVE: the 184 capabilities as her motor system — concepts in, ranked pathways out (plans only, never execution); authority surfaced, motor gaps become unknowns"
 app/mind/identity.py,201,mind/identity,KEEP,AUTHORITY,"BeanieIdentity — the ""I am Beanie"" record (MISSING item M1, Phase 1).",Phase 1 LIVE: 'I am Beanie' as persisted state (M1)
 app/mind/imagination.py,302,mind/imagination,KEEP,IMAGINATION,Imagination — Phase 10 (Beanie AGI roadmap): reasoning and imagination.,Phase 10 LIVE: simulate before acting (prediction + own verified history + open unknowns + counsel); compare prediction vs reality into a ledger + confirmed/refuted training data (M11 resolved)
 app/mind/learning_loop.py,334,mind/learning,KEEP,LEARNING,GeneralLearningEngine — Phase 6 (Beanie AGI roadmap): one learning loop.,Phase 6 LIVE: the ONE general learning loop every experience passes through (observe → interpret → compare → novelty → hypothesis → test → outcome → update model → store → confidence); success is evidence only — attempted ≠ succeeded
@@ -359,7 +360,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,736,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,742,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

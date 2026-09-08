@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 368 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 369 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 — the target architecture itself, all KEEP).
 
 ---
 
@@ -182,7 +182,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–10 are LIVE (Phases 1–10 complete).**
+**Status 2026-09-08: steps 1–11 are LIVE (Phases 1–11 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -241,9 +241,16 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     Verified cycles auto-compare at the door; the runtime keeps owning the
     calibrator. Kill switch `ARENA_IMAGINATION=0`. 12 tests in
     `tests/test_imagination.py`; 28 `/mind/*` endpoints total.
-11. **Open (roadmap order):** Phase 11 embodied intelligence (tools become
-    the motor system; OS abstraction follows in P12); then M8 attention
-    significance, M9 generalization eval, per the owner's sequencing.
+11. ✅ **Phase 11 LIVE (2026-09-08)** — `embodiment.py`: the 184
+    capabilities became her motor system. Concepts in ("interact with my
+    phone"), ranked pathways out with evidence, embodiment labels
+    (pc/android/web), authority surfaced as requires_owner_approval, plans
+    never execution, motor gaps → open unknowns. 9 tests in
+    `tests/test_embodiment.py`; 30 `/mind/*` endpoints total.
+12. **Open (roadmap order):** Phase 12 true OS-level generalization (M10:
+    OS concept-verb abstraction with embodiment mapping — learn it on
+    Windows, generalize to Android/Linux); then M8 attention significance,
+    M9 generalization eval, per the owner's sequencing.
 
 ---
 
