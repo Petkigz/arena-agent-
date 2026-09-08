@@ -281,25 +281,76 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app_logger.warning(f"Parked-goal recheck not scheduled: {e}")
 
-    # Desktop life (charter §5 ⑥): the dashboard opens when the server comes
-    # live. ARENA_AUTO_OPEN_DASHBOARD=0 keeps a headless server headless.
+    # Desktop life (charter §5 ⑥): the UI opens when the server comes live.
+    # Owner decision 2026-09-08: MERGE the native desktop app with the
+    # server — when the server starts, the desktop window starts too. The
+    # desktop client (PySide6) is launched as a detached subprocess pointing
+    # at this server; if it exits within a few seconds (PySide6 missing,
+    # crash), the browser dashboard opens as the fallback instead.
+    # ARENA_AUTO_OPEN_DASHBOARD=0 keeps a headless server headless.
     try:
         if str(getattr(settings, "ARENA_AUTO_OPEN_DASHBOARD", "1")) != "0":
+            import subprocess as _subprocess
+            import sys as _sys
             import threading as _threading
+            import time as _time
             import webbrowser as _webbrowser
 
-            def _open_dashboard() -> None:
-                try:
-                    _webbrowser.open("http://127.0.0.1:8000")
-                except Exception:
-                    pass
+            def _open_ui() -> None:
+                url = "http://127.0.0.1:8000"
+                # Give uvicorn a moment to actually accept connections.
+                for _ in range(20):
+                    try:
+                        import urllib.request as _ur
 
-            _timer = _threading.Timer(1.5, _open_dashboard)
+                        _ur.urlopen(url + "/health", timeout=1.0).close()
+                        break
+                    except Exception:
+                        _time.sleep(0.5)
+                desktop_proc = None
+                try:
+                    desktop_proc = _subprocess.Popen(
+                        [_sys.executable, "-m", "desktop.main", "--url", url],
+                        stdout=_subprocess.DEVNULL,
+                        stderr=_subprocess.DEVNULL,
+                        stdin=_subprocess.DEVNULL,
+                        creationflags=(
+                            _subprocess.DETACHED_PROCESS
+                            | _subprocess.CREATE_NEW_PROCESS_GROUP
+                        ) if _sys.platform == "win32" else 0,
+                    )
+                except Exception as exc:
+                    app_logger.info(f"Desktop client not launched: {exc}")
+                if desktop_proc is not None:
+                    # Still alive after 6s → treat as opened. Died instantly
+                    # (missing PySide6 etc.) → fall back to the browser.
+                    _time.sleep(6.0)
+                    if desktop_proc.poll() is None:
+                        app_logger.info(
+                            "Desktop client started with the server "
+                            "(native window, merged lifecycle)."
+                        )
+                        return
+                    app_logger.info(
+                        "Desktop client exited immediately (PySide6 missing or "
+                        "crashed) — falling back to the browser dashboard."
+                    )
+                try:
+                    opened = _webbrowser.open(url)
+                    app_logger.info(
+                        f"Browser dashboard opened ({url})." if opened
+                        else f"Could not auto-open a browser for {url} — open it manually."
+                    )
+                except Exception as exc:
+                    app_logger.warning(
+                        f"Browser auto-open failed ({exc}) — open {url} manually.")
+
+            _timer = _threading.Timer(1.0, _open_ui)
             _timer.daemon = True
             _timer.start()
-            app_logger.info("Dashboard auto-open scheduled (http://127.0.0.1:8000)")
+            app_logger.info("UI auto-open scheduled (desktop app first, browser fallback)")
     except Exception as e:
-        app_logger.warning(f"Dashboard auto-open not scheduled: {e}")
+        app_logger.warning(f"UI auto-open not scheduled: {e}")
 
     if API_KEY_ENABLED:
         app_logger.info(

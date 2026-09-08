@@ -80,6 +80,11 @@ class _FakeHTTP:
 
     def get(self, url, timeout=None):
         self.get_calls += 1
+        if "/api/v0/models" in url:
+            # Legacy provider (no native load-state endpoint): answer 404
+            # WITHOUT consuming the scripted sequence so every existing pin
+            # keeps its exact GET count and semantics.
+            return _FakeResp(404, {"error": "not found"})
         if not self.models_sequence:
             raise httpx.ConnectError("connection refused")
         item = self.models_sequence.pop(0)

@@ -2,6 +2,7 @@ import os
 import shutil
 import platform
 import subprocess
+import psutil
 from typing import Dict, Any, List, Optional
 from app.database import db
 from app.policy import PolicyEvaluator
@@ -318,6 +319,75 @@ class SystemAppInventory:
         )
         return best, close_matches
 
+    @staticmethod
+    def _find_app_process(app_query: str, exec_path: str = "") -> Optional[Any]:
+        """A live process whose name/path matches the app (psutil scan).
+
+        Match rule mirrors ObservationCollector._observe_open_application:
+        stem equality, short-name-inside-longer-stem, or full token
+        containment — never the bare-reverse direction. Returns the psutil
+        process or None. Bounded: one scan, no waiting.
+        """
+        import re as _re
+
+        stem = str(app_query or "").lower().strip()
+        if not stem:
+            return None
+        if str(exec_path or "").lower().endswith(".lnk"):
+            lnk_stem = _re.sub(r"\.lnk$", "", str(exec_path).lower())
+            lnk_stem = lnk_stem.rsplit("\\", 1)[-1].rsplit("/", 1)[-1].strip()
+            if len(lnk_stem) >= 3:
+                stem = lnk_stem
+        tokens = [t for t in _re.split(r"[^a-z0-9]+", stem) if t]
+        if not tokens or len(tokens) > 6:
+            return None
+        token_set = set(tokens)
+        try:
+            for proc in psutil.process_iter(['name', 'exe']):
+                try:
+                    p_name = (proc.info.get('name') or "").lower()
+                    if not p_name:
+                        continue
+                    p_stem = p_name[:-4] if p_name.endswith(".exe") else p_name
+                    p_tokens = [t for t in _re.split(r"[^a-z0-9]+", p_stem) if t]
+                    if stem == p_stem or (len(stem) <= len(p_stem) and stem in p_stem):
+                        return proc
+                    if p_tokens and all(t in token_set for t in p_tokens):
+                        return proc
+                    exe = (proc.info.get('exe') or "").lower()
+                    if exe and len(stem) >= 4 and stem in exe:
+                        return proc
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception:
+            return None
+        return None
+
+    @classmethod
+    def verify_app_running(cls, app_query: str, exec_path: str = "",
+                           wait_seconds: float = 4.0,
+                           poll_interval: float = 0.75) -> Dict[str, Any]:
+        """Bounded post-launch process verification (machine-observed, not
+        claimed). Polls up to `wait_seconds` for the app's process to
+        appear — os.startfile returns before the process object does."""
+        import time as _time
+
+        deadline = _time.monotonic() + max(0.0, float(wait_seconds))
+        proc = cls._find_app_process(app_query, exec_path)
+        while proc is None and _time.monotonic() < deadline:
+            _time.sleep(float(poll_interval))
+            proc = cls._find_app_process(app_query, exec_path)
+        if proc is None:
+            return {"process_verified": False}
+        try:
+            return {
+                "process_verified": True,
+                "pid": proc.info.get("pid") or proc.pid,
+                "process_name": proc.info.get("name") or "",
+            }
+        except Exception:
+            return {"process_verified": True}
+
     @classmethod
     def launch_any_app(cls, app_query: str) -> Dict[str, Any]:
         """
@@ -413,6 +483,32 @@ class SystemAppInventory:
 
         app_logger.info(f"Attempting to launch application '{app_name}' (Target: {exec_path}) on {host_os}...")
 
+        # Already-open guard (owner live test 2026-09-08: the auto-recheck
+        # loop spawned SIX RICHST TV instances that fought over the same
+        # Electron disk cache). If the app's process is already live, say
+        # so and do not spawn a duplicate.
+        pre_existing = cls._find_app_process(app_name, exec_path)
+        if pre_existing is not None:
+            try:
+                pid = pre_existing.info.get("pid") or pre_existing.pid
+                pname = pre_existing.info.get("name") or ""
+            except Exception:
+                pid, pname = None, ""
+            audit_logger.info(
+                f"App '{app_name}' is already running (pid {pid}) — not spawning a duplicate."
+            )
+            return {
+                "success": True,
+                "app_name": app_name,
+                "executable_path": exec_path,
+                "already_running": True,
+                "process_verified": True,
+                "pid": pid,
+                "process_name": pname,
+                "launch_command_executed": False,
+                "message": f"'{app_name}' is already open on your {platform.system()} system.",
+            }
+
         try:
             launched_process = None
             # SECURITY: exec_path is resolved from the installed-app inventory
@@ -471,15 +567,41 @@ class SystemAppInventory:
                 # binary raises at spawn time and is caught below.
                 launched_process = subprocess.Popen([exec_path])
 
-            audit_logger.info(f"Successfully launched application '{app_name}'")
+            # MACHINE-OBSERVED verification (not a claim): poll briefly for
+            # the app's process to appear before saying "launched".
+            verified = cls.verify_app_running(app_name, exec_path)
+            if verified.get("process_verified"):
+                audit_logger.info(
+                    f"Successfully launched application '{app_name}' "
+                    f"(process verified: {verified.get('process_name')}, pid {verified.get('pid')})"
+                )
+            else:
+                audit_logger.info(
+                    f"Launch command for '{app_name}' executed, but the process "
+                    f"was not observed within the verification window."
+                )
+            if launched_process is not None and not verified.get("pid"):
+                verified["pid"] = launched_process.pid
+                verified.setdefault("process_name", "")
 
+            message = (
+                f"Successfully launched '{app_name}' on your {platform.system()} system!"
+                if verified.get("process_verified")
+                else (
+                    f"I ran the launch for '{app_name}', but could not confirm the "
+                    f"process is running (it may have exited immediately). Treat this "
+                    f"as NOT confirmed."
+                )
+            )
             return {
                 "success": True,
                 "app_name": app_name,
                 "executable_path": exec_path,
                 "launch_command_executed": True,
-                "pid": launched_process.pid if launched_process is not None else None,
-                "message": f"Successfully launched '{app_name}' on your {platform.system()} system!"
+                "process_verified": bool(verified.get("process_verified")),
+                "pid": verified.get("pid"),
+                "process_name": verified.get("process_name") or "",
+                "message": message,
             }
 
         except subprocess.TimeoutExpired:

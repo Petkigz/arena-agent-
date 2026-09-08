@@ -246,6 +246,40 @@ class LocalLLMClient:
             if (not force and self._models_cache is not None
                     and now - self._models_cache_ts < self._MODELS_CACHE_TTL_S):
                 return self._models_cache
+        # LM Studio's native REST API (>=0.3) reports the ACTUAL load state.
+        # The OpenAI-compatible /models listing includes every DOWNLOADED
+        # model, loaded or not — selecting from it makes us request a
+        # not-loaded model and LM Studio silently JIT-loads it (owner live
+        # test 2026-09-08: the 14B was pulled into VRAM over the owner's
+        # loaded 9B models). Ask the native endpoint first; only fall back
+        # to the legacy listing when it does not exist.
+        try:
+            response = self.client.get(
+                f"{self.base_url}/api/v0/models", timeout=5.0)
+            if response.ok:
+                data = (response.json() or {}).get("data") or []
+                # Authoritative only when the payload actually carries load
+                # state; some proxies mirror /models onto this path without
+                # a state field, and OpenAI-compatible servers may not
+                # implement the native route at all.
+                if data and any("state" in m for m in data):
+                    models = sorted({
+                        str(m.get("id")) for m in data
+                        if m.get("id")
+                        and str(m.get("state", "")).lower() == "loaded"
+                    })
+                    with self._models_cache_lock:
+                        self._models_cache = models
+                        self._models_cache_ts = time.monotonic()
+                    if not models:
+                        app_logger.info(
+                            "Provider reports no models currently LOADED "
+                            "(native /api/v0/models); selection will use "
+                            "the configured model only if the provider "
+                            "accepts it.")
+                    return models
+        except Exception:
+            pass  # native endpoint unavailable — use the legacy listing
         try:
             response = self.client.get(
                 f"{self.base_url}/models", timeout=5.0)

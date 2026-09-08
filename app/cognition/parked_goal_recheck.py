@@ -62,6 +62,7 @@ def collect_parked_goals(limit: int = 5) -> List[Dict[str, Any]]:
             SELECT trace_id, session_id, user_input, created_at
             FROM cognitive_traces
             WHERE goal_lifecycle_state = 'waiting_for_evidence'
+              AND user_input NOT LIKE '%(automatic re-check #%'
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -137,6 +138,83 @@ def _post_to_conversation(conversation_id: str, text: str) -> None:
         app_logger.debug(f"parked recheck notify failed: {exc}")
 
 
+_MARKER_RE = None
+
+
+def _strip_recheck_markers(text: str) -> str:
+    """Remove accumulated '(automatic re-check #N)' prefixes.
+
+    Owner live test 2026-09-08: each chained recheck prepended another
+    marker to the goal text, producing '(automatic re-check #1) (automatic
+    re-check #1) ...' eight levels deep in the chat.
+    """
+    import re
+
+    return re.sub(r"\(automatic re-check #\d+\)\s*", "", str(text or "")).strip()
+
+
+def _probe_launch_goal(clean_goal: str) -> Optional[Dict[str, Any]]:
+    """Cheap evidence-only probe for launch-shaped parked goals.
+
+    Returns {"verified": bool, "detail": str} when the goal IS a launch
+    request with a resolvable app name, else None (caller falls back to the
+    full-cycle recheck). Process scan only — no LLM call, no re-execution,
+    no filesystem walk.
+    """
+    try:
+        from app.agents.master_agent import extract_app_query
+
+        app_query = extract_app_query(clean_goal)
+    except Exception:
+        return None
+    if not app_query:
+        return None
+    try:
+        from app.tools.app_inventory import SystemAppInventory
+
+        proc = SystemAppInventory._find_app_process(app_query)
+    except Exception:
+        return None
+    if proc is not None:
+        try:
+            pname = proc.info.get("name") or ""
+            pid = proc.info.get("pid") or proc.pid
+        except Exception:
+            pname, pid = "", None
+        return {
+            "verified": True,
+            "detail": f"'{app_query}' is running right now "
+                      f"(process {pname}, pid {pid}).",
+        }
+    return {"verified": False, "detail": f"No process matching '{app_query}' is running."}
+
+
+def _close_goal_verified(goal: Dict[str, Any], detail: str) -> None:
+    """Mark the parked trace achieved on machine evidence + tell the owner."""
+    try:
+        from app.database import db
+
+        with db._get_connection() as conn:
+            conn.execute(
+                "UPDATE cognitive_traces SET goal_lifecycle_state = 'achieved', "
+                "goal_verified = 1 WHERE trace_id = ?",
+                (goal["trace_id"],),
+            )
+            conn.commit()
+    except Exception as exc:
+        app_logger.warning(f"Parked-goal close failed for {goal['trace_id']}: {exc}")
+    state = _attempts_state(goal["trace_id"])
+    state["closed"] = True
+    app_logger.info(
+        f"Parked goal {goal['trace_id']} VERIFIED by probe (no re-execution): {detail[:120]}"
+    )
+    _post_to_conversation(
+        goal["conversation_id"],
+        f"Auto re-check (evidence only, nothing was re-run): {detail} "
+        f"Goal verified — closing it.",
+    )
+
+
 def _recheck(goal: Dict[str, Any], state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     state["count"] += 1
     state["last"] = time.time()
@@ -174,7 +252,7 @@ def _recheck(goal: Dict[str, Any], state: Dict[str, Any]) -> Optional[Dict[str, 
                     "conversation_id": goal["conversation_id"],
                     "content": (
                         f"(automatic re-check #{state['count']}) "
-                        f"{goal['goal']}"
+                        f"{_strip_recheck_markers(goal['goal'])}"
                     ),
                     "source": "auto_recheck",
                 },
@@ -200,6 +278,28 @@ def parked_goal_recheck_tick() -> Optional[Dict[str, Any]]:
     goal = _next_due_goal(goals)
     if goal is None:
         return None
+
+    # Evidence FIRST, re-execution LAST (owner live test 2026-09-08: each
+    # recheck ran the FULL cognitive cycle and re-launched the app — six
+    # Electron instances fighting over one disk cache — instead of just
+    # looking). For launch-shaped goals a process scan answers it for free.
+    clean_goal = _strip_recheck_markers(goal["goal"])
+    probe = None
+    try:
+        probe = _probe_launch_goal(clean_goal)
+    except Exception as exc:
+        app_logger.debug(f"Parked-goal launch probe failed: {exc}")
+    if probe is not None:
+        state = _attempts_state(goal["trace_id"])
+        if probe.get("verified"):
+            state["count"] += 1  # the probe itself was the attempt
+            state["last"] = time.time()
+            _close_goal_verified(goal, probe["detail"])
+            return {"trace_id": goal["trace_id"], "probe_closed": True}
+        # Evidence says it is NOT running: ONE bounded full-cycle recheck
+        # (a genuine retry — _recheck owns the attempt counting and cap).
+        return _recheck(goal, state)
+
     return _recheck(goal, _attempts_state(goal["trace_id"]))
 
 

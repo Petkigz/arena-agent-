@@ -2697,6 +2697,7 @@ class CognitiveRuntime:
                 execution,
                 world_model=self.world,
                 event_bus=self.events,
+                user_text=user_text,
             )
         except Exception as exc:
             observation_error = str(exc)

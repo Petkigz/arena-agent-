@@ -11,6 +11,7 @@ Phase 1: Uses canonical SourceType enum for all observation sources.
 from __future__ import annotations
 import os
 import re
+import time
 import psutil
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -55,10 +56,19 @@ class ObservationCollector:
         proposal: Any,
         execution_result: Any,
         world_model: Optional[WorldModel] = None,
-        event_bus: Optional[Any] = None
+        event_bus: Optional[Any] = None,
+        user_text: Optional[str] = None
     ) -> List[Observation]:
         """
         Ingests execution facts and environmental observations from an ExecutionResult into WorldModel.
+
+        `user_text` (optional) lets name-resolution probes fall back to the
+        owner's own words when the proposal payload carries no explicit
+        target name (owner live test 2026-09-08: the launch proposal payload
+        had no app key — master_agent extracted 'RICHST TV' from the sentence
+        at execution time — so the post-launch process probe watched for a
+        process named 'app', found nothing, and the goal parked as
+        waiting_for_evidence forever, spawning the auto-recheck loop).
         """
         if not world_model:
             from app.config import settings
@@ -87,7 +97,8 @@ class ObservationCollector:
         # Execution success is NOT used as evidence — only direct environmental probes.
 
         if action_type in ["open_application", "launch_app"]:
-            cls._observe_open_application(payload, world_model, ingested_observations)
+            cls._observe_open_application(payload, world_model, ingested_observations,
+                                          user_text=user_text)
 
         elif action_type == "search_files":
             cls._observe_search_files(execution_result, raw_output,
@@ -117,9 +128,26 @@ class ObservationCollector:
 
     @classmethod
     def _observe_open_application(cls, payload: Dict, world_model: WorldModel,
-                                   ingested: List[Observation]) -> None:
+                                   ingested: List[Observation],
+                                   user_text: Optional[str] = None) -> None:
         """Process probe: strictly establishes running or not_running."""
-        app_name = (payload.get("app_name") or payload.get("app") or payload.get("query") or "app").lower().strip()
+        # Name resolution mirrors master_agent's launch branch exactly
+        # (payload keys first, then the owner's own words). Owner live test
+        # 2026-09-08: the payload carried no app key (extraction happened
+        # inside the launch branch), so this probe watched for 'app' and
+        # never saw the app it had just launched.
+        app_name = (payload.get("app_name") or payload.get("app")
+                    or payload.get("app_query") or payload.get("query") or "")
+        app_name = str(app_name).lower().strip()
+        if not app_name and user_text:
+            try:
+                from app.agents.master_agent import extract_app_query
+
+                app_name = extract_app_query(str(user_text)).lower().strip()
+            except Exception:
+                app_name = ""
+        if not app_name:
+            app_name = "app"
 
         # TOKEN-AWARE matching (live bug class: bidirectional substring match).
         # The old check `app_name in p_name or p_name in app_name` let ANY
@@ -134,29 +162,40 @@ class ObservationCollector:
         process_running = False
         if tokens and not sentence_like:
             app_token_set = set(tokens)
-            try:
-                for proc in psutil.process_iter(['name']):
-                    try:
-                        p_name = proc.info['name'].lower() if proc.info['name'] else ""
-                        if not p_name:
-                            continue
-                        stem = p_name[:-4] if p_name.endswith(".exe") else p_name
-                        stem_tokens = [t for t in re.split(r"[^a-z0-9]+", stem) if t]
-                        # Running iff the stem equals the app name, the (short)
-                        # app name sits inside the (longer) process stem
-                        # ('firefox' -> 'firefox-esr'), or every stem token is
-                        # one of the app-name tokens ('visual studio code' <->
-                        # 'code'). Never the bare-reverse direction.
-                        if app_name == stem or (len(app_name) <= len(stem) and app_name in stem):
-                            process_running = True
-                            break
-                        if stem_tokens and all(t in app_token_set for t in stem_tokens):
-                            process_running = True
-                            break
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                        pass
-            except Exception as e:
-                app_logger.warning(f"ObservationCollector process probe warning for '{app_name}': {e}")
+            # Bounded re-probe: os.startfile returns the instant the OS
+            # accepts the launch; the real process object can appear a
+            # moment later (owner live test: the Electron main process came
+            # up shortly after the launch call returned). A single
+            # immediate probe recorded 'not_running' for a running app.
+            # 3 attempts, 0.5s apart — bounded, cheap, process-level only.
+            for attempt in range(3):
+                try:
+                    for proc in psutil.process_iter(['name']):
+                        try:
+                            p_name = proc.info['name'].lower() if proc.info['name'] else ""
+                            if not p_name:
+                                continue
+                            stem = p_name[:-4] if p_name.endswith(".exe") else p_name
+                            stem_tokens = [t for t in re.split(r"[^a-z0-9]+", stem) if t]
+                            # Running iff the stem equals the app name, the (short)
+                            # app name sits inside the (longer) process stem
+                            # ('firefox' -> 'firefox-esr'), or every stem token is
+                            # one of the app-name tokens ('visual studio code' <->
+                            # 'code'). Never the bare-reverse direction.
+                            if app_name == stem or (len(app_name) <= len(stem) and app_name in stem):
+                                process_running = True
+                                break
+                            if stem_tokens and all(t in app_token_set for t in stem_tokens):
+                                process_running = True
+                                break
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                            pass
+                    if process_running or attempt == 2:
+                        break
+                    time.sleep(0.5)
+                except Exception as e:
+                    app_logger.warning(f"ObservationCollector process probe warning for '{app_name}': {e}")
+                    break
 
         real_status = "running" if process_running else "not_running"
 

@@ -70,7 +70,9 @@ class WebSocketManager:
             try:
                 await websocket.send_json(message)
             except Exception as e:
-                app_logger.error(f"Failed to send to WebSocket: {e}")
+                app_logger.info(
+                    f"Skipped stale WebSocket ({type(e).__name__}); removed from conversation."
+                )
                 disconnected.add(websocket)
         
         # Clean up disconnected sockets
@@ -95,7 +97,9 @@ class WebSocketManager:
             try:
                 await websocket.send_json(message)
             except Exception as e:
-                app_logger.error(f"Failed to broadcast to WebSocket: {e}")
+                app_logger.info(
+                    f"Skipped stale WebSocket ({type(e).__name__}) in broadcast."
+                )
                 disconnected.add(websocket)
 
         if disconnected:

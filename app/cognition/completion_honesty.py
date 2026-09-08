@@ -51,11 +51,24 @@ NON_ACTION_TYPES = {"formulate_answer"}
 
 
 def real_executed_actions(executed_actions: Optional[List[Any]]) -> List[Dict[str, Any]]:
-    """Executed actions that actually touched the world (not the reply)."""
+    """Executed actions that actually touched the world (not the reply).
+
+    Accepts BOTH shapes the pipeline produces: dicts with an ``action_type``
+    (decision-layer records) and plain description strings from the
+    execution layer ("Launched application 'Richst Tv' on your PC.").
+    Owner live test 2026-09-08: the guard read string actions as "nothing
+    executed" and told the owner 'nothing ran' right after the machine had
+    visibly launched the app — a dishonest message from the honesty guard.
+    """
     real: List[Dict[str, Any]] = []
     for action in executed_actions or []:
-        if isinstance(action, dict) and str(action.get("action_type", "")) not in NON_ACTION_TYPES:
-            real.append(action)
+        if isinstance(action, dict):
+            if str(action.get("action_type", "")) not in NON_ACTION_TYPES:
+                real.append(action)
+        elif isinstance(action, str) and action.strip():
+            low = action.strip().lower()
+            if not low.startswith(("formulate", "answer delivered", "reply delivered")):
+                real.append({"action_type": "executed", "detail": action.strip()})
     return real
 
 
@@ -123,6 +136,10 @@ def enforce_completion_honesty(
         guard_applied = "unverified_outcome_surfaced"
 
     if guard_applied:
+        # Marker for BOTH cases — the runtime uses it to update the
+        # PERSISTED trace reply, not just the streamed one. (Owner live
+        # test: the honest-status suffix never reached the stored trace.)
+        result["announcement_guard"] = guard_applied
         try:
             from app.utils import decision_trace
 
