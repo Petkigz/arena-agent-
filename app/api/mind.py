@@ -446,3 +446,33 @@ def mind_perception_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict
     significant, with reasons."""
     p = BeanieMind.get_instance().perception
     return {"success": True, **p.stats(), "stream": p.stream(limit=limit)}
+
+
+# ── Phase 14: attention (M8) ───────────────────────────────────────────────
+class AttentionTaskIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/mind/attention/task")
+def mind_attention_task(body: AttentionTaskIn) -> dict:
+    """Set the current-task anchor — the rung every change is measured
+    against ('may interfere with what you're doing')."""
+    return BeanieMind.get_instance().attention.set_task(body.text)
+
+
+@router.post("/mind/attention/review")
+def mind_attention_review() -> dict:
+    """Arbitrate now: attend to every perception not yet attended, then say
+    what currently deserves thought (with reasons and any advisory)."""
+    return BeanieMind.get_instance().attention.review()
+
+
+@router.get("/mind/attention")
+def mind_attention_focus(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The attention ledger: what she decided deserved thought, at what
+    ladder rung, why — plus the current task anchor and issued advisories."""
+    a = BeanieMind.get_instance().attention
+    return {"success": True, **a.stats(),
+            "snapshot": a.snapshot(),
+            "advisories": a.advisories(),
+            "history": a.focus_history(limit=limit)}

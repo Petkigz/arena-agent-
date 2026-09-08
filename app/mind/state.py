@@ -266,7 +266,12 @@ class BeanieState:
         return self._room(memory, data)
 
     def _attention(self) -> Dict[str, Any]:
-        attention = getattr(self.runtime, "attention", None)
+        # Phase 14: the mind's Attention organ is the authoritative
+        # arbitrator (one cognitive authority); the runtime's in-cycle
+        # AttentionManager stays wired as the legacy fallback.
+        attention = getattr(self.mind, "attention", None) if self.mind is not None else None
+        if attention is None:
+            attention = getattr(self.runtime, "attention", None)
         data = _probe(attention, names=("snapshot", "to_dict", "summary", "current_focus"))
         focus = getattr(attention, "current", None) or getattr(attention, "focus", None)
         if focus is not None:

@@ -108,13 +108,15 @@ class Perception:
         novelty = rec.get("novelty")
         significant, reasons = self._significance(
             novelty=novelty, urgent=urgent, unknowns=touched_unknowns)
-        self._persist(modality, content, source, novelty, significant,
-                      reasons, rec.get("stored_memory_id"))
+        perception_id = self._persist(modality, content, source, novelty,
+                                      significant, reasons,
+                                      rec.get("stored_memory_id"))
         return {"success": True, "epistemic_kind": "perception",
                 "modality": modality, "content": content[:300],
                 "source": source, "novelty": novelty,
                 "significant": significant, "reasons": reasons,
                 "stored_memory_id": rec.get("stored_memory_id"),
+                "perception_id": perception_id,
                 "acted": False}  # perceiving never acts
 
     def _significance(self, novelty: Optional[str], urgent: bool,
@@ -221,10 +223,11 @@ class Perception:
     # ── internals ────────────────────────────────────────────────────────
     def _persist(self, modality: str, content: str, source: str,
                  novelty: Optional[str], significant: bool,
-                 reasons: List[str], stored_memory_id: Optional[str]) -> None:
+                 reasons: List[str],
+                 stored_memory_id: Optional[str]) -> Optional[int]:
         try:
             with self._lock, sqlite3.connect(self.db_path, timeout=5) as conn:
-                conn.execute(
+                cur = conn.execute(
                     """INSERT INTO beanie_perceptions
                        (recorded_at, modality, content, source, novelty,
                         significant, reasons, stored_memory_id)
@@ -233,5 +236,7 @@ class Perception:
                      novelty, int(significant), "|".join(reasons),
                      stored_memory_id))
                 conn.commit()
+                return int(cur.lastrowid)
         except Exception as exc:
             app_logger.warning(f"Perception not persisted: {exc}")
+            return None

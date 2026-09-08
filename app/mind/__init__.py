@@ -28,6 +28,7 @@ from app.mind.imagination import Imagination
 from app.mind.embodiment import Embodiment
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
+from app.mind.attention import Attention
 
 __all__ = [
     "BeanieMind", "BeanieIdentity", "BeanieState", "MODALITIES",
@@ -35,5 +36,5 @@ __all__ = [
     "UnifiedMemory", "SocialMemoryStore", "MetaMemory", "WorldFirstReasoning",
     "GeneralLearningEngine", "EXPERIENCE_KINDS", "DemonstrationTeaching",
     "MediaLearning", "CuriosityEngine", "Imagination", "Embodiment",
-    "OSConceptLayer", "Perception",
+    "OSConceptLayer", "Perception", "Attention",
 ]

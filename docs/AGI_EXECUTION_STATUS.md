@@ -1,15 +1,37 @@
 # Arena AGI Execution Status
 
-**Date:** 2026-09-07  
-**Branch:** `arena/01a07c3e-arena-agent`
+**Date:** 2026-09-08  
+**Branch:** `arena/01a0813a-arena-agent`
 
 **Purpose:** A chronological, repository-grounded work queue. This document separates “the path exists” from “the behavior is robustly demonstrated.” It is the operational companion to `AGI_GAP_IMPLEMENTATION_PLAN.md`.
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–13 ✅ complete.**
-Phase 13 (continuous perception) is LIVE: `app/mind/perception.py` — the
-SENSE side. Eight typed sense channels; every perception enters the Phase-6
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–14 ✅ complete.**
+Phase 14 (attention — M8 attention significance) is LIVE:
+`app/mind/attention.py` — the arbitrator between perception and thought.
+Every perception is classified onto the roadmap ladder from EVIDENCE on the
+record (owner channel → owner_speaking; probe urgency → important_change;
+loop-judged novelty → anomaly; open-unknown touch → unfinished_goal; else
+background) with reasons surfaced. Repeats of already-attended content are
+demoted to background with a reason — "don't react to everything" applies
+to thought too. `review()` arbitrates only perceptions newer than its
+ledger watermark (no re-thought), and surfaces ONE open unknown as learned
+curiosity only when nothing more pressing is pending (with cooldown). The
+roadmap scenario works: popup over the report being edited → advisory
+"…may interfere with what you're doing (task)", offered to working memory
+(the channel the cycle already reads). Attention DECIDES WHAT DESERVES
+THOUGHT — `acted: False` on every verdict. The Phase-3/4 state skeleton's
+attention room now lights up from the mind organ. Owner-visible:
+`POST /mind/attention/task`, `POST /mind/attention/review`,
+`GET /mind/attention`. Kill switch `ARENA_ATTENTION=0`. Guarded by
+`tests/test_mind_attention.py` (16 tests).
+(Counting note: the Phase-13 docs reported 36 `/mind/*` endpoints; the
+true count at that commit was 35 unique paths / 38 routes — three paths
+carry two verbs. After Phase 14: 38 paths / 41 routes.)
+
+Earlier in this gate: Phase 13 (continuous perception) LIVE —
+`app/mind/perception.py` — the SENSE side. Eight typed sense channels; every perception enters the Phase-6
 loop as an observation experience (novel → knowledge, repeated → rehearsed:
 dedupe = don't react to everything); significance judged from urgency /
 novelty / curiosity with surfaced reasons; the existing silent watcher's

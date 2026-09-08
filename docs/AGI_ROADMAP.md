@@ -525,7 +525,8 @@ generalize the concept to Android or Linux.
 > perception touching a buried open unknown flagged significant AND closed
 > the unknown through the knowledge path. Owner-visible:
 > `POST /mind/perception`, `POST /mind/perception/drain`,
-> `GET /mind/perception` (36 `/mind/*` endpoints). Kill switch
+> `GET /mind/perception` (35 `/mind/*` paths; 38 routes — the Phase-13
+> count of 36 was wrong). Kill switch
 > `ARENA_PERCEPTION=0` gates the door drain; the owner surface keeps
 > working. Guarded by `tests/test_mind_perception.py` (12 tests; the
 > pre-existing `tests/test_perception.py` speech tests stay untouched).
@@ -536,6 +537,31 @@ should determine: "Is this relevant to what we're doing?" That gives you an
 attention system.
 
 ## Phase 14 — Attention
+
+> ✅ **LIVE 2026-09-08:** `app/mind/attention.py` — M8 attention
+> significance. The arbitrator between perception and thought: what
+> deserves thought, in what order, with what advisory. Each perception is
+> placed on the roadmap ladder from evidence on the record — owner channel
+> → owner_speaking; probe-declared urgency → important_change; loop-judged
+> novelty → anomaly; open-unknown touch → unfinished_goal; else
+> background_observation — always with reasons. Repeats of already-attended
+> content are demoted with a reason ("don't react to everything" applies to
+> thought too). `review()` arbitrates only perceptions newer than its
+> ledger watermark (nothing is re-thought), and surfaces ONE open unknown
+> as learned_curiosity only when nothing more pressing is pending (with a
+> cooldown so she doesn't repeat herself). The roadmap's own scenario is
+> live: while she is editing the quarterly report, a popup appears →
+> advisory "'popup…' — this may interfere with what you're doing (editing
+> the quarterly report)", offered to working memory through the same
+> channel the Phase-2 brief uses. Attention DECIDES WHAT DESERVES THOUGHT
+> — `acted: False` on every verdict; background is an explicit verdict,
+> never a silent drop. The Phase-3/4 state skeleton's attention room now
+> lights up from the mind organ. Owner-visible: `POST /mind/attention/task`,
+> `POST /mind/attention/review`, `GET /mind/attention` (38 `/mind/*`
+> endpoints; 41 routes counting dual-verb paths). Kill switch
+> `ARENA_ATTENTION=0` gates the door arbitration; the
+> owner surface keeps working. Guarded by `tests/test_mind_attention.py`
+> (16 tests).
 
 ```
 ATTENTION

@@ -153,6 +153,12 @@ OVERRIDES = {
         "channels, significance judged (urgency/novelty/curiosity) with "
         "reasons, silent-watcher changes ingested; perception ≠ belief ≠ "
         "action"),
+    "app/mind/attention.py": (
+        "mind/attention", "KEEP", "ATTENTION",
+        "Phase 14 LIVE (M8): the arbitrator between perception and thought "
+        "— roadmap ladder from evidence on the record, repeats demoted, "
+        "watermark review, one open unknown surfaced when quiet, "
+        "popup-over-task advisory; decides only, never acts"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -413,7 +419,10 @@ OVERRIDES = {
         "mind/motivation", "KEEP", "", "wired in server lifespan"),
     "app/cognition/attention_manager.py": (
         "mind/attention", "INTEGRATE", "ATTENTION",
-        "43-line seed — the Phase-14 attention system must grow here"),
+        "43-line seed, LIVE in the cognitive cycle (runtime.py:159) as the "
+        "in-cycle focus tracker; Phase 14 built the authoritative "
+        "perception-stream arbitrator as the mind organ "
+        "app/mind/attention.py — one cognitive authority"),
 
     # ── LEARNING family (Phases 6-8, 21) ─────────────────────────────────
     "app/cognition/continual_learning.py": (

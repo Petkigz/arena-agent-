@@ -37,6 +37,7 @@ from app.mind.identity import BeanieIdentity
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
+from app.mind.attention import Attention
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
@@ -90,6 +91,7 @@ class BeanieMind:
         self._embodiment: Optional[Embodiment] = None
         self._os_concepts: Optional[OSConceptLayer] = None
         self._perception: Optional[Perception] = None
+        self._attention: Optional[Attention] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -301,6 +303,16 @@ class BeanieMind:
                 self._perception = Perception(self)
             return self._perception
 
+    @property
+    def attention(self) -> Attention:
+        """Phase 14: M8 — the arbitrator between perception and thought:
+        what deserves thought, in what order, with what advisory. Decides
+        only; never acts."""
+        with self._lock:
+            if self._attention is None:
+                self._attention = Attention(self)
+            return self._attention
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -327,6 +339,7 @@ class BeanieMind:
         self._record_entry(modality, conversation_id, user_text)
         self._run_world_first(user_text, modality)
         self._drain_perceptions()
+        self._run_attention(user_text)
         result = self.runtime.process_cognitive_cycle(
             user_text=user_text,
             session_id=conversation_id,
@@ -424,6 +437,18 @@ class BeanieMind:
         except Exception as exc:
             app_logger.warning(f"Perception drain skipped (non-fatal): {exc}")
 
+    def _run_attention(self, user_text: str) -> None:
+        """Phase 14: the owner's current message sets the task anchor, and
+        attention arbitrates everything perceived since the last review —
+        what deserves thought, and whether anything may interfere with the
+        task. Best-effort; attention never fails the task."""
+        if str(getattr(settings, "ARENA_ATTENTION", "1")) == "0":
+            return
+        try:
+            self.attention.review(task=user_text)
+        except Exception as exc:
+            app_logger.warning(f"Attention review skipped (non-fatal): {exc}")
+
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;
         curiosity never breaks the brief."""
@@ -464,10 +489,21 @@ class BeanieMind:
                 modality, summary, source=source)
         except Exception as exc:
             app_logger.warning(f"Perception pass skipped (non-fatal): {exc}")
+        # Phase 14: attention decides whether this one perception deserves
+        # thought (best-effort; the observation lane stays recording-only).
+        attention_note: Optional[Dict[str, Any]] = None
+        if perception_note is not None and perception_note.get("success") \
+                and str(getattr(settings, "ARENA_ATTENTION", "1")) != "0":
+            try:
+                attention_note = self.attention.notice(perception_note)
+            except Exception as exc:
+                app_logger.warning(f"Attention pass skipped (non-fatal): {exc}")
         result: Dict[str, Any] = {"success": True, "recorded": True,
                                   "source": source, "acted": False}
         if perception_note is not None:
             result["perception"] = perception_note
+        if attention_note is not None:
+            result["attention"] = attention_note
         return result
 
     # ── entry ledger ─────────────────────────────────────────────────────

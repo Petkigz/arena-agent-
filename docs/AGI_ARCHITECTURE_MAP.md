@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 371 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 372 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 — the target architecture itself, all KEEP).
 
 ---
 
@@ -139,7 +139,8 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 > auto-submits verified/unverified cycle outcomes and owner corrections; it
 > feeds M11's spirit (failures become data) without claiming M11 resolved.
 > M4 is partial (milestone seed; no narrative layer). Remaining build list:
-> M4-completion, M8, M9. (M10 — OS concept-verb abstraction — is LIVE with
+> M4-completion, M9. (M8 — attention significance — is LIVE with Phase 14:
+> `app/mind/attention.py`; M10 — OS concept-verb abstraction — is LIVE with
 > Phase 12: `app/mind/os_concepts.py`; M11 — the prediction↔reality loop —
 > is LIVE with Phase 10: `app/mind/imagination.py` connects
 > `prediction_engine.py` to the learning loop, so failures become training
@@ -154,7 +155,7 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 | M5 | **Social memory store** — people/relationships as first-class memory type | P5, P16 | `social_cognition.py` engine, no store |
 | M6 | **World-first reasoning path** — goal → world understanding → memory → hypotheses → strategy → capabilities | P2 | none — `tool_matcher` is the inverse |
 | M7 | ~~**Demonstration learning**~~ ✅ LIVE 2026-09-08 — `app/mind/teaching.py`: "Beanie, watch this" → steps → her proposal → owner's "yes" → generalized procedure (Phase 7; integrates `skill_teaching_engine.py` as the durable store) | P7 | ~~`skill_teaching_engine.py` (form-driven)~~ |
-| M8 | **Attention significance system** — current task / owner speaking / anomaly / unfinished goal arbitration | P13, P14 | `attention_manager.py` (43 lines) + observer/prioritizer feeds |
+| M8 | ~~**Attention significance system**~~ ✅ LIVE 2026-09-08 — `app/mind/attention.py`: roadmap ladder (current task / owner speaking / important change / anomaly / unfinished goal / learned curiosity / background) arbitrated from evidence on the perception record; repeats demoted; one open unknown surfaced when quiet; popup-over-task advisory (Phase 14; the in-cycle `attention_manager.py` focus tracker stays wired as the runtime fallback) | P13, P14 | ~~`attention_manager.py` (43 lines) + observer/prioritizer feeds~~ |
 | M9 | **Generalization evaluation** — tasks A–G (teach-once-adapt, tutorial-transfer, unfamiliar-error, environment-change, incomplete-instruction, learn-from-failure, cross-OS transfer) | P24 | `intelligence_benchmark.py` (regression-style only) |
 | M10 | ~~**OS concept-verb abstraction**~~ ✅ LIVE 2026-09-08 — `app/mind/os_concepts.py`: open/copy/navigate/… as platform-free concepts with embodiment mapping derived from the live manifest; procedures transfer across bodies (Phase 12) | P12 | ~~`os_control_planner.py` seed~~ |
 | M11 | ~~**Prediction↔reality comparison loop**~~ ✅ LIVE 2026-09-08 — `app/mind/imagination.py`: simulate-before-acting + compare-vs-reality ledger + confirmed/refuted training data through the Phase-6 loop (Phase 10; `prediction_engine.py` wired) | P10 | ~~`prediction_engine.py` + `execution_truth.py` (not connected)~~ |
@@ -184,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–13 are LIVE (Phases 1–13 complete).**
+**Status 2026-09-08: steps 1–14 are LIVE (Phases 1–14 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -253,17 +254,29 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     one platform-free concept layer over all bodies; per-body mapping
     derived from the live manifest by evidence; procedures (explicit or
     Phase-7 taught) transfer across bodies with resolved-or-gap honesty.
-    10 tests in `tests/test_os_concepts.py`; 33 `/mind/*` endpoints total.
+    10 tests in `tests/test_os_concepts.py`; 35 `/mind/*` routes total.
 13. ✅ **Phase 13 LIVE (2026-09-08)** — `perception.py`: the SENSE side.
     Eight typed channels; perceptions enter the Phase-6 loop (novel →
     knowledge, repeated → rehearsed); significance = urgency / novelty /
     curiosity with surfaced reasons; the silent watcher's buffered changes
     ingest at the door + on demand. Kill switch `ARENA_PERCEPTION=0`.
-    12 tests in `tests/test_mind_perception.py`; 36 `/mind/*` endpoints.
-14. **Open (roadmap order):** Phase 14 attention (M8: current task / owner
-    speaking / important change / anomaly / unfinished goal / learned
-    curiosity arbitration over the perception stream); then M9
-    generalization eval, per the owner's sequencing.
+    12 tests in `tests/test_mind_perception.py`; 35 `/mind/*` paths
+    (38 routes — three paths carry two verbs) total.
+14. ✅ **Phase 14 LIVE (2026-09-08)** — `attention.py` (M8 resolved): the
+    arbitrator between perception and thought. Roadmap ladder from evidence
+    on the record (owner speech / urgency / novelty / unknown touch /
+    background), reasons surfaced, repeats demoted, watermark review, one
+    open unknown surfaced only when quiet; the popup-over-task advisory
+    ("may interfere with what you're doing") offered to working memory.
+    Decides only — `acted: False` on every verdict. Kill switch
+    `ARENA_ATTENTION=0`. 16 tests in `tests/test_mind_attention.py`;
+    38 `/mind/*` paths (41 routes) total.
+15. **Open (roadmap order):** Phase 15 motivation and goals (candidate
+    goals from needs/curiosity/unfinished goals/owner goals/environment +
+    learning opportunities → relevance → prioritize → act), then social /
+    personality / owner authority / self-reflection / self-improvement /
+    model evolution / voice-first UI / one-mind desktop+Android, and M9
+    generalization eval (P24), per the owner's sequencing.
 
 ---
 
