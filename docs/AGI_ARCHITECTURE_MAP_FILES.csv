@@ -1,0 +1,355 @@
+path,lines,agi_layer,disposition,cluster,module_summary,phase0_note
+app/__init__.py,1,infrastructure/package,KEEP,,,
+app/agents/__init__.py,0,infrastructure/package,KEEP,,,
+app/agents/coding_agent.py,283,capabilities/code,DEMOTE,,Coding Agent — a specialized multi-step agent for code tasks.,"task loop, thin-agent contract"
+app/agents/data_analysis_agent.py,327,capabilities/data,DEMOTE,,"Data Analysis Agent — a thin, read-only analysis loop.","task loop, thin-agent contract"
+app/agents/master_agent.py,1104,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
+app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cognition stays in the Mind
+app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
+app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,,,Phase 20 material: one mechanism of self-improvement
+app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
+app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
+app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
+app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
+app/api/vault.py,92,communication/api,KEEP,,Owner-controlled encrypted vault API.,HTTP surface for the mind's state/actions
+app/cognition/__init__.py,100,mind/cognition-core,INTEGRATE,,Phase 1 cognitive foundation for Arena.,cognition module; becomes an organ of BeanieMind
+app/cognition/action_outcomes.py,242,learning/experience,INTEGRATE,,Learned action→outcome statistics from Arena's verified execution history.,
+app/cognition/action_planner.py,338,mind/decision,MERGE,PLANNERS,Cognitive Action Planner & Candidate Branch Evaluator.,
+app/cognition/action_proposal.py,397,mind/decision,KEEP,,ActionProposal & Multi-Gate Verification Engine.,multi-gate proposal engine
+app/cognition/action_selection.py,363,mind/decision,INTEGRATE,,"Turn information needs into bounded, inspectable tool requests.",
+app/cognition/adaptive_autonomy.py,156,owner-authority/autonomy,KEEP,,Outcome-calibrated autonomy thresholds with owner-bounded exploration.,
+app/cognition/advanced_cognitive_capabilities.py,1833,mind/cognition-core,INTEGRATE,,Phase 14: Advanced Cognitive Capabilities,Phase-14 monolith — candidate for split when the Mind forms
+app/cognition/analogical_memory.py,287,memory/semantic,MERGE,MEMORY,Phase 3B: Analogical Reasoning.,analogical reasoning layer
+app/cognition/approval_store.py,208,owner-authority/approvals,KEEP,,Persistent recommendation/decision ledger for owner-reviewed actions.,
+app/cognition/associative_memory.py,298,memory/semantic,MERGE,MEMORY,Associative memory: embedding-backed recall layered over the lexical store.,
+app/cognition/attention_manager.py,43,mind/attention,INTEGRATE,ATTENTION,Phase D: Executive Attention & Priority Allocation Engine.,43-line seed — the Phase-14 attention system must grow here
+app/cognition/autonomous_goal_executor.py,999,mind/motivation,INTEGRATE,,Phase 8: Autonomous Goal Execution,
+app/cognition/autonomous_goal_generator.py,1161,mind/motivation,INTEGRATE,,Phase 7: Autonomous Goal Generation,
+app/cognition/autonomous_operator.py,458,mind/motivation,LEGACY,,Phase 6C: Autonomous Operation with Oversight.,owner-deferred prototype (charter §5⑦); test-only
+app/cognition/autonomy_allocator.py,32,owner-authority/autonomy,KEEP,,Resource-aware multi-goal allocation with owner priority dominance.,
+app/cognition/autonomy_envelope.py,58,owner-authority/autonomy,KEEP,,"Owner-defined, persistent operating envelope for autonomous cycles.",
+app/cognition/autonomy_lease.py,27,owner-authority/autonomy,KEEP,,Atomic SQLite lease preventing overlapping autonomous cycles.,
+app/cognition/autonomy_preemption.py,63,owner-authority/autonomy,KEEP,,Persistent receipts for owner-directed preemption and safe resume review.,
+app/cognition/autonomy_run_ledger.py,89,owner-authority/autonomy,KEEP,,Persistent stage-by-stage audit ledger for autonomous work.,
+app/cognition/autonomy_schedule.py,89,owner-authority/autonomy,KEEP,,Atomic timezone-aware owner task calendar.,
+app/cognition/belief_engine.py,239,mind/reasoning,MERGE,BELIEF,"Connect evidence, competing hypotheses, and belief revision.",two belief systems exist — consolidate to one
+app/cognition/beliefs.py,453,mind/reasoning,MERGE,BELIEF,Phase 3: evidence-backed beliefs and belief revision.,
+app/cognition/blackboard.py,79,mind/cognition-core,INTEGRATE,STATE,Ephemeral working memory for the active cognitive loop with clear boundary contracts.,fragment of future BeanieState (ephemeral loop memory)
+app/cognition/browser_adapters.py,170,embodiment/browser,KEEP,,"Owner-configured, service-specific browser adapters for receipts and deletes.",
+app/cognition/browser_grounding.py,52,models/world,INTEGRATE,WORLD,Persistent browser session/tab grounding without credential assumptions.,
+app/cognition/capability_factory.py,70,capabilities/registry,KEEP,,Verified dynamic capability synthesis.,dynamic capability synthesis
+app/cognition/capability_resolver.py,333,capabilities/registry,KEEP,,"Capability vocabulary resolver — owner review item 7 (2026-09-01, P0).",
+app/cognition/causal_inference.py,828,learning/causal,KEEP,,Phase 12: Causal Inference Engine,
+app/cognition/checkpoint.py,293,infrastructure/persistence,KEEP,,"Crash-safe, explicitly versioned cognitive checkpoints.",
+app/cognition/cognitive_pipeline.py,130,mind/cognition-core,LEGACY,AUTHORITY,Cognitive Pipeline Enforcer delegating strictly to CognitiveRuntime Composition Root.,delegating enforcer over the runtime; compat surface only
+app/cognition/cognitive_router.py,67,mind/cognition-core,LEGACY,,Resource-aware request routing primitives.,owner-deferred prototype (charter §5⑦); test-only
+app/cognition/cognitive_state.py,112,mind/cognition-core,INTEGRATE,STATE,"Shared, serializable working state for Arena's cognitive systems.",fragment of future BeanieState (working state)
+app/cognition/commitment_ledger.py,279,mind/cognition-core,KEEP,,Restart-safe commitments and deterministic introspection summaries.,
+app/cognition/common_sense/__init__.py,16,memory/semantic,KEEP,,Common Sense Knowledge Base for AGI,static common-sense KB
+app/cognition/common_sense/causal_knowledge.py,80,memory/semantic,KEEP,,Causal Knowledge,
+app/cognition/common_sense/common_sense_knowledge_base.py,333,memory/semantic,KEEP,,Common Sense Knowledge Base for AGI,
+app/cognition/common_sense/everyday_knowledge.py,127,memory/semantic,KEEP,,Everyday Life and Practical Knowledge,
+app/cognition/common_sense/human_behavior.py,123,memory/semantic,KEEP,,Human Behavior Knowledge,
+app/cognition/common_sense/physical_world.py,214,memory/semantic,KEEP,,Physical World Knowledge,
+app/cognition/common_sense/spatial_knowledge.py,117,memory/semantic,KEEP,,Spatial Knowledge,
+app/cognition/common_sense/technology_knowledge.py,139,memory/semantic,KEEP,,Technology and Computing Knowledge,
+app/cognition/common_sense/temporal_knowledge.py,85,memory/semantic,KEEP,,Temporal Knowledge,
+app/cognition/completion_honesty.py,157,mind/cognition-core,KEEP,,Completion honesty guard (owner live test 2026-09-08).,truth boundary
+app/cognition/concept_bridge.py,273,mind/reasoning,KEEP,,Goal-side concept expansion: colloquial SYMPTOMS -> diagnostic CONCEPTS.,symptoms → concepts expansion
+app/cognition/condition_language.py,677,mind/decision,KEEP,,The typed condition language (P0 review #9).,
+app/cognition/confidence.py,30,mind/reasoning,LEGACY,,Lightweight empirical calibration of evidence-source reliability.,owner-deferred prototype (charter §5⑦); test-only
+app/cognition/confidence_calibrator.py,369,mind/reasoning,KEEP,,Phase 5B: Confidence Calibration.,
+app/cognition/consciousness_simulation.py,725,models/self,INTEGRATE,SELF,Phase 19: Consciousness Simulation,Phase 19 engine
+app/cognition/consolidation.py,353,learning/consolidation,INTEGRATE,,"Audited consolidation of conflicts, durable gists, and calibration reports.",
+app/cognition/continual_learning.py,263,learning/consolidation,INTEGRATE,,Regression-gated continual-learning cycles (F3 orchestration).,
+app/cognition/correction_measurements.py,246,evaluation/learning,INTEGRATE,,Owner-correction telemetry kept separate from correctness and training state.,owner-correction telemetry — feeds learning-from-owner
+app/cognition/counterfactual_simulator.py,416,mind/imagination,KEEP,,Milestone 4: Counterfactual Parallel Mental Simulator Engine.,mental simulation of strategies
+app/cognition/creative_generation.py,624,mind/imagination,KEEP,,Phase 16: Creative Generation Engine,
+app/cognition/criterion_evaluator.py,374,mind/decision,KEEP,,CriterionEvaluator — the step-level predicate pipeline (P0 #16).,
+app/cognition/criticality_review.py,134,mind/decision,KEEP,,Bounded pre-gate criticality review for action recommendations.,
+app/cognition/cross_domain_transfer.py,851,learning/transfer,KEEP,,Phase 15: Cross-Domain Transfer Learning,owner-deferred embedding completion
+app/cognition/cultural_learning.py,989,learning/social,KEEP,,Phase 21: Cultural Learning,
+app/cognition/diagnostic_ranking.py,162,mind/reasoning,KEEP,,Diagnostic hypothesis ranking (P2 review).,
+app/cognition/disk_reservation.py,220,infrastructure/resources,KEEP,,Persistent free-disk reservations for bounded browser transfers.,
+app/cognition/embodied_boundary.py,83,models/world,MERGE,WORLD,"Evidence-linked boundary between Arena, owner, devices, and environment.",
+app/cognition/embodied_cognition.py,935,perception/environment,INTEGRATE,,Phase 20: Embodied Cognition,Phase 20 engine
+app/cognition/environment_grounding.py,105,models/world,MERGE,WORLD,Phase B/E: Environmental Self-Grounding & Resource Topology Engine.,
+app/cognition/environment_state.py,96,models/world,MERGE,WORLD,Environment observation/reconciliation (review #3).,overlaps world_model/environment_grounding — one world surface
+app/cognition/epistemic_presentation.py,225,mind/cognition-core,KEEP,,User-facing epistemic status for evidence-grounded responses.,
+app/cognition/ethical_reasoning.py,623,owner-authority/values,KEEP,,Phase 11: Ethical Reasoning System,annotates + routes to owner decision; never suppresses (charter §2)
+app/cognition/event_bus.py,68,infrastructure/events,KEEP,,Lightweight in-process event bus for Arena's cognitive systems.,
+app/cognition/events.py,32,infrastructure/events,KEEP,,Typed-enough cognitive events used to decouple Arena subsystems.,
+app/cognition/execution_control.py,569,mind/cognition-core,KEEP,,Cooperative cancellation registry and truthful rollback receipts.,
+app/cognition/execution_result.py,85,mind/cognition-core,KEEP,,First-Class ExecutionResult and ExecutionStatus Abstractions.,
+app/cognition/execution_truth.py,306,mind/cognition-core,KEEP,,"Execution Truth Layer (owner review item 12 / P0 #2, 2026-09-01).",
+app/cognition/experiment_engine.py,80,mind/imagination,INTEGRATE,,Phase C: Experimentation & Self-Play Sandbox Exploration Engine.,experimentation sandbox — Phase-9 curiosity effector
+app/cognition/functional_affect.py,271,models/self,INTEGRATE,,"Bounded functional affect telemetry, not subjective emotion.",bounded functional affect telemetry (social/emotional context)
+app/cognition/goal_decomposer.py,543,mind/decision,INTEGRATE,PLANNERS,Phase 6A: Long-Horizon Goal Decomposition.,
+app/cognition/goal_interpreter.py,1397,mind/reasoning,KEEP,,Semantic Goal & Intent Representation Layer (Goal Representation v2).,goal representation v2
+app/cognition/goal_lifecycle.py,151,mind/cognition-core,KEEP,,Goal Lifecycle & State Progression Engine.,
+app/cognition/goal_replanner.py,263,mind/decision,INTEGRATE,PLANNERS,Goal Reassessment & Replanning Engine.,
+app/cognition/goal_verifier.py,873,mind/cognition-core,KEEP,,Goal Verification Engine.,
+app/cognition/guard_visibility.py,155,mind/cognition-core,KEEP,,"Guard-refusal visibility (owner vision charter §6, raw-input item).",charter §6
+app/cognition/hypotheses.py,142,mind/reasoning,INTEGRATE,BELIEF,Bounded competing hypotheses for evidence-driven reasoning.,
+app/cognition/identity_adaptation.py,1066,models/self,MERGE,SELF,Owner-governed identity adaptation and purpose proposals.,owner-governed identity adaptation — personality-development seed
+app/cognition/identity_continuity.py,79,models/self,MERGE,SELF,Restart-aware continuity checks for Arena's functional identity state.,
+app/cognition/incubation_queue.py,556,mind/imagination,KEEP,,"Owner-visible, bounded incubation queue for safe background reasoning.",bounded background reasoning
+app/cognition/inference_profile.py,370,infrastructure/inference,KEEP,,Owner-managed local inference profile with measured recommendations.,
+app/cognition/information_gain.py,16,mind/motivation,KEEP,,Lightweight information-seeking primitives for uncertain beliefs.,information-seeking primitives
+app/cognition/intelligence_benchmark.py,1862,evaluation/regression,KEEP,,"Isolated longitudinal benchmarks for learning, transfer, and control integrity.","isolated longitudinal benchmark — regression-style, NOT the Phase-24 generalization tasks"
+app/cognition/language_grounding.py,855,mind/reasoning,KEEP,,Phase 22: Language Grounding,
+app/cognition/learning_progress.py,162,mind/motivation,KEEP,,Learning-progress motivation: explore where competence is actually growing.,curiosity: explore growing competence
+app/cognition/lora_evaluation.py,282,learning/consolidation,KEEP,,Held-out LoRA evaluation and evidence-gated provider deployment.,
+app/cognition/memory.py,534,memory/episodic+semantic+procedural,INTEGRATE,MEMORY,"Phase 4: lightweight persistent episodic, semantic, and procedural memory.",the future unified-memory facade nucleus
+app/cognition/memory_learning.py,244,learning/experience,MERGE,REFLECTION,Phase 4/P1-F: Memory Learning & Reflection Integration Engine.,
+app/cognition/metacognitive_monitor.py,903,models/self,INTEGRATE,SELF,Phase 18: Metacognitive Monitoring,metacognition feeds the self model + anticipation
+app/cognition/observation_router.py,1074,models/world,INTEGRATE,WORLD,Deterministic routing of host-state questions to real read-only observations.,host-state questions → real observations
+app/cognition/ontology_schema.py,383,models/world,KEEP,,Owner-controlled ontology/schema revisions with append-only history.,owner-controlled ontology revisions
+app/cognition/os_control_planner.py,362,embodiment/os-abstraction,INTEGRATE,,"General OS control: one planner for every OS action, every platform.","seed of the Phase-12 OS concept abstraction (one planner, all OSes)"
+app/cognition/os_grounding.py,64,models/world,INTEGRATE,WORLD,"Persistent evidence links between tasks, applications, processes, and windows.",task↔app↔process↔window evidence links
+app/cognition/owner_charter.py,196,owner-authority/values,KEEP,,The Owner Charter: the owner's values and priorities as the top directive.,owner's values as top directive (charter §2)
+app/cognition/owner_control.py,396,owner-authority/control-plane,KEEP,,Persistent owner control plane for action authorization.,
+app/cognition/owner_decisions.py,205,owner-authority/decisions,KEEP,,Signed owner decisions binding expected system-state changes to authority.,
+app/cognition/owner_model.py,193,models/owner,INTEGRATE,,The owner model: counted patterns from the owner's own decisions.,exists: counted patterns from owner decisions; becomes the relationship model
+app/cognition/parked_goal_recheck.py,317,mind/motivation,KEEP,,Parked goals get re-checked automatically (owner live test 2026-09-08).,wired in server lifespan
+app/cognition/perception.py,728,perception/environment,INTEGRATE,,Perception & Observation Collector Layer.,observation collector — post-action probes today
+app/cognition/periodic_autonomous_cycle.py,772,mind/motivation,INTEGRATE,,Phase 10: Periodic Autonomous Cycle,
+app/cognition/phase0_evaluation.py,435,evaluation/learning,KEEP,,Isolated Phase 0 evaluation runner for evidence-centered behavior.,
+app/cognition/phase1_evidence.py,202,evaluation/learning,KEEP,,Owner-visible aggregation for bounded Phase 1 evidence.,
+app/cognition/phase1_task_evaluations.py,356,evaluation/learning,KEEP,,Append-only owner-recorded evaluations for Phase 1 held-out tasks.,
+app/cognition/phase7_preferences.py,615,mind/motivation,INTEGRATE,,Bounded Phase 7 preference and novelty evaluations.,preference & novelty evaluation
+app/cognition/pipeline.py,10,mind/cognition-core,LEGACY,AUTHORITY,Compatibility names for the single authoritative cognitive pipeline.,compat aliases (PipelineBridge); stop building on it
+app/cognition/plan_control.py,352,owner-authority/plan-review,KEEP,,"Owner review, editing, approval, and revocation for execution plans.",
+app/cognition/plan_freshness.py,57,mind/decision,KEEP,,Cross-session environment assumptions bound to an approved plan revision.,
+app/cognition/plan_step_reconciliation.py,191,mind/decision,KEEP,,Reconciliation outcomes applied to exact reviewed plan steps.,
+app/cognition/planning_patterns.py,267,mind/decision,MERGE,PLANNERS,Phase 3C: Domain-General Planning Patterns.,
+app/cognition/prediction_engine.py,85,mind/imagination,KEEP,,Phase C/P1-E: Prediction vs Outcome Surprisal Engine.,prediction vs outcome surprisal
+app/cognition/privilege_model.py,39,models/world,KEEP,,Explicit OS privilege and process-ownership evidence.,OS privilege evidence
+app/cognition/project_manager.py,562,mind/decision,INTEGRATE,PLANNERS,Phase 6B: Multi-Session Project Management.,
+app/cognition/project_scheduler.py,520,mind/decision,INTEGRATE,PLANNERS,"Persistent, resource-aware execution of ready project sub-goals.",
+app/cognition/prompt_slicer.py,74,infrastructure/inference,KEEP,,Dynamic Instruction Slicer & Context Budget Prompt Summarizer Guard.,
+app/cognition/prospective_memory.py,77,memory/working,INTEGRATE,MEMORY,Bounded prospective-memory helpers for conversation-turn reminders.,
+app/cognition/raw_input_guard.py,214,owner-authority/safety-gates,KEEP,,Mandatory grounding gate for legacy raw-coordinate input actions.,
+app/cognition/reasoning_cycle.py,123,mind/reasoning,MERGE,LOOP,"Phase 3 cognitive loop: assess, identify uncertainty, and choose next step.",two cognitive loops exist — one loop in the Mind
+app/cognition/reasoning_loop.py,264,mind/reasoning,MERGE,LOOP,Closed observe -> reason -> investigate -> observe cognitive loop.,
+app/cognition/resource_allocator.py,543,mind/decision,KEEP,,Phase 5C: Strategic Resource Allocation.,
+app/cognition/response_grounding.py,181,mind/cognition-core,KEEP,,Reconcile generated responses with authoritative evidence.,truth boundary
+app/cognition/runtime.py,5337,mind/cognition-core,INTEGRATE,AUTHORITY,Unit P1-A: Canonical CognitiveRuntime Composition Root Integration.,"de-facto brain today (singleton composition root, 5.3k lines); becomes the interior of BeanieMind — not a separate authority"
+app/cognition/runtime_wiring.py,285,mind/cognition-core,INTEGRATE,,Phase-module wiring for the cognitive cycle (Phases 11-21).,phase-module wiring glue
+app/cognition/scene_causal.py,132,mind/imagination,INTEGRATE,,Causal and counterfactual replay for the deterministic scene model.,causal replay of scenes
+app/cognition/scene_graph.py,635,models/world,INTEGRATE,WORLD,Deterministic scene state and bounded 2D physics predictions.,deterministic scene state
+app/cognition/self_knowledge.py,360,models/self,MERGE,SELF,Evidence-linked self-knowledge and agency attribution.,
+app/cognition/self_model.py,281,models/self,MERGE,SELF,Phase 5A: Self-Model.,exists (Phase 5A); merge with self_knowledge/identity_*
+app/cognition/self_recovery.py,197,models/self,MERGE,SELF,"Persistent, advisory-only recovery for functional identity discontinuities.",
+app/cognition/self_reflection_engine.py,612,mind/reflection,MERGE,REFLECTION,Phase 9: Self-Reflection Engine for Autonomous Goals,
+app/cognition/semantic_matcher.py,385,capabilities/registry,KEEP,,Local semantic matching for capability discovery (P0 review #4).,
+app/cognition/session.py,24,infrastructure/session,KEEP,,Session isolation for Arena's cognitive context.,
+app/cognition/skill_classifier.py,169,learning/experience,INTEGRATE,,Phase 3A: Skill Abstraction Layer.,
+app/cognition/skill_induction.py,293,learning/experience,INTEGRATE,,Skill induction: compress repeated successful action sequences into skills.,action sequences → skills (procedural memory feed)
+app/cognition/social_cognition.py,1206,learning/social,INTEGRATE,,Phase 17: Social Cognition Module,Phase 16 engine
+app/cognition/source_types.py,192,mind/cognition-core,KEEP,,Canonical source types for evidence provenance.,
+app/cognition/step_verifier.py,304,mind/cognition-core,KEEP,,"StepVerifier — independent per-step verification, distinct from GoalVerifier.",
+app/cognition/strategic_planning.py,733,mind/decision,MERGE,PLANNERS,Phase 13: Long-Term Strategic Planning,
+app/cognition/strategy_outcomes.py,380,learning/experience,INTEGRATE,,Phase 1B: Strategy Outcome Tracking & Outcome-Influenced Selection.,
+app/cognition/structured_lessons.py,363,learning/experience,INTEGRATE,,Phase 1C: Structured Lesson Extraction & Behavior Change.,
+app/cognition/temporal_vision.py,382,perception/vision,KEEP,,Deterministic temporal object tracking across visual frames.,stream-isolated tracking
+app/cognition/tool_matcher.py,862,capabilities/registry,DEMOTE,TOOL-FIRST,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; keep as capability resolution invoked AFTER world reasoning
+app/cognition/tool_registry.py,935,capabilities/registry,KEEP,,Unified Tool Capability Registry with Gate Verification & Event Emissions.,"single capability authority — called BY the mind, never as it"
+app/cognition/trace.py,345,evaluation/trace,KEEP,,Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry.,
+app/cognition/training_examples.py,540,learning/consolidation,KEEP,,Owner-reviewed continual-learning examples from verified outcomes.,owner-reviewed LoRA candidates
+app/cognition/uncertainty_questions.py,294,mind/cognition-core,KEEP,,Uncertainty-driven owner questions: ask instead of acting on weak evidence.,ask instead of acting on weak evidence
+app/cognition/user_state.py,297,models/owner,MERGE,OWNER,Versioned owner state with explicit provenance.,merge with owner_model
+app/cognition/verified_reflection.py,372,mind/reflection,MERGE,REFLECTION,Phase 4: Verified Reflection System.,three reflection engines exist — one reflection in the Mind
+app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserver — deterministic ""understand the screen"" step for the vision loop.",
+app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
+app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
+app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
+app/config.py,60,infrastructure/config,KEEP,,,
+app/database.py,465,infrastructure/persistence,KEEP,,,
+app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
+app/llm.py,771,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
+app/main.py,3224,infrastructure/entry,KEEP,,,127 core REST routes
+app/memory/__init__.py,0,memory,INTEGRATE,,,memory subsystem; folds into the unified memory facade
+app/memory/coworker_brain.py,109,mind/identity,INTEGRATE,AUTHORITY,,persona string only — the seed of 'I am Beanie'; must become a real identity record inside the Mind
+app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
+app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
+app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
+app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
+app/perception/__init__.py,1,perception/environment,INTEGRATE,,,perception module
+app/perception/anticipation_engine.py,303,mind/attention,INTEGRATE,ATTENTION,Phase 4C: Anticipatory Action Engine.,charter §5②
+app/perception/background_observer.py,493,perception/environment,KEEP,,Phase 4A: Background Observation Loop.,charter §5④ silent watcher
+app/perception/event_prioritizer.py,211,perception/environment,KEEP,,Phase 4B: Event-Driven Cognition.,classify → dedupe → decision
+app/perception/piper_voice.py,399,communication/voice,KEEP,,Shared Piper text-to-speech integration.,
+app/perception/speech_to_text.py,148,perception/audio,KEEP,,,
+app/perception/text_to_speech.py,280,communication/voice,KEEP,,,
+app/policy.py,136,owner-authority/policy,KEEP,,,
+app/runtime/__init__.py,5,infrastructure/resources,KEEP,,Runtime resource-management primitives.,
+app/runtime/resource_manager.py,53,infrastructure/resources,KEEP,,Lightweight resource awareness derived from the current host at runtime.,
+app/scheduler/__init__.py,4,infrastructure/scheduling,KEEP,,,
+app/scheduler/scheduler.py,87,infrastructure/scheduling,KEEP,,,
+app/scheduler/self_healer.py,59,infrastructure/scheduling,KEEP,,,
+app/server.py,615,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
+app/settings_store.py,66,infrastructure/config,KEEP,,Shared backend settings store (cross-platform).,
+app/skill_acquisition.py,97,learning/demonstration,INTEGRATE,,,closest thing to demonstration learning today
+app/tasks.py,145,infrastructure/persistence,KEEP,,,
+app/tools/__init__.py,1,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/accessibility_control.py,127,embodiment/generic,KEEP,OS,"Semantic OS targeting through accessibility trees, with honest degradation.",
+app/tools/android_adb_controller.py,168,embodiment/android,KEEP,OS,,owner's phone — first-class (charter §4)
+app/tools/app_inventory.py,620,embodiment/generic,KEEP,OS,,
+app/tools/ast_janitor.py,92,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/backup_manager.py,312,embodiment/filesystem,KEEP,OS,Backup & restore — versioned zip snapshots of files/directories.,
+app/tools/binary_analyzer.py,177,capabilities/general,KEEP,,Honest binary structure analysis with the Python standard library only.,manifest capability; motor-system unit for the future Mind
+app/tools/browser_automation.py,1106,embodiment/browser,KEEP,OS,,
+app/tools/budget_tracker.py,181,capabilities/general,KEEP,,Budget tracker — a deterministic CSV transaction ledger with category totals,manifest capability; motor-system unit for the future Mind
+app/tools/business_growth.py,125,capabilities/general,KEEP,,Business growth — professional-grade opportunity + growth-loop strategist.,manifest capability; motor-system unit for the future Mind
+app/tools/calculator.py,235,capabilities/general,KEEP,,"Deterministic arithmetic evaluation (DIAG F3b, live incident D1).",manifest capability; motor-system unit for the future Mind
+app/tools/calendar_service.py,252,capabilities/general,KEEP,,Local calendar / reminders — a native coworker tool (browser-free).,manifest capability; motor-system unit for the future Mind
+app/tools/camera_capture.py,123,perception/vision,INTEGRATE,SENSES,Native webcam capture (browser-free).,
+app/tools/coder_brain.py,123,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/connectors.py,64,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/contacts.py,176,capabilities/general,KEEP,,"Contacts — a deterministic, browser-free contacts manager.",manifest capability; motor-system unit for the future Mind
+app/tools/content_creator.py,140,capabilities/general,KEEP,,Content creation — professional-grade multi-format content generator.,manifest capability; motor-system unit for the future Mind
+app/tools/crypto_vault.py,241,capabilities/general,KEEP,,Owner-controlled encrypted vault for secrets and messages.,manifest capability; motor-system unit for the future Mind
+app/tools/cybersecurity_brain.py,139,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/daily_briefing.py,111,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/data_analyzer.py,125,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/database_connector.py,252,capabilities/general,KEEP,,Database connector (SQLite / PostgreSQL / MySQL) — read AND write.,manifest capability; motor-system unit for the future Mind
+app/tools/deep_os_controller.py,234,embodiment/windows,KEEP,OS,,
+app/tools/desktop_control.py,128,embodiment/generic,KEEP,OS,,
+app/tools/display_topology.py,61,embodiment/generic,KEEP,OS,Verified multi-monitor topology and coordinate transforms.,
+app/tools/disposable_sandbox.py,269,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/doc_manager.py,206,embodiment/filesystem,KEEP,OS,,
+app/tools/doc_reader.py,11,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/document_generator.py,79,capabilities/general,KEEP,,"Document generation — markdown → HTML (and, if available, PDF).",manifest capability; motor-system unit for the future Mind
+app/tools/email_service.py,107,capabilities/general,KEEP,,Email send/read — native coworker tool (Level-3 gated by the caller).,manifest capability; motor-system unit for the future Mind
+app/tools/fact_checker.py,125,capabilities/general,KEEP,,"Fact-check / citation — assess a claim against live web sources, with real links.",manifest capability; motor-system unit for the future Mind
+app/tools/file_index.py,208,embodiment/filesystem,KEEP,OS,Persistent filename index — the agent's own mini search index.,
+app/tools/finance_trader.py,110,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/financial_legal_wellness.py,176,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/git_manager.py,71,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/indexed_search.py,251,embodiment/filesystem,KEEP,OS,Indexed filesystem search providers (P0 review #11).,
+app/tools/invoice_generator.py,205,capabilities/general,KEEP,,Invoice generator — deterministic PDF invoices/quotes/receipts from line items.,manifest capability; motor-system unit for the future Mind
+app/tools/knowledge_domains.py,93,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/knowledge_indexer.py,98,learning/media,INTEGRATE,,,
+app/tools/local_executor.py,122,embodiment/generic,KEEP,OS,"Generic local command / script / API executor — the ""escape hatch"" tool.",the escape-hatch effector
+app/tools/location_service.py,131,capabilities/general,KEEP,,Native location resolution (browser-free).,manifest capability; motor-system unit for the future Mind
+app/tools/lora_manager.py,540,learning/consolidation,KEEP,,LoRA manager — continual learning via LoRA adapters for Qwen.,
+app/tools/manifest.py,1076,capabilities/general,KEEP,,Unified tool capability manifest.,manifest capability; motor-system unit for the future Mind
+app/tools/media_studio.py,107,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/messaging.py,94,capabilities/general,KEEP,,Messaging — send Telegram and WhatsApp messages.,manifest capability; motor-system unit for the future Mind
+app/tools/music_studio.py,78,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/network_diagnostics.py,174,capabilities/general,KEEP,,"Network diagnostics — DNS lookup, port check, ping, traceroute, WHOIS.",manifest capability; motor-system unit for the future Mind
+app/tools/notes_manager.py,95,capabilities/general,KEEP,,Markdown notes manager — a native coworker tool (browser-free).,manifest capability; motor-system unit for the future Mind
+app/tools/object_detector.py,385,perception/vision,INTEGRATE,SENSES,"Object detection + face detection — deterministic, local, degradable.",
+app/tools/ocr_reader.py,46,perception/vision,INTEGRATE,SENSES,,
+app/tools/opsec_manager.py,139,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/package_installer.py,213,embodiment/generic,KEEP,OS,Package installer — list/check/install/uninstall pip and npm packages.,
+app/tools/pdf_toolkit.py,226,capabilities/general,KEEP,,"PDF toolkit — merge, split, extract, read metadata/text, and fill forms.",manifest capability; motor-system unit for the future Mind
+app/tools/pentest_company_assistant.py,153,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/plugin_registry.py,78,capabilities/general,KEEP,,Plugin registry — a folder where dropping a Python file adds a capability.,manifest capability; motor-system unit for the future Mind
+app/tools/presentation_generator.py,114,capabilities/general,KEEP,,Presentation generator — deterministic .pptx slides from an outline.,manifest capability; motor-system unit for the future Mind
+app/tools/price_lookup.py,115,capabilities/general,KEEP,,Price / portfolio lookup — keyless crypto and stock quotes.,manifest capability; motor-system unit for the future Mind
+app/tools/privilege_inspector.py,8,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/process_manager.py,283,embodiment/generic,KEEP,OS,Process manager — list / inspect / terminate local processes.,
+app/tools/prosody_analyzer.py,209,perception/audio,INTEGRATE,SENSES,"Voice prosody analyzer — deterministic, local, degradable.",
+app/tools/pure_code.py,174,capabilities/general,KEEP,,Pure-computation evaluator — the deterministic calculator's class of,manifest capability; motor-system unit for the future Mind
+app/tools/recipes.py,187,capabilities/general,KEEP,,Deterministic recipes — multi-step composition over existing tools.,manifest capability; motor-system unit for the future Mind
+app/tools/rss_aggregator.py,153,capabilities/general,KEEP,,"RSS/Atom aggregator — fetch feeds, parse them deterministically, optionally",manifest capability; motor-system unit for the future Mind
+app/tools/screen_capture.py,154,perception/screen,INTEGRATE,SENSES,,
+app/tools/security_canary.py,100,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/security_education.py,77,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/security_lab.py,61,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/skill_teaching_engine.py,186,learning/demonstration,INTEGRATE,,,form-driven today; Phase 7 makes conversation the teacher
+app/tools/spreadsheet.py,142,capabilities/general,KEEP,,Spreadsheet engine — deterministic .xlsx read/write/aggregate (no LLM).,manifest capability; motor-system unit for the future Mind
+app/tools/sql_query.py,93,capabilities/general,KEEP,,Read-only SQL query tool for local SQLite databases and CSV files.,manifest capability; motor-system unit for the future Mind
+app/tools/system_diagnostics.py,677,capabilities/general,KEEP,,System diagnostics — read-only Level-0 probes for machine-state questions.,manifest capability; motor-system unit for the future Mind
+app/tools/task_tools.py,59,capabilities/general,KEEP,,Task-list tools: the TaskManager surface as manifest capabilities.,manifest capability; motor-system unit for the future Mind
+app/tools/translator.py,41,capabilities/general,KEEP,,"Translation via the local Qwen LLM — no external API, no key.",manifest capability; motor-system unit for the future Mind
+app/tools/universal_filesystem.py,1041,embodiment/filesystem,KEEP,OS,,
+app/tools/universal_media_learner.py,172,learning/media,INTEGRATE,,,Phase-8 nucleus
+app/tools/vision_analyzer.py,197,perception/vision,INTEGRATE,SENSES,,
+app/tools/vlm_analyzer.py,313,perception/vision,INTEGRATE,SENSES,"VLM analyzer — true visual understanding via tiny VLM (Moondream2 / Llava-Phi), with grace",
+app/tools/weather_service.py,84,capabilities/general,KEEP,,"Weather lookup — free, keyless (Open-Meteo), browser-free.",manifest capability; motor-system unit for the future Mind
+app/tools/web_agent.py,259,embodiment/browser,DEMOTE,OS,Autonomous multi-step Web Agent — a professional-grade browser coworker.,autonomous loop — cognition must move to the Mind
+app/tools/web_research.py,436,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/win32_ghost_operator.py,153,embodiment/windows,KEEP,OS,,
+app/tools/workflow_engine.py,85,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
+app/tools/youtube_learner.py,152,learning/media,INTEGRATE,,,
+app/utils/__init__.py,1,infrastructure/utils,KEEP,,,
+app/utils/concurrency_governor.py,272,infrastructure/utils,KEEP,,"Measured, owner-configured worker concurrency derived from live pressure.",
+app/utils/decision_trace.py,120,evaluation/trace,KEEP,,"Decision trace: the tiniest-detail ""why"" log the owner asked for.",wired via lazy imports in llm.py
+app/utils/hardware_governor.py,274,infrastructure/utils,KEEP,,,
+app/utils/hardware_monitor.py,32,infrastructure/utils,KEEP,,,
+app/utils/logger.py,105,infrastructure/utils,KEEP,,,
+app/utils/notifier.py,22,infrastructure/utils,KEEP,,,
+app/utils/spa.py,49,infrastructure/utils,KEEP,,Shared SPA-serving helpers.,
+app/utils/submissions.py,23,infrastructure/utils,KEEP,,Small idempotency helpers for append-only owner measurement submissions.,
+backend/__init__.py,16,infrastructure/package,KEEP,,Arena backend package.,
+backend/api/__init__.py,1,communication/api,KEEP,,Backend API routes.,
+backend/api/device_routes.py,119,communication/api,KEEP,,Device management and pairing.,
+backend/api/language_routes.py,140,communication/api,KEEP,,Multi-language support and translation.,
+backend/api/phase6_routes.py,868,communication/api,KEEP,,"Phase 6 API routes: File uploads, code execution, and multi-modal analysis.",
+backend/api/screenshot_routes.py,325,communication/api,KEEP,,Live screenshot streaming and analysis.,
+backend/api/speaker_routes.py,114,communication/api,KEEP,,Speaker identification and voice enrollment.,
+backend/api/theme_routes.py,150,communication/api,KEEP,,Theme customization.,
+backend/api/wakeword_routes.py,318,communication/api,KEEP,,Custom wake word training and management.,
+backend/chat_corrections.py,364,learning/conversation,INTEGRATE,,In-chat owner corrections.,in-chat owner corrections — Phase-7 teaching surface
+backend/main.py,20,infrastructure/entry,LEGACY,,Backward-compatible shim for the unified Arena server.,compat shim alias
+backend/message_router.py,882,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
+backend/voice/__init__.py,28,communication/voice,KEEP,,Voice pipeline for Arena.,
+backend/voice/audio_capture.py,176,communication/voice,KEEP,,Audio capture service using PyAudio.,
+backend/voice/orchestrator.py,490,communication/voice,KEEP,,"Voice pipeline orchestrator - coordinates audio capture, wake word, VAD, STT, and TTS.",
+backend/voice/remote_audio.py,113,communication/voice,KEEP,,Remote (phone) audio ingestion — browser-free and dependency-light.,phone audio ingestion
+backend/voice/sample_wake_model.py,238,communication/voice,KEEP,,Custom wake-word model that ACTUALLY trains from the owner's samples.,
+backend/voice/service.py,617,communication/voice,INTEGRATE,ENTRIES,Voice service - integrates voice pipeline with WebSocket and cognitive runtime.,voice entry — must enter the same Mind
+backend/voice/stt.py,154,communication/voice,KEEP,,Speech-to-Text using faster-whisper.,
+backend/voice/tts.py,152,communication/voice,KEEP,,Text-to-Speech using Piper (in-process via the ``piper-tts`` package).,
+backend/voice/vad.py,212,communication/voice,KEEP,,Voice Activity Detection using Silero VAD.,
+backend/voice/wake_word.py,175,communication/voice,KEEP,,Wake word detection using openWakeWord.,
+backend/websocket_server.py,162,communication/text,KEEP,,WebSocket server for real-time communication with frontend.,
+desktop/__init__.py,3,communication/presence,KEEP,,Native (browser-free) Arena desktop client.,desktop client of the one Mind (Phase 23)
+desktop/app.py,785,communication/presence,KEEP,,Native Arena desktop window (PySide6 / Qt) — now modularized.,desktop client of the one Mind (Phase 23)
+desktop/backend_client.py,688,communication/presence,KEEP,,HTTP + WebSocket client for the Arena backend (used by the native desktop app).,desktop client of the one Mind (Phase 23)
+desktop/chat_client.py,289,communication/presence,KEEP,,WebSocket chat client for the native desktop app (GUI-free).,desktop client of the one Mind (Phase 23)
+desktop/design_tokens.py,259,communication/presence,KEEP,,Design tokens — programmatic access to design/tokens.json.,desktop client of the one Mind (Phase 23)
+desktop/main.py,52,communication/presence,KEEP,,Entry point for the native Arena desktop client.,desktop client of the one Mind (Phase 23)
+desktop/pages/__init__.py,27,communication/presence,KEEP,,Pages package — modularized from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/beanie.py,176,communication/presence,KEEP,,BeaniePage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/chat.py,288,communication/presence,KEEP,,ChatPage — extracted.,desktop client of the one Mind (Phase 23)
+desktop/pages/code.py,71,communication/presence,KEEP,,CodePage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/files.py,78,communication/presence,KEEP,,FilesPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/lora.py,134,communication/presence,KEEP,,LoRA page — continual learning via LoRA adapters (P3 AGI).,desktop client of the one Mind (Phase 23)
+desktop/pages/message_bubble.py,106,communication/presence,KEEP,,MessageBubble — extracted.,desktop client of the one Mind (Phase 23)
+desktop/pages/owner_control.py,974,communication/presence,KEEP,,Native desktop Owner Control page.,desktop client of the one Mind (Phase 23)
+desktop/pages/pansophy.py,83,communication/presence,KEEP,,PansophyPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/projects.py,151,communication/presence,KEEP,,ProjectsPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/response_review.py,399,communication/presence,KEEP,,"ResponseReviewBar — native ""Review response"" controls (PySide6).",desktop client of the one Mind (Phase 23)
+desktop/pages/settings.py,266,communication/presence,KEEP,,SettingsPage — extracted.,desktop client of the one Mind (Phase 23)
+desktop/pages/tools.py,225,communication/presence,KEEP,,ToolsPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/pages/vision.py,207,communication/presence,KEEP,,VisionPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/response_review.py,151,communication/presence,KEEP,,Response review logic for the native desktop client (GUI-free).,desktop client of the one Mind (Phase 23)
+desktop/settings.py,87,communication/presence,KEEP,,Persistent desktop-app settings.,desktop client of the one Mind (Phase 23)
+desktop/styles.py,105,communication/presence,KEEP,,Styles — QSS helpers that read current theme globals + shared design tokens.,desktop client of the one Mind (Phase 23)
+desktop/theme.py,209,communication/presence,KEEP,,Theme — the desktop client's palette and Beanie presence states.,desktop client of the one Mind (Phase 23)
+desktop/voice_client.py,330,communication/presence,KEEP,,Voice capture + backend streaming for the native desktop client.,desktop client of the one Mind (Phase 23)
+desktop/widgets/__init__.py,7,communication/presence,KEEP,,Widgets package — modularized from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/widgets/context.py,254,communication/presence,KEEP,,ContextPanel — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/widgets/orb.py,164,communication/presence,KEEP,,Presence orb widget — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/widgets/sidebar.py,166,communication/presence,KEEP,,LeftSidebar — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/widgets/working_context.py,69,communication/presence,KEEP,,WorkingContextCard — the inline 'Working context' card (design review section 4).,desktop client of the one Mind (Phase 23)
+desktop/workers.py,248,communication/presence,KEEP,,Workers — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+scripts/audit_dead_assertions.py,148,evaluation/ops,KEEP,,Static audit: assertions that can NEVER execute.,
+scripts/audit_dead_code.py,246,evaluation/ops,KEEP,,Dead-code / abandoned-code / repetition audit (owner standing rule).,
+scripts/benchmark_intelligence.py,21,evaluation/ops,KEEP,,Run Arena's isolated longitudinal intelligence benchmark suite.,
+scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio benchmark: measured latency/throughput/RAM per model.,
+scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
+scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
+scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
+scripts/map_agi_architecture.py,666,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
+scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
+scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,
+scripts/sync_probe.py,147,evaluation/ops,KEEP,,Two-client live sync probe against the running server.,
+scripts/train_lora.py,114,evaluation/ops,KEEP,,Train a LoRA adapter for continual learning (P2 AGI).,
+scripts/validate_os_control.py,30,evaluation/ops,KEEP,,Owner-machine OS-control validation using read-only probes and a temp workspace.,
+scripts/verify_fixes_live.py,565,evaluation/ops,KEEP,,"Live verification of the P0 fixes (#6, #7, #8, #9) — run on YOUR machine.",

@@ -7,10 +7,33 @@
 
 ## Current owner-directed gate
 
-Feature work is paused for the [repository-wide dead-code/repetition audit](REPOSITORY_AUDIT.md) — re-run 2026-09-07 over the post-session tree (see the incremental section there): 0 dead symbols across five passes; the session's one duplication consolidated into `frontend/src/services/http.ts`; the knowledge/memory editor scaffold consolidation is proposed for owner decision.
+**2026-09-08 — Beanie AGI roadmap active; Phase 0 (architecture freeze) complete.**
+The dead-code/repetition audit closed clean ([REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md):
+0 dead symbols across five passes; the knowledge/memory editor scaffold
+consolidation remains proposed for owner decision), and the full suite was
+re-verified at this gate: **3,353 passed, 19 skipped, 0 failed**. All new work is
+sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); the module-by-module freeze is
+[`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md). Next step awaits owner
+sequencing of the map's §8 proposal (BeanieMind facade → BeanieState → entry
+convergence).
+
+Earlier gate (superseded 2026-09-08): Feature work was paused for the
+[repository-wide dead-code/repetition audit](REPOSITORY_AUDIT.md) — re-run
+2026-09-07 over the post-session tree (see the incremental section there): 0 dead
+symbols across five passes; the session's one duplication consolidated into
+`frontend/src/services/http.ts`.
 Unique unconnected features are retained by owner choice and listed explicitly;
 this does not make them working features or change their phase maturity. Review
 the audit and caller map before adding another implementation.
+
+**GOVERNING ROADMAP:** [`AGI_ROADMAP.md`](AGI_ROADMAP.md) (owner, 2026-09-08)
+sets the AGI-first direction: evolve Arena into one continuously learning mind
+("Beanie"), not more capabilities. Phase 0 is complete in this repository:
+[`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md) +
+[`AGI_ARCHITECTURE_MAP_FILES.csv`](AGI_ARCHITECTURE_MAP_FILES.csv) classify all
+354 production modules (regenerate: `python scripts/map_agi_architecture.py`).
+Standing rule: *"another capability, or more general intelligence?"* Capability
+work is frozen unless it serves the map's INTEGRATE/MERGE/MISSING items.
 
 **GOVERNING CHARTER:** [`OWNER_VISION_CHARTER.md`](OWNER_VISION_CHARTER.md)
 (owner, 2026-09-08) now outranks every design decision in this repository:

@@ -9,6 +9,9 @@ That has been reconciled. Here is the authoritative layout.
 
 | File | What it is |
 |---|---|
+| `AGI_ROADMAP.md` | **Governing direction (2026-09-08):** the owner's AGI-first roadmap — evolve Arena into one continuously learning mind ("Beanie"), phases 0–24 |
+| `AGI_ARCHITECTURE_MAP.md` | Phase-0 freeze: every module classified into the AGI layer model (KEEP/INTEGRATE/MERGE/DEMOTE/LEGACY), cognitive-authority verdict, MISSING ledger |
+| `AGI_ARCHITECTURE_MAP_FILES.csv` | Module-by-module layer/disposition ledger (regenerate: `python scripts/map_agi_architecture.py`) |
 | `../README.md` | Project overview, architecture, setup, run instructions |
 | `REPOSITORY_AUDIT.md` | Current whole-repository structural/dead-code audit, repairs, preserved gaps, and validation limits |
 | `REPOSITORY_AUDIT_FILES.csv` | File-by-file coverage, hashes, check types, and review scope |
