@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'arena-v1';
+const CACHE_NAME = 'arena-v2';  // bump => every client's stale cache is deleted on activate
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -48,6 +48,45 @@ self.addEventListener('fetch', (event) => {
 
   // Skip cross-origin requests
   if (url.origin !== location.origin) {
+    return;
+  }
+
+  // NAVIGATIONS (the app shell): NETWORK-FIRST. Owner live test 2026-09-08:
+  // cache-first served a stale index.html after every rebuild, whose old
+  // hashed asset names 404'd. The shell must always come from the network
+  // when online; the cached shell is only the offline fallback. Hashed
+  // /assets/ files stay cache-first (immutable).
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put('/index.html', responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // Immutable build assets: cache-first is safe (content-hashed names).
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        });
+      })
+    );
     return;
   }
 

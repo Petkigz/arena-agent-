@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { MotionConfig } from 'framer-motion';
@@ -122,6 +122,10 @@ function AppContent() {
         <Routes>
           {/* One destination list, with platform-specific layout only. */}
           <Route element={isMobile ? <MobileLayout /> : <DesktopLayout />}>
+            {/* Home is the conversation — the person's front door (charter §5).
+                Owner live test 2026-09-08: `/` had no route and rendered the
+                404 page for anyone opening the server root. */}
+            <Route path="/" element={<Navigate to="/chat" replace />} />
             <Route path="/beanie" element={<PageErrorBoundary pageName="BeaniePage"><BeaniePage /></PageErrorBoundary>} />
             <Route path="/chat" element={<PageErrorBoundary pageName="ChatPage"><ChatPage /></PageErrorBoundary>} />
             <Route path="/pansophy" element={<PageErrorBoundary pageName="PansophyPage"><PansophyPage /></PageErrorBoundary>} />
