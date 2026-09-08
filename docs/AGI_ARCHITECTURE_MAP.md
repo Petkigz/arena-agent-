@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 362 after the `app/mind/`
-package grew through Phases 1, 3, 4, 5 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 363 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5 — the target architecture itself, all KEEP).
 
 ---
 
@@ -127,12 +127,12 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 
 ## 6. MISSING ledger — concepts with no file (the actual build list)
 
-> **Status 2026-09-08:** M1 (identity), M2 (BeanieState), M3 (meta-memory) and
-> M5 (social memory) are LIVE in `app/mind/` (Phases 1, 4-identity, 5). The
-> Phase-3 world facade makes M6's *substrate* available (`understand(text)`),
-> but the reasoning cycle does not consume it yet — that consumption IS the
-> Phase-2 work. M4 is partial (milestone seed; no narrative layer). Remaining
-> build list: M4-completion, M6-consumption, M7–M11.
+> **Status 2026-09-08:** M1 (identity), M2 (BeanieState), M3 (meta-memory),
+> M5 (social memory) and **M6 (world-first reasoning path)** are LIVE in
+> `app/mind/` (Phases 1, 2, 3, 4, 5): the door now assembles a world → self →
+> memory brief before the cycle identifies capabilities. M4 is partial
+> (milestone seed; no narrative layer). Remaining build list: M4-completion,
+> M7–M11.
 
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
@@ -190,11 +190,15 @@ Per the roadmap's restructuring order, the first build step after this freeze:
 4. ✅ **Phases 3–5 LIVE (2026-09-08)** — `world_facade.py` (ontology +
    pre-action understanding), `self_facade.py` (genuine self-assessment),
    `memory_facade.py` (UnifiedMemory + SocialMemoryStore + MetaMemory).
-   22 tests in `tests/test_mind_models.py`; 14 `/mind/*` endpoints.
-5. **Open (roadmap order):** Phase 2 — make the reasoning cycle consume
-   world/self/memory context (world-first instead of tool-first; M6); then
-   M7 demonstration learning, M8 attention significance, M9 generalization
-   eval, per the owner's sequencing.
+   22 tests in `tests/test_mind_models.py`.
+5. ✅ **Phase 2 LIVE (2026-09-08)** — `world_first.py`: the door assembles the
+   world → self → memory brief BEFORE capability identification and delivers
+   it through working memory (the cycle's existing prompt channel), attention
+   gate decisions recorded (M6 resolved). 11 tests in `tests/test_world_first.py`;
+   16 `/mind/*` endpoints total.
+6. **Open (roadmap order):** Phase 6 general learning loop around BeanieState;
+   then M7 demonstration learning ("Beanie, watch this"), M8 attention
+   significance, M9 generalization eval, per the owner's sequencing.
 
 ---
 

@@ -132,6 +132,20 @@ process — it enters the same mind.
 
 ## Phase 2 — Replace tool-first thinking with world-first thinking
 
+> ✅ **LIVE 2026-09-08:** `app/mind/world_first.py` — at the mind door, every
+> conversational request now gets a deterministic, provenance-tagged **brief**
+> assembled in the roadmap's order (world context → self state → relevant
+> memory) from the Phase 3–5 organs, BEFORE the cycle identifies any
+> capability. Delivery goes through the brain's working-memory scratchpad —
+> the channel the cognitive cycle already reads when building its prompt —
+> and the attention gate's acceptance/rejection is recorded honestly. Pure
+> retrieval, no LLM, budget-bounded; pure-ignorance briefs are skipped
+> (noise is not intelligence). Fail-open: a broken brief path never breaks
+> the door. Kill switch: `ARENA_WORLD_FIRST=0`. Owner-visible:
+> `GET /mind/brief?text=...` (preview) and `GET /mind/briefs` (ledger).
+> Guarded by `tests/test_world_first.py` (11 tests), incl. the roadmap's
+> "find the document I was editing yesterday" example against live data.
+
 Instead of `request → find tool → execute tool`, build:
 
 ```

@@ -19,9 +19,10 @@ from app.mind.beanie_mind import BeanieMind, MODALITIES
 from app.mind.world_facade import WorldModelFacade, WORLD_ENTITY_TYPES
 from app.mind.self_facade import SelfModelFacade
 from app.mind.memory_facade import UnifiedMemory, SocialMemoryStore, MetaMemory
+from app.mind.world_first import WorldFirstReasoning
 
 __all__ = [
     "BeanieMind", "BeanieIdentity", "BeanieState", "MODALITIES",
     "WorldModelFacade", "WORLD_ENTITY_TYPES", "SelfModelFacade",
-    "UnifiedMemory", "SocialMemoryStore", "MetaMemory",
+    "UnifiedMemory", "SocialMemoryStore", "MetaMemory", "WorldFirstReasoning",
 ]

@@ -116,7 +116,10 @@ class SelfModelFacade:
             if not overlap:
                 continue
             score = len(overlap) / max(1, min(len(task_terms), 8))
-            if score >= 0.25:
+            # 0.2 lets a single decisive verb ('open' → open_application) match;
+            # low scores stay evidence-shown and never flip knowledge to 'known'
+            # on their own (that needs score >= 0.5 below).
+            if score >= 0.2:
                 scored.append({
                     "action_type": action_type,
                     "name": entry.get("name"),

@@ -36,6 +36,7 @@ from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
 from app.mind.world_facade import WorldModelFacade
+from app.mind.world_first import WorldFirstReasoning
 from app.utils.logger import app_logger
 
 # The door's vocabulary. Unknown modalities are accepted but flagged —
@@ -72,7 +73,11 @@ class BeanieMind:
         self._world: Optional[WorldModelFacade] = None
         self._self_model: Optional[SelfModelFacade] = None
         self._memory: Optional[UnifiedMemory] = None
+        self._world_first: Optional[WorldFirstReasoning] = None
         self._entry_count = 0
+        # Phase 2: the most recent world-first briefs (owner-inspectable).
+        self._briefs: List[Dict[str, Any]] = []
+        self._briefs_cap = 50
         try:
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
             with sqlite3.connect(self.db_path, timeout=5) as conn:
@@ -179,6 +184,19 @@ class BeanieMind:
                 )
             return self._memory
 
+    @property
+    def world_first(self) -> WorldFirstReasoning:
+        """Phase 2: world-first brief assembly (world → self → memory) before
+        the cycle identifies any capability."""
+        with self._lock:
+            if self._world_first is None:
+                self._world_first = WorldFirstReasoning(self)
+            return self._world_first
+
+    def briefs(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Recent world-first briefs, newest first (owner-inspectable)."""
+        return list(reversed(self._briefs[-int(limit):]))
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -190,18 +208,59 @@ class BeanieMind:
     ) -> Dict[str, Any]:
         """Every conversational input enters the mind here.
 
-        Delegates verbatim to the brain's closed loop; the returned dict is
-        the runtime's typed result, UNCHANGED (attempted ≠ succeeded,
-        UNKNOWN preserved — the honesty invariants live one floor down and
-        are never touched by the door).
+        Phase 2 (world-first): before delegating to the brain's closed loop,
+        the mind assembles a deterministic brief — world context, self state,
+        relevant memory — and offers it to the brain's working-memory
+        scratchpad (the channel the cycle already reads when it builds its
+        prompt). The capability layer is therefore consulted with the world
+        already understood, not instead of it.
+
+        The brief is best-effort and fail-open: if assembly or delivery
+        fails, the cycle runs exactly as before. The returned dict is the
+        runtime's typed result, UNCHANGED (attempted ≠ succeeded, UNKNOWN
+        preserved — the honesty invariants live one floor down).
         """
         self._record_entry(modality, conversation_id, user_text)
+        self._run_world_first(user_text, modality)
         result = self.runtime.process_cognitive_cycle(
             user_text=user_text,
             session_id=conversation_id,
             **cycle_kwargs,
         )
         return result
+
+    def _run_world_first(self, user_text: str, modality: str) -> None:
+        """Assemble + deliver the Phase-2 brief. Never raises into the door."""
+        if str(getattr(settings, "ARENA_WORLD_FIRST", "1")) == "0":
+            return
+        record: Dict[str, Any] = {"text": str(user_text or "")[:200], "modality": modality}
+        try:
+            brief = self.world_first.assemble_brief(user_text)
+            delivery = self.world_first.deliver(user_text, brief)
+            record.update({
+                "chars": brief.get("chars", 0),
+                "has_positive_content": brief.get("has_positive_content"),
+                "delivered": delivery.get("delivered"),
+                "delivery_reason": delivery.get("reason"),
+                "rendered": brief.get("rendered", ""),
+            })
+        except Exception as exc:  # the door must never fail on context
+            record.update({"delivered": False,
+                           "delivery_reason": f"brief failed: {type(exc).__name__}: {exc}"})
+            app_logger.warning(f"World-first brief skipped: {exc}")
+        self._briefs.append(record)
+        if len(self._briefs) > self._briefs_cap * 2:
+            self._briefs = self._briefs[-self._briefs_cap:]
+        try:
+            from app.utils import decision_trace
+            decision_trace.record(
+                "beanie_mind", "world_first_brief",
+                f"delivered={record.get('delivered')} chars={record.get('chars', 0)}"
+                + (f" ({record.get('delivery_reason')})" if record.get("delivery_reason") else ""),
+                conversation_id="", modality=modality,
+            )
+        except Exception:
+            pass
 
     def observe(
         self,

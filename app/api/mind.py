@@ -190,3 +190,21 @@ def mind_social_list(limit: int = Query(default=100, ge=1, le=500)) -> dict:
     """The social memory landscape."""
     social = BeanieMind.get_instance().memory.social
     return {"success": True, "count": social.count(), "people": social.list_people(limit=limit)}
+
+
+# ── Phase 2: world-first reasoning ─────────────────────────────────────────
+@router.get("/mind/brief")
+def mind_brief_preview(text: str = Query(min_length=1)) -> dict:
+    """Preview the world-first brief for a request WITHOUT running it:
+    world context → self state → relevant memory, exactly in the order the
+    mind uses before any capability is identified."""
+    brief = BeanieMind.get_instance().world_first.assemble_brief(text)
+    return {"success": True, "brief": brief}
+
+
+@router.get("/mind/briefs")
+def mind_briefs(limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    """Recent world-first briefs actually assembled at the door (newest
+    first), with the attention-gate delivery decision for each."""
+    mind = BeanieMind.get_instance()
+    return {"success": True, "briefs": mind.briefs(limit=limit)}

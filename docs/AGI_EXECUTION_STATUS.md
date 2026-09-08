@@ -7,7 +7,18 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 3, 4, 5 ✅ complete.**
+**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5 ✅ complete.**
+Phase 2 (world-first thinking) is LIVE: `app/mind/world_first.py` assembles a
+deterministic provenance-tagged brief (world → self → memory, in that order)
+at the mind door before any capability is identified; delivery through the
+brain's working-memory scratchpad with the attention gate's decision recorded;
+fail-open + kill switch (`ARENA_WORLD_FIRST=0`); owner-visible at
+`GET /mind/brief` and `GET /mind/briefs`. Guarded by `tests/test_world_first.py`
+(11 tests). The capability matcher (`tool_matcher`) remains in place as the
+embodiment-layer resolver the roadmap demotes it to — capability selection now
+happens with the world already understood.
+
+Earlier in this gate: Phases 0–1 and 3–5 —
 `app/mind/` now ships: `BeanieMind` (one canonical door — voice/text/REST),
 `BeanieIdentity` ("I am Beanie" as persisted state — M1), the `BeanieState`
 skeleton (M2), the **world facade** (Phase 3: roadmap ontology + pre-action
@@ -15,12 +26,11 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). 14 owner-visible `/mind/*` endpoints; guarded by
-`tests/test_beanie_mind.py` (21) + `tests/test_mind_models.py` (22); zero
-behavior change to the cognitive cycle itself. The Phase-2 consumption of
-world context inside the reasoning cycle is the declared next integration
-step. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module freeze
-in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).
+resolved). 16 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+preview/ledger); guarded by `tests/test_beanie_mind.py` (21) +
+`tests/test_mind_models.py` (22); zero behavior change to the cognitive
+cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
+freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).
 
 The dead-code/repetition audit closed clean ([REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md):
 0 dead symbols across five passes; the knowledge/memory editor scaffold

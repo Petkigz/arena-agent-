@@ -106,6 +106,11 @@ OVERRIDES = {
         "memory", "KEEP", "MEMORY",
         "Phase 5 LIVE: UnifiedMemory over all eight kinds + NEW social store "
         "and meta-memory (M3, M5 resolved)"),
+    "app/mind/world_first.py": (
+        "mind/reasoning", "KEEP", "TOOL-FIRST",
+        "Phase 2 LIVE: world-first brief (world → self → memory) assembled "
+        "before capability identification — the tool_matcher demotion's "
+        "counterpart (M6 consumption resolved)"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
