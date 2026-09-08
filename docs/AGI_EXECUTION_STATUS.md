@@ -12,6 +12,15 @@ Unique unconnected features are retained by owner choice and listed explicitly;
 this does not make them working features or change their phase maturity. Review
 the audit and caller map before adding another implementation.
 
+**GOVERNING CHARTER:** [`OWNER_VISION_CHARTER.md`](OWNER_VISION_CHARTER.md)
+(owner, 2026-09-08) now outranks every design decision in this repository:
+personal agent, not generic AI; voice primary, text backup; full OS control
+including Android; learning-first; everything in conversation; no enforced
+morals — the owner's values only; **ask, never refuse** (typed
+`requires_owner_approval` asks, conversationally answered). Future agent
+sessions MUST read the charter before writing code; contradictions are
+surfaced to the owner, never silently adopted.
+
 **Owner policy directive (2026-09-07, standing):** the system does not suppress
 ideas on its own moral judgment, and it does not filter options as "good" or
 "bad" — the owner decides what affects the owner. Ideas and options always

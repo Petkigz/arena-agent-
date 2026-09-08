@@ -1,5 +1,13 @@
 # Arena Agent Invariants
 
+
+> **GOVERNING CHARTER (2026-09-08):** [`docs/OWNER_VISION_CHARTER.md`](docs/OWNER_VISION_CHARTER.md)
+> records the owner's vision and permission model — personal agent, voice
+> primary, full OS control, learning-first, conversation-everything, no
+> enforced morals, **ask never refuse**. Read it before any work; these
+> invariants govern honesty (truth boundaries are permanent), the charter
+> governs direction and permission.
+
 The non-negotiable design rules every agent, tool, and future change must obey.
 These are not aspirations — they are the contract that keeps the system honest on
 weak local hardware (Qwen 3B/9B, CPU inference). If a change violates one, the

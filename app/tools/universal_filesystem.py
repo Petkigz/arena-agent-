@@ -146,10 +146,16 @@ class UniversalFilesystem:
         return report
 
     @classmethod
-    def copy_file_verified(cls, source_path: str, destination_path: str) -> Dict[str, Any]:
+    def copy_file_verified(cls, source_path: str, destination_path: str, overwrite: bool = False) -> Dict[str, Any]:
         src,dst=Path(source_path),Path(destination_path)
         if not src.is_file():return {"success":False,"error":"Source file not found"}
-        if dst.exists():return {"success":False,"error":"Destination already exists; refusing overwrite"}
+        if dst.exists() and not overwrite:
+            # Owner charter §2: a conflict ASKS, it does not refuse. The owner
+            # approves, then the caller retries with overwrite=True.
+            return {"success":False,"requires_owner_approval":True,
+                    "conflict":"destination_exists","error":f"Destination already exists: '{dst}'",
+                    "destination":str(dst),
+                    "hint":"owner approves, then retry with overwrite=true"}
         before=cls._sha256(src)
         try:dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dst)
         except Exception as exc:return {"success":False,"error":str(exc)}
@@ -166,7 +172,7 @@ class UniversalFilesystem:
         return {"success":verified,"removed_path":str(path),"expected_sha256":expected_sha256,"environment_verified":verified,"side_effects":verified,"rollback_supported":False}
 
     @classmethod
-    def trash_files(cls, file_paths: List[str], trash_root: Optional[str] = None) -> Dict[str, Any]:
+    def trash_files(cls, file_paths: List[str], trash_root: Optional[str] = None, allow_outside_home: bool = False) -> Dict[str, Any]:
         """REVERSIBLE delete: move files to a recoverable trash area.
 
         'delete the file called X' is a Level-3 action the owner must approve;
@@ -186,6 +192,22 @@ class UniversalFilesystem:
         session_dir = trash_base / time.strftime("%Y%m%d-%H%M%S")
         moved: List[Dict[str, str]] = []
         errors: List[str] = []
+        # Owner charter §2: scope is an ASK, not a denial. Paths outside the
+        # home directory are collected and surfaced for owner approval BEFORE
+        # anything moves; with approval (allow_outside_home=True) they proceed.
+        outside_home = []
+        for raw in file_paths:
+            try:
+                candidate = Path(raw).expanduser().resolve()
+                if candidate.exists() and home not in candidate.parents:
+                    outside_home.append(str(candidate))
+            except (OSError, ValueError):
+                continue
+        if outside_home and not allow_outside_home:
+            return {"success":False,"requires_owner_approval":True,
+                    "conflict":"outside_home_scope","error":"Paths outside the home directory need owner approval",
+                    "paths":outside_home[:50],
+                    "hint":"owner approves, then retry with allow_outside_home=true"}
         for raw in file_paths:
             try:
                 src = Path(raw).expanduser().resolve()
@@ -193,9 +215,13 @@ class UniversalFilesystem:
                     errors.append(f"Not found: {src}")
                     continue
                 if home not in src.parents:
-                    errors.append(f"Outside home directory, refused: {src}")
-                    continue
-                dst = session_dir / src.relative_to(home)
+                    if not allow_outside_home:
+                        errors.append(f"Outside home directory, skipped (not approved): {src}")
+                        continue
+                    # Approved: trash by name (no home-relative layout exists).
+                    dst = session_dir / src.name
+                else:
+                    dst = session_dir / src.relative_to(home)
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 if dst.exists():
                     errors.append(f"Already in trash: {dst}")
@@ -868,7 +894,7 @@ class UniversalFilesystem:
         }
 
     @classmethod
-    def rename_or_move(cls, source_path_str: str, destination_path_str: str) -> Dict[str, Any]:
+    def rename_or_move(cls, source_path_str: str, destination_path_str: str, overwrite: bool = False) -> Dict[str, Any]:
         """
         Renames or moves any file or folder across the filesystem.
         """
@@ -877,8 +903,12 @@ class UniversalFilesystem:
 
         if not src.exists():
             return {"success": False, "error": f"Source file/folder not found: '{src}'"}
-        if dst.exists():
-            return {"success": False, "error": f"Destination already exists; refusing overwrite: '{dst}'"}
+        if dst.exists() and not overwrite:
+            # Owner charter §2: conflict ASKS, never refuses.
+            return {"success": False, "requires_owner_approval": True,
+                    "conflict": "destination_exists",
+                    "error": f"Destination already exists: '{dst}'", "destination": str(dst),
+                    "hint": "owner approves, then retry with overwrite=true"}
 
         try:
             import hashlib
@@ -907,7 +937,7 @@ class UniversalFilesystem:
             return {"success": False, "error": str(e)}
 
     @classmethod
-    def compress_zip(cls, source_paths: List[str], output_zip_path_str: str) -> Dict[str, Any]:
+    def compress_zip(cls, source_paths: List[str], output_zip_path_str: str, overwrite: bool = False) -> Dict[str, Any]:
         """
         Compresses files or folders into a ZIP archive.
         """
@@ -916,7 +946,12 @@ class UniversalFilesystem:
         if not sources:return {"success":False,"error":"At least one source path is required"}
         missing=[str(path) for path in sources if not path.exists()]
         if missing:return {"success":False,"error":"One or more sources are missing","missing":missing}
-        if zip_path.exists():return {"success":False,"error":"Output archive already exists; refusing overwrite"}
+        if zip_path.exists() and not overwrite:
+            # Owner charter §2: conflict ASKS, never refuses.
+            return {"success":False,"requires_owner_approval":True,
+                    "conflict":"destination_exists","error":f"Output archive already exists: '{zip_path}'",
+                    "destination":str(zip_path),
+                    "hint":"owner approves, then retry with overwrite=true"}
         manifest=[]
         try:
             zip_path.parent.mkdir(parents=True, exist_ok=True)
