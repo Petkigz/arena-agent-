@@ -37,6 +37,7 @@ from app.api.owner_control_autonomy import router as owner_control_autonomy_rout
 from app.api.os_browser_automation import router as os_browser_automation_router
 from app.api.self_awareness import router as self_awareness_router
 from app.api.vault import router as vault_router
+from app.api.mind import router as mind_router
 
 # ── WebSocket / voice / API wiring — previously served only by `uvicorn backend.main:app` ──
 from app.cognition.runtime import CognitiveRuntime
@@ -480,6 +481,7 @@ def create_app() -> FastAPI:
     app.include_router(os_browser_automation_router, dependencies=_auth_deps)
     app.include_router(self_awareness_router, dependencies=_auth_deps)
     app.include_router(vault_router, dependencies=_auth_deps)
+    app.include_router(mind_router, dependencies=_auth_deps)
 
     # ── API routers (file upload, code exec, multi-modal, screenshot, …) ──
     app.include_router(phase6_router, dependencies=_auth_deps)

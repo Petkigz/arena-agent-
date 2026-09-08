@@ -8,6 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,,,Phase 20 material: one mechanism of self-improvement
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
+app/api/mind.py,42,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind (AGI roadmap Phase 1).,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -41,7 +42,7 @@ app/cognition/capability_factory.py,70,capabilities/registry,KEEP,,Verified dyna
 app/cognition/capability_resolver.py,333,capabilities/registry,KEEP,,"Capability vocabulary resolver — owner review item 7 (2026-09-01, P0).",
 app/cognition/causal_inference.py,828,learning/causal,KEEP,,Phase 12: Causal Inference Engine,
 app/cognition/checkpoint.py,293,infrastructure/persistence,KEEP,,"Crash-safe, explicitly versioned cognitive checkpoints.",
-app/cognition/cognitive_pipeline.py,130,mind/cognition-core,LEGACY,AUTHORITY,Cognitive Pipeline Enforcer delegating strictly to CognitiveRuntime Composition Root.,delegating enforcer over the runtime; compat surface only
+app/cognition/cognitive_pipeline.py,140,mind/cognition-core,LEGACY,AUTHORITY,Cognitive Pipeline Enforcer delegating strictly to CognitiveRuntime Composition Root.,delegating enforcer over the runtime; compat surface only
 app/cognition/cognitive_router.py,67,mind/cognition-core,LEGACY,,Resource-aware request routing primitives.,owner-deferred prototype (charter §5⑦); test-only
 app/cognition/cognitive_state.py,112,mind/cognition-core,INTEGRATE,STATE,"Shared, serializable working state for Arena's cognitive systems.",fragment of future BeanieState (working state)
 app/cognition/commitment_ledger.py,279,mind/cognition-core,KEEP,,Restart-safe commitments and deterministic introspection summaries.,
@@ -175,6 +176,10 @@ app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
+app/mind/__init__.py,20,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/beanie_mind.py,245,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/identity.py,201,mind/identity,KEEP,AUTHORITY,"BeanieIdentity — the ""I am Beanie"" record (MISSING item M1, Phase 1).",Phase 1 LIVE: 'I am Beanie' as persisted state (M1)
+app/mind/state.py,285,mind/cognition-core,KEEP,STATE,"BeanieState — the unified internal-state skeleton (MISSING item M2, Phase 1).","Phase 1 LIVE: BeanieState skeleton — 15 rooms, honestly marked (M2)"
 app/perception/__init__.py,1,perception/environment,INTEGRATE,,,perception module
 app/perception/anticipation_engine.py,303,mind/attention,INTEGRATE,ATTENTION,Phase 4C: Anticipatory Action Engine.,charter §5②
 app/perception/background_observer.py,493,perception/environment,KEEP,,Phase 4A: Background Observation Loop.,charter §5④ silent watcher
@@ -188,7 +193,7 @@ app/runtime/resource_manager.py,53,infrastructure/resources,KEEP,,Lightweight re
 app/scheduler/__init__.py,4,infrastructure/scheduling,KEEP,,,
 app/scheduler/scheduler.py,87,infrastructure/scheduling,KEEP,,,
 app/scheduler/self_healer.py,59,infrastructure/scheduling,KEEP,,,
-app/server.py,615,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
+app/server.py,617,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
 app/settings_store.py,66,infrastructure/config,KEEP,,Shared backend settings store (cross-platform).,
 app/skill_acquisition.py,97,learning/demonstration,INTEGRATE,,,closest thing to demonstration learning today
 app/tasks.py,145,infrastructure/persistence,KEEP,,,
@@ -295,7 +300,7 @@ backend/api/theme_routes.py,150,communication/api,KEEP,,Theme customization.,
 backend/api/wakeword_routes.py,318,communication/api,KEEP,,Custom wake word training and management.,
 backend/chat_corrections.py,364,learning/conversation,INTEGRATE,,In-chat owner corrections.,in-chat owner corrections — Phase-7 teaching surface
 backend/main.py,20,infrastructure/entry,LEGACY,,Backward-compatible shim for the unified Arena server.,compat shim alias
-backend/message_router.py,882,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
+backend/message_router.py,898,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
 backend/voice/__init__.py,28,communication/voice,KEEP,,Voice pipeline for Arena.,
 backend/voice/audio_capture.py,176,communication/voice,KEEP,,Audio capture service using PyAudio.,
 backend/voice/orchestrator.py,490,communication/voice,KEEP,,"Voice pipeline orchestrator - coordinates audio capture, wake word, VAD, STT, and TTS.",
@@ -345,7 +350,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,666,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,682,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

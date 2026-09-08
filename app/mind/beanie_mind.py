@@ -1,0 +1,245 @@
+"""BeanieMind — the one canonical entry point (AGI roadmap Phase 1).
+
+Deliverable, in the roadmap's words: "one canonical entry point:
+``BeanieMind.process(...)``. Whether input comes from voice, text, Android,
+desktop, screen observation, camera, or another process — it enters the same
+mind."
+
+What this class IS and IS NOT:
+
+- It is the IDENTITY + STATE + DOOR of the mind.
+- It is NOT a second cognitive runtime. The brain remains the
+  ``CognitiveRuntime`` singleton (AGENT_INVARIANTS §1 — one brain, always).
+  BeanieMind never constructs a runtime; it resolves the singleton lazily,
+  and every call path lands in ``runtime.process_cognitive_cycle`` exactly
+  as before — Phase 1 changes WHO the input enters through, not HOW the
+  cycle runs.
+
+Entry ledger: every input through the door is recorded (modality,
+conversation, time, short summary) in SQLite, fail-open. This ledger is the
+raw material the Phase-13/14 attention system will arbitrate — observations
+and autonomous ticks will enter here too.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from app.config import settings
+from app.mind.identity import BeanieIdentity
+from app.mind.state import BeanieState
+from app.utils.logger import app_logger
+
+# The door's vocabulary. Unknown modalities are accepted but flagged —
+# honesty over strictness (a new client must never be refused at the door).
+MODALITIES = {
+    "text",       # WebSocket chat (frontend / desktop / Android text)
+    "voice",      # voice pipeline transcript (primary interface)
+    "rest",       # REST /chat
+    "android",    # reserved: Android-native intents
+    "desktop",    # reserved: desktop-native intents
+    "observation",  # reserved Phase 13: perception feeds
+    "autonomous",   # reserved Phase 15: motivation ticks
+    "process",      # reserved: other processes / APIs
+}
+
+_MAX_SUMMARY = 200
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class BeanieMind:
+    """The one door of the one mind."""
+
+    _instance: Optional["BeanieMind"] = None
+    _instance_lock = threading.Lock()
+
+    def __init__(self, db_path: Optional[str] = None, runtime: Any = None) -> None:
+        self.db_path = str(db_path or settings.DB_PATH)
+        self._runtime = runtime  # injected (tests/bound views) or None → singleton
+        self._lock = threading.RLock()
+        self._identity: Optional[BeanieIdentity] = None
+        self._entry_count = 0
+        try:
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self.db_path, timeout=5) as conn:
+                conn.execute(
+                    """CREATE TABLE IF NOT EXISTS beanie_mind_entries (
+                        entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        recorded_at TEXT NOT NULL,
+                        modality TEXT NOT NULL,
+                        known_modality INTEGER NOT NULL,
+                        conversation_id TEXT,
+                        summary TEXT NOT NULL,
+                        epoch REAL NOT NULL
+                    )"""
+                )
+                conn.commit()
+        except Exception as exc:  # storage failure never blocks the door
+            app_logger.warning(f"BeanieMind entry ledger unavailable: {exc}")
+
+    # ── singleton + binding ──────────────────────────────────────────────
+    @classmethod
+    def get_instance(cls, db_path: Optional[str] = None, runtime: Any = None) -> "BeanieMind":
+        """The shared mind. If a caller holds a SPECIFIC runtime (the server
+        wiring, a test stub), the returned mind is bound to that same brain —
+        never to a different one. One brain, always."""
+        with cls._instance_lock:
+            if cls._instance is None:
+                cls._instance = cls(db_path=db_path, runtime=runtime)
+            shared = cls._instance
+            # First explicit brain binds the shared mind WITHOUT resolving the
+            # runtime property (never construct a CognitiveRuntime here — a
+            # test stub must not drag up the real brain, and vice versa).
+            if runtime is not None and shared._runtime is None:
+                shared._runtime = runtime
+        if runtime is not None and shared._runtime is not None and shared._runtime is not runtime:
+            # Bound view for a different brain instance (test fixtures):
+            # intentionally NOT cached — the singleton stays authoritative.
+            return cls(db_path=db_path, runtime=runtime)
+        return shared
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Test-only escape hatch (mirrors CognitiveRuntime test support)."""
+        with cls._instance_lock:
+            cls._instance = None
+
+    @property
+    def runtime(self) -> Any:
+        """The brain. Resolved lazily so importing this module never spins
+        up a CognitiveRuntime; resolved through the singleton so there is
+        exactly one brain in the process."""
+        if self._runtime is None:
+            from app.cognition.runtime import CognitiveRuntime
+            self._runtime = CognitiveRuntime.get_instance()
+        return self._runtime
+
+    # ── identity & state ─────────────────────────────────────────────────
+    @property
+    def identity(self) -> BeanieIdentity:
+        with self._lock:
+            if self._identity is None:
+                self._identity = BeanieIdentity(self.db_path)
+            return self._identity
+
+    def state(self) -> Dict[str, Any]:
+        """The BeanieState snapshot (M2): every room, honestly marked."""
+        return BeanieState(self.runtime, identity=self.identity).snapshot()
+
+    # ── THE DOOR ─────────────────────────────────────────────────────────
+    def process(
+        self,
+        user_text: str,
+        *,
+        modality: str = "text",
+        conversation_id: Optional[str] = None,
+        **cycle_kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Every conversational input enters the mind here.
+
+        Delegates verbatim to the brain's closed loop; the returned dict is
+        the runtime's typed result, UNCHANGED (attempted ≠ succeeded,
+        UNKNOWN preserved — the honesty invariants live one floor down and
+        are never touched by the door).
+        """
+        self._record_entry(modality, conversation_id, user_text)
+        result = self.runtime.process_cognitive_cycle(
+            user_text=user_text,
+            session_id=conversation_id,
+            **cycle_kwargs,
+        )
+        return result
+
+    def observe(
+        self,
+        source: str,
+        payload: Optional[Dict[str, Any]] = None,
+        *,
+        conversation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Perception/autonomy lane (Phases 13–15). Phase 1 records the
+        observation at the door; attention decides later what deserves
+        thought. Recording-only: observing must never act."""
+        summary = f"observation from {source}"
+        if isinstance(payload, dict):
+            hint = payload.get("summary") or payload.get("event") or ""
+            if hint:
+                summary = f"observation from {source}: {str(hint)[:_MAX_SUMMARY]}"
+        self._record_entry("observation", conversation_id, summary)
+        return {"success": True, "recorded": True, "source": source, "acted": False}
+
+    # ── entry ledger ─────────────────────────────────────────────────────
+    def _record_entry(self, modality: str, conversation_id: Optional[str], summary: str) -> None:
+        """Best-effort entry recording. A failed write degrades to an
+        in-process counter and never fails the cycle."""
+        known = modality in MODALITIES
+        entry_summary = str(summary or "")[:_MAX_SUMMARY]
+        self._entry_count += 1
+        try:
+            with sqlite3.connect(self.db_path, timeout=5) as conn:
+                conn.execute(
+                    """INSERT INTO beanie_mind_entries
+                       (recorded_at, modality, known_modality, conversation_id, summary, epoch)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (_now_iso(), str(modality), 1 if known else 0,
+                     conversation_id, entry_summary, time.time()),
+                )
+                conn.commit()
+        except Exception as exc:
+            app_logger.warning(f"BeanieMind entry not persisted: {exc}")
+
+    def entries(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Most recent inputs through the door (owner-visible)."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=5) as conn:
+                rows = conn.execute(
+                    """SELECT recorded_at, modality, known_modality, conversation_id, summary
+                       FROM beanie_mind_entries ORDER BY entry_id DESC LIMIT ?""",
+                    (int(limit),),
+                ).fetchall()
+            return [
+                {
+                    "recorded_at": r[0],
+                    "modality": r[1],
+                    "known_modality": bool(r[2]),
+                    "conversation_id": r[3],
+                    "summary": r[4],
+                }
+                for r in rows
+            ]
+        except Exception:
+            return []
+
+    def entry_stats(self) -> Dict[str, Any]:
+        """Per-modality counts since process start + ledger size."""
+        per_modality: Dict[str, int] = {}
+        total = 0
+        try:
+            with sqlite3.connect(self.db_path, timeout=5) as conn:
+                rows = conn.execute(
+                    "SELECT modality, COUNT(*) FROM beanie_mind_entries GROUP BY modality"
+                ).fetchall()
+            per_modality = {r[0]: r[1] for r in rows}
+            total = sum(per_modality.values())
+        except Exception:
+            total = self._entry_count
+        return {"total_entries": total, "per_modality": per_modality}
+
+    # ── owner-facing description ─────────────────────────────────────────
+    def describe(self) -> Dict[str, Any]:
+        """Who is answering, and through which doors input arrives."""
+        return {
+            "success": True,
+            "identity": self.identity.to_dict(),
+            "identity_statement": self.identity.identity_statement(),
+            "entry_stats": self.entry_stats(),
+            "modalities": sorted(MODALITIES),
+        }

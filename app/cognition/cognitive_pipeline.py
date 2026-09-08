@@ -18,11 +18,21 @@ class CognitivePipeline:
     @classmethod
     def process_request(cls, user_text: str, session_id: Optional[str] = None, complexity: str = "fast") -> Dict[str, Any]:
         session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
-        app_logger.info(f"CognitivePipeline routing request for session '{session_id}' to CognitiveRuntime...")
+        app_logger.info(f"CognitivePipeline routing request for session '{session_id}' through BeanieMind to CognitiveRuntime...")
 
+        # Phase 1 (AGI roadmap): the REST door enters through the same one
+        # mind as voice and WebSocket text. BeanieMind wraps the singleton
+        # brain — the cycle below runs exactly as before; only the door is
+        # unified (and tagged modality='rest' in the entry ledger).
+        #
+        # The runtime is resolved HERE and bound explicitly so the mind
+        # always wraps the CURRENT brain (matters when tests patch
+        # CognitiveRuntime.get_instance per case — one brain, always).
+        from app.mind import BeanieMind
         runtime = CognitiveRuntime.get_instance()
+        mind = BeanieMind.get_instance(runtime=runtime)
         try:
-            res = runtime.process_cognitive_cycle(user_text, complexity=complexity, session_id=session_id)
+            res = mind.process(user_text, modality="rest", conversation_id=session_id, complexity=complexity)
         except Exception as exc:
             # The bridge must never manufacture success — a runtime crash is
             # an honest failure with a reason, not a 500 or a fake 'True'.

@@ -81,6 +81,22 @@ OVERRIDES = {
     "app/__init__.py": ("infrastructure/package", "KEEP", "", ""),
     "backend/__init__.py": ("infrastructure/package", "KEEP", "", ""),
     "app/agents/__init__.py": ("infrastructure/package", "KEEP", "", ""),
+    "app/mind/__init__.py": ("infrastructure/package", "KEEP", "", ""),
+
+    # ── THE MIND ITSELF (Phase 1, LIVE 2026-09-08 — the target architecture
+    #    is no longer hypothetical; these ARE the unified mind) ─────────────
+    "app/mind/beanie_mind.py": (
+        "mind/cognition-core", "KEEP", "AUTHORITY",
+        "Phase 1 LIVE: the one canonical door — BeanieMind.process(...)"),
+    "app/mind/identity.py": (
+        "mind/identity", "KEEP", "AUTHORITY",
+        "Phase 1 LIVE: 'I am Beanie' as persisted state (M1)"),
+    "app/mind/state.py": (
+        "mind/cognition-core", "KEEP", "STATE",
+        "Phase 1 LIVE: BeanieState skeleton — 15 rooms, honestly marked (M2)"),
+    "app/api/mind.py": (
+        "communication/api", "KEEP", "",
+        "Phase 1 LIVE: owner window onto identity/state/entries"),
 
     # ── THE COGNITIVE AUTHORITY QUESTION ─────────────────────────────────
     "app/cognition/runtime.py": (

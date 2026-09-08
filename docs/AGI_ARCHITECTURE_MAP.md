@@ -12,8 +12,9 @@ measured against the real tree. **Nothing was moved, renamed, or deleted.**
 Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
-capabilities** across 85 tool modules. The map covers **354 production Python
-modules, 0 unclassified**.
+capabilities** across 85 tool modules. The map covers all production Python
+modules with **0 unclassified** (354 at freeze; 359 after the Phase-1 `app/mind/`
+modules joined as KEEP — the target architecture itself).
 
 ---
 
@@ -54,7 +55,7 @@ What the tree actually contains (cluster `AUTHORITY` in the CSV):
 | `app/agents/master_agent.py` (1,104 lines) | Action executor — the **hands**. | DEMOTE — named/used strictly as execution, never as authority. |
 | `app/agents/self_evolving_agent.py` | Self-improvement loop. | INTEGRATE into learning/self-improvement (Phase 20 material). |
 | `app/cognition/cognitive_pipeline.py`, `pipeline.py` | Compat shells delegating to the runtime. | LEGACY — stop building on them. |
-| "I am Beanie" | **Does not exist in the backend.** "Beanie" appears only in UI code (frontend BeaniePage/orb, desktop theme states, Android Beanie components). | MISSING #1 — the single most important gap. |
+| "I am Beanie" | **Does not exist in the backend.** "Beanie" appears only in UI code (frontend BeaniePage/orb, desktop theme states, Android Beanie components). | MISSING #1 — the single most important gap. ✅ **Resolved 2026-09-08 (Phase 1):** `app/mind/identity.py` persists it; `app/mind/beanie_mind.py` is the one door. |
 
 **Verdict:** there is exactly one functional brain today (`CognitiveRuntime`),
 which is good news — the Phase-1 job is not a merger of rival brains, it is
@@ -126,6 +127,9 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 
 ## 6. MISSING ledger — concepts with no file (the actual build list)
 
+> **Status 2026-09-08:** M1 (Beanie identity) and M2 (BeanieState) are now
+> LIVE in `app/mind/` (Phase 1). Remaining build list: M3–M11.
+
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
 | M1 | **Beanie identity** — "I am Beanie" as backend state (name, history, values absorbed from owner) | P1, P17 | `coworker_brain.py` persona string |
@@ -165,18 +169,23 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
+**Status 2026-09-08: steps 1–3 are LIVE (Phase 1 complete).**
+
 Per the roadmap's restructuring order, the first build step after this freeze:
 
-1. **`BeanieMind` facade + identity record** (M1) — wraps the existing runtime
-   singleton; zero behavior change; the string persona becomes a persisted
-   identity with owner-visible state. Test-pinned.
-2. **`BeanieState` skeleton** (M2) — absorbs `cognitive_state` + `blackboard`;
-   read-only observers first, no flow changes. Test-pinned.
-3. **Entry convergence** (§5) — text/voice/REST adapters call
-   `BeanieMind.process`; old paths kept as aliases until proven equivalent.
-
-Each step is small, reversible, and leaves the 3,353-test suite green. Merge
-clusters (§4) and MISSING items (§6) follow only after owner sequencing.
+1. ✅ **`BeanieMind` facade + identity record** (M1) — `app/mind/beanie_mind.py`
+   + `app/mind/identity.py`; wraps the existing runtime singleton; zero behavior
+   change; the string persona became a persisted identity with owner-visible
+   state. Test-pinned (`tests/test_beanie_mind.py`).
+2. ✅ **`BeanieState` skeleton** (M2) — `app/mind/state.py`; read-only views over
+   the runtime's real organs, every room honestly marked ok/wired/unavailable.
+   Test-pinned.
+3. ✅ **Entry convergence** (§5) — WS text + voice (`backend/message_router.py`)
+   and REST (`CognitivePipeline.process_request`) call `BeanieMind.process` with
+   modality tags; old result shapes unchanged.
+4. **Open (owner sequencing):** M3–M11 from §6 — next candidates per the map:
+   meta-memory, world-first reasoning path (M6), attention significance (M8),
+   demonstration learning (M7), generalization eval (M9).
 
 ---
 

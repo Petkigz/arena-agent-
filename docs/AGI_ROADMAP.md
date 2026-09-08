@@ -86,6 +86,16 @@ Infrastructure / Legacy / Duplicate. This gives us a map of the existing codebas
 
 ## Phase 1 — Create the actual "Mind"
 
+> ✅ **LIVE 2026-09-08:** `app/mind/` — `BeanieMind.process(...)` is the one
+> canonical door: WS text, voice (`source="voice"` → modality `voice`), and
+> REST `/chat` all enter through it into the existing CognitiveRuntime
+> singleton (one brain, always — the mind wraps it, never replaces it).
+> "I am Beanie" now exists as persisted backend state (`BeanieIdentity`,
+> tables `beanie_identity`/`beanie_milestones`; M1) and the BeanieState
+> skeleton reports all 15 internal-state rooms honestly (M2). Owner-visible:
+> `GET /mind/identity`, `GET /mind/state`, `GET /mind/entries`. Guarded by
+> `tests/test_beanie_mind.py` (21 tests). Full suite green at this step.
+
 This is the most important architectural phase. Right now there is a
 CognitiveRuntime, orchestrators, planners, agents, matchers, etc. Make one of them
 the actual mind coordinator:

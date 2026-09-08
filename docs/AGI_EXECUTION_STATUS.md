@@ -7,15 +7,21 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phase 0 (architecture freeze) complete.**
+**2026-09-08 — Beanie AGI roadmap active; Phase 0 ✅ and Phase 1 ✅ complete.**
+Phase 1 (one canonical mind door) is LIVE: `app/mind/` ships `BeanieMind`,
+`BeanieIdentity` ("I am Beanie" as persisted state — M1), and the `BeanieState`
+skeleton (M2). WS text, voice, and REST all enter through
+`BeanieMind.process(...)` into the single CognitiveRuntime; owner-visible at
+`GET /mind/identity`, `GET /mind/state`, `GET /mind/entries`. Guarded by
+`tests/test_beanie_mind.py` (21 tests); zero behavior change to the cycle
+itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
+freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md). Next step
+awaits owner sequencing (map §6 MISSING ledger: M3–M11).
+
 The dead-code/repetition audit closed clean ([REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md):
 0 dead symbols across five passes; the knowledge/memory editor scaffold
 consolidation remains proposed for owner decision), and the full suite was
-re-verified at this gate: **3,353 passed, 19 skipped, 0 failed**. All new work is
-sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); the module-by-module freeze is
-[`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md). Next step awaits owner
-sequencing of the map's §8 proposal (BeanieMind facade → BeanieState → entry
-convergence).
+re-verified at this gate: **3,353 passed, 19 skipped, 0 failed**.
 
 Earlier gate (superseded 2026-09-08): Feature work was paused for the
 [repository-wide dead-code/repetition audit](REPOSITORY_AUDIT.md) — re-run

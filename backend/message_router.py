@@ -358,6 +358,7 @@ class MessageRouter:
                     attachments=attachments,
                     conversation_id=conversation_id,
                     conversation_history=history[-16:],
+                    message_source=message_source,
                 )
 
                 # Bind the visible answer to the durable trace so an owner can
@@ -453,8 +454,17 @@ class MessageRouter:
         attachments: Optional[List[Dict[str, Any]]] = None,
         conversation_id: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        message_source: str = "text",
     ) -> str:
-        """Route the message through CognitiveRuntime (the authoritative cognitive path).
+        """Route the message through BeanieMind into CognitiveRuntime (the
+        authoritative cognitive path).
+
+        Phase 1 (AGI roadmap): every conversational input enters through the
+        ONE door — ``BeanieMind.process`` — tagged with its modality ('voice'
+        or 'text' here; voice is the primary interface, text the backup).
+        BeanieMind is bound to ``self.runtime``, so the singleton brain is
+        unchanged (one brain, always); the mind is the door, not a second
+        runtime.
 
         Runs the full closed-loop cycle (perceive → reason → plan → execute → verify →
         replan → learn) in a worker thread, then returns the assistant reply for streaming.
@@ -495,15 +505,21 @@ class MessageRouter:
                 and not any(marker in content for marker in ("```", "plan", "analyze", "design", "debug"))
             ):
                 complexity = "fast"
+            from app.mind import BeanieMind
+            # Bind the mind to THIS router's runtime (the singleton brain in
+            # production, a stub in tests) — one brain, always; the mind is
+            # the door, not a second runtime.
+            mind = BeanieMind.get_instance(runtime=self.runtime)
             result = await asyncio.to_thread(
-                self.runtime.process_cognitive_cycle,
-                user_text=content,
-                complexity=complexity,
+                mind.process,
+                content,
+                modality=("voice" if message_source == "voice" else "text"),
                 # session_id = conversation_id: pending approvals are recorded
                 # under the conversation, so the router can surface them to
                 # THIS chat (live bug: approvals landed under a random
                 # sess_<hex> and the owner never saw the approval request).
-                session_id=conversation_id,
+                conversation_id=conversation_id,
+                complexity=complexity,
                 image_path=image_path,
                 audio_path=audio_path,
                 attachments=attachments,
