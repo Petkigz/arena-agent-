@@ -120,7 +120,7 @@ class CognitivePipeline:
             # for 1-click owner approval, the request itself must be
             # visible to bridge consumers (diagnostics, REST callers) —
             # a bare 'blocked' hides that the agent asked to run code.
-            "requires_approval": res.get("requires_approval", False),
+            "requires_approval": bool(res.get("requires_approval") or res.get("requires_owner_approval")),
             "approval_request": res.get("approval_request"),
             "recommendation": res.get("recommendation"),
             "reminder": res.get("reminder"),

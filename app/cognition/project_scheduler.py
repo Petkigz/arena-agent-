@@ -136,7 +136,7 @@ class ProjectDAGScheduler:
             ),
         )
 
-        if result.get("requires_approval"):
+        if result.get("requires_approval") or result.get("requires_owner_approval"):
             self._record_waiting_approval(
                 project, decomposition, sub_goal, proposal, result
             )

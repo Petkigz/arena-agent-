@@ -143,7 +143,7 @@ class BackupManager:
     def restore_backup(cls, backup_id: str, dest_dir: str, overwrite: bool = False) -> Dict[str, Any]:
         """Non-overwriting restore. Overwrite requires a distinct Level-3 action."""
         if overwrite:
-            return {"success": False, "requires_approval": True, "required_action": "restore_backup_overwrite", "error": "Overwrite restore is a separate Level-3 action."}
+            return {"success": False, "requires_owner_approval": True, "required_action": "restore_backup_overwrite", "error": "Overwrite restore would replace existing files in the destination; it is a separate Level-3 action.", "dest_dir": dest_dir, "backup_id": backup_id, "hint": "owner approves restore_backup_overwrite (Level-3); use pre_snapshot=true to snapshot existing files first"}
         return cls._restore_backup_impl(backup_id, dest_dir, overwrite=False)
 
     @classmethod

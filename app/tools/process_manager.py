@@ -104,6 +104,7 @@ class ProcessManager:
     def terminate_verified(
         cls, pid: int, expected_create_time: float,
         expected_executable_path: str = "", force: bool = False,
+        confirm_protected_kill: bool = False,
     ) -> Dict[str, Any]:
         """Terminate only the exact observed process instance and verify it stopped."""
         try:
@@ -111,8 +112,8 @@ class ProcessManager:
         except (TypeError, ValueError):
             return {"success": False, "error": "pid and expected_create_time are required"}
         guard = cls._guard(pid)
-        if guard:
-            return {"success": False, "error": guard}
+        if guard and not confirm_protected_kill:
+            return guard
         try:
             proc = psutil.Process(pid)
             actual_create = float(proc.create_time())
@@ -156,7 +157,9 @@ class ProcessManager:
         }
 
     @classmethod
-    def kill_process(cls, pid: int, force: bool = False) -> Dict[str, Any]:
+    def kill_process(
+        cls, pid: int, force: bool = False, confirm_protected_kill: bool = False,
+    ) -> Dict[str, Any]:
         """Terminate (SIGTERM) or force-kill (SIGKILL) a process by PID."""
         try:
             pid = int(pid)
@@ -164,8 +167,8 @@ class ProcessManager:
             return {"success": False, "error": "pid must be an integer."}
 
         guard = cls._guard(pid)
-        if guard:
-            return {"success": False, "error": guard}
+        if guard and not confirm_protected_kill:
+            return guard
 
         try:
             proc = psutil.Process(pid)
@@ -206,7 +209,7 @@ class ProcessManager:
             return {"success": False, "error": f"Permission denied killing {pid}: {e}"}
 
     @classmethod
-    def restart_process(cls, pid: int) -> Dict[str, Any]:
+    def restart_process(cls, pid: int, confirm_protected_kill: bool = False) -> Dict[str, Any]:
         """Best-effort restart: re-launch the process from its recorded command line.
 
         This is inherently fragile (the command line may be relative to a cwd we
@@ -219,8 +222,8 @@ class ProcessManager:
             return {"success": False, "error": "pid must be an integer."}
 
         guard = cls._guard(pid)
-        if guard:
-            return {"success": False, "error": guard}
+        if guard and not confirm_protected_kill:
+            return guard
 
         try:
             proc = psutil.Process(pid)
@@ -255,10 +258,26 @@ class ProcessManager:
 
     # ── safety guard ────────────────────────────────────────────────────────
     @staticmethod
-    def _guard(pid: int) -> Optional[str]:
-        """Refuse to kill protected PIDs. Returns an error string, or None if allowed."""
+    def _guard(pid: int) -> Optional[Dict[str, Any]]:
+        """Protected-PID guard (charter §2): it ASKS, it never refuses.
+
+        Killing PID 0/1 (init) or the Arena process itself is surfaced to the
+        owner with the reason and the measured PID; a later call with
+        ``confirm_protected_kill=True`` records the owner's explicit choice
+        and proceeds (the action's own Level-3 gate still applies).
+        """
+        reason = None
         if pid <= 1:
-            return f"Refusing to kill PID {pid} (protected system process)."
-        if pid == os.getpid():
-            return "Refusing to kill the Arena process itself."
-        return None
+            reason = f"PID {pid} is a protected system process (init)."
+        elif pid == os.getpid():
+            reason = "this is the Arena process itself"
+        if reason is None:
+            return None
+        return {
+            "success": False,
+            "requires_owner_approval": True,
+            "conflict": "protected_process",
+            "error": f"[Owner approval required — protected process] {reason}",
+            "pid": pid,
+            "hint": "owner approves, then retry with confirm_protected_kill=true",
+        }

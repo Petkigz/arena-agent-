@@ -111,7 +111,6 @@ def python_pass() -> dict:
             continue  # entry-point script (run directly), not an orphan
         parts = list(rel.with_suffix("").parts)  # app/pkg/module
         dotted = ".".join(parts)
-        star = ".".join(parts[:-1])
         string_ref = f'"{dotted}"' in prod_text or f"'{dotted}" + "'" in prod_text
         prod_hit = (
             f"from {dotted} import" in prod_text
@@ -187,20 +186,6 @@ def frontend_pass() -> dict:
         p for p in FE.rglob("*.ts*")
         if "node_modules" not in p.parts and not p.name.endswith(".d.ts")
     ]
-    consumer_files = [
-        p for p in fe_files
-        if not FE_ENTRY_RE.search(str(p.relative_to(FE)))
-        and not FE_TEST_RE.search(p.name)
-        and "test/" not in p.parts
-    ]
-    consumers_text = "\n".join(p.read_text(errors="replace") for p in consumer_files)
-    entry_text = "\n".join(
-        p.read_text(errors="replace") for p in fe_files
-        if FE_ENTRY_RE.search(str(p.relative_to(FE))) or FE_TEST_RE.search(p.name)
-        or "test/" in p.parts
-    )
-    all_text = consumers_text + "\n" + entry_text
-
     orphans: list[str] = []
     name_to_files: dict[str, list[str]] = defaultdict(list)
     for f in fe_files:

@@ -141,10 +141,12 @@ denial. Done so far:
 
 Remaining, in this order (each small, mechanical, test-pinned):
 
-- `process_manager` protected-PID kill (PID 0/1, Arena itself) → ask.
-- `backup_manager` restore-overwrite of non-empty dir → ask.
-- `universal_filesystem` remaining refusal strings (rollback hash change) → ask
-  with the measured evidence stated.
+- ✅ `process_manager` protected-PID kill (PID 0/1, Arena itself) → ask with the
+  measured PID; `confirm_protected_kill=true` records the owner's choice (2026-09-08).
+- ✅ `backup_manager` restore-overwrite → ask naming the Level-3 action and the
+  `pre_snapshot=true` option; key unified to `requires_owner_approval` (2026-09-08).
+- ✅ `universal_filesystem` rollback-hash change → ask with BOTH hashes stated
+  (expected vs measured); `confirm_hash_change=true` proceeds (2026-09-08).
 - `raw_input_guard` misses → these already produce typed, reasoned, retryable
   results ("re-observe and retry"), which is ask-shaped; keep, but make the
   retry path owner-visible in chat.

@@ -163,11 +163,14 @@ class UniversalFilesystem:
         return {"success":verified,"source_path":str(src),"destination_path":str(dst),"source_sha256":before,"destination_sha256":after,"environment_verified":verified,"side_effects":dst.exists(),"rollback_path":str(dst),"rollback_sha256":after}
 
     @classmethod
-    def remove_verified_copy(cls, file_path: str, expected_sha256: str) -> Dict[str, Any]:
+    def remove_verified_copy(cls, file_path: str, expected_sha256: str, confirm_hash_change: bool = False) -> Dict[str, Any]:
         path=Path(file_path)
         if not path.is_file():return {"success":False,"error":"Rollback target is missing"}
         actual=cls._sha256(path)
-        if actual!=expected_sha256:return {"success":False,"error":"Rollback target hash changed; refusing deletion","actual_sha256":actual}
+        # Owner charter §2: a changed rollback target is surfaced with the
+        # measured evidence, not refused. The owner decides with both hashes.
+        if actual!=expected_sha256 and not confirm_hash_change:
+            return {"success":False,"requires_owner_approval":True,"conflict":"rollback_target_changed","error":"[Owner approval required — rollback target changed since it was measured]","expected_sha256":expected_sha256,"actual_sha256":actual,"path":str(path),"hint":"owner approves, then retry with confirm_hash_change=true"}
         path.unlink();verified=not path.exists()
         return {"success":verified,"removed_path":str(path),"expected_sha256":expected_sha256,"environment_verified":verified,"side_effects":verified,"rollback_supported":False}
 

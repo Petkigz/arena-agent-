@@ -489,7 +489,7 @@ class AutonomousGoalExecutor:
                 step.result = result.get("assistant_reply", "Completed")
                 # Gate first: a Level-3 action requires owner approval regardless
                 # of any verdict.
-                requires_approval = bool(result.get("requires_approval"))
+                requires_approval = bool(result.get("requires_approval") or result.get("requires_owner_approval"))
                 gate_blocked = result.get("gate_blocked")
                 if requires_approval or gate_blocked:
                     step.status = ExecutionStatus.WAITING_APPROVAL
