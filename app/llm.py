@@ -253,9 +253,18 @@ class LocalLLMClient:
         # test 2026-09-08: the 14B was pulled into VRAM over the owner's
         # loaded 9B models). Ask the native endpoint first; only fall back
         # to the legacy listing when it does not exist.
+        # LM_STUDIO_URL is host-root + '/v1' (OpenAI-compatible paths live
+        # under /v1); the native REST API lives at the HOST ROOT
+        # (/api/v0/models). Owner live test 2026-09-08 round 4: querying
+        # {base_url}/api/v0/models hit /v1/api/v0/models -> 404 -> silent
+        # legacy fallback -> the not-loaded 14B looked 'available' and its
+        # mere selection JIT-loaded it over the owner's loaded 9B models.
+        _native_base = str(self.base_url or "").rstrip("/")
+        if _native_base.endswith("/v1"):
+            _native_base = _native_base[: -len("/v1")]
         try:
             response = self.client.get(
-                f"{self.base_url}/api/v0/models", timeout=5.0)
+                f"{_native_base}/api/v0/models", timeout=5.0)
             if response.ok:
                 data = (response.json() or {}).get("data") or []
                 # Authoritative only when the payload actually carries load

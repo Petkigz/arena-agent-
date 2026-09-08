@@ -453,19 +453,31 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_online(self) -> None:
-        self._set_status("idle")
-        self.sidebar.set_status(True)
-        self.chat.set_connection_status(True)
-        self.beanie.set_message("What are we working on today?")
-        self.context.set_status(True)
+        # Guarded: the health flip happens on EVERY (re)connect — one bad
+        # attribute here closed the whole app mid-voice (2026-09-08).
+        try:
+            self._set_status("idle")
+            self.sidebar.set_status(True)
+            self.chat.set_connection_status(True)
+            self.beanie.set_message("What are we working on today?")
+            self.context.set_status(True)
+        except Exception:
+            import traceback
+
+            traceback.print_exc()
 
     @Slot(str)
     def _on_offline(self, err: str) -> None:
-        self._set_status("offline")
-        self.sidebar.set_status(False)
-        self.chat.set_connection_status(False, err)
-        self.beanie.set_message("Offline — start the backend.")
-        self.context.set_status(False, err)
+        try:
+            self._set_status("offline")
+            self.sidebar.set_status(False)
+            self.chat.set_connection_status(False, err)
+            self.beanie.set_message("Offline — start the backend.")
+            self.context.set_status(False, err)
+        except Exception:
+            import traceback
+
+            traceback.print_exc()
 
     # ── Chat (ChatGPT-style) ──
     def _on_chat_connected(self) -> None:

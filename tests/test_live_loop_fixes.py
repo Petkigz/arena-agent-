@@ -267,9 +267,10 @@ def test_probe_close_marks_trace_achieved(recheck_db, monkeypatch):
     assert row[1] == 1
 
 
-def test_probe_miss_falls_back_to_bounded_cycle_recheck(recheck_db, monkeypatch):
-    """Evidence says the app is NOT running → one bounded full-cycle retry
-    (a genuine retry), still capped and non-amplifying."""
+def test_probe_miss_closes_without_reexecuting(recheck_db, monkeypatch):
+    """Evidence says the app is NOT running → close honestly, NEVER
+    re-execute. Owner round-4 verdict: rechecks must not re-run actions on
+    their own (the surprise re-launch WAS the bug)."""
     from app.cognition import parked_goal_recheck as pgr
 
     pgr.reset_for_tests()
@@ -282,6 +283,9 @@ def test_probe_miss_falls_back_to_bounded_cycle_recheck(recheck_db, monkeypatch)
                         classmethod(lambda cls, q, ep="": None))
 
     calls = []
+    posted = []
+    monkeypatch.setattr(pgr, "_post_to_conversation",
+                        lambda conv, text: posted.append(text))
 
     class _Future:
         def result(self, timeout=None):
@@ -296,19 +300,13 @@ def test_probe_miss_falls_back_to_bounded_cycle_recheck(recheck_db, monkeypatch)
                         _fake_run_coroutine_threadsafe)
     pgr.set_main_loop(type("L", (), {"is_running": lambda self: True})())
 
-    class _FakeRouter:
-        def __init__(self):
-            from unittest.mock import AsyncMock
-
-            self.handle_message = AsyncMock(return_value="ok")
-
-    from backend import message_router as router_module
-
-    monkeypatch.setattr(router_module, "message_router", _FakeRouter(),
-                        raising=False)
-
-    assert pgr.parked_goal_recheck_tick() is not None
-    assert len(calls) == 1, "the miss falls back to the cycle path"
+    assert pgr.parked_goal_recheck_tick() is None
+    assert not calls, "a probe miss must NOT submit a full LLM cycle"
+    assert posted and "nothing was re-run" in posted[0]
+    assert "not re-launching" in posted[0]
+    # The goal is closed: a second tick does nothing at all.
+    assert pgr.parked_goal_recheck_tick() is None
+    assert len(calls) == 0
 
 
 def test_launch_probe_returns_none_for_non_launch_goals():

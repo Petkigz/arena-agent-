@@ -296,9 +296,19 @@ def parked_goal_recheck_tick() -> Optional[Dict[str, Any]]:
             state["last"] = time.time()
             _close_goal_verified(goal, probe["detail"])
             return {"trace_id": goal["trace_id"], "probe_closed": True}
-        # Evidence says it is NOT running: ONE bounded full-cycle recheck
-        # (a genuine retry — _recheck owns the attempt counting and cap).
-        return _recheck(goal, state)
+        # Evidence says it is NOT running: close honestly WITHOUT
+        # re-executing. Owner round-4 verdict: rechecks must never re-run
+        # actions on their own — the request is hours old by then, and the
+        # surprise re-launch IS the bug (six RICHST TV instances). The
+        # owner decides whether to retry.
+        state["closed"] = True
+        _post_to_conversation(
+            goal["conversation_id"],
+            f"Auto re-check (evidence only, nothing was re-run): {probe['detail']} "
+            f"I am not re-launching on my own — say \"open it\" if you want it "
+            f"started, and this closes as not-verified.",
+        )
+        return None
 
     return _recheck(goal, _attempts_state(goal["trace_id"]))
 

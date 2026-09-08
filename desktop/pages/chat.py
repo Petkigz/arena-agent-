@@ -219,7 +219,7 @@ class ChatPage(QWidget):
         if detail:
             label += f" · {detail}"
         color = PRESENCE_COLORS.get("success") if online else TEXT_MUTED
-        self._header_orb.set_status("idle" if online else "offline")
+        self.header_orb.set_status("idle" if online else "offline")
         self._header_status.setText(f"● {label}")
         self._header_status.setStyleSheet(f"font-size: 12px; color: {color};")
 

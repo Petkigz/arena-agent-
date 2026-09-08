@@ -55,6 +55,12 @@ from app.utils.logger import app_logger
 
 _DEFAULT_EMBED_BASE_URL = "http://localhost:1234/v1"
 _EMBED_TIMEOUT_SECONDS = 4.0
+# Owner live test 2026-09-08: the embedding backend flapped active ->
+# timed-out every cycle, and each timed-out attempt blocked the cognitive
+# cycle for ~6s. After a timeout, stop RE-ATTEMPTING for this long (the
+# local fuzzy matcher answers meanwhile; one probe per window keeps
+# rediscovery alive without stalling cycles).
+_EMBED_TIMEOUT_COOLDOWN_S = 300.0
 
 # --- calibration -------------------------------------------------------------
 
@@ -164,6 +170,12 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
                   "Semantic matching: embedding backend disabled "
                   "(ARENA_LLM_DISABLED); using local fuzzy matching")
         return None
+    if _backend_state.get("timeout_until"):
+        import time as _time
+
+        if _time.monotonic() < float(_backend_state["timeout_until"]):
+            return None  # cooling down after a timeout — fall back instantly
+        _backend_state["timeout_until"] = None
     try:
         with httpx.Client() as client:
             model = _pick_embedding_model(client)
@@ -186,6 +198,14 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
                       f"Semantic matching: embedding backend active (model={model})")
             return vectors
     except Exception as exc:
+        if isinstance(exc, httpx.TimeoutException) or "timed out" in str(exc).lower():
+            # Open the cooldown window: one timed-out probe per window,
+            # not one per cycle (owner log: ~6s stolen from EVERY cycle).
+            import time as _time
+
+            _backend_state["timeout_until"] = (
+                _time.monotonic() + _EMBED_TIMEOUT_COOLDOWN_S
+            )
         _log_backend_transition("fallback",
                   f"Semantic matching: embedding backend unavailable ({exc}); using local fuzzy matching")
         return None

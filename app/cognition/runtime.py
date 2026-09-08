@@ -72,6 +72,37 @@ def probe_evidence_str(output: Any, budget: int = 300) -> str:
     return str(output)[:budget]
 
 
+def _apply_launch_truth_override(verification: Any, action_type: str, execution: Dict[str, Any]) -> bool:
+    """Launch truth override (owner live test 2026-09-08 rounds 3-4).
+
+    The GoalVerifier matches goal conditions against world-model entities;
+    launch goals whose payload carried no app name never matched — the
+    machine had JUST verified the process running, yet the goal parked as
+    waiting_for_evidence and fed the recheck loop. When the launch result
+    itself carries a machine-observed process verification, THAT is the
+    authoritative evidence for the goal "open <app>". Mutates and returns
+    True when the override applied.
+    """
+    if verification is None or verification.verified_success:
+        return False
+    if action_type not in ("launch_app", "open_application"):
+        return False
+    launch = (execution.get("outputs") or {}).get("launch_res") or execution.get("launch_res") or {}
+    if not launch.get("process_verified"):
+        return False
+    verification.verified_success = True
+    verification.is_unknown = False
+    verification.met_conditions = list(verification.met_conditions or []) + [
+        f"process probe: '{launch.get('app_name')}' is running "
+        f"(pid {launch.get('pid')})"
+    ]
+    verification.verification_reason = (
+        f"launch verified by post-launch process observation "
+        f"({launch.get('process_name')}, pid {launch.get('pid')})"
+    )
+    return True
+
+
 def _apply_epistemic_presentation(trace: CognitiveTrace, reply: str, presentation: Any) -> str:
     """Bind a user-facing epistemic summary to the persisted cycle trace."""
     trace.epistemic_presentation = presentation.to_dict()
@@ -2715,6 +2746,7 @@ class CognitiveRuntime:
             observed_state=observed_state,
             failed_payload=proposal.payload,
         )
+        _apply_launch_truth_override(verification, proposal.action_type, execution)
         trace.goal_verified = verification.verified_success
         assistant_reply, execution_grounding = reconcile_response(
             assistant_reply,

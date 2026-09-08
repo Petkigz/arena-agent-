@@ -351,7 +351,9 @@ def test_parked_recheck_attempts_then_reports_honestly(monkeypatch):
     rows = [{
         "trace_id": "t1",
         "conversation_id": "conv-1",
-        "goal": "open the portal",
+        # Non-launch goal (extract_app_query -> ""): launch-shaped goals
+        # are evidence-only since round 4 and never run cycles at all.
+        "goal": "find the fastest route to the airport",
         "created_at": "2020-01-01T00:00:00+00:00",  # old enough
     }]
     monkeypatch.setattr(pgr, "collect_parked_goals", lambda limit=5: rows)
