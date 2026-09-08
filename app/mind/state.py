@@ -81,9 +81,12 @@ def _jsonable(value: Any) -> Any:
 class BeanieState:
     """Read-only unified view over the runtime's internal state."""
 
-    def __init__(self, runtime: Any, identity: Any = None) -> None:
+    def __init__(self, runtime: Any, identity: Any = None, mind: Any = None) -> None:
         self.runtime = runtime
         self.identity = identity
+        # Phase 3–5 organs of the mind (world/self/memory facades). Optional:
+        # the skeleton degrades honestly without them.
+        self.mind = mind
 
     # ── room builders (each fail-open) ───────────────────────────────────
     def _room(self, component: Any, data: Optional[Dict[str, Any]] = None,
@@ -108,6 +111,14 @@ class BeanieState:
                     "born": rec.get("born"),
                     "milestones": len(rec.get("milestones", [])),
                 }
+            except Exception:
+                pass
+        # Phase 4: capability awareness through the mind's self facade.
+        if self.mind is not None:
+            try:
+                caps = self.mind.self_model.capabilities()
+                data["capabilities_count"] = caps.get("count")
+                data["capabilities_by_safety_level"] = caps.get("by_safety_level")
             except Exception:
                 pass
         probed = _probe(getattr(rt, "self_model", None))
@@ -140,6 +151,15 @@ class BeanieState:
             data["recent_observations"] = len(world.recent_observations(limit=50))
         except Exception:
             pass
+        # Phase 3: typed ontology coverage through the mind's world facade —
+        # only when the world store is actually wired (no organ → no data).
+        if self.mind is not None and getattr(self.mind.world, "world", None) is not None:
+            try:
+                stats = self.mind.world.stats()
+                data["by_type"] = stats.get("by_type")
+                data["ontology_size"] = stats.get("ontology_size")
+            except Exception:
+                pass
         if not data:
             return self._room(world, None, "unavailable")
         return self._room(world, data)
@@ -234,6 +254,13 @@ class BeanieState:
         lesson_probe = _probe(lessons)
         if lesson_probe:
             data["lessons"] = lesson_probe
+        # Phase 5: the unified memory landscape (all eight kinds) — only
+        # when a memory store is actually wired.
+        if self.mind is not None and getattr(self.mind.memory, "memory", None) is not None:
+            try:
+                data["unified_memory_counts"] = self.mind.memory.counts()
+            except Exception:
+                pass
         if not data:
             return self._room(memory, None, "unavailable")
         return self._room(memory, data)

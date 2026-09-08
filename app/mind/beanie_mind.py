@@ -32,7 +32,10 @@ from typing import Any, Dict, List, Optional
 
 from app.config import settings
 from app.mind.identity import BeanieIdentity
+from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
+from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
+from app.mind.world_facade import WorldModelFacade
 from app.utils.logger import app_logger
 
 # The door's vocabulary. Unknown modalities are accepted but flagged —
@@ -66,6 +69,9 @@ class BeanieMind:
         self._runtime = runtime  # injected (tests/bound views) or None → singleton
         self._lock = threading.RLock()
         self._identity: Optional[BeanieIdentity] = None
+        self._world: Optional[WorldModelFacade] = None
+        self._self_model: Optional[SelfModelFacade] = None
+        self._memory: Optional[UnifiedMemory] = None
         self._entry_count = 0
         try:
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -132,7 +138,46 @@ class BeanieMind:
 
     def state(self) -> Dict[str, Any]:
         """The BeanieState snapshot (M2): every room, honestly marked."""
-        return BeanieState(self.runtime, identity=self.identity).snapshot()
+        return BeanieState(self.runtime, identity=self.identity, mind=self).snapshot()
+
+    # ── the mind's organs (Phases 3–5): world, self, unified memory ──────
+    @property
+    def world(self) -> WorldModelFacade:
+        """Phase 3: reasoning about the persistent world model."""
+        with self._lock:
+            if self._world is None:
+                self._world = WorldModelFacade(getattr(self.runtime, "world", None))
+            return self._world
+
+    @property
+    def self_model(self) -> SelfModelFacade:
+        """Phase 4: capabilities, limitations, and genuine self-assessment."""
+        with self._lock:
+            if self._self_model is None:
+                from app.tools.manifest import get_tool_manifest
+                self._self_model = SelfModelFacade(
+                    manifest_getter=get_tool_manifest,
+                    memory=getattr(self.runtime, "memory", None),
+                    hardware_self_model=getattr(self.runtime, "hardware_self_model", None),
+                    identity=self.identity,
+                )
+            return self._self_model
+
+    @property
+    def memory(self) -> UnifiedMemory:
+        """Phase 5: one view over every memory kind (working, episodic,
+        semantic, procedural, lesson, social, preference, autobiographical,
+        meta)."""
+        with self._lock:
+            if self._memory is None:
+                self._memory = UnifiedMemory(
+                    memory=getattr(self.runtime, "memory", None),
+                    working=getattr(self.runtime, "working_memory", None),
+                    social=SocialMemoryStore(self.db_path),
+                    identity=self.identity,
+                    preferences=getattr(self.runtime, "phase7_preferences", None),
+                )
+            return self._memory
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(

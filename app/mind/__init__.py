@@ -16,5 +16,12 @@ Everything else in the repository remains something the Mind can call.
 from app.mind.identity import BeanieIdentity
 from app.mind.state import BeanieState
 from app.mind.beanie_mind import BeanieMind, MODALITIES
+from app.mind.world_facade import WorldModelFacade, WORLD_ENTITY_TYPES
+from app.mind.self_facade import SelfModelFacade
+from app.mind.memory_facade import UnifiedMemory, SocialMemoryStore, MetaMemory
 
-__all__ = ["BeanieMind", "BeanieIdentity", "BeanieState", "MODALITIES"]
+__all__ = [
+    "BeanieMind", "BeanieIdentity", "BeanieState", "MODALITIES",
+    "WorldModelFacade", "WORLD_ENTITY_TYPES", "SelfModelFacade",
+    "UnifiedMemory", "SocialMemoryStore", "MetaMemory",
+]

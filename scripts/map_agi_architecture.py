@@ -94,6 +94,18 @@ OVERRIDES = {
     "app/mind/state.py": (
         "mind/cognition-core", "KEEP", "STATE",
         "Phase 1 LIVE: BeanieState skeleton — 15 rooms, honestly marked (M2)"),
+    "app/mind/world_facade.py": (
+        "models/world", "KEEP", "WORLD",
+        "Phase 3 LIVE: ontology + pre-action understanding over the existing "
+        "WorldModel (the verification-side store stays authoritative)"),
+    "app/mind/self_facade.py": (
+        "models/self", "KEEP", "SELF",
+        "Phase 4 LIVE: genuine self-assessment (knowledge/confidence/"
+        "possible_actions) + capability awareness (authority ≠ intelligence)"),
+    "app/mind/memory_facade.py": (
+        "memory", "KEEP", "MEMORY",
+        "Phase 5 LIVE: UnifiedMemory over all eight kinds + NEW social store "
+        "and meta-memory (M3, M5 resolved)"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),

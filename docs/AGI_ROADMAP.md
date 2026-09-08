@@ -147,6 +147,18 @@ filesystem/search/application/screen capabilities.
 
 ## Phase 3 — Build the World Model
 
+> ✅ **LIVE 2026-09-08:** the existing provenance-enforced `WorldModel` is kept
+> as the authoritative store; `app/mind/world_facade.py` adds the roadmap's
+> ontology (People, Places, Devices, Applications, Files, Websites, Accounts,
+> Objects, Concepts, Events, Processes), typed teaching (`remember_entity` /
+> `relate` — missing endpoints are honest failures, never fabricated),
+> provenance-required state observations, and PRE-action understanding
+> (`understand(text)` → matched entities + latest states + visible gaps).
+> Owner-visible: `GET /mind/world`, `/mind/world/about`, `/mind/world/understand`;
+> teaching via `POST /mind/world/{entities,relations,observations}`. Guarded by
+> `tests/test_mind_models.py`. (The Phase-2 consumption of this context inside
+> the reasoning cycle is the next integration step.)
+
 The biggest missing AGI component (see the map for what already exists as
 verification-side fragments). Create a persistent representation of: People,
 Places, Devices, Applications, Files, Websites, Accounts, Objects, Concepts,
@@ -167,6 +179,18 @@ against it.
 
 ## Phase 4 — Build the Self Model
 
+> ✅ **LIVE 2026-09-08:** `app/mind/self_facade.py` makes "I don't know" a
+> genuine internal state. `assess(task)` returns exactly the roadmap's shape —
+> `knowledge` ∈ {known, partial, unknown}, rule-based `confidence` from REAL
+> evidence (capability-catalog match + memory hits, never vibes; unknown =
+> 0.08, the roadmap's number), and typed `possible_actions`
+> (investigate / ask_owner / observe_demonstration / search). Capability
+> awareness reports the full catalog INCLUDING Level-3 actions, because
+> authority ≠ intelligence (charter §18): understanding a capability is not
+> authorization to run it. Limitations read the hardware self-model honestly.
+> Owner-visible: `GET /mind/self`, `GET /mind/self/assess?task=...`. Guarded
+> by `tests/test_mind_models.py`.
+
 Beanie needs a persistent model of herself: identity, capabilities, limitations,
 knowledge, beliefs, uncertainty, experiences, preferences, personality, goals,
 current state, development history.
@@ -183,6 +207,19 @@ possible_actions: investigate / ask owner / observe demonstration / search
 That is much closer to general intelligence than simply returning "I don't know."
 
 ## Phase 5 — Unified Memory
+
+> ✅ **LIVE 2026-09-08:** `app/mind/memory_facade.py` — `UnifiedMemory` is the
+> ONE view over all eight kinds: working (runtime scratchpad), episodic /
+> semantic / procedural / lesson (existing MemoryStore), **social** (NEW
+> `SocialMemoryStore` — people/relationships with provenance, interaction
+> counts, owner-confirmed forget), preference (Phase-7 engine + owner model),
+> autobiographical (identity milestones), and **meta-memory** (NEW
+> `MetaMemory`: `remembered_done` / `knows_how` / `heard_about` / `unknown`,
+> each citing its evidence — "I remember doing this" vs "I think I know how
+> but never did"). Single typed write surface (`remember(kind, ...)`).
+> Owner-visible: `GET /mind/memory`, `/mind/memory/meta?q=...`,
+> `/mind/memory/social`; writes via `POST /mind/memory`, `/mind/memory/social`.
+> Guarded by `tests/test_mind_models.py`.
 
 Don't make memory simply "chat history." Build multiple kinds of memory under one
 system: Working, Episodic (experiences), Semantic (facts/concepts), Procedural

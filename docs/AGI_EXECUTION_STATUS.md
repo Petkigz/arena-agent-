@@ -7,16 +7,20 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phase 0 ✅ and Phase 1 ✅ complete.**
-Phase 1 (one canonical mind door) is LIVE: `app/mind/` ships `BeanieMind`,
-`BeanieIdentity` ("I am Beanie" as persisted state — M1), and the `BeanieState`
-skeleton (M2). WS text, voice, and REST all enter through
-`BeanieMind.process(...)` into the single CognitiveRuntime; owner-visible at
-`GET /mind/identity`, `GET /mind/state`, `GET /mind/entries`. Guarded by
-`tests/test_beanie_mind.py` (21 tests); zero behavior change to the cycle
-itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
-freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md). Next step
-awaits owner sequencing (map §6 MISSING ledger: M3–M11).
+**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 3, 4, 5 ✅ complete.**
+`app/mind/` now ships: `BeanieMind` (one canonical door — voice/text/REST),
+`BeanieIdentity` ("I am Beanie" as persisted state — M1), the `BeanieState`
+skeleton (M2), the **world facade** (Phase 3: roadmap ontology + pre-action
+understanding over the existing provenance-enforced WorldModel), the **self
+facade** (Phase 4: genuine knowledge/confidence/possible_actions
+self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
+all eight memory kinds incl. NEW social store and meta-memory — M3, M5
+resolved). 14 owner-visible `/mind/*` endpoints; guarded by
+`tests/test_beanie_mind.py` (21) + `tests/test_mind_models.py` (22); zero
+behavior change to the cognitive cycle itself. The Phase-2 consumption of
+world context inside the reasoning cycle is the declared next integration
+step. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module freeze
+in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).
 
 The dead-code/repetition audit closed clean ([REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md):
 0 dead symbols across five passes; the knowledge/memory editor scaffold

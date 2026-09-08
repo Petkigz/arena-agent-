@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 359 after the Phase-1 `app/mind/`
-modules joined as KEEP — the target architecture itself).
+modules with **0 unclassified** (354 at freeze; 362 after the `app/mind/`
+package grew through Phases 1, 3, 4, 5 — the target architecture itself, all KEEP).
 
 ---
 
@@ -72,9 +72,9 @@ already there (the failure mode that produced the dead code).
 
 | Roadmap phase | Assumed missing? | Reality in the tree |
 |---|---|---|
-| P3 World Model | "biggest missing component" | **Partial — 9 modules** (cluster WORLD): `world_model.py` (783 lines, persistent), `world_ingest`, `observation_router` (1,074 lines of host-state grounding), `environment_state/grounding`, `os_grounding`, `scene_graph`, `browser_grounding`. **But:** it is used *after* action (verification probes), not *before* action (world-first reasoning). Missing piece is the role, not the storage. |
-| P4 Self Model | "huge difference…" | **Partial — 8 modules** (cluster SELF): `self_model.py`, `self_knowledge.py`, `identity_continuity.py`, `identity_adaptation.py` (1,066 lines), `self_recovery.py`, `metacognitive_monitor.py` (903 lines), `consciousness_simulation.py`, `api/self_awareness.py`. Missing: unified "knowledge: unknown / confidence: 0.08 / possible_actions" internal-state surface (§6 M2). |
-| P5 Unified Memory | "not chat history" | **Partial — 6 modules** (cluster MEMORY): `cognition/memory.py` already implements episodic + semantic + procedural in one store; plus working, prospective, associative, analogical memories and `semantic_rag`. Missing: the single facade, **social memory**, **autobiographical memory**, and **meta-memory** (§6 M3–M5). |
+| P3 World Model | "biggest missing component" | **Partial — 9 modules** (cluster WORLD): `world_model.py` (783 lines, persistent), `world_ingest`, `observation_router` (1,074 lines of host-state grounding), `environment_state/grounding`, `os_grounding`, `scene_graph`, `browser_grounding`. **But:** it is used *after* action (verification probes), not *before* action (world-first reasoning). Missing piece is the role, not the storage. ✅ **2026-09-08:** `app/mind/world_facade.py` adds the pre-action half (ontology + `understand`); cycle consumption remains the Phase-2 step. |
+| P4 Self Model | "huge difference…" | **Partial — 8 modules** (cluster SELF): `self_model.py`, `self_knowledge.py`, `identity_continuity.py`, `identity_adaptation.py` (1,066 lines), `self_recovery.py`, `metacognitive_monitor.py` (903 lines), `consciousness_simulation.py`, `api/self_awareness.py`. ✅ **2026-09-08:** `app/mind/self_facade.py` ships the unified "knowledge: unknown / confidence: 0.08 / possible_actions" internal-state surface (the roadmap's acceptance example, verbatim). |
+| P5 Unified Memory | "not chat history" | **Partial — 6 modules** (cluster MEMORY): `cognition/memory.py` already implements episodic + semantic + procedural in one store; plus working, prospective, associative, analogical memories and `semantic_rag`. ✅ **2026-09-08:** `app/mind/memory_facade.py` ships the single facade over all eight kinds incl. NEW social memory and meta-memory; autobiographical remains the milestone seed (M4 partial). |
 | P16 Owner model | greenfield | **Exists:** `owner_model.py` (counted patterns from owner decisions), `user_state.py`, `human_nature_engine.py`. INTEGRATE, don't rebuild. |
 | P9 Curiosity | greenfield | **Exists:** `learning_progress.py`, `information_gain.py`, `experiment_engine.py`, autonomous-goal family. INTEGRATE into one UNKNOWN→investigate loop. |
 | P10 Reasoning/Imagination | greenfield | **Exists:** `counterfactual_simulator`, `prediction_engine`, `hypotheses`, `incubation_queue`, `scene_causal`. Prediction-vs-reality comparison is the missing connective tissue. |
@@ -127,8 +127,12 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 
 ## 6. MISSING ledger — concepts with no file (the actual build list)
 
-> **Status 2026-09-08:** M1 (Beanie identity) and M2 (BeanieState) are now
-> LIVE in `app/mind/` (Phase 1). Remaining build list: M3–M11.
+> **Status 2026-09-08:** M1 (identity), M2 (BeanieState), M3 (meta-memory) and
+> M5 (social memory) are LIVE in `app/mind/` (Phases 1, 4-identity, 5). The
+> Phase-3 world facade makes M6's *substrate* available (`understand(text)`),
+> but the reasoning cycle does not consume it yet — that consumption IS the
+> Phase-2 work. M4 is partial (milestone seed; no narrative layer). Remaining
+> build list: M4-completion, M6-consumption, M7–M11.
 
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
@@ -183,9 +187,14 @@ Per the roadmap's restructuring order, the first build step after this freeze:
 3. ✅ **Entry convergence** (§5) — WS text + voice (`backend/message_router.py`)
    and REST (`CognitivePipeline.process_request`) call `BeanieMind.process` with
    modality tags; old result shapes unchanged.
-4. **Open (owner sequencing):** M3–M11 from §6 — next candidates per the map:
-   meta-memory, world-first reasoning path (M6), attention significance (M8),
-   demonstration learning (M7), generalization eval (M9).
+4. ✅ **Phases 3–5 LIVE (2026-09-08)** — `world_facade.py` (ontology +
+   pre-action understanding), `self_facade.py` (genuine self-assessment),
+   `memory_facade.py` (UnifiedMemory + SocialMemoryStore + MetaMemory).
+   22 tests in `tests/test_mind_models.py`; 14 `/mind/*` endpoints.
+5. **Open (roadmap order):** Phase 2 — make the reasoning cycle consume
+   world/self/memory context (world-first instead of tool-first; M6); then
+   M7 demonstration learning, M8 attention significance, M9 generalization
+   eval, per the owner's sequencing.
 
 ---
 
