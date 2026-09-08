@@ -132,6 +132,11 @@ OVERRIDES = {
         "Phase 9 LIVE: the internal UNKNOWN system — brief gaps become "
         "records, encounters compound, investigation searches memory first, "
         "resolution paths counted (knowledge/investigation/owner)"),
+    "app/mind/imagination.py": (
+        "mind/imagination", "KEEP", "IMAGINATION",
+        "Phase 10 LIVE: simulate before acting (prediction + own verified "
+        "history + open unknowns + counsel); compare prediction vs reality "
+        "into a ledger + confirmed/refuted training data (M11 resolved)"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -303,7 +308,10 @@ OVERRIDES = {
     "app/cognition/counterfactual_simulator.py": (
         "mind/imagination", "KEEP", "", "mental simulation of strategies"),
     "app/cognition/prediction_engine.py": (
-        "mind/imagination", "KEEP", "", "prediction vs outcome surprisal"),
+        "mind/imagination", "KEEP", "IMAGINATION",
+        "prediction vs outcome surprisal; Phase 10 wires it into "
+        "app/mind/imagination.py (simulate before acting, compare vs "
+        "reality — M11 connected)"),
     "app/cognition/goal_interpreter.py": (
         "mind/reasoning", "KEEP", "", "goal representation v2"),
     "app/cognition/concept_bridge.py": (

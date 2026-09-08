@@ -323,3 +323,41 @@ class ResolveUnknownIn(BaseModel):
 def mind_curiosity_resolve(body: ResolveUnknownIn) -> dict:
     """The owner answers an open unknown."""
     return BeanieMind.get_instance().curiosity.resolve(body.topic, body.answer)
+
+
+# ── Phase 10: reasoning & imagination (simulate / compare) ─────────────────
+class SimulateIn(BaseModel):
+    action_type: str = Field(min_length=1, max_length=120)
+
+
+@router.post("/mind/imagination/simulate")
+def mind_imagination_simulate(body: SimulateIn) -> dict:
+    """Run a candidate action in her head BEFORE acting: prediction +
+    her own verified history + open unknowns + deterministic counsel."""
+    return BeanieMind.get_instance().imagination.simulate(body.action_type)
+
+
+class CompareRealityIn(BaseModel):
+    action_type: str = Field(min_length=1, max_length=120)
+    success: bool
+    surprisal: Optional[float] = None
+    source: str = "owner"
+
+
+@router.post("/mind/imagination/compare")
+def mind_imagination_compare(body: CompareRealityIn) -> dict:
+    """Compare a prediction with reality. success must be EVIDENCE the
+    owner has; the outcome becomes training data through the learning
+    loop."""
+    return BeanieMind.get_instance().imagination.compare(
+        body.action_type, body.success, surprisal=body.surprisal,
+        source=body.source)
+
+
+@router.get("/mind/imagination")
+def mind_imagination(limit: int = Query(default=20, ge=1, le=200)) -> dict:
+    """The prediction-vs-reality ledger: confirmed/refuted comparisons,
+    mean surprisal, and the epistemic ladder."""
+    mind = BeanieMind.get_instance()
+    return {"success": True, **mind.imagination.stats(),
+            "records": mind.imagination.records(limit=limit)}

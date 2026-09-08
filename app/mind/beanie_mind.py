@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 from app.config import settings
 from app.mind.curiosity import CuriosityEngine
 from app.mind.identity import BeanieIdentity
+from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
@@ -82,6 +83,7 @@ class BeanieMind:
         self._teaching: Optional[DemonstrationTeaching] = None
         self._media_learning: Optional[MediaLearning] = None
         self._curiosity: Optional[CuriosityEngine] = None
+        self._imagination: Optional[Imagination] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -257,6 +259,14 @@ class BeanieMind:
                 self._curiosity = CuriosityEngine(self)
             return self._curiosity
 
+    @property
+    def imagination(self) -> Imagination:
+        """Phase 10: simulate before acting; compare prediction vs reality."""
+        with self._lock:
+            if self._imagination is None:
+                self._imagination = Imagination(self)
+            return self._imagination
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -315,6 +325,21 @@ class BeanieMind:
             self.learning.learn(experience)
         except Exception as exc:
             app_logger.warning(f"Cycle experience not learned (non-fatal): {exc}")
+        # Phase 10: prediction vs reality. Only when the verifier gave a
+        # definite word AND an action actually ran — waiting-for-evidence is
+        # not a comparison. Failures become training data. Kill switch:
+        # ARENA_IMAGINATION=0 (the owner surface keeps working).
+        action_type = str(result.get("action_type") or "").strip()
+        if (str(getattr(settings, "ARENA_IMAGINATION", "1")) != "0"
+                and action_type and isinstance(verified, bool)
+                and not result.get("verification_unknown")):
+            try:
+                self.imagination.compare(
+                    action_type, verified,
+                    surprisal=result.get("prediction_surprisal"),
+                    source="cycle")
+            except Exception as exc:
+                app_logger.warning(f"Prediction-vs-reality skipped (non-fatal): {exc}")
 
     def _run_world_first(self, user_text: str, modality: str) -> None:
         """Assemble + deliver the Phase-2 brief. Never raises into the door."""

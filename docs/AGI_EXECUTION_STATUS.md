@@ -7,8 +7,23 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ✅ complete.**
-Phase 9 (curiosity / the UNKNOWN system) is LIVE: `app/mind/curiosity.py` —
+**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ✅ complete.**
+Phase 10 (reasoning and imagination) is LIVE: `app/mind/imagination.py` —
+the epistemic ladder (perception/belief/hypothesis/prediction/simulation/
+reality) as labeled states; `simulate()` runs a candidate action in her head
+(prediction via the existing PredictionEngine + her own verified history +
+open unknowns + deterministic counsel); `compare()` judges prediction vs
+reality (bool evidence only), persists the ledger, stores the verified
+outcome, and feeds the Phase-6 loop as a confirmed/refuted experiment —
+failures become training data (M11 resolved). Verified cycles auto-compare
+at the door; the runtime keeps owning the calibrator (no double counting).
+Owner-visible: `POST /mind/imagination/simulate`,
+`POST /mind/imagination/compare`, `GET /mind/imagination`. Kill switch
+`ARENA_IMAGINATION=0`. Guarded by `tests/test_imagination.py` (12 tests);
+live-verified: simulate found her REAL past failure with search and capped
+its confidence at 0.5 with "proceed carefully".
+
+Earlier in this gate: Phase 9 (curiosity / the UNKNOWN system) LIVE — `app/mind/curiosity.py` —
 ignorance becomes a record. World-first brief gaps register automatically;
 topics normalize; re-encounters compound; investigation searches her own
 memory FIRST (same evidence gate as the learning loop); resolution paths
@@ -85,10 +100,11 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). Now 25 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+resolved). Now 28 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
 preview/ledger, the Phase-6 learning door/landscape/ledger, the Phase-7
-procedures/teaching-session windows, the Phase-8 media learning door, and
-the Phase-9 curiosity landscape/investigate/resolve); guarded by
+procedures/teaching-session windows, the Phase-8 media learning door, the
+Phase-9 curiosity landscape/investigate/resolve, and the Phase-10
+imagination simulate/compare/ledger); guarded by
 `tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module

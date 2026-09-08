@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 367 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 368 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 — the target architecture itself, all KEEP).
 
 ---
 
@@ -139,7 +139,9 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 > auto-submits verified/unverified cycle outcomes and owner corrections; it
 > feeds M11's spirit (failures become data) without claiming M11 resolved.
 > M4 is partial (milestone seed; no narrative layer). Remaining build list:
-> M4-completion, M8–M11.
+> M4-completion, M8–M10. (M11 — the prediction↔reality loop — is LIVE with
+> Phase 10: `app/mind/imagination.py` connects `prediction_engine.py` to the
+> learning loop, so failures become training data.)
 
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
@@ -153,7 +155,7 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 | M8 | **Attention significance system** — current task / owner speaking / anomaly / unfinished goal arbitration | P13, P14 | `attention_manager.py` (43 lines) + observer/prioritizer feeds |
 | M9 | **Generalization evaluation** — tasks A–G (teach-once-adapt, tutorial-transfer, unfamiliar-error, environment-change, incomplete-instruction, learn-from-failure, cross-OS transfer) | P24 | `intelligence_benchmark.py` (regression-style only) |
 | M10 | **OS concept-verb abstraction** — open/copy/navigate/… as platform-free concepts with embodiment mapping | P12 | `os_control_planner.py` seed |
-| M11 | **Prediction↔reality comparison loop** — failures become training data automatically | P10 | `prediction_engine.py` + `execution_truth.py` (not connected) |
+| M11 | ~~**Prediction↔reality comparison loop**~~ ✅ LIVE 2026-09-08 — `app/mind/imagination.py`: simulate-before-acting + compare-vs-reality ledger + confirmed/refuted training data through the Phase-6 loop (Phase 10; `prediction_engine.py` wired) | P10 | ~~`prediction_engine.py` + `execution_truth.py` (not connected)~~ |
 
 Every M-item is testable in isolation and none requires deleting existing code —
 each attaches to a named fragment above. This is the sequencing input for the
@@ -180,7 +182,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–3 are LIVE (Phase 1 complete).**
+**Status 2026-09-08: steps 1–10 are LIVE (Phases 1–10 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -231,10 +233,17 @@ Per the roadmap's restructuring order, the first build step after this freeze:
    owner); no-evidence unknowns stay open; recurrences reopen. Fail-open +
    kill switch (`ARENA_CURIOSITY=0`). 11 tests in
    `tests/test_curiosity.py`; 25 `/mind/*` endpoints total.
-10. **Open (roadmap order):** Phase 10 reasoning and imagination
-    (deterministic simulation over the world model before acting); then M8
-    attention significance, M9 generalization eval, per the owner's
-    sequencing.
+10. ✅ **Phase 10 LIVE (2026-09-08)** — `imagination.py`: the epistemic
+    ladder as labeled states; simulate before acting (PredictionEngine +
+    own verified history + open unknowns + deterministic counsel); compare
+    prediction vs reality (bool evidence only) into a persistent ledger and
+    confirmed/refuted training data via the Phase-6 loop (M11 resolved).
+    Verified cycles auto-compare at the door; the runtime keeps owning the
+    calibrator. Kill switch `ARENA_IMAGINATION=0`. 12 tests in
+    `tests/test_imagination.py`; 28 `/mind/*` endpoints total.
+11. **Open (roadmap order):** Phase 11 embodied intelligence (tools become
+    the motor system; OS abstraction follows in P12); then M8 attention
+    significance, M9 generalization eval, per the owner's sequencing.
 
 ---
 

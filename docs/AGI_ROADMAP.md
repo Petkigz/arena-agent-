@@ -391,6 +391,33 @@ This is a critical AGI behavior.
 
 ## Phase 10 — Reasoning and Imagination
 
+> ✅ **LIVE 2026-09-08:** `app/mind/imagination.py` — `Imagination`: the
+> roadmap's epistemic ladder (perception / belief / hypothesis / prediction
+> / simulation / reality) is now represented as labeled states, and the
+> SIMULATE + COMPARE stages are wired around the existing brain.
+> `simulate(action_type)` runs a candidate action in her head BEFORE acting:
+> the existing `PredictionEngine` produces the prediction (expected changes +
+> confidence, learned or default), then she consults her OWN verified
+> history (episodic evidence) and her open unknowns (curiosity) and returns
+> deterministic counsel. `compare(action_type, success)` judges the
+> prediction against reality — reality must be bool EVIDENCE, never a guess
+> — persists a prediction-vs-reality ledger (sqlite), stores the verified
+> outcome as an episode, and submits the comparison to the Phase-6 loop as
+> an `experiment` experience with a declared prediction → verdict
+> confirmed/refuted → **failures become training data** (M11 resolved: the
+> prediction↔reality loop is connected). The door auto-compares every cycle
+> with a definite verdict and an action (waiting-for-evidence never
+> compares); kill switch `ARENA_IMAGINATION=0`. Division of labor, stated:
+> the runtime already predicts/evaluates surprisal/feeds the calibrator —
+> the organ owns the ledger, verdicts, and training-data feed, and never
+> double-counts calibration. Live-verified against the real server:
+> `simulate("search_files")` found her REAL verified failure from a past
+> cycle and counseled "failed 1 time before, never verifiably succeeded —
+> proceed carefully" with confidence capped at 0.5. Owner-visible:
+> `POST /mind/imagination/simulate`, `POST /mind/imagination/compare`,
+> `GET /mind/imagination` (28 `/mind/*` endpoints total). Guarded by
+> `tests/test_imagination.py` (12 tests).
+
 Add a distinction between: Perception ("The screen contains this"), Belief
 ("I think this is happening"), Hypothesis ("Perhaps X caused it"), Prediction
 ("If I do X, Y should happen"), Simulation ("If I take this path, the likely
