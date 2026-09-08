@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     BROWSER_TRANSFER_MAX_MB: int = 1024  # Owner-overridable local transfer safety quota
     BROWSER_DISK_SAFETY_MARGIN_MB: int = 512  # Free space kept unreserved beneath transfers
     ARENA_ASSOCIATIVE_MEMORY: str = "1"  # "0" disables vector-associative recall
+    ARENA_BACKGROUND_OBSERVER: str = "1"  # "0" disables the read-only environment watcher
     ARENA_EMBEDDING_URL: str = ""  # LM Studio base URL for real embeddings (optional)
     ARENA_EMBEDDING_MODEL: str = ""  # e.g. text-embedding-nomic-embed-text-v1.5
     # Uncertainty questions (F1.2): low calibrated confidence asks the owner.

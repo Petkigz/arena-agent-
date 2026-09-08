@@ -87,21 +87,42 @@ the background for as long as the server is online**.
 These were built, then orphaned by tool crashes and rebuilds. They are the
 owner's ideas, retained in the tree, and they come back — in this order:
 
-1. **Voice-first companionship:** wake word (`backend/voice/wake_word.py` +
-   unmounted `WakeWordTrainer`/`WakeWordManager`/`VoiceOverlay`), voice mode as
-   the default face of desktop + Android; text as fallback.
-2. **The person is home:** mount the **anticipation engine** and the
-   **presence orb** — it should feel like someone is there, anticipating.
-3. **Eyes:** screenshot capture → viewer → **annotator**, as a fluid capability
-   the person uses while talking with the owner (not a hidden page).
-4. **The silent watcher:** `background_observer` + `event_prioritizer` connected
-   to the live runtime.
-5. **UI as one person:** consolidate the separated UI features into the
-   conversation person (this is a design program, not a cleanup).
-6. **Autostart + background persistence** for desktop + Android, per §3.
+1. ✅ **Voice-first companionship (LIVE 2026-09-08):** `WakeWordManager` +
+   `WakeWordTrainer` mounted on `/settings/voice` (train → activate → manage,
+   full backend CRUD wired); `VoiceOverlay` mounted in the conversation — when
+   the chat enters a live voice state, the full voice surface becomes the
+   primary UI; text remains the backup channel. Android keeps its voice-first
+   Compose surface.
+2. ✅ **The person is home (LIVE 2026-09-08):** the **anticipation engine** now
+   learns from every recorded cognitive cycle (`MetacognitiveMonitor.record_process`
+   feeds it, fail-open) and surfaces on the Cognition page ("Anticipated
+   Needs", `GET /cognition/anticipations`); the presence orb was already live
+   on the Beanie page (`ReactiveBeanieOrb`).
+3. ✅ **Eyes (LIVE 2026-09-08):** `ScreenCapture` → `ScreenshotViewer` →
+   `ScreenshotAnnotator` mounted on the Images page as one fluid flow:
+   capture lands in the viewer, one click annotates, saves back to the
+   store (`removeScreenshot` added for deletion). In-conversation, not hidden.
+4. ✅ **The silent watcher (LIVE 2026-09-08):** `BackgroundObserver` starts in
+   the server lifespan (`ARENA_BACKGROUND_OBSERVER=1` default, read-only
+   probes), every observed change flows through `EventPrioritizer`
+   (classify → dedupe → decision), and both raw observations and prioritizer
+   decisions surface on the Cognition page ("Environment Awareness",
+   `GET /cognition/environment/observations`). The watcher notices and
+   prioritizes; it never acts.
+5. ◐ **UI as one person:** this slice mounted the orphaned voice/eyes/awareness
+   surfaces into the conversation person (wake word + overlay + capture flow +
+   awareness sections). Remaining: animation kit, Spinner/Skeleton/Banner,
+   accessibility/theme utilities — catalogued with dispositions in
+   `scripts/audit_dead_code.py` (ACKNOWLEDGED sets), owner picks the order.
+6. ◐ **Autostart + background persistence:** backend pieces live
+   (`app/desktop_tray.py` entry point starts the server subprocess + tray;
+   Android manifest declares FOREGROUND_SERVICE + mic/camera/location). The
+   OS-level "open when the server comes live" glue for release builds is the
+   remaining work (owner-side packaging decision).
 7. Deferred decisions (owner decides when): `cognitive_router` prototype vs the
    live router; `cross_domain_transfer` embedding completion; `confidence.py`
-   source-reliability prototype.
+   source-reliability prototype. (Test-only per the dead-code audit, by owner
+   choice, not drift.)
 
 ## 6. Standing conversion ledger — refusal sites becoming asks
 

@@ -294,3 +294,67 @@ class BackgroundObserver:
                     app_logger.warning(f"BackgroundObserver on_change callback error: {e}")
 
         return all_changes
+
+
+# ── Server wiring (charter §5: the silent watcher) ───────────────────
+# The server lifespan creates this when ARENA_BACKGROUND_OBSERVER is enabled
+# (default on). Read-only probes only: the observer notices, prioritizes, and
+# surfaces — it never acts on its own.
+
+observer_instance: Optional["BackgroundObserver"] = None
+prioritizer_instance: Optional[Any] = None
+
+_MAX_DECISIONS = 100
+_recent_decisions: List[Dict[str, Any]] = []
+_decisions_lock = threading.Lock()
+
+
+def _on_change_prioritize(change: Any) -> None:
+    """Route each observed change through the EventPrioritizer.
+
+    The watcher's full chain: probes observe → prioritizer classifies and
+    deduplicates → decisions surface to the owner. Nothing here acts.
+    """
+    try:
+        from app.perception.event_prioritizer import EventPrioritizer
+
+        global prioritizer_instance
+        prioritizer = prioritizer_instance
+        if prioritizer is None:
+            prioritizer = EventPrioritizer()
+            prioritizer_instance = prioritizer
+        decision = prioritizer.evaluate(change)
+        record = {
+            "change_id": getattr(change, "change_id", ""),
+            "subject": getattr(change, "subject", "unknown"),
+            "change_type": getattr(change, "change_type", "unknown"),
+            "priority": decision.priority,
+            "should_trigger": decision.should_trigger,
+            "reason": decision.reason,
+            "relevant_goals": decision.relevant_goals,
+            "timestamp": getattr(change, "timestamp", ""),
+        }
+        with _decisions_lock:
+            _recent_decisions.append(record)
+            if len(_recent_decisions) > _MAX_DECISIONS:
+                del _recent_decisions[: len(_recent_decisions) - _MAX_DECISIONS]
+    except Exception as exc:
+        app_logger.debug(f"Event prioritization skipped: {exc}")
+
+
+def get_recent_decisions(limit: int = 20) -> List[Dict[str, Any]]:
+    """Recent prioritizer decisions (what the watcher would flag to the owner)."""
+    with _decisions_lock:
+        return list(_recent_decisions[-limit:])
+
+
+def build_default_observer(interval: float = BackgroundObserver.DEFAULT_INTERVAL) -> "BackgroundObserver":
+    """Create the standard observer: read-only probes + event prioritization."""
+    global prioritizer_instance
+    prioritizer_instance = None  # fresh observer -> fresh lazy prioritizer
+    with _decisions_lock:
+        _recent_decisions.clear()
+    observer = BackgroundObserver(interval=interval, on_change=_on_change_prioritize)
+    observer.add_probe(ProcessProbe())
+    observer.add_probe(SystemResourceProbe())
+    return observer

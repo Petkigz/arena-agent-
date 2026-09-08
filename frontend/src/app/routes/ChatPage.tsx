@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { MessageBubble, ChatInput, ChatHeader, ConversationShareMenu, VirtualMessageList } from '../../components/chat';
 import { BeanieOrbPanel, ListeningIndicator } from '../../components/beanie';
+import { VoiceOverlay } from '../../components/ui';
 import { ReactiveBeanieOrb } from '../../components/presence';
 import { EmptyState } from '../../components/ui';
 import { MessageCircle, ShieldAlert } from 'lucide-react';
@@ -373,6 +374,21 @@ export function ChatPage() {
     <div className="relative h-full flex flex-col">
       {/* Floating voice-state indicator (listening / thinking / speaking) */}
       <ListeningIndicator state={voiceState} />
+
+      {/* Voice-first (charter §5): while a live voice state is active, the full
+          voice surface is the primary UI; text remains the backup channel. */}
+      {(voiceState === 'listening' || voiceState === 'recording') && (
+        <VoiceOverlay
+          conversationId={currentConversation.id}
+          onClose={() => setVoiceState('idle')}
+          onTranscript={(text, isFinal) => {
+            if (isFinal && text.trim()) {
+              setVoiceState('idle');
+              void handleSendMessage(text);
+            }
+          }}
+        />
+      )}
       <ChatHeader
         conversationTitle={currentConversation.title}
         connectionStatus={connectionStatus}

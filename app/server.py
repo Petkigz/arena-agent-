@@ -210,6 +210,21 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             app_logger.warning(f"Could not schedule autonomous cycle: {e}")
 
+    # Charter §5: the silent watcher — read-only environment probes running in
+    # the background while the server is live. Observations only, never actions.
+    try:
+        if str(getattr(settings, "ARENA_BACKGROUND_OBSERVER", "1")) != "0":
+            import app.perception.background_observer as _bo
+
+            if _bo.observer_instance is None:
+                _bo.observer_instance = _bo.build_default_observer()
+                _bo.observer_instance.start()
+                app_logger.info(
+                    "Background observer started (read-only environment probes)"
+                )
+    except Exception as e:
+        app_logger.warning(f"Background observer not started: {e}")
+
     if API_KEY_ENABLED:
         app_logger.info(
             f"Arena started (CORS: {CORS_ORIGINS}, Auth: ENABLED — all routes + WS require X-API-Key)"
@@ -227,6 +242,14 @@ async def lifespan(app: FastAPI):
     yield
 
     app_logger.info("Shutting down Arena...")
+    try:
+        import app.perception.background_observer as _bo
+
+        if _bo.observer_instance is not None:
+            _bo.observer_instance.stop()
+            app_logger.info("Background observer stopped during shutdown")
+    except Exception as e:
+        app_logger.error(f"Error stopping background observer during shutdown: {e}")
     try:
         await voice_service.stop()
         app_logger.info("Voice service stopped during shutdown")

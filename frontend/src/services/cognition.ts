@@ -127,3 +127,49 @@ export interface OwnerModelReport {
 export async function fetchOwnerModel(): Promise<OwnerModelReport> {
   return cognitionRequest<OwnerModelReport>('/owner-control/owner-model');
 }
+
+export interface Anticipation {
+  anticipation_id: string;
+  predicted_action: string;
+  confidence: number;
+  reason: string;
+  suggested_preparation: string;
+  requires_approval: boolean;
+  context: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface EnvironmentObservation {
+  change_id: string;
+  change_type: string;
+  subject: string;
+  previous_state: unknown;
+  current_state: unknown;
+  source: string;
+  confidence: number;
+  priority: string;
+  timestamp: string;
+}
+
+export interface AnticipationsResponse {
+  anticipations: Anticipation[];
+  note?: string;
+}
+
+export interface EnvironmentObservationsResponse {
+  observations: EnvironmentObservation[];
+  is_running?: boolean;
+  cycle_count?: number;
+  total_buffered?: number;
+  note?: string;
+}
+
+/** What the system anticipates the owner will need next (learned rhythms, suggestions only). */
+export async function fetchAnticipations(limit = 5): Promise<AnticipationsResponse> {
+  return cognitionRequest<AnticipationsResponse>(`/cognition/anticipations?limit=${limit}`);
+}
+
+/** Recent read-only environment observations from the background watcher. */
+export async function fetchEnvironmentObservations(limit = 20): Promise<EnvironmentObservationsResponse> {
+  return cognitionRequest<EnvironmentObservationsResponse>(`/cognition/environment/observations?limit=${limit}`);
+}

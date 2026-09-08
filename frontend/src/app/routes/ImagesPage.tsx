@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Image as ImageIcon, Monitor, Camera, Upload, Loader2, ScanText, Eye, User } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { ScreenCapture, ScreenshotViewer, ScreenshotAnnotator } from '../../components/ui';
+import { useScreenshotStore, type Screenshot } from '../../stores/screenshotStore';
 import {
   captureScreen,
   captureAndAnalyzeScreen,
@@ -34,6 +36,12 @@ export function ImagesPage() {
   const [groundings, setGroundings] = useState<Array<{ symbol: string; modality: string; confidence: number }>>([]);
   const [engine, setEngine] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Eyes in the conversation: capture → view → annotate (charter §5).
+  const [viewingScreenshot, setViewingScreenshot] = useState<Screenshot | null>(null);
+  const [annotatingScreenshot, setAnnotatingScreenshot] = useState<Screenshot | null>(null);
+  const screenshots = useScreenshotStore((s) => s.screenshots);
+  const addScreenshot = useScreenshotStore((s) => s.addScreenshot);
+  const removeScreenshot = useScreenshotStore((s) => s.removeScreenshot);
   // Track the local blob: URL so we can revoke it (avoid leaking object URLs).
   const localPreviewUrlRef = useRef<string | null>(null);
 
@@ -346,6 +354,56 @@ export function ImagesPage() {
             {analysisText || '(nothing yet)'}
           </pre>
         </section>
+
+        {/* Eyes in the conversation: capture → view → annotate (charter §5) */}
+        <section aria-label="Screen capture and annotation">
+          <h3 className="text-sm font-medium text-text-muted mb-2 flex items-center gap-2">
+            <Monitor className="w-4 h-4" /> Screen capture &amp; annotate
+          </h3>
+          <ScreenCapture conversationId="images-page" onCapture={(shot) => setViewingScreenshot(shot)} />
+          {screenshots.length > 0 && (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {screenshots.map((shot) => (
+                <button
+                  key={shot.id}
+                  type="button"
+                  onClick={() => setViewingScreenshot(shot)}
+                  className="flex-shrink-0 rounded border border-border-subtle overflow-hidden hover:border-accent-primary"
+                  aria-label={`View screenshot from ${new Date(shot.timestamp).toLocaleTimeString()}`}
+                >
+                  <img src={shot.image} alt="" className="h-16 w-auto" />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {viewingScreenshot && (
+          <ScreenshotViewer
+            screenshot={viewingScreenshot}
+            onClose={() => setViewingScreenshot(null)}
+            onAnnotate={(shot) => {
+              setAnnotatingScreenshot(shot);
+              setViewingScreenshot(null);
+            }}
+            onDelete={(screenshotId) => {
+              removeScreenshot(screenshotId);
+              setViewingScreenshot(null);
+            }}
+          />
+        )}
+        {annotatingScreenshot && (
+          <ScreenshotAnnotator
+            screenshot={annotatingScreenshot}
+            onSave={(annotations) => {
+              const annotated: Screenshot = { ...annotatingScreenshot, annotations };
+              addScreenshot(annotated);
+              setAnnotatingScreenshot(null);
+              setViewingScreenshot(annotated);
+            }}
+            onCancel={() => setAnnotatingScreenshot(null)}
+          />
+        )}
       </div>
     </div>
   );

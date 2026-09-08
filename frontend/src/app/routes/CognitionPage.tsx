@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   answerOwnerQuestion,
   decideInducedSkill,
+  fetchAnticipations,
+  fetchEnvironmentObservations,
   fetchInducedSkills,
   fetchLearningProgress,
   fetchOwnerCharter,
@@ -10,6 +12,8 @@ import {
   updateOwnerCharter,
 } from '../../services/cognition';
 import type {
+  Anticipation,
+  EnvironmentObservation,
   InducedSkill,
   LearningTarget,
   OwnerCharter,
@@ -39,6 +43,12 @@ export function CognitionPage() {
   const [ownerModel, setOwnerModel] = useState<OwnerModelReport | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
+  const [anticipations, setAnticipations] = useState<Anticipation[]>([]);
+  const [anticipationNote, setAnticipationNote] = useState('');
+  const [observations, setObservations] = useState<EnvironmentObservation[]>([]);
+  const [observationNote, setObservationNote] = useState('');
+  const [observerRunning, setObserverRunning] = useState<boolean | null>(null);
+
   const refresh = useCallback(async () => {
     try {
       const [c, q, i, p, m] = await Promise.all([
@@ -61,9 +71,26 @@ export function CognitionPage() {
     }
   }, []);
 
+  const refreshAwareness = useCallback(async () => {
+    try {
+      const [a, e] = await Promise.all([
+        fetchAnticipations(),
+        fetchEnvironmentObservations(),
+      ]);
+      setAnticipations(a.anticipations ?? []);
+      setAnticipationNote(a.note ?? '');
+      setObservations(e.observations ?? []);
+      setObservationNote(e.note ?? '');
+      setObserverRunning(e.is_running ?? null);
+    } catch {
+      setObservationNote('Could not load awareness state — is the server running?');
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void refreshAwareness();
+  }, [refresh, refreshAwareness]);
 
   const saveCharter = async () => {
     setCharterBusy(true);
@@ -239,6 +266,50 @@ export function CognitionPage() {
           </p>
         </section>
       )}
+
+      <section aria-label="Anticipated needs" className="space-y-2">
+        <h2 className="text-lg font-semibold">Anticipated Needs</h2>
+        <p className="text-xs opacity-60">
+          Learned from your shared rhythms. These are suggestions it noticed — nothing runs without you.
+        </p>
+        {anticipations.length === 0 ? (
+          <p className="text-sm opacity-70">{anticipationNote || 'Nothing anticipated yet — patterns form as you work together.'}</p>
+        ) : (
+          <ul className="space-y-2">
+            {anticipations.map((a) => (
+              <li key={a.anticipation_id} className="rounded border border-border-subtle bg-background-secondary p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{a.predicted_action}</span>
+                  <span className="text-xs opacity-60">conf {Math.round(a.confidence * 100)}%</span>
+                </div>
+                <p className="opacity-70 mt-1">{a.reason}</p>
+                {a.suggested_preparation && (
+                  <p className="text-xs opacity-60 mt-1">Prepares: {a.suggested_preparation}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section aria-label="Environment awareness" className="space-y-2">
+        <h2 className="text-lg font-semibold">Environment Awareness</h2>
+        <p className="text-xs opacity-60">
+          Read-only watcher {observerRunning === null ? '' : observerRunning ? '(running)' : '(not running)'}. It notices; it never acts.
+        </p>
+        {observations.length === 0 ? (
+          <p className="text-sm opacity-70">{observationNote || 'No environment changes observed yet.'}</p>
+        ) : (
+          <ul className="space-y-1">
+            {observations.map((o) => (
+              <li key={o.change_id} className="text-sm border-t py-1">
+                <span className="font-medium">{o.change_type}</span> · {o.subject}
+                <span className="opacity-60"> — {new Date(o.timestamp).toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <Phase1EvidencePanel />
 

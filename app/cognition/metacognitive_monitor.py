@@ -335,6 +335,27 @@ class MetacognitiveMonitor:
         
         # Update cognitive profile
         self._update_profile(record)
+
+        # Charter §5: feed the anticipation engine so it learns the owner's
+        # task rhythms from every recorded cognitive cycle. Fail-open by
+        # design: rhythm learning must never break the cycle itself.
+        try:
+            goal_text = ""
+            if isinstance(record.input_data, dict):
+                goal_text = str(
+                    record.input_data.get("goal")
+                    or record.input_data.get("user_input")
+                    or record.input_data.get("request")
+                    or ""
+                )
+            self.anticipation_engine.record_task(
+                action_type=record.strategy.value,
+                goal_text=goal_text[:200],
+                intent_type=record.process_type.value,
+                success=bool(record.success),
+            )
+        except Exception as exc:
+            app_logger.debug(f"Anticipation recording skipped: {exc}")
         
         app_logger.info(
             f"Recorded {process_type.value} process: "
@@ -344,6 +365,25 @@ class MetacognitiveMonitor:
         
         return record
     
+    @property
+    def anticipation_engine(self):
+        """Lazy AnticipationEngine (charter §5: it learns the owner's rhythms)."""
+        if getattr(self, "_anticipation_engine", None) is None:
+            from app.perception.anticipation_engine import AnticipationEngine
+
+            self._anticipation_engine = AnticipationEngine()
+        return self._anticipation_engine
+
+    def get_anticipations(self, limit: int = 5):
+        """Predict what the owner will likely need next (suggestions, never actions)."""
+        from dataclasses import asdict
+
+        engine = self.anticipation_engine
+        recent = getattr(engine, "_events", None) or []
+        last_action = recent[-1].action_type if recent else None
+        anticipations = engine.predict_next(last_action=last_action, limit=limit)
+        return [asdict(a) for a in anticipations]
+
     def _detect_biases(
         self,
         process_type: CognitiveProcess,

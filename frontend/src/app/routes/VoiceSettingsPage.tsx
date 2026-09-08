@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores';
-import { Button, Input, Card } from '../../components/ui';
+import { Button, Input, Card, WakeWordManager, WakeWordTrainer } from '../../components/ui';
 import { Mic, Volume2, Waves, Settings, CheckCircle, XCircle } from 'lucide-react';
 import {
   listPiperVoices,
@@ -507,6 +507,18 @@ export function VoiceSettingsPage() {
                     Delay before Arena starts speaking after you finish
                   </p>
                 </div>
+              </div>
+            </Card>
+
+            {/* Wake word — say the word and I listen (charter §5: voice-first) */}
+            <Card className="mb-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-2">Wake word</h3>
+              <p className="text-sm text-text-secondary mb-4">
+                Train your own wake word, then say it any time — voice is the primary way we talk.
+              </p>
+              <WakeWordManager />
+              <div className="mt-6">
+                <WakeWordTrainer />
               </div>
             </Card>
           </>

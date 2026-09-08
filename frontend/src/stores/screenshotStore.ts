@@ -35,6 +35,7 @@ interface ScreenshotStoreState {
 
   // Actions
   addScreenshot: (screenshot: Screenshot) => void;
+  removeScreenshot: (screenshotId: string) => void;
   setCurrentScreenshot: (screenshot: Screenshot | null) => void;
   clearScreenshots: () => void;
   startCapture: () => void;
@@ -56,6 +57,13 @@ export const useScreenshotStore = create<ScreenshotStoreState>((set, get) => ({
     set((state) => ({
       screenshots: [screenshot, ...state.screenshots].slice(0, 50), // Keep last 50
       currentScreenshot: screenshot,
+    })),
+
+  removeScreenshot: (screenshotId) =>
+    set((state) => ({
+      screenshots: state.screenshots.filter((s) => s.id !== screenshotId),
+      currentScreenshot:
+        state.currentScreenshot?.id === screenshotId ? null : state.currentScreenshot,
     })),
 
   setCurrentScreenshot: (screenshot) => set({ currentScreenshot: screenshot }),

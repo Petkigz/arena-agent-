@@ -2795,6 +2795,79 @@ def correction_measurements_endpoint(limit: int = Query(default=100, ge=1, le=50
     }
 
 
+@router.get("/cognition/anticipations")
+def anticipations_endpoint(limit: int = Query(default=5, ge=1, le=25)):
+    """What the system anticipates the owner will need next (charter §5)."""
+    from app.cognition.runtime import CognitiveRuntime
+
+    monitor = getattr(CognitiveRuntime.get_instance(), "metacognitive_monitor", None)
+    if monitor is None or not hasattr(monitor, "get_anticipations"):
+        return {
+            "anticipations": [],
+            "note": (
+                "No anticipation model yet — it learns your rhythms from "
+                "working together; nothing has been recorded so far."
+            ),
+        }
+    try:
+        items = monitor.get_anticipations(limit=limit)
+    except Exception:
+        items = []
+    if not items:
+        return {
+            "anticipations": [],
+            "note": (
+                "Nothing anticipated yet — patterns form as tasks are "
+                "completed together (a few repetitions of the same kind of "
+                "task is all it takes)."
+            ),
+        }
+    return {
+        "anticipations": items,
+        "note": (
+            "Learned from your shared task rhythms. Anticipations are "
+            "suggestions for the owner — never actions on their own."
+        ),
+    }
+
+
+@router.get("/cognition/environment/observations")
+def environment_observations_endpoint(limit: int = Query(default=20, ge=1, le=200)):
+    """Recent read-only environment observations from the background watcher."""
+    import dataclasses
+
+    from app.perception import background_observer as bo
+
+    if bo.observer_instance is None:
+        return {
+            "observations": [],
+            "is_running": False,
+            "cycle_count": 0,
+            "note": (
+                "The background observer is not running; no environment "
+                "changes are being collected (enable with "
+                "ARENA_BACKGROUND_OBSERVER=1)."
+            ),
+        }
+    changes = bo.observer_instance.get_changes(clear=False)
+    recent = changes[-limit:]
+    try:
+        prioritized = bo.get_recent_decisions(limit=limit)
+    except Exception:
+        prioritized = []
+    return {
+        "observations": [dataclasses.asdict(change) for change in recent],
+        "prioritized": prioritized,
+        "is_running": bo.observer_instance.is_running,
+        "cycle_count": bo.observer_instance.cycle_count,
+        "total_buffered": len(changes),
+        "note": (
+            "Read-only environment probes. These are observations the "
+            "assistant notices — never actions it takes."
+        ),
+    }
+
+
 @router.get("/benchmarks/phase1/evidence")
 def phase1_evidence_endpoint(limit: int = Query(default=5000, ge=1, le=5000)):
     """Return owner-visible Phase 1 evidence aggregates without maturity scoring."""
