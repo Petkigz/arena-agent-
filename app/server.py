@@ -117,6 +117,25 @@ CORS_ORIGINS = os.getenv(
     "http://localhost:5173,http://localhost:3000,http://localhost:8080,http://127.0.0.1:5173"
 ).split(",")
 
+# Owner live test 2026-09-08: the SPA is served BY this server, and the owner
+# reaches it from this machine's own names (localhost on the serving port, LAN
+# IP, machine name). The old allowlist only listed dev-server ports, so the
+# browser's CORS preflight for POST /api/wakeword/train was answered
+# "400 Disallowed CORS origin" and the request died before any route ran.
+# This is a personal, loopback-guarded app (unauthenticated access is already
+# restricted to local clients; with an API key set, the key is the boundary,
+# not CORS) — so local/private-network origins are allowed by regex while
+# public origins still need an explicit ARENA_CORS_ORIGINS entry.
+CORS_LOCAL_ORIGIN_REGEX = (
+    r"^https?://(?:"
+    r"localhost|127\.0\.0\.1|\[::1\]"
+    r"|10(?:\.\d{1,3}){3}"
+    r"|192\.168(?:\.\d{1,3}){2}"
+    r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
+    r"|[\w-]+(?:\.local)?"
+    r")(?::\d{1,5})?$"
+)
+
 API_KEY = os.getenv("ARENA_API_KEY", "")
 API_KEY_ENABLED = bool(API_KEY)
 # Fail-closed mode: when the owner sets ARENA_ENFORCE_AUTH=1, requests are
@@ -162,7 +181,11 @@ async def verify_api_key(request: Request, api_key: str = Depends(api_key_header
         if API_KEY_ENFORCED:
             raise HTTPException(status_code=503, detail="Authentication required but ARENA_API_KEY is not set")
         return  # Auth disabled, allow all
-    if api_key != API_KEY:
+    # auto_error=False means api_key is None when the header is absent —
+    # compare as a plain string so no header shape can ever 500 here
+    # (owner log showed an APIKeyHeader frame inside an ASGI 500; the
+    # app-layer paths are pinned clean by tests/test_cors_preflight.py).
+    if not isinstance(api_key, str) or api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 
@@ -345,6 +368,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
+        allow_origin_regex=CORS_LOCAL_ORIGIN_REGEX,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

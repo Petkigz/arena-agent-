@@ -3190,6 +3190,19 @@ class CognitiveRuntime:
                     )
             except Exception as exc:
                 app_logger.warning(f"Completion-honesty guard skipped: {exc}")
+            # Guard-refusal visibility (charter §6): a refused raw-input
+            # action must be owner-visible in chat with the retry path,
+            # never silently swallowed by the execution payload.
+            try:
+                from app.cognition.guard_visibility import surface_guard_retry
+
+                result = surface_guard_retry(result)
+                if result.get("guard_retry_surfaced") and result.get("trace_id"):
+                    CognitiveTrace.update_persisted_reply(
+                        str(result["trace_id"]), str(result.get("assistant_reply") or "")
+                    )
+            except Exception as exc:
+                app_logger.warning(f"Guard-visibility pass skipped: {exc}")
             result["due_reminders"] = due_reminders
             result["conversation_turn"] = conversation_turn
             if due_reminders:

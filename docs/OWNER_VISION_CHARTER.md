@@ -147,9 +147,11 @@ Remaining, in this order (each small, mechanical, test-pinned):
   `pre_snapshot=true` option; key unified to `requires_owner_approval` (2026-09-08).
 - ✅ `universal_filesystem` rollback-hash change → ask with BOTH hashes stated
   (expected vs measured); `confirm_hash_change=true` proceeds (2026-09-08).
-- `raw_input_guard` misses → these already produce typed, reasoned, retryable
+- ✅ `raw_input_guard` misses → these already produce typed, reasoned, retryable
   results ("re-observe and retry"), which is ask-shaped; keep, but make the
-  retry path owner-visible in chat.
+  retry path owner-visible in chat (2026-09-08: `app/cognition/guard_visibility.py`
+  appends a plain-language guard note + retry instruction to the chat reply for
+  every typed refusal found in the execution payload; tests/test_guard_retry_visibility.py).
 
 ## 7. Durability clause
 
