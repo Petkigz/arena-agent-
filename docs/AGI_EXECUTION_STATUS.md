@@ -32,7 +32,7 @@ The repository audit contains two score layers:
 - New audit: five domains, `15/45`.
 - Working reconciled combined baseline: `58/126` (`1.38/3`).
 
-The numerical discrepancy is now reconciled in favor of the displayed item rows. The original wording for the 27 questions is not preserved in the repository, so the question-list recovery remains open and no claim is made that these grouped labels reproduce the original questionnaire.
+The numerical discrepancy is now reconciled in favor of the displayed item rows. The original wording for the 27 questions was recovered verbatim from the owner on 2026-09-07 and is preserved, with per-question score mapping, flagged display ambiguities, and a current evidence-based wiring-tier re-score, in [`QUESTIONNAIRE_BASELINE.md`](QUESTIONNAIRE_BASELINE.md).
 
 Latest automated verification:
 
@@ -71,12 +71,12 @@ Restated rule: **a passing unit test can upgrade wiring; only repeated behaviora
 
 | ID | Work item | Status | Done when |
 |---|---|---|---|
-| 0.1 | Reconcile the 27-item audit row scores and headline total. | **DONE — NUMERIC BASELINE RECONCILED; SOURCE WORDING UNAVAILABLE** | The displayed rows and aggregate agree, and the missing source wording is explicitly recorded rather than guessed. |
+| 0.1 | Reconcile the 27-item audit row scores and headline total. | **DONE — NUMERIC BASELINE RECONCILED; SOURCE WORDING RECOVERED (owner-provided 2026-09-07)** | The displayed rows and aggregate agree, and the original question wording has now been recovered verbatim from the owner and preserved with its score mapping — see [`QUESTIONNAIRE_BASELINE.md`](QUESTIONNAIRE_BASELINE.md). Two positional ambiguities in the historical display are recorded there rather than silently resolved. |
 | 0.2 | Maintain the isolated test environment and repeatable focused/full commands. | **DONE — IMPLEMENTED AND WIRED** | A change can be tested at focused, subsystem, and full-suite levels. |
 | 0.3 | Add a bounded longitudinal evaluation runner for repeated benchmark behavior. | **DONE — IMPLEMENTED AND WIRED for deterministic contract trends** | The isolated benchmark has 38 deterministic checks, including thirteen explicitly scoped held-out grounding/outcome/correction/memory-compounding/causal-physics cases, plus persisted pass/fail trend reporting and owner-visible evidence/evaluation APIs; held-out task outcome effects remain bounded replay evidence, not a generalization or AGI score. |
 | 0.4 | Keep score upgrades tied to observable behavior rather than filenames, modules, or phase labels. | **DONE for current audit process** | Every status cites a reachable path and a test or explicit evidence gap. |
 
-**Phase 0 exit status:** CLOSED for the bounded measurement and observability layer. The unavailable source questionnaire is recorded as an evidence gap, not treated as a blocker. Phase 1 now owns held-out behavior and outcome improvement.
+**Phase 0 exit status:** CLOSED for the bounded measurement and observability layer. The source questionnaire — the last recorded Phase 0 evidence gap — was recovered from the owner on 2026-09-07 (see [`QUESTIONNAIRE_BASELINE.md`](QUESTIONNAIRE_BASELINE.md)). Phase 1 now owns held-out behavior and outcome improvement.
 
 ### 1. Evidence, grounding, and epistemic honesty
 
