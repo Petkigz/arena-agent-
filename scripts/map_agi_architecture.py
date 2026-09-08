@@ -122,6 +122,11 @@ OVERRIDES = {
         "Phase 7 LIVE: conversation is the teaching interface ('watch this') "
         "— M7 resolved; confirmed procedures integrate the taught-skills "
         "store and enter the Phase-6 loop as verified demonstrations"),
+    "app/mind/media_learning.py": (
+        "mind/learning", "KEEP", "LEARNING",
+        "Phase 8 LIVE: images/video/audio/web enter the ONE Phase-6 loop as "
+        "media experiences — deterministic observation first; watching is "
+        "never verification (success=None)"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -526,9 +531,15 @@ OVERRIDES = {
         "is now conversation (app/mind/teaching.py) — the form-driven path is "
         "the fallback, not the interface"),
     "app/tools/universal_media_learner.py": (
-        "learning/media", "INTEGRATE", "", "Phase-8 nucleus"),
+        "learning/media", "INTEGRATE", "LEARNING",
+        "Phase 8 LIVE: stays the deep-analysis capability; app/mind/"
+        "media_learning.py now routes its deterministic scrape (and its LLM "
+        "analyses, on request) into the Phase-6 loop"),
     "app/tools/youtube_learner.py": (
-        "learning/media", "INTEGRATE", "", ""),
+        "learning/media", "INTEGRATE", "LEARNING",
+        "Phase 8 LIVE: stays the transcript/deep-analysis capability; "
+        "app/mind/media_learning.py feeds transcripts into the Phase-6 loop "
+        "as media experiences (watching is never verification)"),
     "app/tools/knowledge_indexer.py": (
         "learning/media", "INTEGRATE", "", ""),
     "app/tools/lora_manager.py": (

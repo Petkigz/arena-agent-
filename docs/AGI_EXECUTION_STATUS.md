@@ -7,8 +7,20 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6, 7 ✅ complete.**
-Phase 7 (learning from the owner) is LIVE: `app/mind/teaching.py` —
+**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6, 7, 8 ✅ complete.**
+Phase 8 (learning from images and video) is LIVE: `app/mind/media_learning.py`
+— images/video/audio/web enter the ONE Phase-6 loop as another experience
+kind, not a new loop. Deterministic observation first (real PIL facts,
+YouTube transcripts and web scraping through the existing learners without
+an LLM on those paths, OCR only when the binary honestly exists); the
+existing LLM analysers stay the deep-analysis capabilities (`deep=true`
+optional). Watching is never verification: every media experience carries
+success=None; every failure is typed and nothing fabricated. Owner-visible:
+`POST /mind/learn/media`. Guarded by `tests/test_media_learning.py`
+(10 tests); live-verified against the real server (real PNG facts land; a
+real YouTube attempt without network returns the typed reason).
+
+Earlier in this gate: Phase 7 (learning from the owner) LIVE — `app/mind/teaching.py` —
 conversation is the teaching interface. "Beanie, watch this" opens a lesson;
 steps are gathered deterministically; "that's it" makes her propose her
 understanding and NOTHING is stored until the owner says "yes". Confirmed
@@ -62,10 +74,10 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). Now 21 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
-preview/ledger, the Phase-6 learning door/landscape/ledger, and the Phase-7
-procedures/teaching-session windows); guarded by
-`tests/test_beanie_mind.py` (21) +
+resolved). Now 22 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+preview/ledger, the Phase-6 learning door/landscape/ledger, the Phase-7
+procedures/teaching-session windows, and the Phase-8 media learning door);
+guarded by `tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module
 freeze in [`AGI_ARCHITECTURE_MAP.md`](AGI_ARCHITECTURE_MAP.md).

@@ -8,7 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,,,Phase 20 material: one mechanism of self-improvement
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
-app/api/mind.py,274,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
+app/api/mind.py,292,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -176,10 +176,11 @@ app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
-app/mind/__init__.py,31,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
-app/mind/beanie_mind.py,403,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/__init__.py,33,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/beanie_mind.py,413,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
 app/mind/identity.py,201,mind/identity,KEEP,AUTHORITY,"BeanieIdentity — the ""I am Beanie"" record (MISSING item M1, Phase 1).",Phase 1 LIVE: 'I am Beanie' as persisted state (M1)
 app/mind/learning_loop.py,334,mind/learning,KEEP,LEARNING,GeneralLearningEngine — Phase 6 (Beanie AGI roadmap): one learning loop.,Phase 6 LIVE: the ONE general learning loop every experience passes through (observe → interpret → compare → novelty → hypothesis → test → outcome → update model → store → confidence); success is evidence only — attempted ≠ succeeded
+app/mind/media_learning.py,236,mind/learning,KEEP,LEARNING,"MediaLearning — Phase 8 (Beanie AGI roadmap): learning from images,",Phase 8 LIVE: images/video/audio/web enter the ONE Phase-6 loop as media experiences — deterministic observation first; watching is never verification (success=None)
 app/mind/memory_facade.py,298,memory,KEEP,MEMORY,"UnifiedMemory — Phase 5 (Beanie AGI roadmap): one memory system, many kinds.","Phase 5 LIVE: UnifiedMemory over all eight kinds + NEW social store and meta-memory (M3, M5 resolved)"
 app/mind/self_facade.py,224,models/self,KEEP,SELF,SelfModelFacade — Phase 4 (Beanie AGI roadmap): a genuine self model.,Phase 4 LIVE: genuine self-assessment (knowledge/confidence/possible_actions) + capability awareness (authority ≠ intelligence)
 app/mind/state.py,312,mind/cognition-core,KEEP,STATE,"BeanieState — the unified internal-state skeleton (MISSING item M2, Phase 1).","Phase 1 LIVE: BeanieState skeleton — 15 rooms, honestly marked (M2)"
@@ -277,7 +278,7 @@ app/tools/system_diagnostics.py,677,capabilities/general,KEEP,,System diagnostic
 app/tools/task_tools.py,59,capabilities/general,KEEP,,Task-list tools: the TaskManager surface as manifest capabilities.,manifest capability; motor-system unit for the future Mind
 app/tools/translator.py,41,capabilities/general,KEEP,,"Translation via the local Qwen LLM — no external API, no key.",manifest capability; motor-system unit for the future Mind
 app/tools/universal_filesystem.py,1041,embodiment/filesystem,KEEP,OS,,
-app/tools/universal_media_learner.py,172,learning/media,INTEGRATE,,,Phase-8 nucleus
+app/tools/universal_media_learner.py,172,learning/media,INTEGRATE,LEARNING,,"Phase 8 LIVE: stays the deep-analysis capability; app/mind/media_learning.py now routes its deterministic scrape (and its LLM analyses, on request) into the Phase-6 loop"
 app/tools/vision_analyzer.py,197,perception/vision,INTEGRATE,SENSES,,
 app/tools/vlm_analyzer.py,313,perception/vision,INTEGRATE,SENSES,"VLM analyzer — true visual understanding via tiny VLM (Moondream2 / Llava-Phi), with grace",
 app/tools/weather_service.py,84,capabilities/general,KEEP,,"Weather lookup — free, keyless (Open-Meteo), browser-free.",manifest capability; motor-system unit for the future Mind
@@ -285,7 +286,7 @@ app/tools/web_agent.py,259,embodiment/browser,DEMOTE,OS,Autonomous multi-step We
 app/tools/web_research.py,436,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
 app/tools/win32_ghost_operator.py,153,embodiment/windows,KEEP,OS,,
 app/tools/workflow_engine.py,85,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
-app/tools/youtube_learner.py,152,learning/media,INTEGRATE,,,
+app/tools/youtube_learner.py,152,learning/media,INTEGRATE,LEARNING,,Phase 8 LIVE: stays the transcript/deep-analysis capability; app/mind/media_learning.py feeds transcripts into the Phase-6 loop as media experiences (watching is never verification)
 app/utils/__init__.py,1,infrastructure/utils,KEEP,,,
 app/utils/concurrency_governor.py,272,infrastructure/utils,KEEP,,"Measured, owner-configured worker concurrency derived from live pressure.",
 app/utils/decision_trace.py,120,evaluation/trace,KEEP,,"Decision trace: the tiniest-detail ""why"" log the owner asked for.",wired via lazy imports in llm.py
@@ -356,7 +357,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,712,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,723,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

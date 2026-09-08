@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 365 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 366 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8 — the target architecture itself, all KEEP).
 
 ---
 
@@ -218,10 +218,16 @@ Per the roadmap's restructuring order, the first build step after this freeze:
    demonstration). Two misreadings → honest stop, nothing saved. Lesson
    turns are consumed before the task cycle; kill switch `ARENA_TEACHING=0`.
    17 tests in `tests/test_teaching.py`; 21 `/mind/*` endpoints total.
-8. **Open (roadmap order):** Phase 8 learning from images/video
-   (`universal_media_learner.py` + `youtube_learner.py` nuclei INTEGRATE
-   into the Phase-6 door); then M8 attention significance, M9
-   generalization eval, per the owner's sequencing.
+8. ✅ **Phase 8 LIVE (2026-09-08)** — `media_learning.py`: images/video/
+   audio/web enter the ONE Phase-6 loop as `media` experiences (the
+   `universal_media_learner.py` + `youtube_learner.py` nuclei INTEGRATED as
+   capabilities). Deterministic observation first; watching is never
+   verification (success=None); every failure typed. 10 tests in
+   `tests/test_media_learning.py`; 22 `/mind/*` endpoints total.
+9. **Open (roadmap order):** Phase 9 curiosity / exploration (the UNKNOWN
+   system — gaps surfaced by world-first briefs become drive); then M8
+   attention significance, M9 generalization eval, per the owner's
+   sequencing.
 
 ---
 

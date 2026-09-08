@@ -315,6 +315,28 @@ skills. No writing JSON. **Conversation is the teaching interface.**
 
 ## Phase 8 — Learning From Images and Video
 
+> ✅ **LIVE 2026-09-08:** `app/mind/media_learning.py` — `MediaLearning`:
+> images, video, audio, and web media enter the ONE Phase-6 loop as another
+> experience kind (`media`) — not a new loop. Deterministic observation
+> first: real file facts via PIL, YouTube transcripts via the existing
+> `YouTubeLearner` (no LLM on that path), web scraping via the existing
+> `UniversalMediaLearner` (no LLM), OCR only when a tesseract binary
+> actually exists (its absence is reported, not faked). The existing LLM
+> analysers stay the deep-analysis capabilities; `deep=true` optionally
+> appends their summary and fails honestly when no model is loaded. The
+> Phase-6 loop then compares / classifies novelty / stores (deduped) /
+> records the ledger entry, with provenance naming the target. Honesty
+> rule: **watching is never verification — every media experience carries
+> success=None**, and every failure is typed (no transcript, unreadable
+> image, fetch error, unsupported target) with nothing fabricated.
+> Live-verified against the real server: a real PNG lands with true
+> dimensions/format; a real YouTube attempt without network returns the
+> typed reason and stores nothing. Owner-visible: `POST /mind/learn/media`
+> (22 `/mind/*` endpoints total). Deferred with evidence, not abandoned:
+> auto-learning the OUTPUTS of media tools run inside cognitive cycles
+> needs the runtime's tool-result shape (Phase 11 embodiment work).
+> Guarded by `tests/test_media_learning.py` (10 tests).
+
 ```
 MEDIA LEARNING
 ├── audio

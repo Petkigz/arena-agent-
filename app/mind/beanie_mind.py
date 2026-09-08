@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 from app.config import settings
 from app.mind.identity import BeanieIdentity
 from app.mind.learning_loop import GeneralLearningEngine
+from app.mind.media_learning import MediaLearning
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
@@ -78,6 +79,7 @@ class BeanieMind:
         self._world_first: Optional[WorldFirstReasoning] = None
         self._learning: Optional[GeneralLearningEngine] = None
         self._teaching: Optional[DemonstrationTeaching] = None
+        self._media_learning: Optional[MediaLearning] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -223,6 +225,14 @@ class BeanieMind:
             if self._teaching is None:
                 self._teaching = DemonstrationTeaching(self)
             return self._teaching
+
+    @property
+    def media_learning(self) -> MediaLearning:
+        """Phase 8: images/video/web enter the one loop as media experiences."""
+        with self._lock:
+            if self._media_learning is None:
+                self._media_learning = MediaLearning(self)
+            return self._media_learning
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(

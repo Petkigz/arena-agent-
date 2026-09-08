@@ -272,3 +272,21 @@ def mind_teaching_sessions() -> dict:
     """Active teaching sessions (in-memory; they expire when abandoned)."""
     return {"success": True,
             "sessions": BeanieMind.get_instance().teaching.sessions()}
+
+
+# ── Phase 8: learning from images, video, web media ────────────────────────
+class MediaLearnIn(BaseModel):
+    target: str = Field(min_length=1, max_length=2000)
+    focus: Optional[str] = None
+    context: Optional[str] = None
+    deep: bool = False
+
+
+@router.post("/mind/learn/media")
+def mind_learn_media(body: MediaLearnIn) -> dict:
+    """Observe a media target (YouTube URL, image, audio/video file, web
+    page) and run the experience through the one learning loop.
+    Deterministic observation first; ``deep=true`` additionally asks the
+    existing LLM analysers. Watching is never counted as verification."""
+    return BeanieMind.get_instance().media_learning.learn_from_media(
+        body.target, focus=body.focus, context=body.context, deep=body.deep)
