@@ -30,6 +30,7 @@ from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
 from app.mind.attention import Attention
 from app.mind.motivation import Motivation
+from app.mind.social import Social
 
 __all__ = [
     "BeanieMind", "BeanieIdentity", "BeanieState", "MODALITIES",
@@ -37,5 +38,5 @@ __all__ = [
     "UnifiedMemory", "SocialMemoryStore", "MetaMemory", "WorldFirstReasoning",
     "GeneralLearningEngine", "EXPERIENCE_KINDS", "DemonstrationTeaching",
     "MediaLearning", "CuriosityEngine", "Imagination", "Embodiment",
-    "OSConceptLayer", "Perception", "Attention", "Motivation",
+    "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
 ]

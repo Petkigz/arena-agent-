@@ -502,3 +502,23 @@ def mind_goals_decide(goal_id: int, accept: bool) -> dict:
     """The owner answers a proposal. Accepted goals execute through the
     normal door under her authority; declined goals are never re-proposed."""
     return BeanieMind.get_instance().motivation.decide(goal_id, accept)
+
+
+# ── Phase 16: social intelligence (the owner model) ────────────────────────
+class SocialNoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@router.get("/mind/social")
+def mind_social_model() -> dict:
+    """The persistent owner model: facets with evidence and observation
+    counts, people, routines, communication style, shared history — all
+    measured, never cold-read."""
+    return {"success": True, **BeanieMind.get_instance().social.model()}
+
+
+@router.post("/mind/social/note")
+def mind_social_note(body: SocialNoteIn) -> dict:
+    """Extract owner-model facets from one utterance (preferences,
+    boundaries, emotion cues, people, interests). Listening never acts."""
+    return BeanieMind.get_instance().social.note(body.text)

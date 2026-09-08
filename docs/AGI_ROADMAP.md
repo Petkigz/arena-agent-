@@ -581,16 +581,6 @@ actually exists alongside you.
 
 ## Phase 15 — Motivation and Goals
 
-Introduce autonomous goals carefully — not randomly generated tasks. Instead:
-needs, curiosity, unfinished goals, owner goals, environment opportunities,
-learning opportunities → candidate goals → evaluate relevance → prioritize → act.
-
-Beanie can eventually say: "You mentioned yesterday that you wanted to organize
-the project. I noticed the files are still scattered. Do you want me to handle
-that?" That's useful autonomous behavior.
-
-## Phase 15 — Motivation and Goals
-
 > ✅ **LIVE 2026-09-08:** `app/mind/motivation.py` — goals from evidence,
 > never from randomness. `gather()` collects candidate goals from SIX real
 > evidence sources in her own state: open unknowns (curiosity), parked
@@ -618,6 +608,39 @@ that?" That's useful autonomous behavior.
 > `tests/test_mind_motivation.py` (15 tests).
 
 Introduce autonomous goals carefully — not randomly generated tasks. Instead:
+needs, curiosity, unfinished goals, owner goals, environment opportunities,
+learning opportunities → candidate goals → evaluate relevance → prioritize → act.
+
+Beanie can eventually say: "You mentioned yesterday that you wanted to organize
+the project. I noticed the files are still scattered. Do you want me to handle
+that?" That's useful autonomous behavior.
+
+## Phase 16 — Social Intelligence
+
+> ✅ **LIVE 2026-09-08:** `app/mind/social.py` — the persistent owner
+> relationship model. Facets come ONLY from what the owner said (explicit
+> markers, evidence carried on every facet): preferences ("I love/prefer/
+> hate…"), boundaries ("Never …" — recorded exactly as said), emotion
+> cues ("I'm … frustrated/stressed/…"), people ("my wife Anita" →
+> registered in the Phase-5 social store with provenance
+> `owner_conversation`), and interests from statements about something.
+> Repeated observations COMPOUND (times_observed), never duplicate.
+> Routines, communication style, and history are MEASURED from the real
+> door ledger — most-active hour and style are claimed only with ≥10
+> interactions; the observation lane never pollutes the owner's style.
+> Live-verified: fresh mind claims NOTHING; seven owner messages later the
+> model has 2 preferences, 1 boundary, 1 emotion cue, 1 person (Anita,
+> owner's wife), interests, and honest 7-interaction history. She never
+> pretends to be human — the model is observed evidence with counts. The
+> state skeleton's owner room shows BOTH the legacy user_state snapshot
+> and the new relationship surface. Owner-visible: `GET /mind/social`,
+> `POST /mind/social/note` (43 `/mind/*` paths; 46 routes). Kill switch
+> `ARENA_SOCIAL=0` gates the door pass; the owner surface keeps working.
+> Guarded by `tests/test_mind_social.py` (15 tests).
+>
+> *(Doc repair, same commit: the Phase-15 LIVE-block edit had accidentally
+> duplicated the Phase-15 heading over the Phase-16 heading; the roadmap
+> structure was restored verbatim.)*
 
 Because the goal is helper + secretary + friend, build an owner model:
 preferences, habits, communication style, goals, routines, interests,

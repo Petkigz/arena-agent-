@@ -7,8 +7,26 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–15 ✅ complete.**
-Phase 15 (motivation and goals) is LIVE: `app/mind/motivation.py` — goals
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–16 ✅ complete.**
+Phase 16 (social intelligence) is LIVE: `app/mind/social.py` — the
+persistent owner relationship model. Facets from what the owner SAID only
+(explicit markers, evidence on every facet): preferences, boundaries
+(recorded exactly as said), emotion cues, people (registered in the
+Phase-5 social store with provenance `owner_conversation`), interests.
+Repeats compound, never duplicate. Routines / communication style /
+history MEASURED from the real door ledger, claimed only with ≥10
+interactions. Live-verified: fresh mind claims nothing; after seven
+messages the model holds preferences, a boundary, an emotion cue, a
+registered person (Anita, owner's wife), interests, honest history. She
+never pretends to be human. The state skeleton's owner room shows both the
+legacy user_state snapshot and the new relationship surface (Phase-1 pin
+preserved). Owner-visible: `GET /mind/social`, `POST /mind/social/note`.
+Kill switch `ARENA_SOCIAL=0`. Guarded by `tests/test_mind_social.py`
+(15 tests). (Same commit repairs the roadmap structure: the Phase-15
+LIVE-block edit had overwritten the Phase-16 heading; restored verbatim.)
+
+Earlier in this gate: Phase 15 (motivation and goals) LIVE —
+`app/mind/motivation.py` — goals
 from evidence, never from randomness. Six real sources in her own state:
 open unknowns, parked goals waiting for evidence (live
 `parked_goal_recheck` feed), goal-shaped owner speech, attention's

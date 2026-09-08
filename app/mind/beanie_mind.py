@@ -42,6 +42,7 @@ from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
+from app.mind.social import Social
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
 from app.mind.teaching import DemonstrationTeaching
@@ -94,6 +95,7 @@ class BeanieMind:
         self._perception: Optional[Perception] = None
         self._attention: Optional[Attention] = None
         self._motivation: Optional[Motivation] = None
+        self._social: Optional[Social] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -325,6 +327,17 @@ class BeanieMind:
                 self._motivation = Motivation(self)
             return self._motivation
 
+    @property
+    def social(self) -> Social:
+        """Phase 16: the persistent owner model — preferences, boundaries,
+        emotion cues, people, interests as facets with evidence; routines,
+        style, history measured from the real door ledger. Never pretends:
+        what was not observed is not claimed."""
+        with self._lock:
+            if self._social is None:
+                self._social = Social(self)
+            return self._social
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -353,6 +366,7 @@ class BeanieMind:
         self._drain_perceptions()
         self._run_attention(user_text)
         self._run_motivation(user_text)
+        self._run_social(user_text)
         result = self.runtime.process_cognitive_cycle(
             user_text=user_text,
             session_id=conversation_id,
@@ -473,6 +487,18 @@ class BeanieMind:
             self.motivation.refresh(task=user_text)
         except Exception as exc:
             app_logger.warning(f"Motivation refresh skipped (non-fatal): {exc}")
+
+    def _run_social(self, user_text: str) -> None:
+        """Phase 16: every owner message is also evidence about the owner —
+        preferences, boundaries, emotion cues, people, interests become
+        facets of the persistent relationship model. Best-effort; the
+        social pass never fails the task."""
+        if str(getattr(settings, "ARENA_SOCIAL", "1")) == "0":
+            return
+        try:
+            self.social.note(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Social pass skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

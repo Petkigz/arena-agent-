@@ -652,8 +652,18 @@ OVERRIDES = {
         "embodiment/browser", "KEEP", "", ""),
 
     # ── SOCIAL / PERSONALITY / PHASE ENGINES (16-21) ─────────────────────
+    "app/mind/social.py": (
+        "mind/social", "KEEP", "SOCIAL",
+        "Phase 16 LIVE: the persistent OWNER relationship model — facets "
+        "(preference/boundary/emotion/interest/person) from what the owner "
+        "said, routines/style/history MEASURED from the door ledger and "
+        "claimed only with enough evidence; never pretends to be human, "
+        "never cold-reads"),
     "app/cognition/social_cognition.py": (
-        "learning/social", "INTEGRATE", "", "Phase 16 engine"),
+        "learning/social", "INTEGRATE", "SOCIAL",
+        "Phase 16 seed (mental-state/emotion/relationship engine); the "
+        "authoritative owner model is app/mind/social.py — this broader "
+        "theory-of-mind engine stays available to it"),
     "app/cognition/ethical_reasoning.py": (
         "owner-authority/values", "KEEP", "",
         "annotates + routes to owner decision; never suppresses (charter §2)"),

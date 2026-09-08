@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 373 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 374 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 — the target architecture itself, all KEEP).
 
 ---
 
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–15 are LIVE (Phases 1–15 complete).**
+**Status 2026-09-08: steps 1–16 are LIVE (Phases 1–16 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -280,12 +280,20 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     auto-propose only when earned (score ≥5.0) and cooled (10
     interactions). Kill switch `ARENA_MOTIVATION=0`. 15 tests in
     `tests/test_mind_motivation.py`; 41 `/mind/*` paths (44 routes) total.
-16. **Open (roadmap order):** Phase 16 social intelligence (persistent
-    owner model: preferences, habits, communication style, goals,
-    routines, boundaries), then personality / owner authority /
-    self-reflection / self-improvement / model evolution / voice-first UI
-    / one-mind desktop+Android, and M9 generalization eval (P24), per the
-    owner's sequencing.
+16. ✅ **Phase 16 LIVE (2026-09-08)** — `social.py`: the persistent owner
+    relationship model. Facets (preference / boundary / emotion cue /
+    interest / person) extracted ONLY from what the owner said, evidence on
+    every facet; repeats compound. Routines / communication style / history
+    measured from the real door ledger, claimed only with ≥10 interactions.
+    People register in the Phase-5 social store with provenance. Kill
+    switch `ARENA_SOCIAL=0`. 15 tests in `tests/test_mind_social.py`;
+    43 `/mind/*` paths (46 routes) total.
+17. **Open (roadmap order):** Phase 17 personality development (basic
+    identity → interactions → experiences → preferences → communication
+    patterns → values), then owner authority / self-reflection /
+    self-improvement / model evolution / voice-first UI / one-mind
+    desktop+Android, and M9 generalization eval (P24), per the owner's
+    sequencing.
 
 ---
 

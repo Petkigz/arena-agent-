@@ -129,16 +129,30 @@ class BeanieState:
         return self._room(getattr(rt, "self_model", None), data)
 
     def _owner(self) -> Dict[str, Any]:
+        # Phase 16: the owner room shows BOTH surfaces honestly — the
+        # runtime's user_state snapshot (the Phase-1 contract) and the
+        # mind's Social relationship model (facets/routines/style/history).
         store = getattr(self.runtime, "user_state", None)
-        data = None
+        social = getattr(self.mind, "social", None) if self.mind is not None else None
+        data: Dict[str, Any] = {}
+        component: Any = None
         if store is not None:
             try:
-                data = {"snapshot": store.snapshot()}
+                data["snapshot"] = store.snapshot()
             except Exception:
-                data = _probe(store)
-        if data is None:
-            return self._room(store, None, "unavailable")
-        return self._room(store, data)
+                probed = _probe(store)
+                if probed:
+                    data.update(probed)
+            component = store
+        if social is not None:
+            relationship = _probe(social, names=("snapshot", "model", "summary"))
+            if relationship:
+                data["relationship"] = relationship
+                if component is None:
+                    component = social
+        if not data:
+            return self._room(component, None, "unavailable")
+        return self._room(component, data)
 
     def _world(self) -> Dict[str, Any]:
         world = getattr(self.runtime, "world", None)
