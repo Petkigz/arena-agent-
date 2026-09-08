@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 364 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 365 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7 — the target architecture itself, all KEEP).
 
 ---
 
@@ -128,15 +128,18 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 ## 6. MISSING ledger — concepts with no file (the actual build list)
 
 > **Status 2026-09-08:** M1 (identity), M2 (BeanieState), M3 (meta-memory),
-> M5 (social memory) and **M6 (world-first reasoning path)** are LIVE in
-> `app/mind/` (Phases 1, 2, 3, 4, 5): the door now assembles a world → self →
-> memory brief before the cycle identifies capabilities. **Phase 6 is also
+> M5 (social memory), **M6 (world-first reasoning path)** and **M7
+> (demonstration learning)** are LIVE in `app/mind/` (Phases 1, 2, 3, 4, 5,
+> 6, 7): the door assembles a world → self → memory brief before capability
+> identification, every experience passes through one learning loop, and the
+> owner teaches procedures by conversation ("watch this" → steps → proposal →
+> confirmed verdict). **Phase 6 is also
 > LIVE** though it had no M-row of its own: `app/mind/learning_loop.py` is the
 > ONE general learning loop every experience passes through — the door
 > auto-submits verified/unverified cycle outcomes and owner corrections; it
 > feeds M11's spirit (failures become data) without claiming M11 resolved.
 > M4 is partial (milestone seed; no narrative layer). Remaining build list:
-> M4-completion, M7–M11.
+> M4-completion, M8–M11.
 
 | # | Concept | Roadmap phase | Nearest existing fragment |
 |---|---|---|---|
@@ -146,7 +149,7 @@ BeanieMind *is* the runtime plus identity plus state, not a second runtime.
 | M4 | **Autobiographical memory** — Beanie's own development history | P5, P17 | `identity_continuity.py` (restart checks only) |
 | M5 | **Social memory store** — people/relationships as first-class memory type | P5, P16 | `social_cognition.py` engine, no store |
 | M6 | **World-first reasoning path** — goal → world understanding → memory → hypotheses → strategy → capabilities | P2 | none — `tool_matcher` is the inverse |
-| M7 | **Demonstration learning** — "Beanie, watch this" → generalized procedure via conversation only | P7 | `skill_teaching_engine.py` (form-driven) |
+| M7 | ~~**Demonstration learning**~~ ✅ LIVE 2026-09-08 — `app/mind/teaching.py`: "Beanie, watch this" → steps → her proposal → owner's "yes" → generalized procedure (Phase 7; integrates `skill_teaching_engine.py` as the durable store) | P7 | ~~`skill_teaching_engine.py` (form-driven)~~ |
 | M8 | **Attention significance system** — current task / owner speaking / anomaly / unfinished goal arbitration | P13, P14 | `attention_manager.py` (43 lines) + observer/prioritizer feeds |
 | M9 | **Generalization evaluation** — tasks A–G (teach-once-adapt, tutorial-transfer, unfamiliar-error, environment-change, incomplete-instruction, learn-from-failure, cross-OS transfer) | P24 | `intelligence_benchmark.py` (regression-style only) |
 | M10 | **OS concept-verb abstraction** — open/copy/navigate/… as platform-free concepts with embodiment mapping | P12 | `os_control_planner.py` seed |
@@ -208,8 +211,16 @@ Per the roadmap's restructuring order, the first build step after this freeze:
    outcomes feed the Phase-5 calibrator. Fail-open + kill switch
    (`ARENA_LEARNING_LOOP=0`). 16 tests in `tests/test_learning_loop.py`;
    19 `/mind/*` endpoints total.
-7. **Open (roadmap order):** Phase 7 learning from the owner ("Beanie, watch
-   this") → M7 demonstration learning; then M8 attention significance, M9
+7. ✅ **Phase 7 LIVE (2026-09-08)** — `teaching.py`: conversation is the
+   teaching interface (M7 resolved). "watch this" → steps → her proposal →
+   owner's "yes" → procedure stored in cognitive procedural memory + the
+   existing taught-skills store + the Phase-6 ledger (verified
+   demonstration). Two misreadings → honest stop, nothing saved. Lesson
+   turns are consumed before the task cycle; kill switch `ARENA_TEACHING=0`.
+   17 tests in `tests/test_teaching.py`; 21 `/mind/*` endpoints total.
+8. **Open (roadmap order):** Phase 8 learning from images/video
+   (`universal_media_learner.py` + `youtube_learner.py` nuclei INTEGRATE
+   into the Phase-6 door); then M8 attention significance, M9
    generalization eval, per the owner's sequencing.
 
 ---

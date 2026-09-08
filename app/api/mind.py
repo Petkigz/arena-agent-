@@ -242,3 +242,33 @@ def mind_learning_events(limit: int = Query(default=50, ge=1, le=500)) -> dict:
     """Recent learning events, newest first (owner-inspectable)."""
     return {"success": True,
             "events": BeanieMind.get_instance().learning.events(limit=limit)}
+
+
+# ── Phase 7: learning from the owner ("Beanie, watch this") ────────────────
+@router.get("/mind/procedures")
+def mind_procedures() -> dict:
+    """Procedures the owner taught through conversation (and any taught
+    skills). Teaching itself happens in chat — this is the inspection
+    window."""
+    procedures: list = []
+    all_taught: list = []
+    note = None
+    try:
+        from app.tools.skill_teaching_engine import SkillTeachingEngine
+        procedures = SkillTeachingEngine.list_taught_skills(
+            category="owner_taught_procedure")
+        all_taught = SkillTeachingEngine.list_taught_skills()
+    except Exception as exc:
+        note = f"taught-skills store unavailable: {exc}"
+    return {"success": True, "procedures": procedures,
+            "total_taught_skills": len(all_taught),
+            **({"note": note} if note else {}),
+            "how_to_teach": "In chat: \"Beanie, watch this\", then the steps, "
+                            "then \"that's it\", then confirm with \"yes\"."}
+
+
+@router.get("/mind/teaching/sessions")
+def mind_teaching_sessions() -> dict:
+    """Active teaching sessions (in-memory; they expire when abandoned)."""
+    return {"success": True,
+            "sessions": BeanieMind.get_instance().teaching.sessions()}

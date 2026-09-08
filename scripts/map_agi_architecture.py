@@ -117,6 +117,11 @@ OVERRIDES = {
         "through (observe → interpret → compare → novelty → hypothesis → "
         "test → outcome → update model → store → confidence); success is "
         "evidence only — attempted ≠ succeeded"),
+    "app/mind/teaching.py": (
+        "mind/learning", "KEEP", "LEARNING",
+        "Phase 7 LIVE: conversation is the teaching interface ('watch this') "
+        "— M7 resolved; confirmed procedures integrate the taught-skills "
+        "store and enter the Phase-6 loop as verified demonstrations"),
     "app/api/mind.py": (
         "communication/api", "KEEP", "",
         "Phase 1 LIVE: owner window onto identity/state/entries"),
@@ -516,8 +521,10 @@ OVERRIDES = {
 
     # ── LEARNING currently disguised as tools ────────────────────────────
     "app/tools/skill_teaching_engine.py": (
-        "learning/demonstration", "INTEGRATE", "",
-        "form-driven today; Phase 7 makes conversation the teacher"),
+        "learning/demonstration", "INTEGRATE", "LEARNING",
+        "Phase 7 LIVE: still the durable taught-skills store, but the TEACHER "
+        "is now conversation (app/mind/teaching.py) — the form-driven path is "
+        "the fallback, not the interface"),
     "app/tools/universal_media_learner.py": (
         "learning/media", "INTEGRATE", "", "Phase-8 nucleus"),
     "app/tools/youtube_learner.py": (

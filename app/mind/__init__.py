@@ -21,10 +21,11 @@ from app.mind.self_facade import SelfModelFacade
 from app.mind.memory_facade import UnifiedMemory, SocialMemoryStore, MetaMemory
 from app.mind.world_first import WorldFirstReasoning
 from app.mind.learning_loop import GeneralLearningEngine, EXPERIENCE_KINDS
+from app.mind.teaching import DemonstrationTeaching
 
 __all__ = [
     "BeanieMind", "BeanieIdentity", "BeanieState", "MODALITIES",
     "WorldModelFacade", "WORLD_ENTITY_TYPES", "SelfModelFacade",
     "UnifiedMemory", "SocialMemoryStore", "MetaMemory", "WorldFirstReasoning",
-    "GeneralLearningEngine", "EXPERIENCE_KINDS",
+    "GeneralLearningEngine", "EXPERIENCE_KINDS", "DemonstrationTeaching",
 ]

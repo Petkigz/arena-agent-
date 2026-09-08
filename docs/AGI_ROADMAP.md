@@ -281,6 +281,28 @@ demonstrations, mistakes, successful actions, owner corrections, experiments.
 
 ## Phase 7 — Learning From You
 
+> ✅ **LIVE 2026-09-08:** `app/mind/teaching.py` — `DemonstrationTeaching`:
+> conversation IS the teaching interface, exactly as the scene below —
+> "Beanie, watch this" opens a lesson; steps are gathered (numbering and
+> lead-ins stripped deterministically); "that's it" makes her PROPOSE her
+> understanding ("So to organize files, you: 1) … 2) … Is that correct?");
+> nothing is stored until the owner says "yes". A confirmed procedure lands
+> in three places honestly: cognitive **procedural** memory (owner_taught,
+> success=True — so world-first briefs and memory search surface it), the
+> EXISTING taught-skills store (`SkillTeachingEngine`, the form-driven engine
+> this phase integrates), and the Phase-6 learning ledger as a VERIFIED
+> demonstration experience. Rejection never fabricates: she asks again, and
+> after two misreadings stops and says nothing was saved. Markers are
+> conservative (bare "watch this" only opens a lesson in a short message, so
+> "watch this video for me" can't hijack a turn); sessions are in-memory and
+> expire when abandoned (stated limit, not hidden). No LLM, no forms, no
+> JSON. Router consumes lesson turns before the task cycle (the steps belong
+> to the lesson, not a tool run); fail-open + kill switch `ARENA_TEACHING=0`.
+> Owner-visible: `GET /mind/procedures`, `GET /mind/teaching/sessions`;
+> live-demo verified against the real server (the roadmap's own scene, and
+> the stored procedure retrieved as the top hit for "how should I organize
+> files"). Guarded by `tests/test_teaching.py` (17 tests).
+
 This should become one of the easiest things you can do.
 
 You: "Beanie, watch this." Then demonstrate. She observes.

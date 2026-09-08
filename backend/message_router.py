@@ -293,6 +293,34 @@ class MessageRouter:
             except Exception as exc:
                 app_logger.warning(f"In-chat approval decision failed (message continues): {exc}")
 
+            # Phase 7 (AGI roadmap): conversation is the teaching interface.
+            # When a teaching session is active ("Beanie, watch this"), the
+            # owner's steps and verdicts belong to the LESSON, not the task
+            # cycle — the learner replies conversationally and this turn is
+            # consumed here. Outside a lesson this returns None and the turn
+            # flows to the cognitive cycle as always. Failures never break
+            # the chat flow.
+            teaching_reply = self._try_teaching_turn(conversation_id, content)
+            if teaching_reply is not None:
+                assistant_message_id = f"msg_{uuid.uuid4().hex[:12]}"
+                add_to_history(conversation_id, "assistant", teaching_reply,
+                               message_id=assistant_message_id)
+                tokens = self._tokenize_response(teaching_reply) or [" "]
+                for i, token in enumerate(tokens):
+                    await ws_manager.send_to_conversation(conversation_id, {
+                        "type": "message_token",
+                        "conversation_id": conversation_id,
+                        "message_id": assistant_message_id,
+                        "token": token,
+                        "done": i == len(tokens) - 1,
+                    })
+                if message_source == "voice" and self.voice_service is not None:
+                    try:
+                        await self.voice_service.speak_reply(teaching_reply)
+                    except Exception as speak_exc:
+                        app_logger.warning(f"Voice teaching reply failed: {speak_exc}")
+                return teaching_reply
+
             # The assistant reply gets its OWN id: clients match streamed tokens and
             # action steps against it. Sharing the user's id would make other
             # clients append the reply onto the sender's message bubble.
@@ -448,6 +476,23 @@ class MessageRouter:
                     "message": f"Error processing message: {str(e)}"
                 })
                 return None
+
+    def _try_teaching_turn(self, conversation_id: str, content: str) -> Optional[str]:
+        """Phase 7: if this message belongs to an active (or opening)
+        teaching session, return the lesson's conversational reply — the turn
+        is consumed by the lesson. Returns None for ordinary conversation
+        (the cognitive cycle then runs as always). Kill switch:
+        ARENA_TEACHING=0. Best-effort — teaching never breaks the chat."""
+        try:
+            from app.config import settings
+            if str(getattr(settings, "ARENA_TEACHING", "1")) == "0":
+                return None
+            from app.mind import BeanieMind
+            return BeanieMind.get_instance(runtime=self.runtime).teaching.handle_message(
+                conversation_id, content)
+        except Exception as exc:
+            app_logger.warning(f"Teaching turn skipped (non-fatal): {exc}")
+            return None
 
     def _feed_correction_to_mind(self, correction_note: Dict[str, Any], content: str) -> None:
         """Phase 6: route a recorded owner correction into the mind's general

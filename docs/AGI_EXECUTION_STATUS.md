@@ -7,8 +7,24 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6 ✅ complete.**
-Phase 6 (general learning engine) is LIVE: `app/mind/learning_loop.py` —
+**2026-09-08 — Beanie AGI roadmap active; Phases 0, 1, 2, 3, 4, 5, 6, 7 ✅ complete.**
+Phase 7 (learning from the owner) is LIVE: `app/mind/teaching.py` —
+conversation is the teaching interface. "Beanie, watch this" opens a lesson;
+steps are gathered deterministically; "that's it" makes her propose her
+understanding and NOTHING is stored until the owner says "yes". Confirmed
+procedures land in cognitive procedural memory (owner_taught, verified), the
+existing taught-skills store (`SkillTeachingEngine` integrated, not
+duplicated), and the Phase-6 learning ledger as verified demonstration
+experiences. Rejection costs no fabricated knowledge (two misreadings →
+honest stop). Conservative markers, expiring in-memory sessions, router
+consumes lesson turns before the task cycle, fail-open + kill switch
+(`ARENA_TEACHING=0`). Owner-visible: `GET /mind/procedures`,
+`GET /mind/teaching/sessions`. Guarded by `tests/test_teaching.py`
+(17 tests); live-verified against the real server with the roadmap's own
+scene — the stored procedure is retrieved as the top hit for "how should I
+organize files", so future briefs carry it.
+
+Earlier in this gate: Phase 6 (general learning engine) LIVE — `app/mind/learning_loop.py` —
 ONE deterministic loop every experience passes through (observe → interpret
 → compare → novelty → hypothesis → test → outcome → update model → store →
 confidence), entered through the mind door (`BeanieMind.learn`) for all seven
@@ -46,8 +62,9 @@ understanding over the existing provenance-enforced WorldModel), the **self
 facade** (Phase 4: genuine knowledge/confidence/possible_actions
 self-assessment; authority ≠ intelligence), and **UnifiedMemory** (Phase 5:
 all eight memory kinds incl. NEW social store and meta-memory — M3, M5
-resolved). Now 19 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
-preview/ledger and the Phase-6 learning door/landscape/ledger); guarded by
+resolved). Now 21 owner-visible `/mind/*` endpoints (incl. the Phase-2 brief
+preview/ledger, the Phase-6 learning door/landscape/ledger, and the Phase-7
+procedures/teaching-session windows); guarded by
 `tests/test_beanie_mind.py` (21) +
 `tests/test_mind_models.py` (22); zero behavior change to the cognitive
 cycle itself. Sequenced by [`AGI_ROADMAP.md`](AGI_ROADMAP.md); module-by-module

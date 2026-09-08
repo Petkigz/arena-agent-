@@ -36,6 +36,7 @@ from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
+from app.mind.teaching import DemonstrationTeaching
 from app.mind.world_facade import WorldModelFacade
 from app.mind.world_first import WorldFirstReasoning
 from app.utils.logger import app_logger
@@ -76,6 +77,7 @@ class BeanieMind:
         self._memory: Optional[UnifiedMemory] = None
         self._world_first: Optional[WorldFirstReasoning] = None
         self._learning: Optional[GeneralLearningEngine] = None
+        self._teaching: Optional[DemonstrationTeaching] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -213,6 +215,14 @@ class BeanieMind:
         observations, media, demonstrations, experiments — enters here and runs
         the same ten-stage loop."""
         return self.learning.learn(experience)
+
+    @property
+    def teaching(self) -> DemonstrationTeaching:
+        """Phase 7: conversation is the teaching interface ("watch this")."""
+        with self._lock:
+            if self._teaching is None:
+                self._teaching = DemonstrationTeaching(self)
+            return self._teaching
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
