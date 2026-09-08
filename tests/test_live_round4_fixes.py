@@ -270,6 +270,11 @@ def test_timeout_opens_cooldown_and_short_circuits(embed_env, monkeypatch):
     import httpx
 
     sm = embed_env
+    # Pin the model id so discovery is skipped: _pick_embedding_model
+    # swallows GET errors into 'no model', which would short-circuit the
+    # test on a cold cache (CI) before the POST ever times out.
+    monkeypatch.setenv("ARENA_EMBED_MODEL",
+                       "text-embedding-nomic-embed-text-v1.5")
     calls = {"n": 0}
 
     class _TimeoutClient:
@@ -322,6 +327,11 @@ def test_timeout_opens_cooldown_and_short_circuits(embed_env, monkeypatch):
 def test_cooldown_expiry_resumes_probing(embed_env, monkeypatch):
     sm = embed_env
     sm._backend_state["timeout_until"] = 1.0  # long in the past
+    # Pin the model id: the discovery TTL cache may hold a 'no model' miss
+    # from earlier tests, which would bypass the probe entirely (and the
+    # behavior under test) depending on suite order.
+    monkeypatch.setenv("ARENA_EMBED_MODEL",
+                       "text-embedding-nomic-embed-text-v1.5")
 
     class _OkClient:
         def __init__(self, *a, **k):
