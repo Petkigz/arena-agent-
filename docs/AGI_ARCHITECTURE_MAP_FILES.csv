@@ -8,7 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
-app/api/mind.py,967,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
+app/api/mind.py,1005,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -165,7 +165,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,82,infrastructure/config,KEEP,,,
+app/config.py,83,infrastructure/config,KEEP,,,
 app/database.py,465,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,771,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
@@ -176,10 +176,10 @@ app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
-app/mind/__init__.py,57,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/__init__.py,58,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
 app/mind/attention.py,350,mind/attention,KEEP,ATTENTION,Attention — Phase 14 (Beanie AGI roadmap): M8 attention significance.,"Phase 14 LIVE (M8): the arbitrator between perception and thought — roadmap ladder from evidence on the record, repeats demoted, watermark review, one open unknown surfaced when quiet, popup-over-task advisory; decides only, never acts"
 app/mind/authority.py,406,owner-authority/policy,KEEP,AUTHORITY,"Authority — Phase 18 (Beanie AGI roadmap): the owner's authority, not","Phase 18 LIVE: the OWNER's authority — five lanes of owner-stated rules (always / ask-first / never / trusted contexts / temporary), Phase-16 boundaries seed the never lane, risk patterns decide only WHEN TO ASK (ask-first opens a typed requires_owner_approval ask, never a silent drop), answers obeyed; no system morals; authority ≠ intelligence; judges authorization, never executes"
-app/mind/beanie_mind.py,1006,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/beanie_mind.py,1037,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
 app/mind/beliefs.py,313,mind/beliefs,KEEP,BELIEFS,Beliefs — post-roadmap growth (audit item #20): false-belief theory,"Post-roadmap LIVE (audit #20): false-belief theory of mind — what the owner believes, captured from markers in the owner's own words (never mind-read), held separately from what the evidence shows; check() sets belief vs the VERIFIED record (corroborated / contested either direction / unknown plainly); guide() meets a contested belief with acknowledgment + her own record + the decision left to the owner — never 'you are wrong'; she models the owner's mind, she never edits it"
 app/mind/curiosity.py,304,mind/curiosity,KEEP,CURIOSITY,CuriosityEngine — Phase 9 (Beanie AGI roadmap): the internal UNKNOWN,"Phase 9 LIVE: the internal UNKNOWN system — brief gaps become records, encounters compound, investigation searches memory first, resolution paths counted (knowledge/investigation/owner)"
 app/mind/embodiment.py,247,mind/motor,KEEP,EMBODIMENT,Embodiment — Phase 11 (Beanie AGI roadmap): the existing capabilities,"Phase 11 LIVE: the 184 capabilities as her motor system — concepts in, ranked pathways out (plans only, never execution); authority surfaced, motor gaps become unknowns"
@@ -195,6 +195,7 @@ app/mind/media_learning.py,236,mind/learning,KEEP,LEARNING,"MediaLearning — Ph
 app/mind/memory_facade.py,298,memory,KEEP,MEMORY,"UnifiedMemory — Phase 5 (Beanie AGI roadmap): one memory system, many kinds.","Phase 5 LIVE: UnifiedMemory over all eight kinds + NEW social store and meta-memory (M3, M5 resolved)"
 app/mind/motivation.py,447,mind/motivation,KEEP,MOTIVATION,"Motivation — Phase 15 (Beanie AGI roadmap): goals from evidence, never","Phase 15 LIVE: goals from evidence only (open unknowns, parked goals, owner speech, attention verdicts, verified failures, learned rhythms) — relevance as named contributions, recurrence compounds, proposals are questions (acted: False), accepted goals execute through the normal door under owner authority"
 app/mind/os_concepts.py,291,mind/motor,KEEP,EMBODIMENT,OSConceptLayer — Phase 12 (Beanie AGI roadmap): true OS-level,"Phase 12 LIVE (M10): ONE platform-free concept layer over all bodies — express/transfer/coverage from the live manifest by evidence; no per-OS intelligence, gaps visible not fabricated"
+app/mind/paradigms.py,381,mind/paradigms,KEEP,PARADIGMS,Paradigms — post-roadmap growth (audit item #21): ontological,"Post-roadmap LIVE (audit #21): ontological paradigm shifts — universal claims captured from markers in the owner's words or formed provisionally from her own verified tally; one verified counter-example strains, two OVERTURN — the shift recorded exactly once with its evidence and a replacement that names the change; matching uses content terms only; describes, never executes"
 app/mind/perception.py,242,mind/perception,KEEP,SENSES,Perception — Phase 13 (Beanie AGI roadmap): continuous perception.,"Phase 13 LIVE: the SENSE side — typed perceptions over eight channels, significance judged (urgency/novelty/curiosity) with reasons, silent-watcher changes ingested; perception ≠ belief ≠ action"
 app/mind/personality.py,384,mind/personality,KEEP,PERSONALITY,"Personality — Phase 17 (Beanie AGI roadmap): a personality that develops,","Phase 17 LIVE: the DEVELOPING personality — basic identity plus traits derived from her real ledgers (experiences, calibration, curiosity, her own reply patterns, the owner's values only, adaptation); derive() snapshots + diffs = the verifiable record of 'Beanie has changed'; describes, performs nothing"
 app/mind/presence.py,283,mind/presence,KEEP,PRESENCE,Presence — Phase 22 (Beanie AGI roadmap): voice-first Beanie.,"Phase 22 LIVE: voice-first presence — the state vocabulary is the design system's own machine (design/tokens.json → beanie.states); states derived from real signals, never staged, never invented; idle is honest, not a mask; the contextual window shows the complicated information when needed, not permanently (conversation, open asks, goals, unknowns, lessons); the voice-primary door sends transcripts through the ONE mind, settling state by the verifier's word only"
@@ -377,7 +378,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,932,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,941,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

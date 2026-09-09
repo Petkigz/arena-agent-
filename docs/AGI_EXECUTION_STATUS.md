@@ -10,7 +10,31 @@
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — plus post-roadmap growth from the
 architecture audit.**
-Post-roadmap: stakes-based effort (audit item #22) is LIVE —
+Post-roadmap: ontological paradigm shifts (audit item #21) are LIVE —
+`app/mind/paradigms.py`. Patching the same broken rule once is
+adaptation; the SECOND verified counter-example means the rule itself
+was wrong. `assume(statement)` captures universal claims from markers
+in the owner's own words ("always", "every time", "never"…) — no
+markers, nothing captured; imperatives addressed at her are the
+authority organ's lane, not ontology. `generalize(subject)` forms a
+provisional universal from her own verified tally (3+ successes, zero
+failures — "has held so far"). `scan()` sets every held paradigm
+against the verified ledger (content terms only, so "always" never
+dilutes the overlap): one counter-example STRAINS, two OVERTURN —
+recorded exactly once with its evidence and a replacement that names
+the shift. The door captures universals and scans on every pass, so
+the shift happens the moment the evidence arrives. Live-verified: "the
+nightly sync always works" → strained after 1 verified failure →
+OVERTURNED after 2 ("no longer universal — broke against 2 verified
+counter-example(s); treat it case-by-case, not as law"); third scan
+changes nothing; own-record generalization formed from 3 clean
+successes. Owner-visible: `GET /mind/paradigms`, `POST assume / scan`.
+Kill switch `ARENA_PARADIGMS=0`. Guarded by
+`tests/test_mind_paradigms.py` (17 tests). Remaining audit gap in
+leverage order: intuitive physics (Domain A); mortality (#26)
+deliberately absent unless the owner asks.
+
+Earlier in this gate: stakes-based effort (audit item #22) is LIVE —
 `app/mind/stakes.py`. `assess(task)` computes what a request costs if
 it fails from FOUR deterministic signals out of her own record — never
 vibes: risk markers in the words themselves (destroying data, moving

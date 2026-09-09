@@ -48,6 +48,7 @@ from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.improvement import Improvement
+from app.mind.paradigms import Paradigms
 from app.mind.perception import Perception
 from app.mind.personality import Personality
 from app.mind.presence import Presence
@@ -119,6 +120,7 @@ class BeanieMind:
         self._beliefs: Optional[BeliefModel] = None
         self._idle_replay: Optional[IdleReplay] = None
         self._stakes: Optional[Stakes] = None
+        self._paradigms: Optional[Paradigms] = None
         # Post-roadmap (#18): the door's idle clock — when did the owner
         # last enter? She dreams in the quiet BETWEEN messages.
         self._last_door_iso: Optional[str] = None
@@ -514,6 +516,19 @@ class BeanieMind:
                 self._stakes = Stakes(self)
             return self._stakes
 
+    @property
+    def paradigms(self) -> Paradigms:
+        """Post-roadmap growth (audit #21): ontological paradigm
+        shifts — deep assumptions captured from universal markers in
+        the owner's words or formed provisionally from her own
+        verified tally; one verified counter-example strains an
+        assumption, two OVERTURN it and the shift is recorded with its
+        evidence. Describes; never executes."""
+        with self._lock:
+            if self._paradigms is None:
+                self._paradigms = Paradigms(self)
+            return self._paradigms
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -552,6 +567,7 @@ class BeanieMind:
         self._run_personality(user_text, result)
         self._run_authority(user_text)
         self._run_beliefs(user_text)
+        self._run_paradigms(user_text)
         self._run_stakes(user_text)
         self._run_reflection(user_text, result)
         self._run_improvement(user_text, result)
@@ -726,6 +742,21 @@ class BeanieMind:
             self.beliefs.note(user_text)
         except Exception as exc:
             app_logger.warning(f"Beliefs pass skipped (non-fatal): {exc}")
+
+    def _run_paradigms(self, user_text: str) -> None:
+        """Post-roadmap (#21): the owner's words may state universal
+        claims ("X always…", "Y never…") — capture them; then set
+        every held paradigm against the verified record, because a
+        shift happens the moment the evidence arrives. Best-effort;
+        never fails the task."""
+        if str(getattr(settings, "ARENA_PARADIGMS", "1")) == "0":
+            return
+        try:
+            self.paradigms.assume(user_text)
+            self.paradigms.scan()
+        except Exception as exc:
+            app_logger.warning(f"Paradigms pass skipped (non-fatal): "
+                               f"{exc}")
 
     def _run_stakes(self, user_text: str) -> None:
         """Post-roadmap (#22): effort follows stakes. Every non-empty

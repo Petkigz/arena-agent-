@@ -965,3 +965,41 @@ def mind_stakes_assess(body: StakesAssessIn) -> dict:
     emphasis, her own verified failure history, the owner's rules — and
     return the effort plan the level buys. Assesses; never executes."""
     return BeanieMind.get_instance().stakes.assess(body.task)
+
+
+# ── Post-roadmap growth: ontological paradigm shifts (audit #21) ───────────
+class ParadigmAssumeIn(BaseModel):
+    statement: str = Field(min_length=1, max_length=2000)
+
+
+@router.get("/mind/paradigms")
+def mind_paradigms_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """Her deep assumptions — captured from universal markers in the
+    owner's words or formed provisionally from her own verified tally —
+    with status held / strained / overturned and the shift history."""
+    pg = BeanieMind.get_instance().paradigms
+    return {"success": True, **pg.stats(),
+            "stream": pg.paradigms(limit=limit),
+            "shifts": pg.shifts(limit=limit)}
+
+
+@router.post("/mind/paradigms/assume")
+def mind_paradigms_assume(body: ParadigmAssumeIn) -> dict:
+    """Capture a universal claim if the words carry universal markers —
+    never inferred beyond that; imperatives addressed at her are the
+    authority organ's lane, not ontology."""
+    res = BeanieMind.get_instance().paradigms.assume(body.statement)
+    if res is None:
+        return {"captured": False, "acted": False,
+                "reason": "no universal markers in those words — "
+                          "nothing was assumed"}
+    return res
+
+
+@router.post("/mind/paradigms/scan")
+def mind_paradigms_scan() -> dict:
+    """Set every held paradigm against the verified record: one
+    counter-example strains, two verified counter-examples OVERTURN —
+    the shift is recorded with its evidence. Describes; never
+    executes."""
+    return BeanieMind.get_instance().paradigms.scan()

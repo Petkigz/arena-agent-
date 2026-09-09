@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     ARENA_IDLE_REPLAY: str = "1"  # "0" disables the dream-like consolidation pass at the mind door
     ARENA_IDLE_REPLAY_SECONDS: str = "1800"  # quiet gap after which the door runs an idle replay
     ARENA_STAKES: str = "1"  # "0" disables the stakes-based effort assessment pass at the mind door
+    ARENA_PARADIGMS: str = "1"  # "0" disables the paradigm-shift pass at the mind door
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard

@@ -1024,10 +1024,35 @@ now closed:
 > `GET /mind/stakes`, `POST /mind/stakes/assess` (79 `/mind/*` paths;
 > 82 routes). Kill switch `ARENA_STAKES=0`. Guarded by
 > `tests/test_mind_stakes.py` (16 tests).
+
+> ✅ **LIVE 2026-09-09:** `app/mind/paradigms.py` — ontological
+> paradigm shifts (audit item #21: "can she overturn a deep assumption
+> when verified evidence breaks it, or does she only patch exceptions
+> forever?"). Patching the same broken rule once is adaptation; the
+> SECOND verified counter-example means the rule itself was wrong.
+> ``assume(statement)`` captures universal claims from markers in the
+> owner's own words ("always", "every time", "whenever", "never") —
+> no markers, nothing captured; imperatives addressed at HER are the
+> authority organ's lane, not ontology. ``generalize(subject)`` lets
+> her form a PROVISIONAL universal from her own verified tally (3+
+> verified successes, zero failures — "has held so far"). ``scan()``
+> sets every held paradigm against the verified ledger — matching on
+> content terms only, so "always" never dilutes the overlap: positive
+> universals are broken by verified failures, negative universals by
+> verified successes. One counter-example → STRAINED; two or more →
+> OVERTURNED, recorded exactly once with the counter-evidence and a
+> replacement that names the shift ("no longer universal — broke
+> against 2 verified counter-example(s); treat it case-by-case, not as
+> law"). The door captures universals and scans on every pass, so the
+> shift happens the moment the evidence arrives. The organ describes;
+> it never executes. Owner-visible: `GET /mind/paradigms`,
+> `POST /mind/paradigms/assume`, `POST /mind/paradigms/scan`
+> (82 `/mind/*` paths; 85 routes). Kill switch `ARENA_PARADIGMS=0`.
+> Guarded by `tests/test_mind_paradigms.py` (17 tests).
 >
-> Remaining audit gaps (in leverage order): ontological paradigm
-> shifts (#21), intuitive physics (Domain A); mortality (#26) is
-> deliberately absent unless the owner asks for it.
+> Remaining audit gap (in leverage order): intuitive physics
+> (Domain A); mortality (#26) is deliberately absent unless the owner
+> asks for it.
 
 ## The development order actually used
 

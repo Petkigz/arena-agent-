@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 386 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 387 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -434,10 +434,18 @@ owner-directed architecture audit:
     concrete NESTING effort plans; the door assesses every non-empty
     request; assesses and records — never executes, never vetoes. Kill
     switch `ARENA_STAKES=0`. 16 tests in `tests/test_mind_stakes.py`;
-    79 `/mind/*` paths (82 routes). Remaining audit gaps in leverage
-    order: ontological paradigm shifts (#21), intuitive physics
-    (Domain A); mortality (#26) deliberately absent unless the owner
-    asks.
+    79 `/mind/*` paths (82 routes).
+29. ✅ **Post-roadmap LIVE (2026-09-09)** — `paradigms.py`: ontological
+    paradigm shifts (audit #21) — universal claims captured from
+    markers in the owner's words or formed provisionally from her own
+    verified tally; one verified counter-example strains, two OVERTURN
+    — the shift recorded exactly once with its evidence and a
+    replacement that names the change; the door scans on every pass so
+    the shift happens when the evidence arrives. Kill switch
+    `ARENA_PARADIGMS=0`. 17 tests in `tests/test_mind_paradigms.py`;
+    82 `/mind/*` paths (85 routes). Remaining audit gap in leverage
+    order: intuitive physics (Domain A); mortality (#26) deliberately
+    absent unless the owner asks.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

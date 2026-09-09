@@ -704,6 +704,15 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/paradigms.py": (
+        "mind/paradigms", "KEEP", "PARADIGMS",
+        "Post-roadmap LIVE (audit #21): ontological paradigm shifts — "
+        "universal claims captured from markers in the owner's words "
+        "or formed provisionally from her own verified tally; one "
+        "verified counter-example strains, two OVERTURN — the shift "
+        "recorded exactly once with its evidence and a replacement "
+        "that names the change; matching uses content terms only; "
+        "describes, never executes"),
     "app/mind/stakes.py": (
         "mind/stakes", "KEEP", "STAKES",
         "Post-roadmap LIVE (audit #22): stakes-based effort — "
