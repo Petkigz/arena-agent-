@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/beliefs.py": (
+        "mind/beliefs", "KEEP", "BELIEFS",
+        "Post-roadmap LIVE (audit #20): false-belief theory of mind — "
+        "what the owner believes, captured from markers in the owner's "
+        "own words (never mind-read), held separately from what the "
+        "evidence shows; check() sets belief vs the VERIFIED record "
+        "(corroborated / contested either direction / unknown plainly); "
+        "guide() meets a contested belief with acknowledgment + her own "
+        "record + the decision left to the owner — never 'you are "
+        "wrong'; she models the owner's mind, she never edits it"),
     "app/mind/scrutiny.py": (
         "mind/scrutiny", "KEEP", "SCRUTINY",
         "Post-roadmap LIVE (audit #25): the devil's advocate — argues "

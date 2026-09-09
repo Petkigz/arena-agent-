@@ -964,12 +964,30 @@ now closed:
 > Owner-visible: `GET /mind/scrutiny`, `POST /mind/scrutiny/scrutinize`
 > (71 `/mind/*` paths; 74 routes). Kill switch `ARENA_SCRUTINY=0`.
 > Guarded by `tests/test_mind_scrutiny.py` (13 tests).
+
+> ✅ **LIVE 2026-09-09:** `app/mind/beliefs.py` — false-belief theory of
+> mind (audit item #20: "hold that you hold a false belief, and choose
+> to guide you WITHOUT correcting you"). What the owner believes is
+> captured from markers in the owner's OWN words ("I think…", "I
+> believe…") — never mind-read — and held SEPARATELY from what the
+> evidence shows. ``check(subject)`` sets the belief against her own
+> VERIFIED record: corroborated, CONTESTED (a false belief, detected in
+> either direction), or unknown — said plainly. ``guide(subject)`` is
+> the behavior the audit asked for: a contested belief is met with
+> acknowledgment ("you told me you believe…"), her own record, and the
+> decision left to the owner — never "you are wrong"; a corroborated
+> belief is affirmed; an unknown one offers to find out together. The
+> door captures beliefs from owner speech; she models the owner's mind,
+> she never edits it. Owner-visible: `GET /mind/beliefs`,
+> `POST /mind/beliefs/note`, `POST /mind/beliefs/check`,
+> `POST /mind/beliefs/guide` (75 `/mind/*` paths; 78 routes). Kill
+> switch `ARENA_BELIEFS=0`. Guarded by `tests/test_mind_beliefs.py`
+> (16 tests).
 >
-> Remaining audit gaps (in leverage order): false-belief theory of mind
-> (#20), idle replay/dream-like consolidation (#18), stakes-based
-> effort (#22), ontological paradigm shifts (#21), intuitive physics
-> (Domain A); mortality (#26) is deliberately absent unless the owner
-> asks for it.
+> Remaining audit gaps (in leverage order): idle replay/dream-like
+> consolidation (#18), stakes-based effort (#22), ontological paradigm
+> shifts (#21), intuitive physics (Domain A); mortality (#26) is
+> deliberately absent unless the owner asks for it.
 
 ## The development order actually used
 

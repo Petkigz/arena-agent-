@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 383 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 384 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -405,10 +405,21 @@ owner-directed architecture audit:
     the door runs it on verified successes (survivorship bias); doubts,
     never acts, never vetoes. Kill switch `ARENA_SCRUTINY=0`. 13 tests
     in `tests/test_mind_scrutiny.py`; 71 `/mind/*` paths (74 routes).
-    Remaining audit gaps in leverage order: false-belief ToM (#20),
-    idle replay (#18), stakes-based effort (#22), ontological paradigm
-    shifts (#21), intuitive physics (Domain A); mortality (#26)
-    deliberately absent unless the owner asks.
+26. ✅ **Post-roadmap LIVE (2026-09-09)** — `beliefs.py`: false-belief
+    theory of mind (audit #20) — what the owner believes, captured from
+    markers in the owner's own words (never mind-read; restatements
+    compound), held SEPARATELY from what the evidence shows.
+    `check(subject)` sets the belief against the VERIFIED record
+    (corroborated / contested either direction / unknown, said
+    plainly); `guide(subject)` meets a contested belief with
+    acknowledgment, her own record, and the decision left to the owner
+    — never "you are wrong". She models the owner's mind, she never
+    edits it. Kill switch `ARENA_BELIEFS=0`. 16 tests in
+    `tests/test_mind_beliefs.py`; 75 `/mind/*` paths (78 routes).
+    Remaining audit gaps in leverage order: idle replay (#18),
+    stakes-based effort (#22), ontological paradigm shifts (#21),
+    intuitive physics (Domain A); mortality (#26) deliberately absent
+    unless the owner asks.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

@@ -872,3 +872,50 @@ def mind_scrutiny_now(body: ScrutinyIn) -> dict:
     Counter-evidence comes only from her ledgers, never invented."""
     return BeanieMind.get_instance().scrutiny.scrutinize(
         body.conclusion, source=body.source)
+
+
+# ── Post-roadmap growth: false-belief theory of mind (audit #20) ───────────
+class BeliefNoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class BeliefSubjectIn(BaseModel):
+    subject: str = Field(min_length=1, max_length=2000)
+
+
+@router.get("/mind/beliefs")
+def mind_beliefs_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """What the owner believes, held separately from what the verified
+    evidence shows — captured from markers in the owner's own words,
+    never mind-read."""
+    bm = BeanieMind.get_instance().beliefs
+    return {"success": True, **bm.stats(),
+            "stream": bm.beliefs(limit=limit)}
+
+
+@router.post("/mind/beliefs/note")
+def mind_beliefs_note(body: BeliefNoteIn) -> dict:
+    """Capture a belief statement if the words carry belief markers —
+    never inferred beyond that; restated beliefs compound."""
+    res = BeanieMind.get_instance().beliefs.note(body.text)
+    if res is None:
+        return {"captured": False, "acted": False,
+                "reason": "no belief markers in those words — nothing "
+                          "was inferred"}
+    return res
+
+
+@router.post("/mind/beliefs/check")
+def mind_beliefs_check(body: BeliefSubjectIn) -> dict:
+    """Set the owner's belief against her OWN verified record:
+    corroborated, contested (a false belief, detected from evidence),
+    or unknown — said plainly."""
+    return BeanieMind.get_instance().beliefs.check(body.subject)
+
+
+@router.post("/mind/beliefs/guide")
+def mind_beliefs_guide(body: BeliefSubjectIn) -> dict:
+    """The gracious response: a contested belief is met with
+    acknowledgment, her own record, and the decision left to the owner —
+    guidance, never blunt correction."""
+    return BeanieMind.get_instance().beliefs.guide(body.subject)

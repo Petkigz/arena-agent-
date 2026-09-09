@@ -10,7 +10,28 @@
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — plus post-roadmap growth from the
 architecture audit.**
-Post-roadmap: the devil's advocate (audit item #25) is LIVE —
+Post-roadmap: false-belief theory of mind (audit item #20) is LIVE —
+`app/mind/beliefs.py`. What the owner believes is captured from markers
+in the owner's OWN words (never mind-read; restatements compound) and
+held SEPARATELY from what the evidence shows. `check(subject)` sets the
+belief against her own VERIFIED record: corroborated / contested (a
+false belief, detected in either direction) / unknown, said plainly.
+`guide(subject)` is the grace: a contested belief is met with
+acknowledgment, her own record, and the decision left to the owner —
+never "you are wrong"; corroborated beliefs are affirmed; unknown ones
+offer to find out together. The door captures beliefs from owner
+speech; she models the owner's mind, she never edits it. Live-verified:
+"I think the nightly sync works fine" against 2 verified failures →
+contested → guidance: "I hold that respectfully… I'm not going to tell
+you you're wrong — this is what I've seen; the call is yours."
+Owner-visible: `GET /mind/beliefs`, `POST note / check / guide`. Kill
+switch `ARENA_BELIEFS=0`. Guarded by `tests/test_mind_beliefs.py`
+(16 tests). Remaining audit gaps in leverage order: idle replay (#18),
+stakes-based effort (#22), ontological paradigm shifts (#21), intuitive
+physics (Domain A); mortality (#26) deliberately absent unless the
+owner asks.
+
+Earlier in this gate: the devil's advocate (audit item #25) is LIVE —
 `app/mind/scrutiny.py`. `scrutinize(conclusion)` argues the opposite
 case from her OWN ledgers only (verified failures, wrong reflections,
 refuted predictions, open gaps, admitted unknowns) — never invented

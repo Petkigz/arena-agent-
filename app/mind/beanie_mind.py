@@ -42,6 +42,7 @@ from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
 from app.mind.attention import Attention
 from app.mind.authority import Authority
+from app.mind.beliefs import BeliefModel
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
@@ -113,6 +114,7 @@ class BeanieMind:
         self._embodiments: Optional[Embodiments] = None
         self._evaluation: Optional[Evaluation] = None
         self._scrutiny: Optional[Scrutiny] = None
+        self._beliefs: Optional[BeliefModel] = None
         self._presence: Optional[Presence] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
@@ -467,6 +469,19 @@ class BeanieMind:
                 self._scrutiny = Scrutiny(self)
             return self._scrutiny
 
+    @property
+    def beliefs(self) -> BeliefModel:
+        """Post-roadmap growth (audit #20): false-belief theory of mind —
+        what the owner believes, held separately from what the verified
+        evidence shows. A contested belief is met with acknowledgment,
+        her own record, and the decision left to the owner — guidance,
+        never blunt correction. She models the owner's mind; she never
+        edits it."""
+        with self._lock:
+            if self._beliefs is None:
+                self._beliefs = BeliefModel(self)
+            return self._beliefs
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -504,6 +519,7 @@ class BeanieMind:
         self._learn_from_cycle(user_text, modality, result)
         self._run_personality(user_text, result)
         self._run_authority(user_text)
+        self._run_beliefs(user_text)
         self._run_reflection(user_text, result)
         self._run_improvement(user_text, result)
         self._run_evolution(result)
@@ -664,6 +680,18 @@ class BeanieMind:
             self.authority.note(user_text)
         except Exception as exc:
             app_logger.warning(f"Authority pass skipped (non-fatal): {exc}")
+
+    def _run_beliefs(self, user_text: str) -> None:
+        """Post-roadmap (#20): the owner's words may carry beliefs ('I
+        think X works…', 'I believe Y is broken…'). Capture them —
+        markers only, never mind-read. Best-effort; never fails the
+        task."""
+        if str(getattr(settings, "ARENA_BELIEFS", "1")) == "0":
+            return
+        try:
+            self.beliefs.note(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Beliefs pass skipped (non-fatal): {exc}")
 
     def _run_reflection(self, user_text: str, result: Any) -> None:
         """Phase 19: a VERIFIED cycle is an important experience — she
