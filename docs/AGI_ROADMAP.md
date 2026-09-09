@@ -1002,11 +1002,32 @@ now closed:
 > `GET /mind/replay`, `POST /mind/replay/run` (77 `/mind/*` paths;
 > 80 routes). Kill switch `ARENA_IDLE_REPLAY=0`. Guarded by
 > `tests/test_mind_idle_replay.py` (16 tests).
+
+> ✅ **LIVE 2026-09-09:** `app/mind/stakes.py` — stakes-based effort
+> (audit item #22: "does she try equally hard at everything, or does
+> effort follow stakes?"). ``assess(task)`` computes what a request
+> costs if it fails from FOUR deterministic signals out of her own
+> record — never vibes: risk markers in the words themselves
+> (destroying data, moving money, contacting people on the owner's
+> behalf); owner emphasis ("important", "carefully", …); her OWN
+> verified failure history on the topic — where she has failed
+> verified 2+ times, casual effort is least affordable; and the
+> owner's authority rules touching the topic (read-only — judging
+> stakes never opens asks). Score → level: ROUTINE (0–1), CAREFUL
+> (2–3), CRITICAL (4+), and each level carries a concrete, NESTING
+> EFFORT PLAN — what extra care the level buys, up to "run the shadow
+> advocate before relying on a conclusion" and "confirm irreversible
+> steps with the owner first". The door assesses every non-empty
+> request; low stakes are honest too — not everything needs ceremony.
+> The organ assesses and records; it never executes, never vetoes —
+> the decision belongs to the owner's authority. Owner-visible:
+> `GET /mind/stakes`, `POST /mind/stakes/assess` (79 `/mind/*` paths;
+> 82 routes). Kill switch `ARENA_STAKES=0`. Guarded by
+> `tests/test_mind_stakes.py` (16 tests).
 >
-> Remaining audit gaps (in leverage order): stakes-based effort
-> (#22), ontological paradigm shifts (#21), intuitive physics
-> (Domain A); mortality (#26) is deliberately absent unless the owner
-> asks for it.
+> Remaining audit gaps (in leverage order): ontological paradigm
+> shifts (#21), intuitive physics (Domain A); mortality (#26) is
+> deliberately absent unless the owner asks for it.
 
 ## The development order actually used
 

@@ -943,3 +943,25 @@ def mind_replay_run(body: ReplayRunIn) -> dict:
     the verifier's tally (strengthen / revisit / open). Describes;
     never acts."""
     return BeanieMind.get_instance().idle_replay.replay(source=body.source)
+
+
+# ── Post-roadmap growth: stakes-based effort (audit #22) ───────────────────
+class StakesAssessIn(BaseModel):
+    task: str = Field(min_length=1, max_length=2000)
+
+
+@router.get("/mind/stakes")
+def mind_stakes_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The effort ledger: every stakes assessment — level, score, the
+    evidence-backed reasons, and the effort plan the level buys."""
+    st = BeanieMind.get_instance().stakes
+    return {"success": True, **st.stats(),
+            "stream": st.recent(limit=limit)}
+
+
+@router.post("/mind/stakes/assess")
+def mind_stakes_assess(body: StakesAssessIn) -> dict:
+    """Assess what this task costs if it fails — risk markers, owner
+    emphasis, her own verified failure history, the owner's rules — and
+    return the effort plan the level buys. Assesses; never executes."""
+    return BeanieMind.get_instance().stakes.assess(body.task)

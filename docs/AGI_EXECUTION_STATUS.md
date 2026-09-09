@@ -10,8 +10,30 @@
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — plus post-roadmap growth from the
 architecture audit.**
-Post-roadmap: idle replay / dream-like consolidation (audit item #18)
-is LIVE — `app/mind/idle_replay.py`. Her quiet pass over everything
+Post-roadmap: stakes-based effort (audit item #22) is LIVE —
+`app/mind/stakes.py`. `assess(task)` computes what a request costs if
+it fails from FOUR deterministic signals out of her own record — never
+vibes: risk markers in the words themselves (destroying data, moving
+money, contacting people on the owner's behalf); owner emphasis; her
+OWN verified failure history on the topic; and the owner's authority
+rules touching it (read-only — judging stakes never opens asks). Score
+→ level: routine / careful / critical, each carrying a concrete,
+NESTING effort plan — up to "run the shadow advocate before relying on
+a conclusion" and "confirm irreversible steps with the owner first".
+The door assesses every non-empty request; low stakes are honest too.
+The organ assesses and records; it never executes, never vetoes.
+Live-verified: "what time is it" → routine; "pay the hosting invoice"
+→ careful (money markers); "run the export job" against 2 verified
+failures → careful (her own record); "please delete the archive files,
+this is important" → critical (risk + emphasis). Owner-visible:
+`GET /mind/stakes`, `POST /mind/stakes/assess`. Kill switch
+`ARENA_STAKES=0`. Guarded by `tests/test_mind_stakes.py` (16 tests).
+Remaining audit gaps in leverage order: ontological paradigm shifts
+(#21), intuitive physics (Domain A); mortality (#26) deliberately
+absent unless the owner asks.
+
+Earlier in this gate: idle replay / dream-like consolidation (audit
+item #18) is LIVE — `app/mind/idle_replay.py`. Her quiet pass over everything
 NEW since the last replay (watermark in the replay ledger, survives
 restarts): related experiences are gathered into threads by vocabulary
 overlap and each thread is judged ONLY by the verifier's tally —

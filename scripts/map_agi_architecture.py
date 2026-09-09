@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/stakes.py": (
+        "mind/stakes", "KEEP", "STAKES",
+        "Post-roadmap LIVE (audit #22): stakes-based effort — "
+        "assess(task) computes what a request costs if it fails from "
+        "four deterministic signals (risk markers in the words, owner "
+        "emphasis, her own verified failure history, the owner's "
+        "authority rules read-only); levels routine/careful/critical "
+        "carry concrete NESTING effort plans; the door assesses every "
+        "non-empty request; assesses and records — never executes, "
+        "never vetoes"),
     "app/mind/idle_replay.py": (
         "mind/idle_replay", "KEEP", "IDLE_REPLAY",
         "Post-roadmap LIVE (audit #18): dream-like consolidation — "

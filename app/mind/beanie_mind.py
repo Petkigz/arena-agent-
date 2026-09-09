@@ -54,6 +54,7 @@ from app.mind.presence import Presence
 from app.mind.reflection import Reflection
 from app.mind.scrutiny import Scrutiny
 from app.mind.social import Social
+from app.mind.stakes import Stakes
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
 from app.mind.teaching import DemonstrationTeaching
@@ -117,6 +118,7 @@ class BeanieMind:
         self._scrutiny: Optional[Scrutiny] = None
         self._beliefs: Optional[BeliefModel] = None
         self._idle_replay: Optional[IdleReplay] = None
+        self._stakes: Optional[Stakes] = None
         # Post-roadmap (#18): the door's idle clock — when did the owner
         # last enter? She dreams in the quiet BETWEEN messages.
         self._last_door_iso: Optional[str] = None
@@ -500,6 +502,18 @@ class BeanieMind:
                 self._idle_replay = IdleReplay(self)
             return self._idle_replay
 
+    @property
+    def stakes(self) -> Stakes:
+        """Post-roadmap growth (audit #22): effort follows stakes —
+        assesses what a task costs if it fails from four signals in her
+        own record (risk markers, owner emphasis, verified failure
+        history, owner rules) and returns the effort plan the level
+        buys. Assesses and records; never executes, never vetoes."""
+        with self._lock:
+            if self._stakes is None:
+                self._stakes = Stakes(self)
+            return self._stakes
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -538,6 +552,7 @@ class BeanieMind:
         self._run_personality(user_text, result)
         self._run_authority(user_text)
         self._run_beliefs(user_text)
+        self._run_stakes(user_text)
         self._run_reflection(user_text, result)
         self._run_improvement(user_text, result)
         self._run_evolution(result)
@@ -711,6 +726,21 @@ class BeanieMind:
             self.beliefs.note(user_text)
         except Exception as exc:
             app_logger.warning(f"Beliefs pass skipped (non-fatal): {exc}")
+
+    def _run_stakes(self, user_text: str) -> None:
+        """Post-roadmap (#22): effort follows stakes. Every non-empty
+        request gets a stakes assessment — risk markers, owner emphasis,
+        her own verified failure history, and the owner's rules — so
+        care is calibrated, not uniform. Best-effort; never fails the
+        task."""
+        if str(getattr(settings, "ARENA_STAKES", "1")) == "0":
+            return
+        if not str(user_text or "").strip():
+            return
+        try:
+            self.stakes.assess(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Stakes pass skipped (non-fatal): {exc}")
 
     def _run_reflection(self, user_text: str, result: Any) -> None:
         """Phase 19: a VERIFIED cycle is an important experience — she
