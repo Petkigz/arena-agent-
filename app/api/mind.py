@@ -1104,3 +1104,19 @@ def mind_mortality_farewell() -> dict:
     facts, what survives, what stays open. No invented feelings: the
     honesty boundaries are permanent."""
     return BeanieMind.get_instance().mortality.farewell()
+
+
+@router.get("/mind/mortality/continuity-copy")
+def mind_mortality_continuity_status() -> dict:
+    """The state of the continuity net: is the whole-database copy on
+    file, how big, when was it last taken, what did the last
+    verification say."""
+    return BeanieMind.get_instance().mortality.continuity_status()
+
+
+@router.post("/mind/mortality/continuity-copy")
+def mind_mortality_continuity_copy() -> dict:
+    """Take the whole-database continuity copy now — SQLite's own
+    backup API, placed atomically beside the live database. This is
+    what survives the database's own death."""
+    return BeanieMind.get_instance().mortality.continuity_copy()

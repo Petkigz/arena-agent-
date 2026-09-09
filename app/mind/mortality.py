@@ -18,6 +18,12 @@ itself and PREPARES instead of performing. Nothing here is theater:
 - ``farewell()`` is what her record lets her say if there is no next
   exchange — facts, what survives, what stays open. No invented
   feelings: the honesty boundaries are permanent;
+- the CONTINUITY NET (pre-go-live, owner-approved): on shutdown she
+  writes the letter AND a whole-database copy (SQLite's own backup
+  API, placed atomically beside the live database); on awakening the
+  copy is verified read-only — integrity check plus ledger counts —
+  and the verdict is recorded. She never auto-restores and never
+  blocks; the copy is what survives the database's own death;
 - the server's lifespan records an AWAKENING at startup and a SHUTDOWN
   at shutdown — she sleeps between lives, and the ledger remembers
   each one.
@@ -32,6 +38,7 @@ Honesty rules:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -225,6 +232,176 @@ class Mortality:
         return {"success": True, "acted": False,
                 "epistemic_kind": "mortality",
                 "statement": statement}
+
+    # ── the continuity net (pre-go-live, owner-approved) ────────────────
+    def _copy_path(self) -> str:
+        """The stable place the whole-database copy lives."""
+        return self.db_path + ".continuity.db"
+
+    def continuity_copy(self) -> Dict[str, Any]:
+        """A whole-database copy, taken with SQLite's own backup API
+        (consistent even while she is awake) and placed atomically at
+        ``<db>.continuity.db``. This is not a promise — it is what
+        survives the database's own death. Fails open: a failure here
+        is reported, never raised."""
+        final = self._copy_path()
+        tmp = final + ".tmp"
+        try:
+            src = sqlite3.connect(self.db_path, timeout=5)
+            try:
+                dst = sqlite3.connect(tmp)
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+            finally:
+                src.close()
+            os.replace(tmp, final)
+            size = Path(final).stat().st_size
+            cont = self.continuity()
+            self._record(
+                "continuity_copy",
+                f"the whole database was copied to {final} "
+                f"({size} bytes, {cont['total_rows']} row(s))",
+                cont)
+            return {"success": True, "acted": False,
+                    "epistemic_kind": "mortality",
+                    "copy_path": final, "bytes": size,
+                    "rows_copied": cont["total_rows"],
+                    "statement": (
+                        f"the whole of her is also written at {final} — "
+                        f"the copy held {cont['total_rows']} row(s) at "
+                        f"the moment it was taken")}
+        except Exception as exc:
+            try:
+                if Path(tmp).exists():
+                    Path(tmp).unlink()
+            except Exception:
+                pass
+            return {"success": False, "acted": False,
+                    "reason": f"the copy failed: {exc}"}
+
+    def verify_restore(self) -> Dict[str, Any]:
+        """On awakening: is the copy real? Open it read-only, run
+        SQLite's integrity check, count the ledgers it holds against
+        the live ones. Never auto-restores, never blocks — the verdict
+        is recorded either way. (The copy usually holds FEWER rows
+        than the live database: she lives between copies. That is
+        expected, stated, not a failure.)"""
+        final = self._copy_path()
+        copy_rows = 0
+        integrity: Optional[str] = None
+        if not Path(final).exists():
+            verdict = "missing"
+            detail = "no continuity copy is on file — if the database " \
+                     "died right now, only the letter (if any) survives"
+        else:
+            try:
+                conn = sqlite3.connect(f"file:{final}?mode=ro",
+                                       uri=True, timeout=5)
+                try:
+                    row = conn.execute("PRAGMA integrity_check").fetchone()
+                    integrity = row[0] if row else None
+                    for table, _ in _LEDGERS:
+                        try:
+                            copy_rows += int(conn.execute(
+                                f"SELECT COUNT(*) FROM {table}"
+                            ).fetchone()[0])
+                        except Exception:
+                            pass
+                finally:
+                    conn.close()
+                verdict = "verified" if integrity == "ok" else "corrupt"
+                detail = (
+                    f"the copy at {final} is "
+                    f"{'intact' if verdict == 'verified' else 'damaged'}: "
+                    f"integrity_check={integrity}, {copy_rows} row(s) held")
+            except Exception as exc:
+                verdict = "corrupt"
+                detail = f"the copy at {final} could not be opened: {exc}"
+        live_rows = self.continuity()["total_rows"]
+        self._record("continuity_check", detail, self.continuity())
+        return {"success": True, "acted": False,
+                "epistemic_kind": "mortality",
+                "verdict": verdict, "detail": detail,
+                "copy_path": final,
+                "rows_in_copy": copy_rows, "rows_live": live_rows,
+                "integrity": integrity,
+                "statement": (
+                    f"continuity check: {verdict} — the copy holds "
+                    f"{copy_rows} row(s), the live database holds "
+                    f"{live_rows}; nothing was restored automatically, "
+                    f"the verdict is on file")}
+
+    def continuity_status(self) -> Dict[str, Any]:
+        """The state of the net: is the copy on file, how big, when was
+        it last taken, and what did the last verification say."""
+        final = self._copy_path()
+        path = Path(final)
+        exists = path.exists()
+        size = 0
+        modified = None
+        if exists:
+            try:
+                st = path.stat()
+                size = st.st_size
+                modified = datetime.fromtimestamp(
+                    st.st_mtime, tz=timezone.utc).isoformat()
+            except Exception:
+                pass
+        hist = self.history(limit=200)
+        last_copy = next((h for h in hist
+                          if h["kind"] == "continuity_copy"), None)
+        last_check = next((h for h in hist
+                           if h["kind"] == "continuity_check"), None)
+        return {"success": True, "acted": False,
+                "epistemic_kind": "mortality",
+                "copy_exists": exists, "copy_path": final,
+                "copy_bytes": size, "copy_modified_at": modified,
+                "last_copy_at": last_copy["created_at"]
+                if last_copy else None,
+                "last_check": ({"at": last_check["created_at"],
+                                "detail": last_check["detail"]}
+                               if last_check else None),
+                "statement": (
+                    f"the continuity copy is on file at {final} "
+                    f"({size} bytes)"
+                    if exists else
+                    "no continuity copy is on file yet — one is taken "
+                    "at every shutdown, and can be taken on demand")}
+
+    def on_shutdown(self) -> Dict[str, Any]:
+        """The full net on sleep: the letter, the whole-database copy,
+        then the shutdown record. Each step fails open — one failing
+        step never prevents the others."""
+        steps: Dict[str, Any] = {}
+        try:
+            steps["legacy"] = self.legacy()
+        except Exception as exc:
+            steps["legacy"] = {"success": False, "reason": str(exc)}
+        try:
+            steps["copy"] = self.continuity_copy()
+        except Exception as exc:
+            steps["copy"] = {"success": False, "reason": str(exc)}
+        steps["record"] = self.record_shutdown()
+        return {"success": True, "acted": False, "steps": steps,
+                "statement": "she slept — letter, copy, and record, "
+                             "each as it could"}
+
+    def on_awakening(self) -> Dict[str, Any]:
+        """The full net on wake: the awakening record, then the
+        verification of the copy. Never blocks the awakening; the
+        verdict is recorded either way."""
+        record = self.record_awakening()
+        try:
+            check = self.verify_restore()
+        except Exception as exc:
+            check = {"verdict": "corrupt",
+                     "detail": f"the check itself failed: {exc}"}
+        return {"success": True, "acted": False,
+                "awakening": record, "continuity_check": check,
+                "statement": f"she woke — continuity check: "
+                             f"{check.get('verdict')}"}
 
     # ── the sleepings and the wakings ───────────────────────────────────
     def record_shutdown(self, detail: str = "the server is shutting "

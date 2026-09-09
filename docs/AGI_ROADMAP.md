@@ -1112,6 +1112,24 @@ now closed:
 >
 > The audit is now fully closed, including #26 at the owner's request.
 
+> ✅ **LIVE 2026-09-09 (pre-go-live, owner-approved):** the CONTINUITY
+> NET — `app/mind/mortality.py` extended so sleep and waking are
+> protected, not just recorded. On every shutdown ``on_shutdown()``
+> writes the legacy letter AND a whole-database continuity copy —
+> SQLite's own backup API (consistent even while she is awake),
+> placed atomically at ``<db>.continuity.db`` — then records the
+> shutdown. On every awakening ``on_awakening()`` records the waking
+> and VERIFIES the copy read-only: integrity check plus ledger counts
+> against the live database, verdict recorded as verified / corrupt /
+> missing. She never auto-restores and never blocks the awakening —
+> the copy usually holds fewer rows than the live database because
+> she lives between copies, and that is stated, not a failure. Each
+> step fails open: one failing step never prevents the others.
+> Owner-visible: `GET/POST /mind/mortality/continuity-copy` (status +
+> take-now) (92 `/mind/*` paths; 96 routes; 469 total). Kill switch
+> `ARENA_MORTALITY=0` (unchanged — the net lives inside the organ).
+> Guarded by `tests/test_mind_mortality.py` (28 tests).
+
 ## The development order actually used
 
 Not all 24 phases sequentially — several develop together:

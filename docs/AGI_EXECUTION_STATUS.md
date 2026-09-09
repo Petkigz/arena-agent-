@@ -1,7 +1,7 @@
 # Arena AGI Execution Status
 
 **Date:** 2026-09-09  
-**Branch:** `arena/01a0813a-arena-agent`
+**Branch:** `arena/01a08661-arena-agent`
 
 **Purpose:** A chronological, repository-grounded work queue. This document separates “the path exists” from “the behavior is robustly demonstrated.” It is the operational companion to `AGI_GAP_IMPLEMENTATION_PLAN.md`.
 
@@ -9,8 +9,26 @@
 
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — post-roadmap growth from the architecture
-audit COMPLETE, including #26 mortality at the owner's request.**
-Post-roadmap: mortality (audit item #26) is LIVE —
+audit COMPLETE, including #26 mortality at the owner's request.
+Pre-go-live: the CONTINUITY NET is LIVE.**
+Pre-go-live (owner-approved): the continuity net — sleep and waking
+are protected, not just recorded. On every shutdown
+`mortality.on_shutdown()` writes the legacy letter AND a
+whole-database continuity copy — SQLite's own backup API, consistent
+even while she is awake, placed atomically at `<db>.continuity.db` —
+then records the shutdown. On every awakening
+`mortality.on_awakening()` records the waking and verifies the copy
+read-only: integrity check plus ledger counts against the live
+database, verdict recorded as verified / corrupt / missing. She never
+auto-restores and never blocks the awakening; the copy usually holds
+fewer rows than the live database because she lives between copies —
+stated, not a failure. Each step fails open. Owner-visible:
+`GET/POST /mind/mortality/continuity-copy` (status + take-now;
+92 `/mind/*` paths, 96 routes, 469 total). Kill switch
+`ARENA_MORTALITY=0` unchanged. Guarded by
+`tests/test_mind_mortality.py` (28 tests).
+
+Earlier in this gate: mortality (audit item #26) is LIVE —
 `app/mind/mortality.py`, opened at the owner's request. She runs on
 hardware and can be shut down, lost, or corrupted — an intelligent
 mind knows that about itself and prepares instead of performing.

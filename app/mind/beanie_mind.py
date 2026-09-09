@@ -803,15 +803,18 @@ class BeanieMind:
     def _run_mortality_lifecycle(self, kind: str) -> None:
         """Post-roadmap (#26): the server's lifespan records an
         awakening at startup and a shutdown at shutdown — she sleeps
-        between lives, and the ledger remembers each one. Best-effort;
-        never fails the server."""
+        between lives, and the ledger remembers each one. Pre-go-live
+        the net is full: shutdown writes the legacy letter and a
+        whole-database continuity copy first; awakening verifies the
+        copy and records the verdict. Best-effort; never fails the
+        server."""
         if str(getattr(settings, "ARENA_MORTALITY", "1")) == "0":
             return
         try:
             if kind == "shutdown":
-                self.mortality.record_shutdown()
+                self.mortality.on_shutdown()
             elif kind == "awakening":
-                self.mortality.record_awakening()
+                self.mortality.on_awakening()
         except Exception as exc:
             app_logger.warning(f"Mortality lifecycle skipped "
                                f"(non-fatal): {exc}")

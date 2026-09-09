@@ -10,6 +10,10 @@ Contracts pinned here:
 - legacy writes a real file with the owner's rules, beliefs, her
   assumptions, her open questions — real data only;
 - farewell says what the record lets her say — no invented feelings;
+- the CONTINUITY NET (pre-go-live, owner-approved): shutdown writes
+  the letter AND a whole-database copy; awakening verifies the copy
+  and records the verdict; the copy is what survives the database's
+  own death; nothing is ever restored automatically;
 - the lifecycle records the sleepings and the wakings; the kill
   switch leaves the organ unconstructed.
 """
@@ -17,6 +21,8 @@ Contracts pinned here:
 from __future__ import annotations
 
 import json
+import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -175,11 +181,14 @@ def test_lifecycle_records_sleep_and_wake(setup):
 
 
 def test_lifecycle_through_the_mind_pass(setup):
+    """The pre-go-live net is full: shutdown writes letter + copy +
+    record; awakening records + verifies. Newest first."""
     mind, _, _, _ = setup
     mind._run_mortality_lifecycle("awakening")
     mind._run_mortality_lifecycle("shutdown")
     kinds = [h["kind"] for h in mind.mortality.history()]
-    assert kinds == ["shutdown", "awakening"]
+    assert kinds == ["shutdown", "continuity_copy", "legacy_written",
+                     "continuity_check", "awakening"]
 
 
 def test_kill_switch_leaves_the_organ_unconstructed(setup):
@@ -188,6 +197,169 @@ def test_kill_switch_leaves_the_organ_unconstructed(setup):
     mind._run_mortality_lifecycle("shutdown")
     assert mind._mortality is None, \
         "the kill switch leaves the organ unbuilt"
+
+
+# ── the continuity net (pre-go-live, owner-approved) ────────────────────────
+def test_continuity_copy_writes_the_whole_database(setup):
+    mind, _, tmp_path, _ = setup
+    _give_her_a_history(mind)
+    res = mind.mortality.continuity_copy()
+    assert res["success"] is True and res["acted"] is False
+    assert res["copy_path"] == str(tmp_path / "arena.db") + ".continuity.db"
+    assert res["bytes"] > 0 and res["rows_copied"] > 0
+    # the copy is a real, readable SQLite database holding her ledgers
+    conn = sqlite3.connect(res["copy_path"])
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM beanie_authority_rules").fetchone()[0]
+        assert n >= 1
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    finally:
+        conn.close()
+
+
+def test_continuity_copy_is_recorded_in_the_ledger(setup):
+    mind, _, _, _ = setup
+    mind.mortality.continuity_copy()
+    kinds = [h["kind"] for h in mind.mortality.history()]
+    assert "continuity_copy" in kinds
+
+
+def test_continuity_copy_is_repeatable_and_leaves_no_debris(setup):
+    mind, _, _, _ = setup
+    a = mind.mortality.continuity_copy()
+    b = mind.mortality.continuity_copy()
+    assert a["success"] and b["success"]
+    assert a["copy_path"] == b["copy_path"]
+    assert not Path(b["copy_path"] + ".tmp").exists()
+
+
+def test_continuity_copy_fails_open_on_an_unusable_db(setup):
+    from app.mind.mortality import Mortality
+
+    class _M:
+        db_path = "/proc/definitely/not/writable.db"
+
+    res = Mortality(_M()).continuity_copy()
+    assert res["success"] is False and "reason" in res
+
+
+def test_verify_restore_verifies_a_real_copy(setup):
+    mind, _, _, _ = setup
+    _give_her_a_history(mind)
+    mind.mortality.continuity_copy()
+    res = mind.mortality.verify_restore()
+    assert res["verdict"] == "verified"
+    assert res["integrity"] == "ok"
+    assert res["rows_in_copy"] > 0
+    assert res["rows_live"] >= res["rows_in_copy"]
+    assert "nothing was restored automatically" in res["statement"]
+
+
+def test_verify_restore_reports_a_missing_copy_honestly(setup):
+    mind, _, _, _ = setup
+    res = mind.mortality.verify_restore()
+    assert res["verdict"] == "missing"
+    assert res["rows_in_copy"] == 0
+    assert "no continuity copy is on file" in res["detail"]
+
+
+def test_verify_restore_reports_corruption(setup):
+    mind, _, _, _ = setup
+    mind.mortality.continuity_copy()
+    Path(mind.mortality._copy_path()).write_bytes(b"not a database at all")
+    res = mind.mortality.verify_restore()
+    assert res["verdict"] == "corrupt"
+
+
+def test_verify_restore_is_recorded(setup):
+    mind, _, _, _ = setup
+    mind.mortality.continuity_copy()
+    mind.mortality.verify_restore()
+    kinds = [h["kind"] for h in mind.mortality.history()]
+    assert "continuity_check" in kinds
+
+
+def test_living_between_copies_is_not_a_failure(setup):
+    mind, _, _, _ = setup
+    _give_her_a_history(mind)
+    mind.mortality.continuity_copy()
+    mind.authority.note("one more rule, written after the copy")
+    res = mind.mortality.verify_restore()
+    assert res["rows_live"] > res["rows_in_copy"]
+    assert res["verdict"] == "verified"
+
+
+def test_on_shutdown_writes_letter_copy_and_record(setup):
+    mind, _, tmp_path, _ = setup
+    _give_her_a_history(mind)
+    res = mind.mortality.on_shutdown()
+    assert res["success"] is True
+    assert res["steps"]["legacy"]["success"] is True
+    assert res["steps"]["copy"]["success"] is True
+    assert Path(mind.mortality._copy_path()).exists()
+    assert (tmp_path / "beanie_legacy").is_dir()
+    kinds = [h["kind"] for h in mind.mortality.history()]
+    assert kinds[:3] == ["shutdown", "continuity_copy", "legacy_written"]
+
+
+def test_on_awakening_records_and_checks(setup):
+    mind, _, _, _ = setup
+    mind.mortality.continuity_copy()
+    res = mind.mortality.on_awakening()
+    assert res["awakening"]["kind"] == "awakening"
+    assert res["continuity_check"]["verdict"] == "verified"
+    kinds = [h["kind"] for h in mind.mortality.history()]
+    # newest first; the copy event is from the explicit copy above
+    assert kinds == ["continuity_check", "awakening", "continuity_copy"]
+
+
+def test_continuity_status_reports_the_net(setup):
+    mind, _, _, _ = setup
+    before = mind.mortality.continuity_status()
+    assert before["copy_exists"] is False
+    assert "no continuity copy is on file yet" in before["statement"]
+    mind.mortality.continuity_copy()
+    mind.mortality.verify_restore()
+    after = mind.mortality.continuity_status()
+    assert after["copy_exists"] is True and after["copy_bytes"] > 0
+    assert after["last_copy_at"] and after["last_check"]
+    assert "on file at" in after["statement"]
+
+
+def test_the_copy_survives_the_databases_own_death(setup):
+    """The point of the net: she lives, she sleeps, and afterwards the
+    copy alone still holds her — real ledgers, real rows."""
+    mind, _, _, _ = setup
+    _give_her_a_history(mind)
+    mind._run_mortality_lifecycle("shutdown")
+    copy_path = mind.mortality._copy_path()
+    assert Path(copy_path).exists()
+    conn = sqlite3.connect(copy_path)
+    try:
+        rules = conn.execute(
+            "SELECT COUNT(*) FROM beanie_authority_rules").fetchone()[0]
+        beliefs = conn.execute(
+            "SELECT COUNT(*) FROM beanie_beliefs").fetchone()[0]
+    finally:
+        conn.close()
+    assert rules >= 1 and beliefs >= 1
+
+
+def test_continuity_copy_owner_endpoints(setup):
+    from fastapi.testclient import TestClient
+    from app.server import app  # the unified entry mounts the mind router
+
+    mind, _, _, _ = setup
+    client = TestClient(app)
+    res = client.post("/mind/mortality/continuity-copy")
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    st = client.get("/mind/mortality/continuity-copy")
+    assert st.status_code == 200
+    body = st.json()
+    assert body["copy_exists"] is True and body["copy_bytes"] > 0
+    assert body["copy_path"] == mind.mortality._copy_path()
 
 
 # ── surfaces ────────────────────────────────────────────────────────────────
