@@ -1049,10 +1049,36 @@ now closed:
 > `POST /mind/paradigms/assume`, `POST /mind/paradigms/scan`
 > (82 `/mind/*` paths; 85 routes). Kill switch `ARENA_PARADIGMS=0`.
 > Guarded by `tests/test_mind_paradigms.py` (17 tests).
+
+> ✅ **LIVE 2026-09-09:** `app/mind/physics.py` — intuitive physics
+> (audit Domain A: "does she hold expectations about how the physical
+> world behaves — and notice when the world violates them?"). The
+> honest version for a desk-bound mind is not a rigid-body simulator;
+> it is the OLDEST physical law applied to her own record —
+> PERSISTENCE: what she observed is still so, until a recorded event
+> changes it. ``place(subject, state)`` records where the world is;
+> ``expect(subject)`` says what persistence implies RIGHT NOW, citing
+> the observation it stands on — or says plainly that physics has
+> nothing to say about what she has never seen. ``report(subject,
+> observed)`` sets the world against the expectation: match →
+> CONFIRMED; mismatch → VIOLATION with no recorded cause — physical
+> surprise, recorded exactly as it is, handed to curiosity as an open
+> unknown, and staying VISIBLE until ``explain(subject, cause)``
+> supplies the missing event. The world outranks the model: after a
+> violation the state is the observation. The door's grammar is
+> strict — placement reports ("the keys are on the hook") and
+> disappearance reports ("the keys are gone") only; anything else is
+> ignored, never guessed. Owner-visible: `GET /mind/physics`,
+> `POST /mind/physics/place`, `POST /mind/physics/report`,
+> `POST /mind/physics/explain` (86 `/mind/*` paths; 89 routes). Kill
+> switch `ARENA_PHYSICS=0`. Guarded by `tests/test_mind_physics.py`
+> (18 tests).
 >
-> Remaining audit gap (in leverage order): intuitive physics
-> (Domain A); mortality (#26) is deliberately absent unless the owner
-> asks for it.
+> With this organ every audit gap she was meant to close IS closed:
+> scrutiny (#25), false-belief theory of mind (#20), idle replay
+> (#18), stakes-based effort (#22), ontological paradigm shifts (#21),
+> and intuitive physics (Domain A) are all LIVE. Mortality (#26)
+> remains deliberately absent unless the owner asks for it.
 
 ## The development order actually used
 

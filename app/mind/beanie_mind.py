@@ -50,6 +50,7 @@ from app.mind.os_concepts import OSConceptLayer
 from app.mind.improvement import Improvement
 from app.mind.paradigms import Paradigms
 from app.mind.perception import Perception
+from app.mind.physics import IntuitivePhysics
 from app.mind.personality import Personality
 from app.mind.presence import Presence
 from app.mind.reflection import Reflection
@@ -121,6 +122,7 @@ class BeanieMind:
         self._idle_replay: Optional[IdleReplay] = None
         self._stakes: Optional[Stakes] = None
         self._paradigms: Optional[Paradigms] = None
+        self._physics: Optional[IntuitivePhysics] = None
         # Post-roadmap (#18): the door's idle clock — when did the owner
         # last enter? She dreams in the quiet BETWEEN messages.
         self._last_door_iso: Optional[str] = None
@@ -529,6 +531,19 @@ class BeanieMind:
                 self._paradigms = Paradigms(self)
             return self._paradigms
 
+    @property
+    def physics(self) -> IntuitivePhysics:
+        """Post-roadmap growth (Domain A): intuitive physics grounded
+        in her own observations — persistence holds that what she
+        observed is still so until a recorded event changes it.
+        Expectations cite their evidence; a violation with no recorded
+        cause stays VISIBLE until explained; no observation, no
+        expectation."""
+        with self._lock:
+            if self._physics is None:
+                self._physics = IntuitivePhysics(self)
+            return self._physics
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -568,6 +583,7 @@ class BeanieMind:
         self._run_authority(user_text)
         self._run_beliefs(user_text)
         self._run_paradigms(user_text)
+        self._run_physics(user_text)
         self._run_stakes(user_text)
         self._run_reflection(user_text, result)
         self._run_improvement(user_text, result)
@@ -757,6 +773,18 @@ class BeanieMind:
         except Exception as exc:
             app_logger.warning(f"Paradigms pass skipped (non-fatal): "
                                f"{exc}")
+
+    def _run_physics(self, user_text: str) -> None:
+        """Post-roadmap (Domain A): the owner's words may report where
+        the world is ('the keys are on the hook') or that it changed
+        ('the keys are gone') — strict grammar only, anything else is
+        ignored, never guessed. Best-effort; never fails the task."""
+        if str(getattr(settings, "ARENA_PHYSICS", "1")) == "0":
+            return
+        try:
+            self.physics.note(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Physics pass skipped (non-fatal): {exc}")
 
     def _run_stakes(self, user_text: str) -> None:
         """Post-roadmap (#22): effort follows stakes. Every non-empty

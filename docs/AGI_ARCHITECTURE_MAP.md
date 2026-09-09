@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 387 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 388 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -443,9 +443,20 @@ owner-directed architecture audit:
     replacement that names the change; the door scans on every pass so
     the shift happens when the evidence arrives. Kill switch
     `ARENA_PARADIGMS=0`. 17 tests in `tests/test_mind_paradigms.py`;
-    82 `/mind/*` paths (85 routes). Remaining audit gap in leverage
-    order: intuitive physics (Domain A); mortality (#26) deliberately
-    absent unless the owner asks.
+    82 `/mind/*` paths (85 routes).
+30. ✅ **Post-roadmap LIVE (2026-09-09)** — `physics.py`: intuitive
+    physics (audit Domain A) — persistence applied to her own record:
+    what she observed is still so until a recorded event changes it;
+    expectations cite their evidence; a match confirms, a mismatch
+    with no recorded cause is a VIOLATION that stays visible until
+    explained (handed to curiosity as an open unknown); the world
+    outranks the model; the door's grammar is strict — placement and
+    disappearance reports only, anything else ignored. Kill switch
+    `ARENA_PHYSICS=0`. 18 tests in `tests/test_mind_physics.py`;
+    86 `/mind/*` paths (89 routes). With this organ every audit gap
+    she was meant to close IS closed (#25, #20, #18, #22, #21,
+    Domain A); mortality (#26) remains deliberately absent unless the
+    owner asks.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

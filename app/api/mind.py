@@ -1003,3 +1003,56 @@ def mind_paradigms_scan() -> dict:
     the shift is recorded with its evidence. Describes; never
     executes."""
     return BeanieMind.get_instance().paradigms.scan()
+
+
+# ── Post-roadmap growth: intuitive physics (audit Domain A) ────────────────
+class PhysicsPlaceIn(BaseModel):
+    subject: str = Field(min_length=1, max_length=200)
+    state: str = Field(min_length=1, max_length=300)
+
+
+class PhysicsReportIn(BaseModel):
+    subject: str = Field(min_length=1, max_length=200)
+    observed: str = Field(min_length=1, max_length=300)
+
+
+class PhysicsExplainIn(BaseModel):
+    subject: str = Field(min_length=1, max_length=200)
+    cause: str = Field(min_length=1, max_length=300)
+
+
+@router.get("/mind/physics")
+def mind_physics_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """Her physical expectations and how the world has met them —
+    confirmations, violations (unexplained until a cause is on file),
+    and the states persistence currently holds."""
+    ph = BeanieMind.get_instance().physics
+    return {"success": True, **ph.stats(),
+            "stream": ph.checks(limit=limit),
+            "states": ph.snapshot()["states"][:limit]}
+
+
+@router.post("/mind/physics/place")
+def mind_physics_place(body: PhysicsPlaceIn) -> dict:
+    """Record where or how something is — persistence takes over: it
+    is still so until a recorded event says otherwise."""
+    return BeanieMind.get_instance().physics.place(body.subject, body.state)
+
+
+@router.post("/mind/physics/report")
+def mind_physics_report(body: PhysicsReportIn) -> dict:
+    """Set the observed world against the expectation: confirmed, or a
+    VIOLATION — expected here, observed otherwise, no recorded event
+    explains it. The world outranks the model; the surprise stays
+    visible until explained."""
+    return BeanieMind.get_instance().physics.report(body.subject,
+                                                    body.observed)
+
+
+@router.post("/mind/physics/explain")
+def mind_physics_explain(body: PhysicsExplainIn) -> dict:
+    """Supply the missing event: the most recent unexplained violation
+    on this subject is marked explained. Surprises are resolved on
+    file, never buried."""
+    return BeanieMind.get_instance().physics.explain(body.subject,
+                                                     body.cause)

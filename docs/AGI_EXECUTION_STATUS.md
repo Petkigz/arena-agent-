@@ -8,10 +8,33 @@
 ## Current owner-directed gate
 
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
-the full roadmap is LIVE — plus post-roadmap growth from the
-architecture audit.**
-Post-roadmap: ontological paradigm shifts (audit item #21) are LIVE —
-`app/mind/paradigms.py`. Patching the same broken rule once is
+the full roadmap is LIVE — post-roadmap growth from the architecture
+audit COMPLETE: every audit gap she was meant to close is closed.**
+Post-roadmap: intuitive physics (audit Domain A) is LIVE —
+`app/mind/physics.py`. The honest version for a desk-bound mind is not
+a rigid-body simulator; it is the OLDEST physical law applied to her
+own record — PERSISTENCE: what she observed is still so until a
+recorded event changes it. `place` records where the world is;
+`expect` says what persistence implies RIGHT NOW, citing the
+observation it stands on — or says plainly that physics has nothing to
+say about what she has never seen; `report` sets the world against the
+expectation: match → confirmed; mismatch → VIOLATION with no recorded
+cause — physical surprise, recorded exactly as it is, handed to
+curiosity as an open unknown, staying VISIBLE until `explain` supplies
+the missing event. The world outranks the model. The door's grammar is
+strict — placement and disappearance reports only; anything else is
+ignored, never guessed. Live-verified: "the keys are on the hook" →
+expectation with cited evidence → confirmed on re-report → "the keys
+are gone" → violation, unexplained=1, curiosity asked "why did 'the
+keys' change from on the hook to gone with no recorded event" → "I
+moved them to my bag" → explained, unexplained=0. Owner-visible:
+`GET /mind/physics`, `POST place / report / explain`. Kill switch
+`ARENA_PHYSICS=0`. Guarded by `tests/test_mind_physics.py` (18 tests).
+The audit's remaining open item is #26 mortality — deliberately absent
+unless the owner asks for it.
+
+Earlier in this gate: ontological paradigm shifts (audit item #21) are
+LIVE — `app/mind/paradigms.py`. Patching the same broken rule once is
 adaptation; the SECOND verified counter-example means the rule itself
 was wrong. `assume(statement)` captures universal claims from markers
 in the owner's own words ("always", "every time", "never"…) — no

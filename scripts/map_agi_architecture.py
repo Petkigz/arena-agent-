@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/physics.py": (
+        "mind/physics", "KEEP", "PHYSICS",
+        "Post-roadmap LIVE (audit Domain A): intuitive physics — "
+        "persistence applied to her own record: what she observed is "
+        "still so until a recorded event changes it; expectations cite "
+        "their evidence; a match confirms, a mismatch with no recorded "
+        "cause is a VIOLATION that stays visible until explained "
+        "(handed to curiosity as an open unknown); the world outranks "
+        "the model; the door's grammar is strict — placement and "
+        "disappearance reports only"),
     "app/mind/paradigms.py": (
         "mind/paradigms", "KEEP", "PARADIGMS",
         "Post-roadmap LIVE (audit #21): ontological paradigm shifts — "
