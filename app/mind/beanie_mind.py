@@ -50,6 +50,7 @@ from app.mind.perception import Perception
 from app.mind.personality import Personality
 from app.mind.presence import Presence
 from app.mind.reflection import Reflection
+from app.mind.scrutiny import Scrutiny
 from app.mind.social import Social
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
@@ -111,6 +112,7 @@ class BeanieMind:
         self._evolution: Optional[Evolution] = None
         self._embodiments: Optional[Embodiments] = None
         self._evaluation: Optional[Evaluation] = None
+        self._scrutiny: Optional[Scrutiny] = None
         self._presence: Optional[Presence] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
@@ -452,6 +454,19 @@ class BeanieMind:
                 self._evaluation = Evaluation(self)
             return self._evaluation
 
+    @property
+    def scrutiny(self) -> Scrutiny:
+        """Post-roadmap growth (audit #25): the devil's advocate —
+        argues the opposite case for a favored conclusion using only
+        her own ledgers (verified failures, wrong reflections, refuted
+        predictions, open gaps, admitted unknowns). Surviving scrutiny
+        is the absence of a counter-case, never proof. Doubts, never
+        acts, never vetoes."""
+        with self._lock:
+            if self._scrutiny is None:
+                self._scrutiny = Scrutiny(self)
+            return self._scrutiny
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -494,6 +509,7 @@ class BeanieMind:
         self._run_evolution(result)
         self._run_presence(result)
         self._run_embodiments(result)
+        self._run_scrutiny(user_text, result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -747,6 +763,24 @@ class BeanieMind:
         except Exception as exc:
             app_logger.warning(f"Embodiments pass skipped (non-fatal): "
                                f"{exc}")
+
+    def _run_scrutiny(self, user_text: str, result: Any) -> None:
+        """The shadow advocate: on a VERIFIED SUCCESS the favorite
+        conclusion is 'this works' — exactly when survivorship bias
+        bites, so that is when her own record argues the opposite case.
+        Failures are already doubted by the verifier. Best-effort;
+        never fails the task."""
+        if str(getattr(settings, "ARENA_SCRUTINY", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        if result.get("goal_verified") is not True \
+                or result.get("verification_unknown"):
+            return
+        try:
+            self.scrutiny.scrutinize(user_text, source="door")
+        except Exception as exc:
+            app_logger.warning(f"Scrutiny pass skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

@@ -846,3 +846,29 @@ def mind_evaluation_run() -> dict:
                 "reason": "the evaluation surface is disabled "
                           "(ARENA_EVALUATION=0)"}
     return BeanieMind.get_instance().evaluation.run_all()
+
+
+# ── Post-roadmap growth: the devil's advocate (audit #25) ──────────────────
+class ScrutinyIn(BaseModel):
+    conclusion: str = Field(min_length=1, max_length=2000)
+    source: str = "owner_surface"
+
+
+@router.get("/mind/scrutiny")
+def mind_scrutiny_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The devil's advocate: her own record arguing the opposite case of
+    her favored conclusions. The doubt ledger holds only CONTESTED
+    conclusions; surviving scrutiny is the absence of a counter-case,
+    never proof."""
+    sc = BeanieMind.get_instance().scrutiny
+    return {"success": True, **sc.stats(),
+            "doubt_list": sc.doubts(limit=limit),
+            "stream": sc.scrutinies(limit=limit)}
+
+
+@router.post("/mind/scrutiny/scrutinize")
+def mind_scrutiny_now(body: ScrutinyIn) -> dict:
+    """Point the shadow advocate at any conclusion — including her own.
+    Counter-evidence comes only from her ledgers, never invented."""
+    return BeanieMind.get_instance().scrutiny.scrutinize(
+        body.conclusion, source=body.source)

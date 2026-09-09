@@ -8,8 +8,28 @@
 ## Current owner-directed gate
 
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
-the full roadmap is LIVE.**
-Phase 24 (AGI evaluation) is LIVE: `app/mind/evaluation.py` — measure
+the full roadmap is LIVE — plus post-roadmap growth from the
+architecture audit.**
+Post-roadmap: the devil's advocate (audit item #25) is LIVE —
+`app/mind/scrutiny.py`. `scrutinize(conclusion)` argues the opposite
+case from her OWN ledgers only (verified failures, wrong reflections,
+refuted predictions, open gaps, admitted unknowns) — never invented
+counter-arguments. Any counter-evidence contests the conclusion; none
+found = survived THIS scrutiny, reported as the absence of a
+counter-case, never proof. The door runs the advocate on VERIFIED
+SUCCESSES — success against contrary history is where survivorship bias
+bites. Doubts, never acts, never vetoes. Live-verified: a conclusion
+with contrary history contested by 3 pieces of her own record; a clean
+conclusion survived honestly; the door doubted a verified success with
+contrary history. Owner-visible: `GET /mind/scrutiny`,
+`POST /mind/scrutiny/scrutinize`. Kill switch `ARENA_SCRUTINY=0`.
+Guarded by `tests/test_mind_scrutiny.py` (13 tests). Remaining audit
+gaps in leverage order: false-belief ToM (#20), idle replay (#18),
+stakes-based effort (#22), ontological paradigm shifts (#21), intuitive
+physics (Domain A); mortality (#26) deliberately absent unless the
+owner asks.
+
+Earlier in this gate: Phase 24 (AGI evaluation) is LIVE: `app/mind/evaluation.py` — measure
 GENERALIZATION, not test counts. All seven task families (A teach once
 → variation; B tutorial without hard-coded workflow; C unfamiliar error
 → investigate; D environment change → adapt; E incomplete instruction

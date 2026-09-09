@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 382 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 383 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -394,12 +394,27 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     `tests/test_mind_evaluation.py`; 69 `/mind/*` paths (72 routes)
     total.
 
-**All 24 roadmap phases are LIVE.** What remains is not a phase but
-practice: run the generalization evaluation on the owner's machine with
-the real capability manifest and a live model, feed the results back
-through reflection → improvement → evolution, and let the map's
-dispositions (the MERGE/INTEGRATE/DEMOTE backlog) be worked down as she
-grows.
+**All 24 roadmap phases are LIVE.** Growth now comes from the
+owner-directed architecture audit:
+
+25. ✅ **Post-roadmap LIVE (2026-09-09)** — `scrutiny.py`: the devil's
+    advocate (audit #25) — argues the opposite case for a favored
+    conclusion using ONLY her own ledgers (verified failures, wrong
+    reflections, refuted predictions, open gaps, admitted unknowns);
+    surviving scrutiny is the absence of a counter-case, never proof;
+    the door runs it on verified successes (survivorship bias); doubts,
+    never acts, never vetoes. Kill switch `ARENA_SCRUTINY=0`. 13 tests
+    in `tests/test_mind_scrutiny.py`; 71 `/mind/*` paths (74 routes).
+    Remaining audit gaps in leverage order: false-belief ToM (#20),
+    idle replay (#18), stakes-based effort (#22), ontological paradigm
+    shifts (#21), intuitive physics (Domain A); mortality (#26)
+    deliberately absent unless the owner asks.
+
+Beyond that, what remains is practice: run the generalization
+evaluation on the owner's machine with the real capability manifest and
+a live model, feed the results back through reflection → improvement →
+evolution → scrutiny, and let the map's dispositions (the
+MERGE/INTEGRATE/DEMOTE backlog) be worked down as she grows.
 
 ---
 

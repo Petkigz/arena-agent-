@@ -38,6 +38,7 @@ from app.mind.motivation import Motivation
 from app.mind.personality import Personality
 from app.mind.presence import Presence
 from app.mind.reflection import Reflection
+from app.mind.scrutiny import Scrutiny
 from app.mind.social import Social
 
 __all__ = [
@@ -48,5 +49,5 @@ __all__ = [
     "MediaLearning", "CuriosityEngine", "Imagination", "Embodiment",
     "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
     "Personality", "Authority", "Reflection", "Improvement", "Evolution",
-    "Presence", "Embodiments", "Evaluation",
+    "Presence", "Embodiments", "Evaluation", "Scrutiny",
 ]

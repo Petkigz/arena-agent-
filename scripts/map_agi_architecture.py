@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/scrutiny.py": (
+        "mind/scrutiny", "KEEP", "SCRUTINY",
+        "Post-roadmap LIVE (audit #25): the devil's advocate — argues "
+        "the opposite case for a favored conclusion using ONLY her own "
+        "ledgers (verified failures, wrong reflections, refuted "
+        "predictions, open gaps, admitted unknowns), never invented "
+        "counter-arguments; surviving scrutiny is the absence of a "
+        "counter-case, never proof; the door runs it on VERIFIED "
+        "successes (survivorship bias); doubts, never acts, never "
+        "vetoes"),
     "app/mind/evaluation.py": (
         "mind/evaluation", "KEEP", "EVALUATION",
         "Phase 24 LIVE: AGI evaluation — measure generalization, not "

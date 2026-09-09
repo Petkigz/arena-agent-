@@ -941,6 +941,36 @@ Create tasks Beanie has never explicitly been programmed for:
 
 Those are much more meaningful AGI measurements.
 
+## Beyond the roadmap — growth from the 2026-09-09 architecture audit
+
+After Phases 0–24 went LIVE, the owner asked for an honest audit against
+a 27-question + 5-domain general-intelligence checklist. The audit
+scored her from the actual code and surfaced the gaps. The first gap is
+now closed:
+
+> ✅ **LIVE 2026-09-09:** `app/mind/scrutiny.py` — the devil's advocate
+> (audit item #25: "a dedicated subroutine that actively tries to
+> disprove its own favorite conclusions… true intelligence doubts
+> itself"). ``scrutinize(conclusion)`` argues the OPPOSITE case using
+> only evidence from her own ledgers — verified failures, reflections
+> where the verifier called her wrong, refuted predictions, open
+> improvement gaps, admitted unknowns — never invented
+> counter-arguments. Any counter-evidence CONTESTS the conclusion; none
+> found means it survived THIS scrutiny, reported exactly as the
+> absence of a counter-case, never proof. The door runs the advocate on
+> VERIFIED SUCCESSES — success in the face of contrary history is where
+> survivorship bias bites. Doubts, never acts, never vetoes (the
+> decision belongs to the owner's authority and the verifier's word).
+> Owner-visible: `GET /mind/scrutiny`, `POST /mind/scrutiny/scrutinize`
+> (71 `/mind/*` paths; 74 routes). Kill switch `ARENA_SCRUTINY=0`.
+> Guarded by `tests/test_mind_scrutiny.py` (13 tests).
+>
+> Remaining audit gaps (in leverage order): false-belief theory of mind
+> (#20), idle replay/dream-like consolidation (#18), stakes-based
+> effort (#22), ontological paradigm shifts (#21), intuitive physics
+> (Domain A); mortality (#26) is deliberately absent unless the owner
+> asks for it.
+
 ## The development order actually used
 
 Not all 24 phases sequentially — several develop together:
