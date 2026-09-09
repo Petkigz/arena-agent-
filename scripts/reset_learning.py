@@ -131,10 +131,44 @@ KEPT_TABLES = [
 
 
 def _server_is_running(host: str = "127.0.0.1", port: int = 8000, timeout: float = 1.5) -> bool:
+    """HTTP probe — but the port is overridable (ARENA_HOST/ARENA_PORT) and
+    the responder must identify as Arena: an unrelated process answering on
+    the port must not block a legitimate reset (audit 2026-09-09)."""
+    import os
+
+    host = os.environ.get("ARENA_HOST", host)
+    try:
+        port = int(os.environ.get("ARENA_PORT", str(port)))
+    except ValueError:
+        pass
     try:
         with urllib.request.urlopen(f"http://{host}:{port}/health", timeout=timeout) as r:
-            return r.status == 200
+            if r.status != 200:
+                return False
+            try:
+                body = r.read(4096).decode("utf-8", "replace")
+            except Exception:
+                body = ""
+            return "arena-backend" in body
     except Exception:
+        return False
+
+
+# Contract with app/utils/heartbeat.py: the server touches this file every
+# 10s while it lives. Kept as a stdlib check here so the script stays
+# dependency-free and runnable from a bare interpreter.
+_HEARTBEAT_FILENAME = "server.heartbeat.json"
+_HEARTBEAT_FRESH_S = 45.0
+
+
+def _heartbeat_is_fresh(data_dir: Path) -> bool:
+    """A fresh heartbeat proves a live server owns this data dir ON ANY
+    PORT — the HTTP probe alone missed non-8000 servers (audit 2026-09-09:
+    the script could reset a database under an active server)."""
+    try:
+        mtime = (Path(data_dir) / _HEARTBEAT_FILENAME).stat().st_mtime
+        return (time.time() - mtime) < _HEARTBEAT_FRESH_S
+    except OSError:
         return False
 
 
@@ -184,6 +218,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if not db_path.exists():
         print(f"ERROR: database not found at {db_path}")
+        return 2
+
+    if not args.force and _heartbeat_is_fresh(data_dir):
+        print("ERROR: a live Arena server heartbeat is fresh in this data dir")
+        print("       (server.heartbeat.json — the server touches it every 10s,")
+        print("       on ANY port). Stop the server first, then re-run.")
+        print("       If you are sure it is stopped, re-run with --force.")
         return 2
 
     if not args.force and _server_is_running():

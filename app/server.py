@@ -282,6 +282,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app_logger.warning(f"Parked-goal recheck not scheduled: {e}")
 
+    # Live-server heartbeat (audit 2026-09-09): touch a file beside the
+    # database every 10s so filesystem tools can detect a running server
+    # on ANY port (the fixed-port HTTP probe alone could miss one, and
+    # reset_learning.py could then race a live writer). Fail-open.
+    heartbeat_task = None
+    try:
+        import asyncio as _hb_asyncio
+
+        from app.utils.heartbeat import (
+            HEARTBEAT_INTERVAL_S,
+            write_server_heartbeat,
+        )
+
+        async def _heartbeat_loop():
+            while True:
+                write_server_heartbeat()
+                await _hb_asyncio.sleep(HEARTBEAT_INTERVAL_S)
+
+        heartbeat_task = _hb_asyncio.get_running_loop().create_task(_heartbeat_loop())
+        app_logger.info("Server heartbeat started (data/server.heartbeat.json)")
+    except Exception as e:
+        app_logger.warning(f"Server heartbeat not started: {e}")
+
     # Desktop life (charter §5 ⑥): the UI opens when the server comes live.
     # Owner decision 2026-09-08: MERGE the native desktop app with the
     # server — when the server starts, the desktop window starts too. The
@@ -378,6 +401,14 @@ async def lifespan(app: FastAPI):
     yield
 
     app_logger.info("Shutting down Arena...")
+    # Stop the heartbeat and remove the file (best-effort).
+    try:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+        from app.utils.heartbeat import remove_server_heartbeat
+        remove_server_heartbeat()
+    except Exception:
+        pass
     # Post-roadmap (#26): she sleeps — the ledger remembers.
     try:
         from app.mind import BeanieMind

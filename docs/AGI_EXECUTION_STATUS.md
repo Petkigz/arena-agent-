@@ -88,6 +88,39 @@ flake, NOT from this increment (reproduced on pristine 0d730c9):
 fails under a specific 62-file subset ordering (CognitiveRuntime
 singleton leakage); it passes standalone, in the full-suite order, and
 on the owner's runs.
+Go-live hardening round 3 (owner-pasted external audit 2026-09-09, run
+against her machine with a LIVE server on :8000 — her 4 suite failures
+reproduced and root-caused): (1) RESET-SCRIPT PROTECTION IS NOW
+DATABASE-AWARE — the script detected a live server ONLY by probing
+127.0.0.1:8000/health (a server on any other port was invisible and
+could be reset under; an unrelated process on 8000 could block a
+legitimate reset). The server now touches `data/server.heartbeat.json`
+every 10s (`app/utils/heartbeat.py`, wired in the lifespan, removed at
+shutdown, kill switch `ARENA_SERVER_HEARTBEAT=0`); the script refuses
+while the heartbeat is fresh (45s window), requires Arena's own
+`arena-backend` marker in the probe response, and takes
+`ARENA_HOST`/`ARENA_PORT` overrides. Its tests are hermetic: the
+subprocess probe targets a closed free port (monkeypatch cannot cross
+the process boundary — with her real server up, three tests failed;
+with a dummy Arena on :8000 they now pass 11/11). (2) THE
+COMPETING-HYPOTHESES TEST IS ORDER-FREE — both observations score 0.9;
+the ranking tie-breaks on timestamps then a RANDOM hypothesis_id, and
+on Windows `datetime.now()` can return identical timestamps for both
+upserts, making the top candidate a coin toss (her failure; 25/25
+passes on Linux microsecond clocks). The test now pins the safety
+invariant — both candidates retained, nothing synthesized, never
+ANSWER — not which equal-score candidate ranks first. Audit claims
+verified false: no `cv2` distribution exists on PyPI (the earlier
+`pip uninstall cv2` advice is corrected) and the repo contains no
+shadowing `cv2.py`; her OpenCV breakage is a broken/conflicting
+install in her interpreter. Audit claims already shipped before it was
+written: the multi-drive re-walk loop (walk-result cache, 0d730c9) and
+stale parked-goal rechecks (follow-up supersession, 89b8a5c). Open,
+proposed as next increments: well-known-folder search scoping ('my
+documents folder' must not walk 5 drives), the media-playback
+capability contract, a local integration smoke suite beside the
+deterministic one, and honest reclassification of shape-only
+multimodal / over-mocked closed-loop / Android token tests.
 
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking

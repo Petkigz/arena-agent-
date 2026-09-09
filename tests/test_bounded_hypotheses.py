@@ -39,7 +39,16 @@ def test_competing_hypotheses_do_not_become_a_synthesized_answer():
     assert decision.belief is not None
     assert decision.belief.has_competing_hypotheses is True
     assert decision.belief.hypotheses_bounded is True
-    assert set(decision.belief.alternatives) == {"running"}
+    # Order-free on purpose: both observations carry score 0.9, and the
+    # ranking tie-breaks on timestamps then on a RANDOM hypothesis_id.
+    # On Windows, datetime.now() can return the same timestamp for both
+    # upserts (coarse clock), making the top candidate a coin toss — the
+    # old `alternatives == {"running"}` pin failed there roughly half the
+    # time (owner run 2026-09-09). The safety invariant is that BOTH
+    # incompatible candidates are retained and nothing is synthesized
+    # into an answer — not which equal-score candidate ranks first.
+    assert len(decision.belief.alternatives) == 1
+    assert set(decision.belief.alternatives) <= {"running", "stopped"}
     assert decision.action in {ReasoningAction.INVESTIGATE, ReasoningAction.DEFER}
     assert decision.action is not ReasoningAction.ANSWER
     assert "Competing hypotheses" in decision.reason

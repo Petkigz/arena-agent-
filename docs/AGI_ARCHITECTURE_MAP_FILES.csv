@@ -223,7 +223,7 @@ app/runtime/resource_manager.py,53,infrastructure/resources,KEEP,,Lightweight re
 app/scheduler/__init__.py,4,infrastructure/scheduling,KEEP,,,
 app/scheduler/scheduler.py,87,infrastructure/scheduling,KEEP,,,
 app/scheduler/self_healer.py,59,infrastructure/scheduling,KEEP,,,
-app/server.py,631,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
+app/server.py,662,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
 app/settings_store.py,66,infrastructure/config,KEEP,,Shared backend settings store (cross-platform).,
 app/skill_acquisition.py,97,learning/demonstration,INTEGRATE,,,closest thing to demonstration learning today
 app/tasks.py,145,infrastructure/persistence,KEEP,,,
@@ -315,6 +315,7 @@ app/utils/concurrency_governor.py,272,infrastructure/utils,KEEP,,"Measured, owne
 app/utils/decision_trace.py,120,evaluation/trace,KEEP,,"Decision trace: the tiniest-detail ""why"" log the owner asked for.",wired via lazy imports in llm.py
 app/utils/hardware_governor.py,274,infrastructure/utils,KEEP,,,
 app/utils/hardware_monitor.py,32,infrastructure/utils,KEEP,,,
+app/utils/heartbeat.py,59,infrastructure/utils,KEEP,,Live-server heartbeat file — filesystem-visible proof that Arena runs.,
 app/utils/logger.py,105,infrastructure/utils,KEEP,,,
 app/utils/notifier.py,22,infrastructure/utils,KEEP,,,
 app/utils/spa.py,49,infrastructure/utils,KEEP,,Shared SPA-serving helpers.,
@@ -383,7 +384,7 @@ scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that n
 scripts/map_agi_architecture.py,963,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
-scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,
+scripts/reset_learning.py,326,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,
 scripts/sync_probe.py,147,evaluation/ops,KEEP,,Two-client live sync probe against the running server.,
 scripts/train_lora.py,114,evaluation/ops,KEEP,,Train a LoRA adapter for continual learning (P2 AGI).,
 scripts/validate_os_control.py,30,evaluation/ops,KEEP,,Owner-machine OS-control validation using read-only probes and a temp workspace.,
