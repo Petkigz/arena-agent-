@@ -27,6 +27,7 @@ from app.mind.media_learning import MediaLearning
 from app.mind.curiosity import CuriosityEngine
 from app.mind.imagination import Imagination
 from app.mind.embodiment import Embodiment
+from app.mind.evolution import Evolution
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
 from app.mind.attention import Attention
@@ -43,5 +44,5 @@ __all__ = [
     "GeneralLearningEngine", "EXPERIENCE_KINDS", "DemonstrationTeaching",
     "MediaLearning", "CuriosityEngine", "Imagination", "Embodiment",
     "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
-    "Personality", "Authority", "Reflection", "Improvement",
+    "Personality", "Authority", "Reflection", "Improvement", "Evolution",
 ]

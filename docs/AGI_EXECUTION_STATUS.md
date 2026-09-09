@@ -7,8 +7,28 @@
 
 ## Current owner-directed gate
 
-**2026-09-09 — Beanie AGI roadmap active; Phases 0–20 ✅ complete.**
-Phase 20 (self-improvement) is LIVE: `app/mind/improvement.py` — the
+**2026-09-09 — Beanie AGI roadmap active; Phases 0–21 ✅ complete.**
+Phase 21 (model evolution) is LIVE: `app/mind/evolution.py` — the three
+lanes. Fast: already live at the door — reported from the real organs,
+never duplicated. Medium: the door consolidates when enough new verified
+learning accumulates, delegating to the WIRED ConsolidationCoordinator
+(conflict replay, gists from repeated verified success, calibration
+refresh) and claiming only its audited telemetry; consolidation
+APPENDS — raw experience is never deleted (the forgetting guard). Long:
+her own VERIFIED ledger becomes a training dataset (JSONL, provenance
+per row, unverified material never trains, empty ledger exports
+nothing), evaluated with deterministic sufficiency (volume floor + both
+outcome classes — arithmetic, never optimism); the optional adapter lane
+stays on the owner's GPU machine — the organ reports readiness, never a
+trained model. Live-verified: threshold-triggered consolidation;
+provenance dataset export; honest "not sufficient yet" evaluation.
+Owner-visible: `GET /mind/evolution`, `POST /mind/evolution/consolidate`,
+`POST /mind/evolution/dataset`, `POST /mind/evolution/evaluate`. Kill
+switch `ARENA_EVOLUTION=0`. Guarded by `tests/test_mind_evolution.py`
+(13 tests).
+
+Earlier in this gate: Phase 20 (self-improvement) LIVE —
+`app/mind/improvement.py` — the
 full loop: detect capability gap → investigate → design → implement →
 test → measure → retain/revert. Gaps from evidence only (the same thing
 failing verified 2+ times; a single failure is data); Phase-19 unknowns

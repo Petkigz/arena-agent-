@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 378 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 379 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-09: steps 1–20 are LIVE (Phases 1–20 complete).**
+**Status 2026-09-09: steps 1–21 are LIVE (Phases 1–21 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -337,11 +337,25 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     explicit owner-surface act. Kill switch `ARENA_IMPROVEMENT=0`.
     19 tests in `tests/test_mind_improvement.py`; 54 `/mind/*` paths
     (57 routes) total.
-21. **Open (roadmap order):** Phase 21 model evolution (fast
-    memory/world-model updates; medium skill consolidation; long dataset
-    + optional adapter training — no catastrophic forgetting), then
-    voice-first UI / one-mind desktop+Android, and M9 generalization eval
-    (P24), per the owner's sequencing.
+21. ✅ **Phase 21 LIVE (2026-09-09)** — `evolution.py`: model evolution
+    in three lanes. Fast: already live at the door — reported from the
+    real organs, never duplicated. Medium: the door consolidates when
+    enough new verified learning accumulates, delegating to the WIRED
+    `ConsolidationCoordinator` (conflict replay, gists from repeated
+    verified success, calibration refresh) and claiming only its audited
+    telemetry — appends, never deletes raw experience (the forgetting
+    guard). Long: her own VERIFIED ledger becomes a provenance dataset
+    (unverified material never trains; empty ledger exports nothing,
+    never padded) with deterministic sufficiency (volume floor + both
+    outcome classes — arithmetic, never optimism); adapter training
+    stays on the owner's GPU machine — the organ reports readiness,
+    never a trained model. Kill switch `ARENA_EVOLUTION=0`. 13 tests in
+    `tests/test_mind_evolution.py`; 58 `/mind/*` paths (61 routes) total.
+22. **Open (roadmap order):** Phase 22 voice-first Beanie (the desktop
+    feels like a companion, not a dashboard: "Yeah?" + listening state +
+    small visual presence; voice primary, text backup), then one-mind
+    desktop+Android, and M9 generalization eval (P24), per the owner's
+    sequencing.
 
 ---
 

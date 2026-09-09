@@ -450,9 +450,16 @@ OVERRIDES = {
 
     # ── LEARNING family (Phases 6-8, 21) ─────────────────────────────────
     "app/cognition/continual_learning.py": (
-        "learning/consolidation", "INTEGRATE", "", ""),
+        "learning/consolidation", "INTEGRATE", "EVOLUTION",
+        "regression-gated continual-learning cycles — long-lane material "
+        "for the Phase-21 organ app/mind/evolution.py"),
     "app/cognition/consolidation.py": (
-        "learning/consolidation", "INTEGRATE", "", ""),
+        "learning/consolidation", "INTEGRATE", "EVOLUTION",
+        "Phase 21 LIVE: the WIRED medium-lane engine — "
+        "app/mind/evolution.py delegates consolidation (conflict replay, "
+        "gists from repeated verified success, calibration refresh) to "
+        "it and claims only its audited telemetry; appends, never "
+        "deletes raw experience (the forgetting guard)"),
     "app/cognition/skill_induction.py": (
         "learning/experience", "INTEGRATE", "",
         "action sequences → skills (procedural memory feed)"),
@@ -697,6 +704,17 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/evolution.py": (
+        "mind/evolution", "KEEP", "EVOLUTION",
+        "Phase 21 LIVE: model evolution in three lanes — fast lane "
+        "reported from the live wiring (never duplicated); medium lane "
+        "delegates to the wired ConsolidationCoordinator when enough new "
+        "verified learning accumulates (appends, never deletes raw "
+        "experience — the forgetting guard); long lane exports her OWN "
+        "verified ledger as a provenance dataset with deterministic "
+        "sufficiency rules (arithmetic, never optimism) and reports "
+        "adapter readiness — training stays on the owner's GPU machine, "
+        "never claimed here"),
     "app/mind/improvement.py": (
         "mind/improvement", "KEEP", "IMPROVEMENT",
         "Phase 20 LIVE: self-improvement — detect capability gaps from "

@@ -783,6 +783,31 @@ mechanism of self-improvement, not the definition of intelligence.
 
 ## Phase 21 — Model Evolution
 
+> ✅ **LIVE 2026-09-09:** `app/mind/evolution.py` — model evolution in
+> the roadmap's three lanes, each honest about what it is. **Fast:**
+> already live at the door (learning ledger, durable memory, world
+> model, self model) — the organ REPORTS the real wiring, never
+> duplicates it. **Medium:** the door consolidates automatically once
+> enough new verified learning accumulates, delegating to the WIRED
+> `ConsolidationCoordinator` engine (conflict replay, gists from
+> repeated VERIFIED success, calibration refresh) and claiming only its
+> audited telemetry — consolidation APPENDS, raw experience is never
+> deleted (the forgetting guard). **Long:** her OWN verified ledger
+> becomes a training dataset (JSONL, provenance per row — unverified
+> material never trains the model, an empty ledger exports nothing,
+> never padded), evaluated with deterministic sufficiency rules (volume
+> floor + both outcome classes; arithmetic, never optimism); the
+> optional adapter lane (`LoraManagerTool` / `scripts/train_lora.py`)
+> stays where the roadmap puts it — training runs on the owner's GPU
+> machine, and the organ reports readiness, never a trained model.
+> Live-verified: threshold-triggered consolidation at the door; dataset
+> export with provenance; honest "not sufficient yet" evaluation.
+> Owner-visible: `GET /mind/evolution`, `POST /mind/evolution/consolidate`,
+> `POST /mind/evolution/dataset`, `POST /mind/evolution/evaluate`
+> (58 `/mind/*` paths; 61 routes). Kill switch `ARENA_EVOLUTION=0`
+> gates the door pass; the owner surface keeps working. Guarded by
+> `tests/test_mind_evolution.py` (13 tests).
+
 Only now work on: base model + memory + world model + self model + learned
 examples + personality + optional LoRA. The model itself doesn't need to be
 retrained after every interaction:

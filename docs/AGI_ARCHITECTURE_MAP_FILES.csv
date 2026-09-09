@@ -8,7 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
-app/api/mind.py,665,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
+app/api/mind.py,710,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -61,8 +61,8 @@ app/cognition/condition_language.py,677,mind/decision,KEEP,,The typed condition 
 app/cognition/confidence.py,30,mind/reasoning,LEGACY,,Lightweight empirical calibration of evidence-source reliability.,owner-deferred prototype (charter §5⑦); test-only
 app/cognition/confidence_calibrator.py,369,mind/reasoning,KEEP,,Phase 5B: Confidence Calibration.,
 app/cognition/consciousness_simulation.py,725,models/self,INTEGRATE,SELF,Phase 19: Consciousness Simulation,Phase 19 engine
-app/cognition/consolidation.py,353,learning/consolidation,INTEGRATE,,"Audited consolidation of conflicts, durable gists, and calibration reports.",
-app/cognition/continual_learning.py,263,learning/consolidation,INTEGRATE,,Regression-gated continual-learning cycles (F3 orchestration).,
+app/cognition/consolidation.py,353,learning/consolidation,INTEGRATE,EVOLUTION,"Audited consolidation of conflicts, durable gists, and calibration reports.","Phase 21 LIVE: the WIRED medium-lane engine — app/mind/evolution.py delegates consolidation (conflict replay, gists from repeated verified success, calibration refresh) to it and claims only its audited telemetry; appends, never deletes raw experience (the forgetting guard)"
+app/cognition/continual_learning.py,263,learning/consolidation,INTEGRATE,EVOLUTION,Regression-gated continual-learning cycles (F3 orchestration).,regression-gated continual-learning cycles — long-lane material for the Phase-21 organ app/mind/evolution.py
 app/cognition/correction_measurements.py,246,evaluation/learning,INTEGRATE,,Owner-correction telemetry kept separate from correctness and training state.,owner-correction telemetry — feeds learning-from-owner
 app/cognition/counterfactual_simulator.py,416,mind/imagination,KEEP,,Milestone 4: Counterfactual Parallel Mental Simulator Engine.,mental simulation of strategies
 app/cognition/creative_generation.py,624,mind/imagination,KEEP,,Phase 16: Creative Generation Engine,
@@ -165,7 +165,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,73,infrastructure/config,KEEP,,,
+app/config.py,74,infrastructure/config,KEEP,,,
 app/database.py,465,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,771,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
@@ -176,12 +176,13 @@ app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
-app/mind/__init__.py,47,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/__init__.py,48,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
 app/mind/attention.py,350,mind/attention,KEEP,ATTENTION,Attention — Phase 14 (Beanie AGI roadmap): M8 attention significance.,"Phase 14 LIVE (M8): the arbitrator between perception and thought — roadmap ladder from evidence on the record, repeats demoted, watermark review, one open unknown surfaced when quiet, popup-over-task advisory; decides only, never acts"
 app/mind/authority.py,406,owner-authority/policy,KEEP,AUTHORITY,"Authority — Phase 18 (Beanie AGI roadmap): the owner's authority, not","Phase 18 LIVE: the OWNER's authority — five lanes of owner-stated rules (always / ask-first / never / trusted contexts / temporary), Phase-16 boundaries seed the never lane, risk patterns decide only WHEN TO ASK (ask-first opens a typed requires_owner_approval ask, never a silent drop), answers obeyed; no system morals; authority ≠ intelligence; judges authorization, never executes"
-app/mind/beanie_mind.py,754,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/beanie_mind.py,787,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
 app/mind/curiosity.py,304,mind/curiosity,KEEP,CURIOSITY,CuriosityEngine — Phase 9 (Beanie AGI roadmap): the internal UNKNOWN,"Phase 9 LIVE: the internal UNKNOWN system — brief gaps become records, encounters compound, investigation searches memory first, resolution paths counted (knowledge/investigation/owner)"
 app/mind/embodiment.py,247,mind/motor,KEEP,EMBODIMENT,Embodiment — Phase 11 (Beanie AGI roadmap): the existing capabilities,"Phase 11 LIVE: the 184 capabilities as her motor system — concepts in, ranked pathways out (plans only, never execution); authority surfaced, motor gaps become unknowns"
+app/mind/evolution.py,410,mind/evolution,KEEP,EVOLUTION,Evolution — Phase 21 (Beanie AGI roadmap): model evolution.,"Phase 21 LIVE: model evolution in three lanes — fast lane reported from the live wiring (never duplicated); medium lane delegates to the wired ConsolidationCoordinator when enough new verified learning accumulates (appends, never deletes raw experience — the forgetting guard); long lane exports her OWN verified ledger as a provenance dataset with deterministic sufficiency rules (arithmetic, never optimism) and reports adapter readiness — training stays on the owner's GPU machine, never claimed here"
 app/mind/identity.py,201,mind/identity,KEEP,AUTHORITY,"BeanieIdentity — the ""I am Beanie"" record (MISSING item M1, Phase 1).",Phase 1 LIVE: 'I am Beanie' as persisted state (M1)
 app/mind/imagination.py,302,mind/imagination,KEEP,IMAGINATION,Imagination — Phase 10 (Beanie AGI roadmap): reasoning and imagination.,Phase 10 LIVE: simulate before acting (prediction + own verified history + open unknowns + counsel); compare prediction vs reality into a ledger + confirmed/refuted training data (M11 resolved)
 app/mind/improvement.py,578,mind/improvement,KEEP,IMPROVEMENT,Improvement — Phase 20 (Beanie AGI roadmap): self-improvement.,"Phase 20 LIVE: self-improvement — detect capability gaps from evidence only (2+ verified failures of the same thing), investigate, design a proposal (designs never execute), run the wired SelfEvolvingAgent verify-before-install mechanism as ONE mechanism claiming only its typed word, measure from NEW verified experience (success + no new failures = retained; 2+ new failures = reverted for real; else awaiting, never guessed); the door proposes, never implements — execution stays an explicit owner-surface act"
@@ -369,7 +370,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,842,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,860,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

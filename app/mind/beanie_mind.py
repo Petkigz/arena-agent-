@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 from app.config import settings
 from app.mind.curiosity import CuriosityEngine
 from app.mind.embodiment import Embodiment
+from app.mind.evolution import Evolution
 from app.mind.identity import BeanieIdentity
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
@@ -104,6 +105,7 @@ class BeanieMind:
         self._authority: Optional[Authority] = None
         self._reflection: Optional[Reflection] = None
         self._improvement: Optional[Improvement] = None
+        self._evolution: Optional[Evolution] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -392,6 +394,19 @@ class BeanieMind:
                 self._improvement = Improvement(self)
             return self._improvement
 
+    @property
+    def evolution(self) -> Evolution:
+        """Phase 21: model evolution in three lanes — fast (memory/world/
+        self updates already live at the door, reported not duplicated),
+        medium (the wired consolidation engine, appends gists/calibration,
+        never deletes raw experience — the forgetting guard), long
+        (dataset from her own verified ledger + deterministic
+        sufficiency; adapter training stays on the owner's machine)."""
+        with self._lock:
+            if self._evolution is None:
+                self._evolution = Evolution(self)
+            return self._evolution
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -431,6 +446,7 @@ class BeanieMind:
         self._run_authority(user_text)
         self._run_reflection(user_text, result)
         self._run_improvement(user_text, result)
+        self._run_evolution(result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -627,6 +643,23 @@ class BeanieMind:
             self.improvement.note_failure(user_text)
         except Exception as exc:
             app_logger.warning(f"Improvement pass skipped (non-fatal): {exc}")
+
+    def _run_evolution(self, result: Any) -> None:
+        """Phase 21: when enough new learning has accumulated (a definite
+        verifier verdict was just added), consolidate — the medium lane,
+        additive only (raw experience untouched). Best-effort; never
+        fails the task."""
+        if str(getattr(settings, "ARENA_EVOLUTION", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        verified = result.get("goal_verified")
+        if not isinstance(verified, bool) or result.get("verification_unknown"):
+            return
+        try:
+            self.evolution.maybe_consolidate()
+        except Exception as exc:
+            app_logger.warning(f"Evolution pass skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

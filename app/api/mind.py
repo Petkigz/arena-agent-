@@ -663,3 +663,48 @@ def mind_improvement_measure(body: ImprovementIdIn) -> dict:
     new failures = retained; 2+ new failures = reverted for real; anything
     less = awaiting evidence, never guessed."""
     return BeanieMind.get_instance().improvement.measure(body.improvement_id)
+
+
+# ── Phase 21: model evolution ──────────────────────────────────────────────
+class EvolutionConsolidateIn(BaseModel):
+    max_tasks: int = Field(default=50, ge=1, le=100)
+
+
+class EvolutionDatasetIn(BaseModel):
+    limit: int = Field(default=1000, ge=1, le=10000)
+
+
+@router.get("/mind/evolution")
+def mind_evolution_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """Model evolution in three lanes: fast (memory/world/self updates
+    already live at the door), medium (consolidation — appends, never
+    deletes raw experience), long (dataset from her own verified ledger +
+    sufficiency evaluation; adapter training stays on the owner's
+    machine)."""
+    evo = BeanieMind.get_instance().evolution
+    return {"success": True, **evo.stats(), "fast": evo.fast_state(),
+            "adapter": evo.adapter_status(), "runs": evo.runs(limit=limit)}
+
+
+@router.post("/mind/evolution/consolidate")
+def mind_evolution_consolidate(body: EvolutionConsolidateIn) -> dict:
+    """Run the medium lane now: the wired consolidation engine (conflict
+    replay, gists from repeated verified success, calibration refresh).
+    Its telemetry is reported verbatim; raw experience is never
+    deleted."""
+    return BeanieMind.get_instance().evolution.consolidate(body.max_tasks)
+
+
+@router.post("/mind/evolution/dataset")
+def mind_evolution_dataset(body: EvolutionDatasetIn) -> dict:
+    """Long lane: export her OWN verified ledger as a training dataset
+    (JSONL, provenance per row). Unverified material never trains the
+    model; an empty ledger exports nothing — never padded."""
+    return BeanieMind.get_instance().evolution.dataset(body.limit)
+
+
+@router.post("/mind/evolution/evaluate")
+def mind_evolution_evaluate() -> dict:
+    """Deterministic dataset sufficiency: volume floor + both outcome
+    classes present. Arithmetic, never optimism."""
+    return BeanieMind.get_instance().evolution.evaluate_dataset()
