@@ -42,6 +42,7 @@ from app.mind.authority import Authority
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
+from app.mind.improvement import Improvement
 from app.mind.perception import Perception
 from app.mind.personality import Personality
 from app.mind.reflection import Reflection
@@ -102,6 +103,7 @@ class BeanieMind:
         self._personality: Optional[Personality] = None
         self._authority: Optional[Authority] = None
         self._reflection: Optional[Reflection] = None
+        self._improvement: Optional[Improvement] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -378,6 +380,18 @@ class BeanieMind:
                 self._reflection = Reflection(self)
             return self._reflection
 
+    @property
+    def improvement(self) -> Improvement:
+        """Phase 20: self-improvement — detect capability gaps from
+        evidence (2+ verified failures of the same thing), investigate,
+        design a proposal, run the wired synthesis mechanism, measure
+        from later evidence, retain or revert for real. The door detects
+        and proposes only; implementation is an explicit surface act."""
+        with self._lock:
+            if self._improvement is None:
+                self._improvement = Improvement(self)
+            return self._improvement
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -416,6 +430,7 @@ class BeanieMind:
         self._run_personality(user_text, result)
         self._run_authority(user_text)
         self._run_reflection(user_text, result)
+        self._run_improvement(user_text, result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -594,6 +609,24 @@ class BeanieMind:
             })
         except Exception as exc:
             app_logger.warning(f"Reflection skipped (non-fatal): {exc}")
+
+    def _run_improvement(self, user_text: str, result: Any) -> None:
+        """Phase 20: a DEFINITELY-failed verified cycle may complete a
+        failure pattern — then the gap is detected and a proposal is
+        recorded. The door NEVER implements: execution stays an explicit
+        surface act under the owner's authority. Best-effort; never
+        fails the task."""
+        if str(getattr(settings, "ARENA_IMPROVEMENT", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        verified = result.get("goal_verified")
+        if verified is not False or result.get("verification_unknown"):
+            return
+        try:
+            self.improvement.note_failure(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Improvement pass skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

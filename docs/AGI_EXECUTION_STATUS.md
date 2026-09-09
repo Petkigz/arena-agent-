@@ -7,8 +7,28 @@
 
 ## Current owner-directed gate
 
-**2026-09-09 — Beanie AGI roadmap active; Phases 0–19 ✅ complete.**
-Phase 19 (self-reflection) is LIVE: `app/mind/reflection.py` — the
+**2026-09-09 — Beanie AGI roadmap active; Phases 0–20 ✅ complete.**
+Phase 20 (self-improvement) is LIVE: `app/mind/improvement.py` — the
+full loop: detect capability gap → investigate → design → implement →
+test → measure → retain/revert. Gaps from evidence only (the same thing
+failing verified 2+ times; a single failure is data); Phase-19 unknowns
+corroborate. Design records a proposal — designs never execute.
+Implementation runs the EXISTING `SelfEvolvingAgent` verify-before-install
+engine as ONE mechanism, claiming only its typed word (offline/unverified
+= honest failure, nothing installed anywhere). Measurement compares NEW
+verified experience to the baseline: success with no new failures =
+retained; 2+ new failures = reverted FOR REAL (registry entry popped,
+environment revision bumped, files removed); otherwise awaiting, never
+guessed. The door proposes when a verified failure completes a pattern;
+it never implements — execution stays an explicit surface act under the
+owner's authority. Live-verified offline: propose → honest synthesis
+failure → measurement awaits. Owner-visible: `GET /mind/improvement`,
+`POST /mind/improvement/propose`, `POST /mind/improvement/implement`,
+`POST /mind/improvement/measure`. Kill switch `ARENA_IMPROVEMENT=0`.
+Guarded by `tests/test_mind_improvement.py` (19 tests).
+
+Earlier in this gate: Phase 19 (self-reflection) LIVE —
+`app/mind/reflection.py` — the
 bridge between experience and development. After important (VERIFIED)
 experiences she answers every question the roadmap asks from evidence
 already on record — never narrated: what happened; what she believed

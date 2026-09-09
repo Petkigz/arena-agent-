@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 377 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 378 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-09: steps 1–19 are LIVE (Phases 1–19 complete).**
+**Status 2026-09-09: steps 1–20 are LIVE (Phases 1–20 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -323,10 +323,25 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     reflecting performs nothing. Kill switch `ARENA_REFLECTION=0`. 19
     tests in `tests/test_mind_reflection.py`; 50 `/mind/*` paths
     (53 routes) total.
-20. **Open (roadmap order):** Phase 20 self-improvement (detect gap →
-    investigate → design → implement → test → measure → retain/revert),
-    then model evolution / voice-first UI / one-mind desktop+Android, and
-    M9 generalization eval (P24), per the owner's sequencing.
+20. ✅ **Phase 20 LIVE (2026-09-09)** — `improvement.py`: the full
+    self-improvement loop — detect capability gaps from evidence only
+    (2+ verified failures of the same thing; a single failure is data);
+    investigate the record; design a proposal (designs never execute);
+    implement via the WIRED `SelfEvolvingAgent` verify-before-install
+    engine as ONE mechanism, claiming only its typed word (offline =
+    honest failure, nothing installed anywhere); measure from NEW
+    verified experience (success + no new failures = retained; 2+ new
+    failures = reverted for real — registry entry popped, files removed;
+    otherwise awaiting, never guessed). The door proposes when a verified
+    failure completes a pattern — it NEVER implements; execution stays an
+    explicit owner-surface act. Kill switch `ARENA_IMPROVEMENT=0`.
+    19 tests in `tests/test_mind_improvement.py`; 54 `/mind/*` paths
+    (57 routes) total.
+21. **Open (roadmap order):** Phase 21 model evolution (fast
+    memory/world-model updates; medium skill consolidation; long dataset
+    + optional adapter training — no catastrophic forgetting), then
+    voice-first UI / one-mind desktop+Android, and M9 generalization eval
+    (P24), per the owner's sequencing.
 
 ---
 

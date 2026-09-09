@@ -613,3 +613,53 @@ def mind_reflection_now(body: ReflectionIn) -> dict:
         "kind": body.kind, "content": body.content, "success": body.success,
         "goal_type": body.goal_type, "surprisal": body.surprisal,
     })
+
+
+# ── Phase 20: self-improvement ─────────────────────────────────────────────
+class ImprovementProposeIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ImprovementIdIn(BaseModel):
+    improvement_id: int = Field(ge=1)
+
+
+@router.get("/mind/improvement")
+def mind_improvement_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The self-improvement loop: capability gaps detected from evidence
+    (2+ verified failures of the same thing), proposals, attempts, and
+    measurements. The mechanism's typed word decides; nothing is claimed
+    without verification."""
+    imp = BeanieMind.get_instance().improvement
+    return {"success": True, **imp.stats(),
+            "gaps": imp.detect_gaps(),
+            "stream": imp.improvements(limit=limit)}
+
+
+@router.post("/mind/improvement/propose")
+def mind_improvement_propose(body: ImprovementProposeIn) -> dict:
+    """Investigate one candidate gap and, when the evidence shows a real
+    pattern (2+ verified failures), record the proposal. Designs never
+    execute."""
+    imp = BeanieMind.get_instance().improvement
+    evidence = imp.investigate(body.content)
+    if not evidence.get("success"):
+        return evidence
+    return imp.design({"content": body.content,
+                       "verified_failures": evidence["failure_count"]})
+
+
+@router.post("/mind/improvement/implement")
+def mind_improvement_implement(body: ImprovementIdIn) -> dict:
+    """Run the wired synthesis mechanism for a proposal. The engine's own
+    contract decides (sandbox test BEFORE install, hotload only if green);
+    success is claimed only from its typed result."""
+    return BeanieMind.get_instance().improvement.implement(body.improvement_id)
+
+
+@router.post("/mind/improvement/measure")
+def mind_improvement_measure(body: ImprovementIdIn) -> dict:
+    """Measure an attempt against NEW verified experience: success with no
+    new failures = retained; 2+ new failures = reverted for real; anything
+    less = awaiting evidence, never guessed."""
+    return BeanieMind.get_instance().improvement.measure(body.improvement_id)

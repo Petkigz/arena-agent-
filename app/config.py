@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     ARENA_PERSONALITY: str = "1"  # "0" disables Phase-17 personality evidence pass at the mind door
     ARENA_AUTHORITY: str = "1"  # "0" disables Phase-18 authority-rule extraction at the mind door
     ARENA_REFLECTION: str = "1"  # "0" disables Phase-19 reflection on verified cycles at the mind door
+    ARENA_IMPROVEMENT: str = "1"  # "0" disables Phase-20 gap detection/proposals at the mind door
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard

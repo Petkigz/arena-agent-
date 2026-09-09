@@ -749,6 +749,33 @@ remember this? This becomes the bridge between experience and development.
 
 ## Phase 20 — Self-Improvement
 
+> ✅ **LIVE 2026-09-09:** `app/mind/improvement.py` — the full loop the
+> roadmap draws: detect capability gap → investigate → design → implement
+> → test → measure → retain/revert. Detection is evidence only — the SAME
+> thing failing verified 2+ times in the learning ledger (a single
+> failure is data, not a gap); Phase-19's registered unknowns
+> corroborate. Investigation reports the record, nothing more. Design
+> records a proposal (mechanism `capability_synthesis`, hypothesis,
+> baseline failure count, measurement criterion) — designs never
+> execute. Implementation runs the EXISTING self-evolving engine
+> (`SelfEvolvingAgent`, the wired verify-before-install loop) as ONE
+> mechanism, and claims only its typed word: sandbox-tested before
+> install, hotloaded only if green; an offline model or a rejected
+> attempt is recorded as the honest failure it is. Measurement compares
+> NEW verified experience to the baseline — success with no new failures
+> = retained; 2+ new failures = reverted FOR REAL (live registry entry
+> popped, environment revision bumped, files removed); anything less =
+> awaiting evidence, never guessed. The door detects and PROPOSES when a
+> verified failure completes a pattern — it never implements; execution
+> stays an explicit surface act under the owner's authority.
+> Live-verified offline: second failure proposes; synthesis fails
+> honestly ("no usable model completion"); measurement awaits.
+> Owner-visible: `GET /mind/improvement`, `POST /mind/improvement/propose`,
+> `POST /mind/improvement/implement`, `POST /mind/improvement/measure`
+> (54 `/mind/*` paths; 57 routes). Kill switch `ARENA_IMPROVEMENT=0`
+> gates the door pass; the owner surface keeps working. Guarded by
+> `tests/test_mind_improvement.py` (19 tests).
+
 Only after the previous pieces work: detect capability gap → investigate → design
 improvement → implement → test → measure → retain/revert. The existing
 self-evolving/code-generation infrastructure can become part of this — one

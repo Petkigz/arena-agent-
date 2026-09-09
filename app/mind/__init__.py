@@ -14,6 +14,7 @@ Everything else in the repository remains something the Mind can call.
 """
 
 from app.mind.identity import BeanieIdentity
+from app.mind.improvement import Improvement
 from app.mind.state import BeanieState
 from app.mind.beanie_mind import BeanieMind, MODALITIES
 from app.mind.world_facade import WorldModelFacade, WORLD_ENTITY_TYPES
@@ -42,5 +43,5 @@ __all__ = [
     "GeneralLearningEngine", "EXPERIENCE_KINDS", "DemonstrationTeaching",
     "MediaLearning", "CuriosityEngine", "Imagination", "Embodiment",
     "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
-    "Personality", "Authority", "Reflection",
+    "Personality", "Authority", "Reflection", "Improvement",
 ]

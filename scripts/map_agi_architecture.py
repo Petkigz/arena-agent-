@@ -190,8 +190,10 @@ OVERRIDES = {
         "embodiment/action-execution", "DEMOTE", "AUTHORITY",
         "action executor (hands); must not be perceived as a brain"),
     "app/agents/self_evolving_agent.py": (
-        "learning/self-improvement", "INTEGRATE", "",
-        "Phase 20 material: one mechanism of self-improvement"),
+        "learning/self-improvement", "INTEGRATE", "IMPROVEMENT",
+        "Phase 20 LIVE: the verify-before-install synthesis engine — the "
+        "one MECHANISM that app/mind/improvement.py calls; the organ "
+        "decides, this engine executes-and-verifies"),
     "app/agents/coding_agent.py": (
         "capabilities/code", "DEMOTE", "", "task loop, thin-agent contract"),
     "app/agents/data_analysis_agent.py": (
@@ -695,6 +697,17 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/improvement.py": (
+        "mind/improvement", "KEEP", "IMPROVEMENT",
+        "Phase 20 LIVE: self-improvement — detect capability gaps from "
+        "evidence only (2+ verified failures of the same thing), "
+        "investigate, design a proposal (designs never execute), run the "
+        "wired SelfEvolvingAgent verify-before-install mechanism as ONE "
+        "mechanism claiming only its typed word, measure from NEW "
+        "verified experience (success + no new failures = retained; 2+ "
+        "new failures = reverted for real; else awaiting, never guessed); "
+        "the door proposes, never implements — execution stays an explicit "
+        "owner-surface act"),
     "app/cognition/social_cognition.py": (
         "learning/social", "INTEGRATE", "SOCIAL",
         "Phase 16 seed (mental-state/emotion/relationship engine); the "
