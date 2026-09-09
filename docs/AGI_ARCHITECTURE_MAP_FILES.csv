@@ -87,7 +87,7 @@ app/cognition/experiment_engine.py,80,mind/imagination,INTEGRATE,,Phase C: Exper
 app/cognition/functional_affect.py,271,models/self,INTEGRATE,,"Bounded functional affect telemetry, not subjective emotion.",bounded functional affect telemetry (social/emotional context)
 app/cognition/goal_decomposer.py,543,mind/decision,INTEGRATE,PLANNERS,Phase 6A: Long-Horizon Goal Decomposition.,
 app/cognition/goal_interpreter.py,1397,mind/reasoning,KEEP,,Semantic Goal & Intent Representation Layer (Goal Representation v2).,goal representation v2
-app/cognition/goal_lifecycle.py,151,mind/cognition-core,KEEP,,Goal Lifecycle & State Progression Engine.,
+app/cognition/goal_lifecycle.py,235,mind/cognition-core,KEEP,,Goal Lifecycle & State Progression Engine.,
 app/cognition/goal_replanner.py,263,mind/decision,INTEGRATE,PLANNERS,Goal Reassessment & Replanning Engine.,
 app/cognition/goal_verifier.py,873,mind/cognition-core,KEEP,,Goal Verification Engine.,
 app/cognition/guard_visibility.py,155,mind/cognition-core,KEEP,,"Guard-refusal visibility (owner vision charter §6, raw-input item).",charter §6
@@ -112,7 +112,7 @@ app/cognition/owner_charter.py,196,owner-authority/values,KEEP,,The Owner Charte
 app/cognition/owner_control.py,396,owner-authority/control-plane,KEEP,,Persistent owner control plane for action authorization.,
 app/cognition/owner_decisions.py,205,owner-authority/decisions,KEEP,,Signed owner decisions binding expected system-state changes to authority.,
 app/cognition/owner_model.py,193,models/owner,INTEGRATE,,The owner model: counted patterns from the owner's own decisions.,exists: counted patterns from owner decisions; becomes the relationship model
-app/cognition/parked_goal_recheck.py,383,mind/motivation,KEEP,MOTIVATION,Parked goals get re-checked automatically (owner live test 2026-09-08).,wired in server lifespan; Phase 15 LIVE: its parked (waiting_for_evidence) goals feed app/mind/motivation.py as the unfinished_goal evidence source
+app/cognition/parked_goal_recheck.py,413,mind/motivation,KEEP,MOTIVATION,Parked goals get re-checked automatically (owner live test 2026-09-08).,wired in server lifespan; Phase 15 LIVE: its parked (waiting_for_evidence) goals feed app/mind/motivation.py as the unfinished_goal evidence source
 app/cognition/perception.py,728,perception/environment,INTEGRATE,,Perception & Observation Collector Layer.,observation collector — post-action probes today
 app/cognition/periodic_autonomous_cycle.py,772,mind/motivation,INTEGRATE,MOTIVATION,Phase 10: Periodic Autonomous Cycle,
 app/cognition/phase0_evaluation.py,435,evaluation/learning,KEEP,,Isolated Phase 0 evaluation runner for evidence-centered behavior.,
@@ -156,7 +156,7 @@ app/cognition/structured_lessons.py,363,learning/experience,INTEGRATE,,Phase 1C:
 app/cognition/temporal_vision.py,382,perception/vision,KEEP,,Deterministic temporal object tracking across visual frames.,stream-isolated tracking
 app/cognition/tool_matcher.py,945,capabilities/registry,DEMOTE,EMBODIMENT,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; Phase 11 gives it the demoted job for real: primary capability resolver inside app/mind/embodiment.py (concepts → motor pathways)
 app/cognition/tool_registry.py,935,capabilities/registry,KEEP,,Unified Tool Capability Registry with Gate Verification & Event Emissions.,"single capability authority — called BY the mind, never as it"
-app/cognition/trace.py,345,evaluation/trace,KEEP,,Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry.,
+app/cognition/trace.py,351,evaluation/trace,KEEP,,Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry.,
 app/cognition/training_examples.py,540,learning/consolidation,KEEP,,Owner-reviewed continual-learning examples from verified outcomes.,owner-reviewed LoRA candidates
 app/cognition/uncertainty_questions.py,294,mind/cognition-core,KEEP,,Uncertainty-driven owner questions: ask instead of acting on weak evidence.,ask instead of acting on weak evidence
 app/cognition/user_state.py,297,models/owner,MERGE,OWNER,Versioned owner state with explicit provenance.,merge with owner_model
@@ -331,7 +331,7 @@ backend/api/theme_routes.py,150,communication/api,KEEP,,Theme customization.,
 backend/api/wakeword_routes.py,318,communication/api,KEEP,,Custom wake word training and management.,
 backend/chat_corrections.py,364,learning/conversation,INTEGRATE,,In-chat owner corrections.,in-chat owner corrections — Phase-7 teaching surface
 backend/main.py,20,infrastructure/entry,LEGACY,,Backward-compatible shim for the unified Arena server.,compat shim alias
-backend/message_router.py,1012,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
+backend/message_router.py,1040,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
 backend/voice/__init__.py,28,communication/voice,KEEP,,Voice pipeline for Arena.,
 backend/voice/audio_capture.py,176,communication/voice,KEEP,,Audio capture service using PyAudio.,
 backend/voice/orchestrator.py,490,communication/voice,KEEP,,"Voice pipeline orchestrator - coordinates audio capture, wake word, VAD, STT, and TTS.",

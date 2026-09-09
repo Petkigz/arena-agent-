@@ -144,7 +144,8 @@ def recheck_db(monkeypatch, tmp_path):
                 latency_ms REAL NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 goal_verified INTEGER,
-                goal_lifecycle_state TEXT
+                goal_lifecycle_state TEXT,
+                goal_park_reason TEXT
             )
             """
         )

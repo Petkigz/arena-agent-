@@ -617,13 +617,41 @@ class MessageRouter:
                 # Honest status for parked goals (live complaint: 'the task is
                 # still going on but I can't track it'). Nothing runs in the
                 # background when a goal lands in waiting_for_evidence — say
-                # so instead of leaving the owner wondering.
+                # so instead of leaving the owner wondering. Typed park
+                # reasons (audit 2026-09-09): 'waiting_for_evidence' had
+                # become a generic failure bucket; the reason says WHY it
+                # parked and whether an auto-recheck could ever help.
                 state = result.get("goal_lifecycle_state")
                 if state == "waiting_for_evidence" and "waiting_for_evidence" not in reply.lower():
-                    reply += (
-                        "\n\n[status: goal parked as waiting_for_evidence — no background "
-                        "task is running. Ask me to re-check and I'll gather evidence again.]"
-                    )
+                    try:
+                        from app.cognition.goal_lifecycle import (
+                            classify_park_reason,
+                            park_status_line,
+                        )
+                        park_reason = classify_park_reason(result)
+                        result["goal_park_reason"] = park_reason
+                        trace_id = str(result.get("trace_id") or "")
+                        if trace_id:
+                            try:
+                                from app.database import db
+                                with db._get_connection() as conn:
+                                    conn.execute(
+                                        "UPDATE cognitive_traces "
+                                        "SET goal_park_reason = ? "
+                                        "WHERE trace_id = ?",
+                                        (park_reason, trace_id),
+                                    )
+                                    conn.commit()
+                            except Exception as exc:
+                                app_logger.debug(
+                                    f"Park reason not persisted for {trace_id}: {exc}")
+                        reply += "\n\n" + park_status_line(park_reason)
+                    except Exception:
+                        reply += (
+                            "\n\n[status: goal parked as waiting_for_evidence — no "
+                            "background task is running. Ask me to re-check and "
+                            "I'll gather evidence again.]"
+                        )
                 # The helper is also used as a reply-only adapter by legacy
                 # callers that do not bind a conversation. Those callers do
                 # not have a metadata channel for the structured epistemic

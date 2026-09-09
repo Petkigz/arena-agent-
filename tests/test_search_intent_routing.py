@@ -113,21 +113,24 @@ def supersede_db(monkeypatch, tmp_path):
                 latency_ms REAL NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 goal_verified INTEGER,
-                goal_lifecycle_state TEXT
+                goal_lifecycle_state TEXT,
+                goal_park_reason TEXT
             )
             """
         )
         conn.commit()
 
-    def _insert(trace_id, session_id, text, state="waiting_for_evidence"):
+    def _insert(trace_id, session_id, text, state="waiting_for_evidence",
+                park_reason=None):
         with database_module.db._get_connection() as conn:
             conn.execute(
                 "INSERT INTO cognitive_traces (trace_id, session_id, "
                 "user_input, assistant_reply, actions_json, model_used, "
-                "latency_ms, created_at, goal_verified, goal_lifecycle_state)"
+                "latency_ms, created_at, goal_verified, goal_lifecycle_state, "
+                "goal_park_reason)"
                 " VALUES (?, ?, ?, '', '[]', 'fast', 1.0, "
-                "'2026-09-09T13:00:00+00:00', 0, ?)",
-                (trace_id, session_id, text, state),
+                "'2026-09-09T13:00:00+00:00', 0, ?, ?)",
+                (trace_id, session_id, text, state, park_reason),
             )
             conn.commit()
 

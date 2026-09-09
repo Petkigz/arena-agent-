@@ -34,6 +34,7 @@ class CognitiveTrace:
     reflection_lesson: str = ""
     goal_verified: bool = True
     goal_lifecycle_state: str = ""  # e.g. 'achieved', 'waiting_for_evidence', 'deferred'
+    goal_park_reason: str = ""  # typed park reason (goal_lifecycle.PARK_*); '' = legacy
     epistemic_presentation: Dict[str, Any] = field(default_factory=dict)
     grounding_result: Dict[str, Any] = field(default_factory=dict)
     retrieved_memories: List[Dict[str, Any]] = field(default_factory=list)
@@ -59,6 +60,7 @@ class CognitiveTrace:
         gate_decision: str = "passed",
         goal_verified: bool = True,
         goal_lifecycle_state: str = "",
+        goal_park_reason: str = "",
         epistemic_presentation: Optional[Dict[str, Any]] = None,
         grounding_result: Optional[Dict[str, Any]] = None,
     ):
@@ -71,6 +73,8 @@ class CognitiveTrace:
         self.goal_verified = goal_verified
         if goal_lifecycle_state:
             self.goal_lifecycle_state = goal_lifecycle_state
+        if goal_park_reason:
+            self.goal_park_reason = goal_park_reason
         if epistemic_presentation is not None:
             self.epistemic_presentation = dict(epistemic_presentation)
         if grounding_result is not None:
@@ -291,6 +295,7 @@ class CognitiveTrace:
                 ("reflection_lesson", "TEXT"),
                 ("goal_verified", "INTEGER"),
                 ("goal_lifecycle_state", "TEXT"),
+                ("goal_park_reason", "TEXT"),
                 ("epistemic_presentation_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("grounding_result_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("retrieved_memories_json", "TEXT NOT NULL DEFAULT '[]'"),
@@ -306,8 +311,8 @@ class CognitiveTrace:
                     cursor.execute(f"ALTER TABLE cognitive_traces ADD COLUMN {column} {ddl}")
             cursor.execute("""
                 INSERT OR REPLACE INTO cognitive_traces
-                (trace_id, session_id, user_input, ontology_revision, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, hypothesis_state_json, compute_policy_json, strategy_goal_type, strategy_action_type, resource_allocation_json, criticality_review_json, route_comparison_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trace_id, session_id, user_input, ontology_revision, assistant_reply, actions_json, model_used, latency_ms, vram_pressure, ram_pressure, attention_focus, belief_confidence, gate_decision, prediction_surprisal, reflection_lesson, goal_verified, goal_lifecycle_state, goal_park_reason, epistemic_presentation_json, grounding_result_json, retrieved_memories_json, hypothesis_state_json, compute_policy_json, strategy_goal_type, strategy_action_type, resource_allocation_json, criticality_review_json, route_comparison_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trace_id,
                 self.session_id or "default",
@@ -326,6 +331,7 @@ class CognitiveTrace:
                 self.reflection_lesson,
                 1 if self.goal_verified else 0,
                 self.goal_lifecycle_state,
+                self.goal_park_reason,
                 json.dumps(self.epistemic_presentation, default=str),
                 json.dumps(self.grounding_result, default=str),
                 json.dumps(self.retrieved_memories, default=str),

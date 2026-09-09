@@ -53,30 +53,60 @@ def _age_seconds(created_at: Any) -> float:
 
 
 def collect_parked_goals(limit: int = 5) -> List[Dict[str, Any]]:
-    """Parked (waiting_for_evidence) goals, newest first."""
-    from app.database import db
+    """Parked (waiting_for_evidence) goals, newest first.
 
+    Typed park reasons (audit 2026-09-09): only OBSERVATION_PENDING
+    goals — and legacy rows predating the taxonomy — are eligible for
+    evidence rechecks. NEEDS_CLARIFICATION, TARGET_AMBIGUOUS,
+    CAPABILITY_UNAVAILABLE, AUTHORIZATION_REQUIRED and
+    PROVIDER_UNAVAILABLE can never be fixed by re-running the chat
+    cycle; replaying it for those was the live defect (looping 'Have
+    you tried Task Manager?' on an unresolvable app name). They stay
+    parked and visible with their reason until the owner acts.
+    """
+    import sqlite3
+
+    from app.database import db
+    from app.cognition.goal_lifecycle import RECHECK_ELIGIBLE_PARK_REASONS
+
+    base_where = (
+        "WHERE goal_lifecycle_state = 'waiting_for_evidence' "
+        "AND user_input NOT LIKE '%(automatic re-check #%' "
+        "ORDER BY created_at DESC LIMIT ?")
     with db._get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT trace_id, session_id, user_input, created_at
-            FROM cognitive_traces
-            WHERE goal_lifecycle_state = 'waiting_for_evidence'
-              AND user_input NOT LIKE '%(automatic re-check #%'
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [
-        {
+        try:
+            rows = conn.execute(
+                "SELECT trace_id, session_id, user_input, created_at, "
+                f"COALESCE(goal_park_reason, '') FROM cognitive_traces {base_where}",
+                (limit * 4,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # Pre-migration database: the column is added by the trace
+            # store's additive migration on first persist.
+            rows = [
+                (*r, "") for r in conn.execute(
+                    "SELECT trace_id, session_id, user_input, created_at "
+                    f"FROM cognitive_traces {base_where}",
+                    (limit * 4,),
+                ).fetchall()
+            ]
+    goals: List[Dict[str, Any]] = []
+    for r in rows:
+        if len(goals) >= limit:
+            break
+        reason = r[4] or ""
+        if reason not in RECHECK_ELIGIBLE_PARK_REASONS:
+            app_logger.debug(
+                f"Parked goal {r[0]} skipped by auto-recheck "
+                f"({reason}: re-running cannot fix it)")
+            continue
+        goals.append({
             "trace_id": r[0],
             "conversation_id": r[1] or "desktop-chat",
             "goal": r[2] or "",
             "created_at": r[3],
-        }
-        for r in rows
-    ]
+        })
+    return goals
 
 
 def _next_due_goal(goals: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

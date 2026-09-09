@@ -146,6 +146,34 @@ evidence-only reconciliation beyond launch goals, deterministic
 app-launch routing for explicit 'open X' commands, completion-honesty
 diagnostics that name the execution-blocking reason, and a local
 integration smoke suite.
+Go-live hardening round 5 (third owner-pasted audit 2026-09-09 —
+architecture-level; its one precisely actionable finding shipped):
+'waiting_for_evidence' HAD BECOME A GENERIC FAILURE BUCKET — an
+unresolvable app name, an underspecified intent, a missing capability,
+a pending approval, and a dead model provider all parked under the
+same state, and the auto-recheck replayed the full chat cycle for
+cases re-running can never fix (looping 'Have you tried Task Manager?'
+on 'open RichST TV'). Parked goals now carry a TYPED REASON
+(`goal_park_reason`: OBSERVATION_PENDING, NEEDS_CLARIFICATION,
+TARGET_AMBIGUOUS, CAPABILITY_UNAVAILABLE, AUTHORIZATION_REQUIRED,
+PROVIDER_UNAVAILABLE — `app/cognition/goal_lifecycle.py::classify_park_reason`,
+signal-first with the honest legacy default). ONLY observation-pending
+goals — and legacy rows predating the taxonomy, which keep the bounded
+3-attempt behavior — are eligible for evidence rechecks; the others
+stay parked and visible with their reason until the owner acts. The
+lifecycle state itself is unchanged (every existing reader keeps
+working; the reason is an additive column with a pre-migration
+fallback), the owner-visible status line keeps the familiar
+'waiting_for_evidence' wording and ADDS the reason plus whether an
+auto-recheck could ever help. Guarded by
+`tests/test_park_reason_taxonomy.py` (10 tests). The audit's broader
+thesis — the tool matcher must become one input to capability
+discovery rather than the behavioral center — is directionally
+accepted and explicitly NOT a one-commit change; proposed as a gated
+program. Audit state-mapping note: VERIFIED_SUCCESS = existing
+'achieved'+goal_verified, SUPERSEDED_BY_NEWER_REQUEST = existing
+'superseded_by_followup', ABANDONED = the bounded 3-attempt honest
+close.
 
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
