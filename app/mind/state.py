@@ -211,6 +211,30 @@ class BeanieState:
             return self._room(None, None, "unavailable")
 
     def _current_goals(self) -> Dict[str, Any]:
+        # P15 carry-over, now closed: MIND-FIRST precedence. The mind's
+        # Motivation organ is the authoritative view of her goals (one
+        # cognitive authority); the runtime's CommitmentLedger stays
+        # wired as the legacy surface — shown under its own key when
+        # both are readable, used as the fallback when the mind organ
+        # cannot be read. Same pattern as the attention room.
+        motivation = getattr(self.mind, "motivation", None) \
+            if self.mind is not None else None
+        if motivation is not None:
+            data: Dict[str, Any] = {}
+            try:
+                data["priorities"] = motivation.prioritize(limit=10)
+            except Exception:
+                pass
+            try:
+                data["stats"] = motivation.stats()
+            except Exception:
+                pass
+            if data:
+                commitments = getattr(self.runtime, "commitments", None)
+                legacy = _probe(commitments)
+                if legacy:
+                    data["commitments_legacy"] = legacy
+                return self._room(motivation, data)
         commitments = getattr(self.runtime, "commitments", None)
         data = _probe(commitments)
         if data is None:

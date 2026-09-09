@@ -31,7 +31,12 @@ moved them to my bag" → explained, unexplained=0. Owner-visible:
 `GET /mind/physics`, `POST place / report / explain`. Kill switch
 `ARENA_PHYSICS=0`. Guarded by `tests/test_mind_physics.py` (18 tests).
 The audit's remaining open item is #26 mortality — deliberately absent
-unless the owner asks for it.
+unless the owner asks for it. The final P15 carry-over is also closed:
+`current_goals` in the BeanieState snapshot follows mind-first
+precedence — the Motivation organ is the authoritative goal surface,
+the CommitmentLedger stays wired beside it under `commitments_legacy`
+and remains the fallback when the mind organ cannot be read (guarded
+by `tests/test_state_goals_precedence.py`, 5 tests).
 
 Earlier in this gate: ontological paradigm shifts (audit item #21) are
 LIVE — `app/mind/paradigms.py`. Patching the same broken rule once is

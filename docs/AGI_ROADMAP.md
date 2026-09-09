@@ -1080,6 +1080,14 @@ now closed:
 > and intuitive physics (Domain A) are all LIVE. Mortality (#26)
 > remains deliberately absent unless the owner asks for it.
 
+> ✅ **P15 carry-over closed 2026-09-09:** `current_goals` in the
+> BeanieState snapshot now follows MIND-FIRST precedence — the mind's
+> Motivation organ is the authoritative goal surface (priorities +
+> stats), the runtime's CommitmentLedger stays wired beside it under
+> `commitments_legacy`, and remains the fallback when the mind organ
+> cannot be read. Same pattern as the attention room. Guarded by
+> `tests/test_state_goals_precedence.py` (5 tests).
+
 ## The development order actually used
 
 Not all 24 phases sequentially — several develop together:
