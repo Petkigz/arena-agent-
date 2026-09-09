@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 376 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 377 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–18 are LIVE (Phases 1–18 complete).**
+**Status 2026-09-09: steps 1–19 are LIVE (Phases 1–19 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -309,12 +309,24 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     authorization, never executes. Kill switch `ARENA_AUTHORITY=0`.
     17 tests in `tests/test_mind_authority.py`; 48 `/mind/*` paths
     (51 routes) total.
-19. **Open (roadmap order):** Phase 19 self-reflection (what happened?
-    why? what did I believe? was I correct? what surprised me? what did I
-    learn? should I change my model? — the bridge between experience and
-    development), then self-improvement / model evolution / voice-first
-    UI / one-mind desktop+Android, and M9 generalization eval (P24), per
-    the owner's sequencing.
+19. ✅ **Phase 19 LIVE (2026-09-09)** — `reflection.py`: the bridge
+    between experience and development. After important (VERIFIED)
+    experiences she answers — from evidence already on record, never
+    narrated — what happened; what she believed (imagination ledger or
+    honest "no simulation recorded"); was she correct (verifier's word
+    only; missing verdict stays UNKNOWN); what surprised her (refuted
+    prediction or declared surprisal); what she learned (loop's own
+    record); change model? (refuted prediction → update; a REPEATED
+    verified failure → open unknown registered with curiosity; a single
+    failure is data, not a pattern); remember? (the loop's own decision).
+    The door reflects on cycles with a definite verifier verdict only;
+    reflecting performs nothing. Kill switch `ARENA_REFLECTION=0`. 19
+    tests in `tests/test_mind_reflection.py`; 50 `/mind/*` paths
+    (53 routes) total.
+20. **Open (roadmap order):** Phase 20 self-improvement (detect gap →
+    investigate → design → implement → test → measure → retain/revert),
+    then model evolution / voice-first UI / one-mind desktop+Android, and
+    M9 generalization eval (P24), per the owner's sequencing.
 
 ---
 

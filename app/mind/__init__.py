@@ -32,6 +32,7 @@ from app.mind.attention import Attention
 from app.mind.authority import Authority
 from app.mind.motivation import Motivation
 from app.mind.personality import Personality
+from app.mind.reflection import Reflection
 from app.mind.social import Social
 
 __all__ = [
@@ -41,5 +42,5 @@ __all__ = [
     "GeneralLearningEngine", "EXPERIENCE_KINDS", "DemonstrationTeaching",
     "MediaLearning", "CuriosityEngine", "Imagination", "Embodiment",
     "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
-    "Personality", "Authority",
+    "Personality", "Authority", "Reflection",
 ]

@@ -44,6 +44,7 @@ from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
 from app.mind.perception import Perception
 from app.mind.personality import Personality
+from app.mind.reflection import Reflection
 from app.mind.social import Social
 from app.mind.self_facade import SelfModelFacade
 from app.mind.state import BeanieState
@@ -100,6 +101,7 @@ class BeanieMind:
         self._social: Optional[Social] = None
         self._personality: Optional[Personality] = None
         self._authority: Optional[Authority] = None
+        self._reflection: Optional[Reflection] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -364,6 +366,18 @@ class BeanieMind:
                 self._authority = Authority(self)
             return self._authority
 
+    @property
+    def reflection(self) -> Reflection:
+        """Phase 19: the bridge between experience and development — after
+        important (verified) experiences she asks what happened, what she
+        believed, whether she was correct, what surprised her, what she
+        learned, and whether to change her model. Evidence only; UNKNOWN
+        preserved; reflecting performs nothing."""
+        with self._lock:
+            if self._reflection is None:
+                self._reflection = Reflection(self)
+            return self._reflection
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -401,6 +415,7 @@ class BeanieMind:
         self._learn_from_cycle(user_text, modality, result)
         self._run_personality(user_text, result)
         self._run_authority(user_text)
+        self._run_reflection(user_text, result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -555,6 +570,30 @@ class BeanieMind:
             self.authority.note(user_text)
         except Exception as exc:
             app_logger.warning(f"Authority pass skipped (non-fatal): {exc}")
+
+    def _run_reflection(self, user_text: str, result: Any) -> None:
+        """Phase 19: a VERIFIED cycle is an important experience — she
+        reflects on it (what happened / believed / correct / surprised /
+        learned / change model / remember). Unverified cycles are not
+        important yet: no verdict, no reflection. Best-effort; never
+        fails the task."""
+        if str(getattr(settings, "ARENA_REFLECTION", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        verified = result.get("goal_verified")
+        if not isinstance(verified, bool) or result.get("verification_unknown"):
+            return
+        try:
+            self.reflection.reflect_on({
+                "kind": "action", "content": user_text,
+                "source": "cycle", "success": verified,
+                "outcome": str(result.get("goal_lifecycle_state") or "") or None,
+                "goal_type": str(result.get("reasoning_action") or ""),
+                "surprisal": result.get("prediction_surprisal"),
+            })
+        except Exception as exc:
+            app_logger.warning(f"Reflection skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

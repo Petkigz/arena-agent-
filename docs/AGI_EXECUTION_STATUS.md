@@ -1,14 +1,42 @@
 # Arena AGI Execution Status
 
-**Date:** 2026-09-08  
+**Date:** 2026-09-09  
 **Branch:** `arena/01a0813a-arena-agent`
 
 **Purpose:** A chronological, repository-grounded work queue. This document separates “the path exists” from “the behavior is robustly demonstrated.” It is the operational companion to `AGI_GAP_IMPLEMENTATION_PLAN.md`.
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–18 ✅ complete.**
-Phase 18 (owner authority) is LIVE: `app/mind/authority.py` — the owner's
+**2026-09-09 — Beanie AGI roadmap active; Phases 0–19 ✅ complete.**
+Phase 19 (self-reflection) is LIVE: `app/mind/reflection.py` — the
+bridge between experience and development. After important (VERIFIED)
+experiences she answers every question the roadmap asks from evidence
+already on record — never narrated: what happened; what she believed
+(imagination ledger prediction, or honest "no simulation recorded");
+whether she was correct (the verifier's word only; a missing verdict
+stays UNKNOWN, never guessed); what surprised her (refuted prediction or
+declared surprisal ≥ 0.5); what she learned (learning loop's own
+record); whether to change her model (refuted prediction → update
+expectations; a repeated verified failure → open unknown registered with
+curiosity; a single failure is data, not a pattern; verified success →
+the model holds); whether to remember this (the loop's own
+stored/rehearsed decision). The door reflects on cycles with a definite
+verifier verdict only; reflecting performs nothing (`acted: False`).
+Live-verified: success keeps the model; second verified failure of the
+same thing becomes an open unknown. Owner-visible: `GET /mind/reflection`,
+`POST /mind/reflection/reflect`. Kill switch `ARENA_REFLECTION=0`.
+Guarded by `tests/test_mind_reflection.py` (19 tests).
+
+Same commit fixes a latent, ORDER-DEPENDENT test-isolation bug (older
+than Phase 19 — reproduced at the Phase-18 commit): the round-4
+embedding-cooldown tests' fixture reset `semantic_matcher` backend state
+but not the TTL'd model-discovery miss cache, so any earlier test that
+probed the absent embedding server poisoned `_pick_embedding_model` for
+30s and the cooldown tests failed order-dependently. The fixture now
+clears the discovery cache around each test (save/restore).
+
+Earlier in this gate: Phase 18 (owner authority) LIVE —
+`app/mind/authority.py` — the owner's
 authority, not system morals. Five lanes (always_allowed / ask_first /
 never_do / trusted_context / temporary) from the owner's statements only;
 repeats compound; Phase-16 boundaries seed the never lane. Charter §2 in

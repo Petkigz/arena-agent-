@@ -259,9 +259,20 @@ def embed_env(monkeypatch):
     monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
     from app.cognition import semantic_matcher as sm
 
+    # Full module-state reset, INCLUDING the TTL'd model-discovery cache:
+    # any earlier test that probes rank_tools/semantic_scores against the
+    # (absent) embedding server caches a MISS for 30s, and the cached
+    # miss short-circuits _pick_embedding_model before the patched
+    # httpx.Client is ever called — the cooldown tests then fail
+    # order-dependently (found via the Phase-19 full suite; the bug is
+    # older than Phase 19).
+    saved_cache = dict(sm._embed_model_cache)
+    sm._embed_model_cache.clear()
     sm._backend_state["timeout_until"] = None
     sm._backend_state["current"] = None
     yield sm
+    sm._embed_model_cache.clear()
+    sm._embed_model_cache.update(saved_cache)
     sm._backend_state["timeout_until"] = None
     sm._backend_state["current"] = None
 

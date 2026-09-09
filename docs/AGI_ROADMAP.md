@@ -719,6 +719,30 @@ distinction.
 
 ## Phase 19 — Self-Reflection
 
+> ✅ **LIVE 2026-09-09:** `app/mind/reflection.py` — the bridge between
+> experience and development. After important (VERIFIED) experiences she
+> answers every question the roadmap asks, and every answer is drawn from
+> evidence already on record — never narrated: what happened; what she
+> believed (the imagination ledger's prediction for that action, or an
+> honest "no simulation recorded" — nothing invented); whether she was
+> correct (the verifier's word only — True/False, and a missing verdict
+> stays UNKNOWN, never guessed); what surprised her (a refuted prediction
+> or declared surprisal ≥ 0.5); what she learned (the learning loop's own
+> record); whether to change her model (refuted prediction → update
+> expectations; a REPEATED verified failure → registered as an open
+> unknown with curiosity, "why does this keep failing"; a single failure
+> is data, not a pattern; verified success → the model holds); and
+> whether to remember this (the learning loop's own stored/rehearsed
+> decision). The door reflects on cycles whose verifier returned a
+> definite verdict — unverified cycles are not important yet, so no
+> reflection. Reflecting performs nothing (`acted: False`). Live-verified:
+> verified success keeps the model; one failure is data; the second
+> verified failure of the same thing becomes an open unknown the mind
+> keeps working on. Owner-visible: `GET /mind/reflection`,
+> `POST /mind/reflection/reflect` (50 `/mind/*` paths; 53 routes). Kill
+> switch `ARENA_REFLECTION=0` gates the door pass; the owner surface
+> keeps working. Guarded by `tests/test_mind_reflection.py` (19 tests).
+
 After important experiences: What happened? Why? What did I believe? Was I
 correct? What surprised me? What did I learn? Should I change my model? Should I
 remember this? This becomes the bridge between experience and development.

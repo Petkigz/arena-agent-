@@ -581,3 +581,35 @@ def mind_authority_answer(body: AuthorityAnswerIn) -> dict:
     obeyed. A declined ask is the owner's decision — the only reason it
     doesn't happen."""
     return BeanieMind.get_instance().authority.answer(body.ask_id, body.allow)
+
+
+# ── Phase 19: self-reflection ──────────────────────────────────────────────
+class ReflectionIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+    kind: str = "experience"
+    success: Optional[bool] = None
+    goal_type: str = ""
+    surprisal: Optional[float] = None
+
+
+@router.get("/mind/reflection")
+def mind_reflection_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The reflection ledger: after important experiences — what happened,
+    what she believed, whether she was correct, what surprised her, what
+    she learned, and whether to change her model. Evidence only; UNKNOWN
+    preserved."""
+    r = BeanieMind.get_instance().reflection
+    return {"success": True, **r.stats(),
+            "lessons": r.lessons(limit=limit),
+            "stream": r.reflections(limit=limit)}
+
+
+@router.post("/mind/reflection/reflect")
+def mind_reflection_now(body: ReflectionIn) -> dict:
+    """Reflect on one experience now. Success must be the verifier's word
+    (True/False) or omitted — a missing verdict stays UNKNOWN, never
+    guessed."""
+    return BeanieMind.get_instance().reflection.reflect_on({
+        "kind": body.kind, "content": body.content, "success": body.success,
+        "goal_type": body.goal_type, "surprisal": body.surprisal,
+    })

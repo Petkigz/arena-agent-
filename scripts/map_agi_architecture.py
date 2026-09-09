@@ -488,10 +488,12 @@ OVERRIDES = {
         "learning/conversation", "INTEGRATE", "",
         "in-chat owner corrections — Phase-7 teaching surface"),
 
-    # ── REFLECTION cluster (Phase 19) ────────────────────────────────────
+    # ── REFLECTION cluster (Phase 19 LIVE: app/mind/reflection.py is the
+    #    authoritative reflection; these three legacy engines fold into it) ─
     "app/cognition/verified_reflection.py": (
         "mind/reflection", "MERGE", "REFLECTION",
-        "three reflection engines exist — one reflection in the Mind"),
+        "three reflection engines existed — Phase 19 made one reflection "
+        "in the Mind (app/mind/reflection.py)"),
     "app/cognition/self_reflection_engine.py": (
         "mind/reflection", "MERGE", "REFLECTION", ""),
     "app/memory/reflection_engine.py": (
@@ -548,7 +550,9 @@ OVERRIDES = {
         "infrastructure/inference", "KEEP", "", ""),
     "app/cognition/metacognitive_monitor.py": (
         "models/self", "INTEGRATE", "SELF",
-        "metacognition feeds the self model + anticipation"),
+        "introspection seed (records cognitive processes, reads "
+        "goal_verified); Phase 19's app/mind/reflection.py is the "
+        "authoritative reflection alongside it"),
 
     # ── PERCEPTION layer (Phases 11, 13) ─────────────────────────────────
     "app/cognition/perception.py": (
@@ -681,6 +685,16 @@ OVERRIDES = {
         "requires_owner_approval ask, never a silent drop), answers "
         "obeyed; no system morals; authority ≠ intelligence; judges "
         "authorization, never executes"),
+    "app/mind/reflection.py": (
+        "mind/reflection", "KEEP", "REFLECTION",
+        "Phase 19 LIVE: the bridge between experience and development — "
+        "after important (verified) experiences she answers what "
+        "happened / what she believed / was she correct (verifier's word "
+        "only, UNKNOWN preserved) / what surprised her / what she "
+        "learned / change model? (refuted prediction → update; repeated "
+        "verified failure → open unknown with curiosity) / remember? "
+        "(the loop's own decision) — every answer from evidence on "
+        "record, never narrated; reflecting performs nothing"),
     "app/cognition/social_cognition.py": (
         "learning/social", "INTEGRATE", "SOCIAL",
         "Phase 16 seed (mental-state/emotion/relationship engine); the "
