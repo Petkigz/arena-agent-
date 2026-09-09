@@ -42,7 +42,15 @@ os.environ.setdefault("ARENA_PARKED_RECHECK", "0")
 os.environ.setdefault("ARENA_AUTO_OPEN_DASHBOARD", "0")
 os.environ.setdefault("ARENA_DECISION_TRACE", "0")
 os.environ.setdefault("ARENA_SCREEN_WATCHER", "0")
-os.environ.setdefault("ARENA_ANNOUNCEMENT_GUARD", "0")
+# NOTE: ARENA_ANNOUNCEMENT_GUARD is deliberately NOT disabled here. The
+# line used to exist, but the settings loader's LPA_ prefix silently
+# ignored the bare name, so the guard was effectively ON for the whole
+# test history — and its own contract tests (hollow promises must be
+# replaced) require it ON. Since bare names now really load (config
+# naming fix, audit 2026-09-09: app/config.py::_BareNameEnvSource),
+# re-adding it would flip long-verified suite behavior. The guard is a
+# reply rewriter, not a background side-effect feature like the four
+# above.
 
 
 @pytest.fixture(autouse=True)

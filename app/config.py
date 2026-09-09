@@ -1,5 +1,34 @@
+import re as _re
 from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
+
+
+class _BareNameEnvSource(EnvSettingsSource):
+    """Accept the DOCUMENTED bare env names beside the LPA_-prefixed ones.
+
+    Audit 2026-09-09: the loader's ``env_prefix`` is ``LPA_``, so every
+    documented switch name (``ARENA_PARKED_RECHECK=0``,
+    ``MAIN_MODEL=auto``, ``AUTONOMY_MODE=off`` …) was silently ignored by
+    the settings loader — while half the codebase's kill switches read
+    ``os.environ`` directly under exactly those bare names. Two
+    incompatible conventions lived in one repo, and owner-facing
+    instructions using the bare names had no effect.
+
+    Bare names now work for the ``ARENA_*`` switches and the
+    model/autonomy knobs; GENERIC field names (``DEBUG``, ``DB_PATH``,
+    ``APP_NAME`` …) deliberately stay prefixed-only so an unrelated
+    machine env var can never hijack them. When both are set, the
+    ``LPA_`` name wins (existing deployments keep their authority).
+    """
+
+    _BARE_ALLOWED = _re.compile(
+        r"^(?:ARENA_.+|MAIN_MODEL|FAST_MODEL|CODE_MODEL.*|AUTONOMY_.+)$")
+
+    def get_field_value(self, field, field_name):
+        if not self._BARE_ALLOWED.match(field_name.upper()):
+            return None, field_name, False
+        return super().get_field_value(field, field_name)
+
 
 class Settings(BaseSettings):
     # App General Settings
@@ -82,6 +111,18 @@ class Settings(BaseSettings):
         env_file=".env",
         extra="ignore"
     )
+
+    @classmethod
+    def settings_customise_sources(cls, settings_cls, init_settings,
+                                   env_settings, dotenv_settings,
+                                   file_secret_settings):
+        return (
+            init_settings,
+            env_settings,  # LPA_-prefixed names — existing authority
+            _BareNameEnvSource(settings_cls, env_prefix=""),
+            dotenv_settings,
+            file_secret_settings,
+        )
 
 # Ensure data directories exist
 settings = Settings()

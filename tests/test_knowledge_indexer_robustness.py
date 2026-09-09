@@ -8,7 +8,6 @@ memory id), and successes return the created memory id.
 """
 import os
 
-os.environ.setdefault("ARENA_ANNOUNCEMENT_GUARD", "0")
 
 import pytest
 

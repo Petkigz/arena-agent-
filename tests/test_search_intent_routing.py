@@ -33,12 +33,25 @@ from app.cognition.parked_goal_recheck import (
 
 
 class TestInfoQueryRouting:
-    def test_weather_query_routes_to_web_search(self):
-        # The exact live failure: no control verb, must not deflect to chat.
+    def test_weather_with_city_routes_to_the_weather_tool(self):
+        # The exact live failure: no control verb, must not deflect to
+        # chat. The manifest ships a dedicated `weather` tool that takes
+        # a city (audit 2026-09-09) — a named city goes there, not to a
+        # generic web search.
         m = match_control_tool("the weather in kampala now")
         assert m is not None
-        assert m.action_type == "web_search"
-        assert m.payload.get("query") == "weather in kampala"
+        assert m.action_type == "weather"
+        assert m.payload.get("city") == "kampala"
+
+    def test_forecast_for_city_extracts_the_city(self):
+        m = match_control_tool("weather forecast for entebbe tomorrow")
+        assert m is not None and m.action_type == "weather"
+        assert m.payload.get("city") == "entebbe"
+
+    def test_cityless_weather_falls_back_to_web_search(self):
+        m = match_control_tool("any weather updates")
+        assert m is not None and m.action_type == "web_search"
+        assert "weather" in m.payload.get("query", "")
 
     def test_news_query_routes_with_filler_stripped(self):
         m = match_control_tool("what's the news today")

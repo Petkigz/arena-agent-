@@ -6,7 +6,6 @@ deterministic surfacing pass.
 """
 import os
 
-os.environ.setdefault("ARENA_ANNOUNCEMENT_GUARD", "0")
 
 import pytest
 

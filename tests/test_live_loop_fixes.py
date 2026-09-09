@@ -22,7 +22,6 @@ The owner's log showed four failures at once:
 """
 import os
 
-os.environ.setdefault("ARENA_ANNOUNCEMENT_GUARD", "0")
 
 import pytest
 

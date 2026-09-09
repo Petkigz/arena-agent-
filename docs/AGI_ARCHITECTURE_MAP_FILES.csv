@@ -154,7 +154,7 @@ app/cognition/strategic_planning.py,733,mind/decision,MERGE,PLANNERS,Phase 13: L
 app/cognition/strategy_outcomes.py,380,learning/experience,INTEGRATE,,Phase 1B: Strategy Outcome Tracking & Outcome-Influenced Selection.,
 app/cognition/structured_lessons.py,363,learning/experience,INTEGRATE,,Phase 1C: Structured Lesson Extraction & Behavior Change.,
 app/cognition/temporal_vision.py,382,perception/vision,KEEP,,Deterministic temporal object tracking across visual frames.,stream-isolated tracking
-app/cognition/tool_matcher.py,929,capabilities/registry,DEMOTE,EMBODIMENT,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; Phase 11 gives it the demoted job for real: primary capability resolver inside app/mind/embodiment.py (concepts → motor pathways)
+app/cognition/tool_matcher.py,945,capabilities/registry,DEMOTE,EMBODIMENT,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; Phase 11 gives it the demoted job for real: primary capability resolver inside app/mind/embodiment.py (concepts → motor pathways)
 app/cognition/tool_registry.py,935,capabilities/registry,KEEP,,Unified Tool Capability Registry with Gate Verification & Event Emissions.,"single capability authority — called BY the mind, never as it"
 app/cognition/trace.py,345,evaluation/trace,KEEP,,Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry.,
 app/cognition/training_examples.py,540,learning/consolidation,KEEP,,Owner-reviewed continual-learning examples from verified outcomes.,owner-reviewed LoRA candidates
@@ -165,7 +165,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,89,infrastructure/config,KEEP,,,
+app/config.py,130,infrastructure/config,KEEP,,,
 app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)

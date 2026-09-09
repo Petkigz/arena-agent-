@@ -583,6 +583,14 @@ _INFO_QUERY_PATTERNS = (
 )
 _INFO_QUERY_FILE_HINT = re.compile(
     r"\.(?:pdf|docx?|xlsx?|pptx?|txt|csv|mp3|mp4|avi|mkv|jpg|jpeg|png|zip|rar)\b")
+# The manifest ships a dedicated `weather` tool that takes a city — a
+# named city routes there instead of a generic web search (audit
+# 2026-09-09). Cityless weather asks still fall through to web_search.
+_WEATHER_CITY_RE = re.compile(
+    r"\b(?:weather|forecast)\s+(?:in|for|at|over)\s+"
+    r"([a-z][a-z .'-]{1,58}?)"
+    r"(?:\s+(?:now|today|tonight|right\s+now|currently|tomorrow|"
+    r"this\s+(?:week|weekend))\b|\s*$)")
 _INFO_QUERY_FILLER = re.compile(
     r"^(?:hey|hi|hello|ok|okay|so|please|tell\s+me|can\s+you\s+tell\s+me|"
     r"do\s+you\s+know|what\s+is|what's|whats|i\s+want\s+to\s+know)\s+", re.I)
@@ -617,6 +625,14 @@ def _match_info_query(text: str) -> Optional[ToolMatch]:
         return None  # a control verb means the richer normal path decides
     if not any(p.search(text) for p in _INFO_QUERY_PATTERNS):
         return None
+    city = _WEATHER_CITY_RE.search(text)
+    if city:
+        city_name = city.group(1).strip().rstrip("?!. ")
+        if 2 <= len(city_name) <= 60:
+            return ToolMatch(
+                action_type="weather", score=4.0,
+                payload={"city": city_name},
+                matched_terms=("info_query", "weather"))
     query = _clean_info_query(text)
     if len(query) < 4:
         return None

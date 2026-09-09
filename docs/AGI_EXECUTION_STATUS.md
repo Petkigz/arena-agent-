@@ -121,6 +121,31 @@ documents folder' must not walk 5 drives), the media-playback
 capability contract, a local integration smoke suite beside the
 deterministic one, and honest reclassification of shape-only
 multimodal / over-mocked closed-loop / Android token tests.
+Go-live hardening round 4 (second owner-pasted audit 2026-09-09 — its
+headline finding verified TRUE and fixed): THE CONFIG LOADER'S
+`env_prefix` IS `LPA_`, so every documented bare switch name
+(`ARENA_PARKED_RECHECK=0`, `MAIN_MODEL=auto`, `AUTONOMY_MODE=off`, …)
+was silently ignored by pydantic settings while half the codebase's
+kill switches read `os.environ` directly under those same bare names —
+two incompatible conventions, and owner-facing instructions (including
+this repo's own earlier guidance) had no effect. Fixed at the loader:
+a second env source accepts bare names for the `ARENA_*` switches and
+the model/autonomy knobs (`MAIN_MODEL`, `FAST_MODEL`, `CODE_MODEL*`,
+`AUTONOMY_*`); `LPA_` wins when both are set; generic fields (`DEBUG`,
+`DB_PATH`, `APP_NAME`, …) stay prefixed-only so stray machine env vars
+cannot hijack them (`app/config.py::_BareNameEnvSource`, pinned by
+`tests/test_config_env_naming.py`, 6 tests). Same audit: the manifest's
+dedicated `weather` tool (takes a city) now wins over generic
+web_search when a city is named ('the weather in kampala now' →
+`weather{city: 'kampala'}`); cityless weather asks still fall through
+to web_search (`tests/test_search_intent_routing.py`, now 19 tests).
+Audit claims verified but deliberately NOT changed this round (each
+proposed as its own increment): persisted recheck-marker pollution in
+old rows (the live strip already prevents NEW pollution), recheck
+evidence-only reconciliation beyond launch goals, deterministic
+app-launch routing for explicit 'open X' commands, completion-honesty
+diagnostics that name the execution-blocking reason, and a local
+integration smoke suite.
 
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
