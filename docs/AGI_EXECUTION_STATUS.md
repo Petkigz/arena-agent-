@@ -7,8 +7,29 @@
 
 ## Current owner-directed gate
 
-**2026-09-09 — Beanie AGI roadmap active; Phases 0–22 ✅ complete.**
-Phase 22 (voice-first Beanie) is LIVE: `app/mind/presence.py` — the
+**2026-09-09 — Beanie AGI roadmap active; Phases 0–23 ✅ complete.**
+Phase 23 (desktop + Android as embodiments) is LIVE:
+`app/mind/embodiments.py` — the bodies of the one mind. Bodies announce
+themselves (fixed vocabulary desktop/android/web — unknown kinds
+refused, never invented; re-announce updates, never duplicates) and are
+presence points of the ONE mind, never separate assistants. Aliveness
+is DERIVED from heartbeats against a TTL — never assumed.
+`broadcast_presence` sends the SAME event to every alive body (one
+mind, one message; silent bodies skipped and said so, deliveries never
+faked); bodies pull their queue and acknowledge delivery themselves.
+`note_execution` records WHICH body's hands acted — hands, never
+brains. The device-pairing registry stays wired as the transport-level
+pairing layer. The door broadcasts the settled presence state to every
+alive body after a verified cycle — background presence, one continuous
+conversation. Live-verified: desktop + android both hear the same
+verified-success state and acknowledge; a rewound heartbeat makes a
+body silent and the next broadcast skips it honestly. Owner-visible:
+`GET /mind/embodiments`, `POST announce / heartbeat / acknowledge /
+execution`, `GET events`. Kill switch `ARENA_EMBODIMENTS=0`. Guarded by
+`tests/test_mind_embodiments.py` (14 tests).
+
+Earlier in this gate: Phase 22 (voice-first Beanie) LIVE —
+`app/mind/presence.py` — the
 presence vocabulary is the design system's own state machine
 (design/tokens.json → beanie.states); states outside it are refused,
 never invented; idle with no activity is honest, not a mask. The

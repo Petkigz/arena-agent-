@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 380 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 381 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-09: steps 1–22 are LIVE (Phases 1–22 complete).**
+**Status 2026-09-09: steps 1–23 are LIVE (Phases 1–23 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -365,11 +365,24 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     orchestrator) stays wired as a callable — one typed door, one
     continuous conversation. Kill switch `ARENA_PRESENCE=0`. 15 tests in
     `tests/test_mind_presence.py`; 61 `/mind/*` paths (64 routes) total.
-23. **Open (roadmap order):** Phase 23 desktop + Android as embodiments
-    — both clients of the SAME Mind (background presence, one continuous
-    conversation), then M9 generalization eval (P24: teach once →
-    variation; tutorial without hard-coded workflow; unfamiliar error
-    investigation), per the owner's sequencing.
+23. ✅ **Phase 23 LIVE (2026-09-09)** — `embodiments.py`: the bodies of
+    the ONE mind. Desktop and Android are BOTH clients of the same mind
+    — never two assistants. Bodies announce from a fixed vocabulary
+    (desktop/android/web — never invented; re-announce updates, never
+    duplicates); aliveness derived from heartbeats against a TTL (never
+    assumed); one presence message to every alive body (silent ones
+    skipped and said so — deliveries never faked); bodies pull their
+    queue and acknowledge delivery themselves; `note_execution` credits
+    WHICH body's hands acted (hands, never brains). The device-pairing
+    registry stays wired as the transport-level layer. The door
+    broadcasts the settled presence state after a verified cycle —
+    background presence, one continuous conversation. Kill switch
+    `ARENA_EMBODIMENTS=0`. 14 tests in `tests/test_mind_embodiments.py`;
+    67 `/mind/*` paths (70 routes) total.
+24. **Open (roadmap order):** Phase 24 AGI evaluation — stop measuring
+    primarily "how many tests pass"; measure GENERALIZATION (M9): teach
+    once → variation; tutorial without hard-coded workflow; unfamiliar
+    error investigation, per the owner's sequencing.
 
 ---
 

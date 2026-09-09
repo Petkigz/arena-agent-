@@ -749,3 +749,75 @@ def mind_presence_voice(body: PresenceVoiceIn) -> dict:
     nothing claimed)."""
     return BeanieMind.get_instance().presence.voice_turn(
         body.text, conversation_id=body.conversation_id)
+
+
+# ── Phase 23: desktop + Android as embodiments of ONE mind ─────────────────
+class EmbodimentAnnounceIn(BaseModel):
+    kind: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=200)
+    capabilities: List[str] = []
+
+
+class EmbodimentIdIn(BaseModel):
+    body_id: int = Field(ge=1)
+
+
+class EmbodimentAckIn(BaseModel):
+    body_id: int = Field(ge=1)
+    event_id: int = Field(ge=1)
+
+
+class EmbodimentExecutionIn(BaseModel):
+    body_id: int = Field(ge=1)
+    action: str = Field(min_length=1, max_length=1000)
+
+
+@router.get("/mind/embodiments")
+def mind_embodiments_stream() -> dict:
+    """The bodies of the one mind: desktop and Android are BOTH clients
+    of the SAME mind — presence points, never two assistants. Aliveness
+    is derived from heartbeats, never assumed."""
+    eb = BeanieMind.get_instance().embodiments
+    return {"success": True, **eb.stats(), "stream": eb.bodies()}
+
+
+@router.post("/mind/embodiments/announce")
+def mind_embodiments_announce(body: EmbodimentAnnounceIn) -> dict:
+    """A client announces itself as a body of the ONE mind. Kinds
+    outside the vocabulary (desktop/android/web) are refused — bodies
+    are never invented."""
+    return BeanieMind.get_instance().embodiments.announce(
+        body.kind, body.name, capabilities=body.capabilities)
+
+
+@router.post("/mind/embodiments/heartbeat")
+def mind_embodiments_heartbeat(body: EmbodimentIdIn) -> dict:
+    """The body beats — aliveness is derived from heartbeats within the
+    window, never assumed."""
+    return BeanieMind.get_instance().embodiments.heartbeat(body.body_id)
+
+
+@router.get("/mind/embodiments/events")
+def mind_embodiments_events(body_id: int = Query(ge=1),
+                            include_acknowledged: bool = False) -> dict:
+    """The body's pull queue: what the mind has said to it (presence
+    broadcasts, execution provenance)."""
+    return {"success": True, "body_id": body_id,
+            "events": BeanieMind.get_instance().embodiments.events(
+                body_id, include_acknowledged=include_acknowledged)}
+
+
+@router.post("/mind/embodiments/acknowledge")
+def mind_embodiments_acknowledge(body: EmbodimentAckIn) -> dict:
+    """The body confirms delivery — the mind's bookkeeping, not a
+    claim."""
+    return BeanieMind.get_instance().embodiments.acknowledge(
+        body.body_id, body.event_id)
+
+
+@router.post("/mind/embodiments/execution")
+def mind_embodiments_execution(body: EmbodimentExecutionIn) -> dict:
+    """Record WHICH body's hands performed an action — provenance: the
+    bodies are hands, never brains."""
+    return BeanieMind.get_instance().embodiments.note_execution(
+        body.body_id, body.action)

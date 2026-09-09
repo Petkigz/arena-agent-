@@ -704,6 +704,18 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/embodiments.py": (
+        "mind/embodiments", "KEEP", "EMBODIMENT",
+        "Phase 23 LIVE: the bodies of the ONE mind — desktop and Android "
+        "both clients of the same mind, never two assistants; bodies "
+        "announce from a fixed vocabulary (never invented), aliveness "
+        "derived from heartbeats (never assumed), one presence message "
+        "to every alive body (silent ones skipped honestly, deliveries "
+        "never faked), bodies pull + acknowledge their own queue, and "
+        "note_execution credits WHICH body's hands acted (hands, never "
+        "brains); the door broadcasts the settled presence state after a "
+        "verified cycle — background presence, one continuous "
+        "conversation"),
     "app/mind/presence.py": (
         "mind/presence", "KEEP", "PRESENCE",
         "Phase 22 LIVE: voice-first presence — the state vocabulary is "

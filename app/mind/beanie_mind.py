@@ -34,6 +34,7 @@ from app.config import settings
 from app.mind.curiosity import CuriosityEngine
 from app.mind.embodiment import Embodiment
 from app.mind.evolution import Evolution
+from app.mind.embodiments import Embodiments
 from app.mind.identity import BeanieIdentity
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
@@ -107,6 +108,7 @@ class BeanieMind:
         self._reflection: Optional[Reflection] = None
         self._improvement: Optional[Improvement] = None
         self._evolution: Optional[Evolution] = None
+        self._embodiments: Optional[Embodiments] = None
         self._presence: Optional[Presence] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
@@ -421,6 +423,18 @@ class BeanieMind:
                 self._presence = Presence(self)
             return self._presence
 
+    @property
+    def embodiments(self) -> Embodiments:
+        """Phase 23: desktop + Android as embodiments — both clients of
+        the SAME mind, never two assistants. Bodies announce themselves
+        (fixed vocabulary, never invented), aliveness is derived from
+        heartbeats, one presence message goes to every alive body, and
+        each body's hands are credited for what they do."""
+        with self._lock:
+            if self._embodiments is None:
+                self._embodiments = Embodiments(self)
+            return self._embodiments
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -462,6 +476,7 @@ class BeanieMind:
         self._run_improvement(user_text, result)
         self._run_evolution(result)
         self._run_presence(result)
+        self._run_embodiments(result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -694,6 +709,27 @@ class BeanieMind:
                 source="door")
         except Exception as exc:
             app_logger.warning(f"Presence pass skipped (non-fatal): {exc}")
+
+    def _run_embodiments(self, result: Any) -> None:
+        """Phase 23: after a cycle with a DEFINITE verdict settles the
+        presence state, broadcast it to every ALIVE body — background
+        presence, one mind, one message. No alive bodies = honest no-op.
+        Best-effort; never fails the task."""
+        if str(getattr(settings, "ARENA_EMBODIMENTS", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        verified = result.get("goal_verified")
+        if not isinstance(verified, bool) or result.get("verification_unknown"):
+            return
+        try:
+            state = "success" if verified else "error"
+            if self.embodiments.alive():
+                self.embodiments.broadcast_presence(
+                    state, detail="the verifier's word from the door")
+        except Exception as exc:
+            app_logger.warning(f"Embodiments pass skipped (non-fatal): "
+                               f"{exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

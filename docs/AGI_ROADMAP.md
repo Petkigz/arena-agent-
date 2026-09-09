@@ -867,6 +867,33 @@ Voice: primary. Text: backup. Visual UI: contextual window into the mind.
 
 ## Phase 23 — Desktop + Android as embodiments
 
+> ✅ **LIVE 2026-09-09:** `app/mind/embodiments.py` — the bodies of the
+> one mind. A body ANNOUNCES itself (kind from the fixed vocabulary
+> desktop / android / web — unknown kinds are refused, never invented;
+> re-announce updates, never duplicates) and is a presence point of the
+> ONE mind, never a separate assistant. Aliveness is DERIVED from
+> heartbeats against a TTL — active while it beats, silent when it
+> stops, never assumed. `broadcast_presence` sends the SAME presence
+> event to every alive body — one mind, one message; silent bodies are
+> skipped and said so, deliveries never faked. Bodies PULL their queue
+> (`events`) and `acknowledge` delivery themselves; the transport stays
+> whatever each client speaks. `note_execution` records WHICH body's
+> hands performed an action — provenance, because bodies are hands,
+> never brains. The device-pairing registry
+> (`backend/api/device_routes.py`) stays wired as the transport-level
+> pairing layer. The door broadcasts the settled presence state to
+> every alive body after a verified cycle — background presence, one
+> continuous conversation. Live-verified: desktop + android both hear
+> the same verified-success state and acknowledge; a rewound heartbeat
+> makes a body silent and the next broadcast skips it honestly.
+> Owner-visible: `GET /mind/embodiments`, `POST
+> /mind/embodiments/announce`, `POST /mind/embodiments/heartbeat`,
+> `GET /mind/embodiments/events`, `POST /mind/embodiments/acknowledge`,
+> `POST /mind/embodiments/execution` (67 `/mind/*` paths; 70 routes).
+> Kill switch `ARENA_EMBODIMENTS=0` gates the door pass; the owner
+> surface keeps working. Guarded by `tests/test_mind_embodiments.py`
+> (14 tests).
+
 ```
 Arena Server
       ├──────────→ Desktop Beanie ── background presence
