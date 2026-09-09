@@ -5,6 +5,7 @@ import string
 import sys
 import zipfile
 import subprocess
+from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from app.config import settings
@@ -273,6 +274,23 @@ class UniversalFilesystem:
     })
 
     _INDEX_TTL_S = 1800.0  # cache trusted for fast-path hits up to 30 min
+
+    # ── Bounded live-walk result cache (owner log 2026-09-09) ──────────────
+    # A term the index can never match exactly ('kaba' — the walker's fuzzy
+    # pass surfaces 'kanban' candidates, but lookup_exact cannot reproduce
+    # them) misses the index on EVERY query, so every repeat re-walked every
+    # root: the owner's log showed all 5 drives (~500k entries) re-walked
+    # three times per parked-goal recheck, minutes apart, for an hour. The
+    # walk that produced a result just refreshed the index; re-walking
+    # within a short window can only surface files created inside that
+    # window. Replayed results are existence-verified, so deletions still
+    # drop out. Bounded staleness (5 min) for REPEATED identical queries
+    # that already return matches; misses are never cached (a file saved
+    # right after a miss must be found by the next query), first queries
+    # and all other terms walk live, as before. Kill switch:
+    # ARENA_WALK_CACHE=0.
+    _WALK_RESULT_TTL_S = 300.0
+    _walk_result_cache: "OrderedDict[tuple, tuple]" = OrderedDict()
 
     # ------------------------------------------------------------------
     # P0 bottleneck #12: explicit search scopes. The old default
@@ -591,6 +609,49 @@ class UniversalFilesystem:
         except Exception as exc:
             app_logger.warning(f"File index fast path skipped ({exc}); using live walk.")
 
+        # ── Walk-result replay (bounded staleness — see class attrs) ───────
+        cache_enabled = os.getenv("ARENA_WALK_CACHE", "1") != "0"
+        cache_key = (query_norm, tuple(str(r) for r in roots), max_results, int(timeout_s))
+        if cache_enabled:
+            hit = cls._walk_result_cache.get(cache_key)
+            if hit is not None:
+                cached_at, cached_results = hit
+                age = _time.monotonic() - cached_at
+                if age < cls._WALK_RESULT_TTL_S:
+                    replay = [
+                        dict(m) for m in cached_results
+                        if os.path.exists(m["file_path"])
+                    ]
+                    cls._walk_result_cache.move_to_end(cache_key)
+                    app_logger.info(
+                        f"Search walk suppressed for '{query_raw}': replaying "
+                        f"{len(replay)} result(s) from the walk {age:.0f}s ago "
+                        f"(walk-result TTL {cls._WALK_RESULT_TTL_S:.0f}s)."
+                    )
+                    return replay
+                cls._walk_result_cache.pop(cache_key, None)
+
+        def _remember(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            """Store a completed walk's results so an identical query inside
+            the TTL replays instead of re-walking every drive.
+
+            Only NON-EMPTY results are cached. A cached miss would hide a
+            file created seconds after the walk from the very next repeat
+            query — violating the index's core contract ('a file created a
+            second after indexing is still found'); the owner-saving-a-file-
+            then-asking-again flow must always walk live. Repeated queries
+            that already return matches (the live 'kaba' pathology: 5 fuzzy
+            hits, re-walked 3× per recheck) are the ones worth suppressing.
+            """
+            if cache_enabled and results:
+                cls._walk_result_cache[cache_key] = (
+                    _time.monotonic(), [dict(m) for m in results],
+                )
+                cls._walk_result_cache.move_to_end(cache_key)
+                while len(cls._walk_result_cache) > 64:
+                    cls._walk_result_cache.popitem(last=False)
+            return results
+
         exact: List[Dict[str, Any]] = []
         tokened: List[Dict[str, Any]] = []
         fuzzy: List[Dict[str, Any]] = []
@@ -759,20 +820,20 @@ class UniversalFilesystem:
                 app_logger.warning(f"Error during filesystem search: {e}")
 
         if exact:
-            return exact[:max_results]
+            return _remember(exact[:max_results])
         # Token tier: a distinctive query token matched as a substring
         # ('kaba' inside 'Kaba - Song.mp3' when the contaminated phrase
         # 'kaba on system play' could never match). Most-specific token
         # hits first.
         if tokened:
             tokened.sort(key=lambda m: -len(m.get("matched_token") or ""))
-            return tokened[:max_results]
+            return _remember(tokened[:max_results])
         # No exact hits anywhere → fuzzy candidates are the answer the owner
         # needs (typo'd title). Best scores first.
         fuzzy.sort(key=lambda m: -(m.get("fuzzy_score") or 0))
         for m in fuzzy[:max_results]:
             m["fuzzy_match"] = True
-        return fuzzy[:max_results]
+        return _remember(fuzzy[:max_results])
 
     @classmethod
     def open_with_default_app(cls, file_path_str: str) -> Dict[str, Any]:

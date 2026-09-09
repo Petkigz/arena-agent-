@@ -22,6 +22,7 @@ replans, honest partial-completion reporting for ungroundable steps
 """
 
 import re
+import time
 
 import pytest
 
@@ -504,3 +505,97 @@ class TestFindAndPlayFullCycle:
         # And never a leaked tool validation error.
         assert "resize_image" not in reply
         assert "missing required parameter" not in reply
+
+
+# ── 6. Bounded walk-result cache (owner log 2026-09-09) ──────────────────────
+#
+# Her machine re-walked all 5 drives (~500k entries) three times per
+# parked-goal recheck for 'kaba': the term is never an exact substring of
+# anything ('kanban' fuzzy candidates don't satisfy lookup_exact), so the
+# index fast path missed forever and every repeat fell through to a live
+# walk. A completed walk's results are now replayed for identical queries
+# inside a short TTL instead of re-walking — existence-verified, bounded
+# staleness, ARENA_WALK_CACHE=0 disables.
+
+
+def _sentinel(existing_path):
+    return {
+        "file_name": "SENTINEL",
+        "file_path": str(existing_path),
+        "size_bytes": 0,
+        "extension": ".mp3",
+        "type": "file",
+        "match": "fuzzy",
+    }
+
+
+class TestWalkResultCache:
+    @pytest.fixture(autouse=True)
+    def _clear_walk_cache(self):
+        UniversalFilesystem._walk_result_cache.clear()
+        yield
+        UniversalFilesystem._walk_result_cache.clear()
+
+    @staticmethod
+    def _reseed(existing_path, age_s=0.0):
+        """Replace the single cached entry's results with a sentinel the
+        live walk could never produce; optionally age it."""
+        cache = UniversalFilesystem._walk_result_cache
+        assert len(cache) == 1
+        key = next(iter(cache))
+        cache[key] = (time.monotonic() - age_s, [_sentinel(existing_path)])
+        return key
+
+    def test_repeat_query_replays_instead_of_rewalking(self, media_tree):
+        # 'kabaa' is a typo — never an exact substring, so the index fast
+        # path cannot answer it (exactly the live 'kaba' pathology).
+        first = UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        assert "Kaba - Song.mp3" in {r["file_name"] for r in first}
+        self._reseed(media_tree / "music" / "Kaba - Song.mp3")
+        second = UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        # The sentinel proves the replay path answered; a live walk would
+        # have returned the real fuzzy candidates again.
+        assert [r["file_name"] for r in second] == ["SENTINEL"]
+
+    def test_replay_drops_results_deleted_since_the_walk(self, media_tree):
+        UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        self._reseed(media_tree / "music" / "Kaba - Song.mp3")
+        (media_tree / "music" / "Kaba - Song.mp3").unlink()
+        # Cached entry points at a file that no longer exists: replay must
+        # verify existence and drop it — never report a deleted file.
+        res = UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        assert all(r["file_name"] != "SENTINEL" for r in res)
+
+    def test_expired_entry_walks_live_again(self, media_tree):
+        UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        key = self._reseed(
+            media_tree / "music" / "Kaba - Song.mp3",
+            age_s=UniversalFilesystem._WALK_RESULT_TTL_S + 1,
+        )
+        res = UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        # TTL expired → the sentinel is ignored, a live walk runs, and the
+        # cache is refreshed with the walk's real results.
+        assert "Kaba - Song.mp3" in {r["file_name"] for r in res}
+        cached_at, cached_results = UniversalFilesystem._walk_result_cache[key]
+        assert time.monotonic() - cached_at < 60
+        assert all(r["file_name"] != "SENTINEL" for r in cached_results)
+
+    def test_different_term_is_not_served_from_cache(self, media_tree):
+        UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        self._reseed(media_tree / "music" / "Kaba - Song.mp3")
+        res = UniversalFilesystem.search_filesystem("another", root_dir=str(media_tree))
+        assert "Another Song.mp3" in {r["file_name"] for r in res}
+        assert all(r["file_name"] != "SENTINEL" for r in res)
+
+    def test_kill_switch_disables_store_and_replay(self, media_tree, monkeypatch):
+        monkeypatch.setenv("ARENA_WALK_CACHE", "0")
+        res = UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        assert "Kaba - Song.mp3" in {r["file_name"] for r in res}
+        assert len(UniversalFilesystem._walk_result_cache) == 0
+        # Even a hand-seeded entry is ignored while the switch is off.
+        cache = UniversalFilesystem._walk_result_cache
+        cache[("kabaa", (str(media_tree),), 20, 15)] = (
+            time.monotonic(), [_sentinel(media_tree / "music" / "Another Song.mp3")],
+        )
+        res = UniversalFilesystem.search_filesystem("kabaa", root_dir=str(media_tree))
+        assert all(r["file_name"] != "SENTINEL" for r in res)

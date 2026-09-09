@@ -45,6 +45,23 @@ operand completion now resolves bare names only. Guarded by
 `tests/test_llm_code_autoswap.py` (11 tests),
 `tests/test_conversation_delete_sync.py` (7), the desktop suites (31
 under real PySide6) and the fixed platform suites.
+Go-live hardening round 1b (same live run, second log window
+17:12–18:12 — her checkout was still pre-fix, so this window also
+CONFIRMS round 1's targets reproduced exactly): the parked 'kaba'
+goal self-closed after 3 unverified rechecks (bounded, as designed),
+but the log exposed THE SEARCH-LOOP ROOT CAUSE: a term the index can
+never match exactly ('kaba' — fuzzy 'kanban' candidates don't satisfy
+`lookup_exact`) misses the index on EVERY query, so every repeat
+re-walked all 5 drives (~500k entries, ~40s/pass) — 3 passes per
+recheck, every recheck, for an hour (and pushed the hourly cycle into
+APScheduler overlap skips). Fix: `UniversalFilesystem` now replays a
+completed walk's results for an identical query inside a bounded TTL
+(`_WALK_RESULT_TTL_S` = 300s, existence-verified on replay; misses are
+NEVER cached so a file saved right after a miss is still found by the
+next query; kill switch `ARENA_WALK_CACHE=0`). Guarded by 5 new tests
+in `tests/test_search_autonomy.py::TestWalkResultCache` (43/43 in the
+file, 203/203 across all 22 search-path suites, full suite 3827
+passed / 0 failed).
 
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
