@@ -215,6 +215,19 @@ class MessageRouter:
 
         app_logger.info(f"Processing user message in {conversation_id}: {content[:80]}...")
         message_source = str(message.get("source") or "text")
+
+        # A substantive follow-up supersedes an AMBIGUOUS parked goal in
+        # this conversation ('i wanted to search something' + 'the weather
+        # in kampala now' — owner transcript 2026-09-09), so rechecks stop
+        # chasing the placeholder. Fail-open: never blocks the message.
+        if message_source != "auto_recheck":
+            try:
+                from app.cognition.parked_goal_recheck import (
+                    supersede_ambiguous_parked_goals,
+                )
+                supersede_ambiguous_parked_goals(conversation_id, content)
+            except Exception as exc:
+                app_logger.debug(f"Parked-goal supersession hook skipped: {exc}")
         try:
             from app.utils import decision_trace
             decision_trace.record(

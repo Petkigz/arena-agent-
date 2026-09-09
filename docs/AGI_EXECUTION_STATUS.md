@@ -62,6 +62,32 @@ next query; kill switch `ARENA_WALK_CACHE=0`). Guarded by 5 new tests
 in `tests/test_search_autonomy.py::TestWalkResultCache` (43/43 in the
 file, 203/203 across all 22 search-path suites, full suite 3827
 passed / 0 failed).
+Go-live hardening round 2 (owner transcript 2026-09-09, increment
+approved with her 'go'): (1) INFO QUERIES ROUTE TO A REAL WEB SEARCH —
+'the weather in kampala now' carries no control verb, so the tool
+matcher returned None and the turn degraded into a conversational
+deflection while the parked goal 'i wanted to search something'
+web-searched the literal word 'something' (Bing, 0 results). Obvious
+web-lookup subjects (weather/forecast, news, exchange rates, stock
+prices, match scores) now route deterministically to `web_search`
+BEFORE the control-verb gate, with the utterance itself as the cleaned
+query — but never when a control verb competes ('open the weather app'
+stays a launch) or a file operand is present ('weather_report.pdf' is
+file work). Kill switch `ARENA_INFO_QUERY_SEARCH=0`. (2) A FOLLOW-UP
+SUPERSEDES ITS AMBIGUOUS PARKED GOAL — when the owner sends a
+substantive turn in a conversation holding a parked goal whose object
+is a placeholder ('something'/'stuff'/'things'), the stale vague trace
+leaves the recheck queue as `superseded_by_followup` (honest: nothing
+achieved, `goal_verified` stays 0) and the follow-up's own trace
+carries the intent; greetings, short turns, concrete goals, other
+conversations, and recheck messages are never touched. Kill switch
+`ARENA_PARKED_SUPERSESSION=0`. Guarded by
+`tests/test_search_intent_routing.py` (17 tests). Known pre-existing
+flake, NOT from this increment (reproduced on pristine 0d730c9):
+`test_observation_routing.py::test_answer_branch_uses_observation_evidence`
+fails under a specific 62-file subset ordering (CognitiveRuntime
+singleton leakage); it passes standalone, in the full-suite order, and
+on the owner's runs.
 
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking

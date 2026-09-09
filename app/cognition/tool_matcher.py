@@ -564,6 +564,67 @@ def _extract_payload(text: str, action_type: str = "") -> Dict[str, Any]:
     return payload
 
 
+# ── Info-query routing (owner transcript 2026-09-09) ────────────────────────
+# 'the weather in kampala now' carries NO control verb, so the matcher
+# returned None and the turn degraded into a conversational deflection
+# ('Have you tried searching...?') while the parked goal 'i wanted to
+# search something' web-searched the literal word 'something' (Bing, 0
+# results). Obvious web-lookup subjects route deterministically to
+# web_search with the utterance itself as the query — but ONLY when no
+# control verb competes ('open the weather app' must stay a launch) and
+# no file operand is present ('weather_report.pdf' is file work).
+# Kill switch: ARENA_INFO_QUERY_SEARCH=0.
+_INFO_QUERY_PATTERNS = (
+    re.compile(r"\bweather\b|\bforecast\b"),
+    re.compile(r"\bnews\b"),
+    re.compile(r"\bexchange\s+rate|\bforex\s+rate|\b(?:usd|ugx|eur|gbp)\s+to\s+"),
+    re.compile(r"\bstock\s+price|\bshare\s+price\b"),
+    re.compile(r"\bwho\s+won\b|\bmatch\s+score|\bfinal\s+score\b"),
+)
+_INFO_QUERY_FILE_HINT = re.compile(
+    r"\.(?:pdf|docx?|xlsx?|pptx?|txt|csv|mp3|mp4|avi|mkv|jpg|jpeg|png|zip|rar)\b")
+_INFO_QUERY_FILLER = re.compile(
+    r"^(?:hey|hi|hello|ok|okay|so|please|tell\s+me|can\s+you\s+tell\s+me|"
+    r"do\s+you\s+know|what\s+is|what's|whats|i\s+want\s+to\s+know)\s+", re.I)
+
+
+def _clean_info_query(text: str) -> str:
+    """Strip conversational filler so the query is the actual question:
+    'the weather in kampala now' -> 'weather in kampala'."""
+    q = text.strip().rstrip("?!. ")
+    prev = None
+    while prev != q:
+        prev = q
+        q = _INFO_QUERY_FILLER.sub("", q, count=1).strip()
+    q = re.sub(r"^the\s+", "", q)
+    q = re.sub(r"\s+(?:now|right\s+now|today|tonight|currently|"
+               r"at\s+the\s+moment)\s*$", "", q)
+    return q.strip() or text.strip()
+
+
+def _match_info_query(text: str) -> Optional[ToolMatch]:
+    """Deterministic web_search route for verbless obvious info queries."""
+    import os as _os
+
+    if _os.environ.get("ARENA_INFO_QUERY_SEARCH", "1") == "0":
+        return None
+    if not (6 <= len(text) <= 160):
+        return None
+    if _INFO_QUERY_FILE_HINT.search(text) or _looks_like_path(text):
+        return None
+    words = set(re.findall(r"[a-z_]+", text))
+    if words & CONTROL_VERBS:
+        return None  # a control verb means the richer normal path decides
+    if not any(p.search(text) for p in _INFO_QUERY_PATTERNS):
+        return None
+    query = _clean_info_query(text)
+    if len(query) < 4:
+        return None
+    return ToolMatch(
+        action_type="web_search", score=4.0, payload={"query": query},
+        matched_terms=("info_query",))
+
+
 def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, Any]]] = None) -> Optional[ToolMatch]:
     """Deterministic best-tool match for a control request, or None.
 
@@ -594,6 +655,12 @@ def match_control_tool(user_text: str, manifest: Optional[Dict[str, Dict[str, An
     cap_create = _match_capability_creation(text)
     if cap_create is not None:
         return cap_create
+    # Info queries ('the weather in kampala now') carry no control verb at
+    # all: route them BEFORE the verb gate, or they fall through to a
+    # conversational deflection (owner transcript 2026-09-09).
+    info_query = _match_info_query(text)
+    if info_query is not None:
+        return info_query
     if not ((words & CONTROL_VERBS) or comm_verb_with_number):
         return None
 

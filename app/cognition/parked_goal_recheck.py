@@ -138,6 +138,72 @@ def _post_to_conversation(conversation_id: str, text: str) -> None:
         app_logger.debug(f"parked recheck notify failed: {exc}")
 
 
+# ── Follow-up supersession (owner transcript 2026-09-09) ────────────────────
+# 'i wanted to search something' parked as waiting_for_evidence, and the
+# rechecks kept web-searching the literal word 'something' while the
+# owner's follow-up ('the weather in kampala now') carried the actual
+# intent in its OWN trace. When the owner follows up in a conversation
+# holding an AMBIGUOUS parked goal — one whose object is a placeholder
+# ('something', 'stuff', 'things') — the stale vague trace leaves the
+# recheck queue as 'superseded_by_followup'; the follow-up's own trace
+# carries the goal forward. Conservative by design: greetings and very
+# short turns never supersede, concrete parked goals are never touched,
+# recheck messages never supersede. Kill switch:
+# ARENA_PARKED_SUPERSESSION=0.
+_AMBIGUOUS_OBJECT_WORDS = ("something", "stuff", "things", "that thing")
+_SUPERSESSION_GREETINGS = {
+    "hi", "hello", "hey", "yo", "sup", "ok", "okay", "yes", "no", "thanks",
+    "thank you", "good morning", "good afternoon", "good evening",
+    "good night", "bye", "cool", "nice", "sure",
+}
+
+
+def supersede_ambiguous_parked_goals(conversation_id: str, new_text: str) -> int:
+    """Close ambiguous parked goals in this conversation; return the count."""
+    import os
+
+    if os.environ.get("ARENA_PARKED_SUPERSESSION", "1") == "0":
+        return 0
+    text = (new_text or "").strip()
+    if len(text) < 10 or "(automatic re-check #" in text.lower():
+        return 0
+    if text.lower().rstrip("?!. ") in _SUPERSESSION_GREETINGS:
+        return 0
+    superseded = 0
+    try:
+        from app.database import db
+        from app.utils.logger import audit_logger
+
+        with db._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT trace_id, user_input FROM cognitive_traces "
+                "WHERE goal_lifecycle_state = 'waiting_for_evidence' "
+                "  AND session_id = ? "
+                "  AND user_input NOT LIKE '%(automatic re-check #%'",
+                (conversation_id,),
+            ).fetchall()
+            for trace_id, goal_text in rows:
+                low = (goal_text or "").lower()
+                if not any(w in low for w in _AMBIGUOUS_OBJECT_WORDS):
+                    continue
+                conn.execute(
+                    "UPDATE cognitive_traces "
+                    "SET goal_lifecycle_state = 'superseded_by_followup' "
+                    "WHERE trace_id = ?",
+                    (trace_id,),
+                )
+                superseded += 1
+                audit_logger.info(
+                    f"Parked goal {trace_id} ('{(goal_text or '')[:60]}') "
+                    f"superseded by the owner's follow-up: '{text[:60]}'")
+            if superseded:
+                conn.commit()
+    except Exception as exc:
+        app_logger.debug(f"Parked-goal supersession check skipped: {exc}")
+        return 0
+    return superseded
+
+
 _MARKER_RE = None
 
 
