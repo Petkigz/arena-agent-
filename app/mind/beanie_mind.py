@@ -37,6 +37,7 @@ from app.mind.evolution import Evolution
 from app.mind.embodiments import Embodiments
 from app.mind.evaluation import Evaluation
 from app.mind.identity import BeanieIdentity
+from app.mind.idle_replay import IdleReplay
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
@@ -115,6 +116,10 @@ class BeanieMind:
         self._evaluation: Optional[Evaluation] = None
         self._scrutiny: Optional[Scrutiny] = None
         self._beliefs: Optional[BeliefModel] = None
+        self._idle_replay: Optional[IdleReplay] = None
+        # Post-roadmap (#18): the door's idle clock — when did the owner
+        # last enter? She dreams in the quiet BETWEEN messages.
+        self._last_door_iso: Optional[str] = None
         self._presence: Optional[Presence] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
@@ -482,6 +487,19 @@ class BeanieMind:
                 self._beliefs = BeliefModel(self)
             return self._beliefs
 
+    @property
+    def idle_replay(self) -> IdleReplay:
+        """Post-roadmap growth (audit #18): dream-like consolidation —
+        when the quiet between messages crosses the idle window, she
+        replays everything NEW since the last replay: gathers related
+        experiences into threads and judges each by the verifier's own
+        tally (strengthen / revisit / open). Reads her own ledgers
+        only; describes, never acts, never edits the record."""
+        with self._lock:
+            if self._idle_replay is None:
+                self._idle_replay = IdleReplay(self)
+            return self._idle_replay
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -526,6 +544,7 @@ class BeanieMind:
         self._run_presence(result)
         self._run_embodiments(result)
         self._run_scrutiny(user_text, result)
+        self._run_idle_replay()
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -809,6 +828,27 @@ class BeanieMind:
             self.scrutiny.scrutinize(user_text, source="door")
         except Exception as exc:
             app_logger.warning(f"Scrutiny pass skipped (non-fatal): {exc}")
+
+    def _run_idle_replay(self) -> None:
+        """Post-roadmap (#18): she dreams in the quiet BETWEEN messages.
+        If the gap since the owner's previous entry crossed the idle
+        window, replay everything new since the last replay. The clock
+        is kept honest even when the replay itself fails. Best-effort;
+        never fails the task."""
+        if str(getattr(settings, "ARENA_IDLE_REPLAY", "1")) == "0":
+            return
+        try:
+            res = self.idle_replay.maybe_replay(self._last_door_iso)
+            self._last_door_iso = _now_iso()
+            if res.get("replayed"):
+                app_logger.info(
+                    "Idle replay after "
+                    f"{int(res.get('elapsed_seconds') or 0)}s quiet: "
+                    f"{res.get('statement')}")
+        except Exception as exc:
+            self._last_door_iso = _now_iso()
+            app_logger.warning(f"Idle replay pass skipped (non-fatal): "
+                               f"{exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

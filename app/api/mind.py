@@ -919,3 +919,27 @@ def mind_beliefs_guide(body: BeliefSubjectIn) -> dict:
     acknowledgment, her own record, and the decision left to the owner —
     guidance, never blunt correction."""
     return BeanieMind.get_instance().beliefs.guide(body.subject)
+
+
+# ── Post-roadmap growth: idle replay / dream-like consolidation (#18) ──────
+class ReplayRunIn(BaseModel):
+    source: str = Field(default="manual", min_length=1, max_length=100)
+
+
+@router.get("/mind/replay")
+def mind_replay_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """The dream ledger: every offline replay of new experiences since
+    the last one — threads gathered, verifier-tally verdicts, open gaps
+    named. Reads her own record only."""
+    rp = BeanieMind.get_instance().idle_replay
+    return {"success": True, **rp.stats(),
+            "stream": rp.replays(limit=limit)}
+
+
+@router.post("/mind/replay/run")
+def mind_replay_run(body: ReplayRunIn) -> dict:
+    """Run a consolidation pass now: replay everything NEW since the
+    last replay, gather related experiences into threads, judge each by
+    the verifier's tally (strengthen / revisit / open). Describes;
+    never acts."""
+    return BeanieMind.get_instance().idle_replay.replay(source=body.source)

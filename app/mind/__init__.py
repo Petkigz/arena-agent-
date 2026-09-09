@@ -35,6 +35,7 @@ from app.mind.perception import Perception
 from app.mind.attention import Attention
 from app.mind.authority import Authority
 from app.mind.beliefs import BeliefModel
+from app.mind.idle_replay import IdleReplay
 from app.mind.motivation import Motivation
 from app.mind.personality import Personality
 from app.mind.presence import Presence
@@ -51,4 +52,5 @@ __all__ = [
     "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
     "Personality", "Authority", "Reflection", "Improvement", "Evolution",
     "Presence", "Embodiments", "Evaluation", "Scrutiny", "BeliefModel",
+    "IdleReplay",
 ]

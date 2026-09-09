@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/idle_replay.py": (
+        "mind/idle_replay", "KEEP", "IDLE_REPLAY",
+        "Post-roadmap LIVE (audit #18): dream-like consolidation — "
+        "replays everything NEW since the last replay (watermark in "
+        "the replay ledger); gathers related experiences into threads "
+        "by vocabulary overlap; each thread judged ONLY by the "
+        "verifier's tally (strengthen / revisit / open); open gaps "
+        "named, not re-argued; the door runs it when the quiet between "
+        "messages crosses the idle window — she dreams between "
+        "messages; describes, never acts"),
     "app/mind/beliefs.py": (
         "mind/beliefs", "KEEP", "BELIEFS",
         "Post-roadmap LIVE (audit #20): false-belief theory of mind — "

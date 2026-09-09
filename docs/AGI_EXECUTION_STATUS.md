@@ -10,8 +10,29 @@
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — plus post-roadmap growth from the
 architecture audit.**
-Post-roadmap: false-belief theory of mind (audit item #20) is LIVE —
-`app/mind/beliefs.py`. What the owner believes is captured from markers
+Post-roadmap: idle replay / dream-like consolidation (audit item #18)
+is LIVE — `app/mind/idle_replay.py`. Her quiet pass over everything
+NEW since the last replay (watermark in the replay ledger, survives
+restarts): related experiences are gathered into threads by vocabulary
+overlap and each thread is judged ONLY by the verifier's tally —
+strengthen / revisit / open — and open improvement gaps are named, not
+re-argued. The door measures the quiet between messages and runs the
+consolidation when the owner returns after the idle window
+(`ARENA_IDLE_REPLAY_SECONDS`, default 1800): she dreams in the quiet
+BETWEEN messages. Nothing is invented while she dreams — she replays
+only what is already in her ledgers, and replay describes, never acts,
+never edits the record. Live-verified: 7 experiences replayed into 2
+threads (both "revisit", against 2+ verified failures each), second
+replay reports "the mind rested", and a 3-hour quiet gap at the door
+triggered the pass on the owner's return. Owner-visible:
+`GET /mind/replay`, `POST /mind/replay/run`. Kill switch
+`ARENA_IDLE_REPLAY=0`. Guarded by `tests/test_mind_idle_replay.py`
+(16 tests). Remaining audit gaps in leverage order: stakes-based
+effort (#22), ontological paradigm shifts (#21), intuitive physics
+(Domain A); mortality (#26) deliberately absent unless the owner asks.
+
+Earlier in this gate: false-belief theory of mind (audit item #20) is
+LIVE — `app/mind/beliefs.py`. What the owner believes is captured from markers
 in the owner's OWN words (never mind-read; restatements compound) and
 held SEPARATELY from what the evidence shows. `check(subject)` sets the
 belief against her own VERIFIED record: corroborated / contested (a

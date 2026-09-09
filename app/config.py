@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     ARENA_EVALUATION: str = "1"  # "0" disables the Phase-24 generalization evaluation surface
     ARENA_SCRUTINY: str = "1"  # "0" disables the devil's-advocate pass on verified successes at the mind door
     ARENA_BELIEFS: str = "1"  # "0" disables the owner-belief capture pass at the mind door
+    ARENA_IDLE_REPLAY: str = "1"  # "0" disables the dream-like consolidation pass at the mind door
+    ARENA_IDLE_REPLAY_SECONDS: str = "1800"  # quiet gap after which the door runs an idle replay
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard

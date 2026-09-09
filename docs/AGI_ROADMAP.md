@@ -983,11 +983,30 @@ now closed:
 > `POST /mind/beliefs/guide` (75 `/mind/*` paths; 78 routes). Kill
 > switch `ARENA_BELIEFS=0`. Guarded by `tests/test_mind_beliefs.py`
 > (16 tests).
+
+> ✅ **LIVE 2026-09-09:** `app/mind/idle_replay.py` — dream-like
+> consolidation (audit item #18: "when nothing is asked of her, does
+> she replay recent experience offline and consolidate it?").
+> ``replay()`` is her quiet pass over everything NEW since the last
+> replay (a watermark kept in the replay ledger, so it survives
+> restarts): related experiences are gathered into THREADS by
+> vocabulary overlap, and each thread is judged ONLY by the verifier's
+> own tally — mostly verified successes → strengthen, mostly verified
+> failures → revisit, mixed or no verdict → open; improvement gaps
+> still open are named, not re-argued. The door measures the quiet
+> between messages (``ARENA_IDLE_REPLAY_SECONDS``, default 1800): when
+> the owner returns after the window, the consolidation runs — she
+> dreams in the quiet BETWEEN messages. Nothing is invented while she
+> dreams: she replays only what is already in her ledgers, and replay
+> describes — never acts, never edits the record. Owner-visible:
+> `GET /mind/replay`, `POST /mind/replay/run` (77 `/mind/*` paths;
+> 80 routes). Kill switch `ARENA_IDLE_REPLAY=0`. Guarded by
+> `tests/test_mind_idle_replay.py` (16 tests).
 >
-> Remaining audit gaps (in leverage order): idle replay/dream-like
-> consolidation (#18), stakes-based effort (#22), ontological paradigm
-> shifts (#21), intuitive physics (Domain A); mortality (#26) is
-> deliberately absent unless the owner asks for it.
+> Remaining audit gaps (in leverage order): stakes-based effort
+> (#22), ontological paradigm shifts (#21), intuitive physics
+> (Domain A); mortality (#26) is deliberately absent unless the owner
+> asks for it.
 
 ## The development order actually used
 

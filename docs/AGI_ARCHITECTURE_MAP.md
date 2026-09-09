@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 384 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 385 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -416,10 +416,19 @@ owner-directed architecture audit:
     — never "you are wrong". She models the owner's mind, she never
     edits it. Kill switch `ARENA_BELIEFS=0`. 16 tests in
     `tests/test_mind_beliefs.py`; 75 `/mind/*` paths (78 routes).
-    Remaining audit gaps in leverage order: idle replay (#18),
-    stakes-based effort (#22), ontological paradigm shifts (#21),
-    intuitive physics (Domain A); mortality (#26) deliberately absent
-    unless the owner asks.
+27. ✅ **Post-roadmap LIVE (2026-09-09)** — `idle_replay.py`: dream-like
+    consolidation (audit #18) — her quiet pass over everything NEW
+    since the last replay (watermark in the replay ledger): threads
+    gathered by vocabulary overlap, each judged ONLY by the verifier's
+    tally (strengthen / revisit / open), open gaps named, not
+    re-argued. The door measures the quiet between messages and runs
+    the pass when the owner returns after the idle window. She dreams
+    between messages; describes, never acts, never edits the record.
+    Kill switch `ARENA_IDLE_REPLAY=0`. 16 tests in
+    `tests/test_mind_idle_replay.py`; 77 `/mind/*` paths (80 routes).
+    Remaining audit gaps in leverage order: stakes-based effort (#22),
+    ontological paradigm shifts (#21), intuitive physics (Domain A);
+    mortality (#26) deliberately absent unless the owner asks.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and
