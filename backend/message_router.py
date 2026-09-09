@@ -167,6 +167,7 @@ class MessageRouter:
             "join_conversation": self._handle_join_conversation,
             "create_conversation": self._handle_create_conversation,
             "list_conversations": self._handle_list_conversations,
+            "delete_conversation": self._handle_delete_conversation,
             "delete_message": self._handle_delete_message,
             "voice_start": self._handle_voice_start,
             "voice_stop": self._handle_voice_stop,
@@ -728,6 +729,41 @@ class MessageRouter:
             })
         except Exception as exc:
             app_logger.warning(f"Could not broadcast conversation activity: {exc}")
+
+    async def _handle_delete_conversation(self, websocket, message: Dict[str, Any]):
+        """Delete a whole conversation and synchronize EVERY UI (owner
+        report 2026-09-09: deletions used to touch local state only and
+        resurrected at the next hydrate). The database is the source of
+        truth: rows deleted, in-memory history dropped, all clients
+        told."""
+        conversation_id = str(message.get("conversation_id") or "").strip()
+        if not conversation_id:
+            await ws_manager.send_to_connection(websocket, {
+                "type": "error",
+                "message": "delete_conversation requires conversation_id",
+            })
+            return
+        deleted = 0
+        try:
+            deleted = db.delete_conversation(conversation_id)
+        except Exception as exc:
+            app_logger.warning(f"Conversation delete failed: {exc}")
+        _conversation_histories.pop(conversation_id, None)
+        await ws_manager.send_to_connection(websocket, {
+            "type": "conversation_deleted",
+            "conversation_id": conversation_id,
+            "deleted_messages": deleted,
+        })
+        try:
+            await ws_manager.broadcast_to_all({
+                "type": "conversation_deleted",
+                "conversation_id": conversation_id,
+            })
+        except Exception as exc:
+            app_logger.warning(f"Could not broadcast conversation deletion: {exc}")
+        app_logger.info(
+            f"Conversation '{conversation_id}' deleted ({deleted} message "
+            f"row(s)); every UI was told.")
 
     async def _handle_list_conversations(self, websocket, message: Dict[str, Any]):
         """Handle listing conversations (SQLite-persisted, merged with active connections)."""

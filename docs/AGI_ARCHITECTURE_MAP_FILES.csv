@@ -3,7 +3,7 @@ app/__init__.py,1,infrastructure/package,KEEP,,,
 app/agents/__init__.py,0,infrastructure/package,KEEP,,,
 app/agents/coding_agent.py,283,capabilities/code,DEMOTE,,Coding Agent — a specialized multi-step agent for code tasks.,"task loop, thin-agent contract"
 app/agents/data_analysis_agent.py,327,capabilities/data,DEMOTE,,"Data Analysis Agent — a thin, read-only analysis loop.","task loop, thin-agent contract"
-app/agents/master_agent.py,1104,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
+app/agents/master_agent.py,1112,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
 app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cognition stays in the Mind
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
@@ -165,10 +165,10 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,85,infrastructure/config,KEEP,,,
-app/database.py,465,infrastructure/persistence,KEEP,,,
+app/config.py,89,infrastructure/config,KEEP,,,
+app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
-app/llm.py,771,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
+app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
 app/main.py,3224,infrastructure/entry,KEEP,,,127 core REST routes
 app/memory/__init__.py,0,memory,INTEGRATE,,,memory subsystem; folds into the unified memory facade
 app/memory/coworker_brain.py,109,mind/identity,INTEGRATE,AUTHORITY,,"persona string only — the seed of 'I am Beanie'; superseded as the identity record by BeanieIdentity (Phase 1), which Phase 17 uses as the basic identity its derived personality starts from"
@@ -230,7 +230,7 @@ app/tasks.py,145,infrastructure/persistence,KEEP,,,
 app/tools/__init__.py,1,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
 app/tools/accessibility_control.py,127,embodiment/generic,KEEP,OS,"Semantic OS targeting through accessibility trees, with honest degradation.",
 app/tools/android_adb_controller.py,168,embodiment/android,KEEP,OS,,owner's phone — first-class (charter §4)
-app/tools/app_inventory.py,620,embodiment/generic,KEEP,OS,,
+app/tools/app_inventory.py,628,embodiment/generic,KEEP,OS,,
 app/tools/ast_janitor.py,92,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
 app/tools/backup_manager.py,312,embodiment/filesystem,KEEP,OS,Backup & restore — versioned zip snapshots of files/directories.,
 app/tools/binary_analyzer.py,177,capabilities/general,KEEP,,Honest binary structure analysis with the Python standard library only.,manifest capability; motor-system unit for the future Mind
@@ -330,7 +330,7 @@ backend/api/theme_routes.py,150,communication/api,KEEP,,Theme customization.,
 backend/api/wakeword_routes.py,318,communication/api,KEEP,,Custom wake word training and management.,
 backend/chat_corrections.py,364,learning/conversation,INTEGRATE,,In-chat owner corrections.,in-chat owner corrections — Phase-7 teaching surface
 backend/main.py,20,infrastructure/entry,LEGACY,,Backward-compatible shim for the unified Arena server.,compat shim alias
-backend/message_router.py,963,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
+backend/message_router.py,999,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
 backend/voice/__init__.py,28,communication/voice,KEEP,,Voice pipeline for Arena.,
 backend/voice/audio_capture.py,176,communication/voice,KEEP,,Audio capture service using PyAudio.,
 backend/voice/orchestrator.py,490,communication/voice,KEEP,,"Voice pipeline orchestrator - coordinates audio capture, wake word, VAD, STT, and TTS.",
@@ -343,9 +343,9 @@ backend/voice/vad.py,212,communication/voice,KEEP,,Voice Activity Detection usin
 backend/voice/wake_word.py,175,communication/voice,KEEP,,Wake word detection using openWakeWord.,
 backend/websocket_server.py,162,communication/text,KEEP,,WebSocket server for real-time communication with frontend.,
 desktop/__init__.py,3,communication/presence,KEEP,,Native (browser-free) Arena desktop client.,desktop client of the one Mind (Phase 23)
-desktop/app.py,785,communication/presence,KEEP,,Native Arena desktop window (PySide6 / Qt) — now modularized.,desktop client of the one Mind (Phase 23)
+desktop/app.py,806,communication/presence,KEEP,,Native Arena desktop window (PySide6 / Qt) — now modularized.,desktop client of the one Mind (Phase 23)
 desktop/backend_client.py,688,communication/presence,KEEP,,HTTP + WebSocket client for the Arena backend (used by the native desktop app).,desktop client of the one Mind (Phase 23)
-desktop/chat_client.py,289,communication/presence,KEEP,,WebSocket chat client for the native desktop app (GUI-free).,desktop client of the one Mind (Phase 23)
+desktop/chat_client.py,299,communication/presence,KEEP,,WebSocket chat client for the native desktop app (GUI-free).,desktop client of the one Mind (Phase 23)
 desktop/design_tokens.py,259,communication/presence,KEEP,,Design tokens — programmatic access to design/tokens.json.,desktop client of the one Mind (Phase 23)
 desktop/main.py,52,communication/presence,KEEP,,Entry point for the native Arena desktop client.,desktop client of the one Mind (Phase 23)
 desktop/pages/__init__.py,27,communication/presence,KEEP,,Pages package — modularized from monolithic app.py.,desktop client of the one Mind (Phase 23)
@@ -358,7 +358,7 @@ desktop/pages/message_bubble.py,106,communication/presence,KEEP,,MessageBubble �
 desktop/pages/owner_control.py,974,communication/presence,KEEP,,Native desktop Owner Control page.,desktop client of the one Mind (Phase 23)
 desktop/pages/pansophy.py,83,communication/presence,KEEP,,PansophyPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
 desktop/pages/projects.py,151,communication/presence,KEEP,,ProjectsPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
-desktop/pages/response_review.py,399,communication/presence,KEEP,,"ResponseReviewBar — native ""Review response"" controls (PySide6).",desktop client of the one Mind (Phase 23)
+desktop/pages/response_review.py,403,communication/presence,KEEP,,"ResponseReviewBar — native ""Review response"" controls (PySide6).",desktop client of the one Mind (Phase 23)
 desktop/pages/settings.py,266,communication/presence,KEEP,,SettingsPage — extracted.,desktop client of the one Mind (Phase 23)
 desktop/pages/tools.py,225,communication/presence,KEEP,,ToolsPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
 desktop/pages/vision.py,207,communication/presence,KEEP,,VisionPage — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
@@ -368,7 +368,7 @@ desktop/styles.py,105,communication/presence,KEEP,,Styles — QSS helpers that r
 desktop/theme.py,209,communication/presence,KEEP,,Theme — the desktop client's palette and Beanie presence states.,desktop client of the one Mind (Phase 23)
 desktop/voice_client.py,330,communication/presence,KEEP,,Voice capture + backend streaming for the native desktop client.,desktop client of the one Mind (Phase 23)
 desktop/widgets/__init__.py,7,communication/presence,KEEP,,Widgets package — modularized from monolithic app.py.,desktop client of the one Mind (Phase 23)
-desktop/widgets/context.py,254,communication/presence,KEEP,,ContextPanel — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
+desktop/widgets/context.py,261,communication/presence,KEEP,,ContextPanel — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
 desktop/widgets/orb.py,164,communication/presence,KEEP,,Presence orb widget — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
 desktop/widgets/sidebar.py,166,communication/presence,KEEP,,LeftSidebar — extracted from monolithic app.py.,desktop client of the one Mind (Phase 23)
 desktop/widgets/working_context.py,69,communication/presence,KEEP,,WorkingContextCard — the inline 'Working context' card (design review section 4).,desktop client of the one Mind (Phase 23)

@@ -150,11 +150,16 @@ export const useConversationStore = create<ConversationState>()(
         return conversationId;
       },
 
-      removeConversation: (id) =>
+      removeConversation: (id) => {
         set((state) => ({
           conversations: state.conversations.filter((c) => c.id !== id),
           currentConversation: state.currentConversation?.id === id ? null : state.currentConversation,
-        })),
+        }));
+        // Owner report 2026-09-09: local-only filtering let deleted
+        // conversations resurrect at the next hydrate. Tell the server
+        // so the rows are deleted and every UI synchronizes.
+        webSocketService.deleteConversation(id);
+      },
 
       exportConversation: (id) => {
         const state = get();

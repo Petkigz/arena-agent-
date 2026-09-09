@@ -201,10 +201,17 @@ class LocalLLMClient:
     # (LM Studio/Ollama phrasings). A 400 that is NOT about the model
     # (e.g. context overflow) must not trigger the model retry. NOTE: the
     # gap must allow periods INSIDE model ids ('qwen2.5-9b-instruct').
+    # Owner live log 2026-09-09: LM Studio answered a not-loaded model
+    # with "Please load the model ... first" — phrased as an
+    # instruction, not a 'not found' — and the request fell straight to
+    # simulation while loaded models sat idle. The ladder must catch it.
     _MODEL_NOT_FOUND_RE = re.compile(
         r"model.{0,160}?(?:not\s+(?:be\s+)?(?:found|loaded)|"
         r"no\s+longer\s+loaded|does\s+not\s+exist|is\s+unavailable)|"
-        r"no\s+model\s+found|model\s+not\s+found",
+        r"no\s+model\s+found|model\s+not\s+found|"
+        r"please\s+load\s+the\s+model|"
+        r"load\s+the\s+model\s+(?:with\s+key\s+)?[^.]{0,120}?first|"
+        r"model\s+is\s+not\s+loaded",
         re.IGNORECASE | re.DOTALL,
     )
 
@@ -220,6 +227,11 @@ class LocalLLMClient:
         self._models_cache_lock = threading.Lock()
         # Bounded ring of observable fallback decisions (last 50).
         self.fallback_events: List[Dict[str, Any]] = []
+        # Code-lane autoswap state: the model THIS client loaded on
+        # demand (owner-loaded coders are never ejected by us) and the
+        # pending eject timer.
+        self._code_swapped_id: Optional[str] = None
+        self._code_eject_timer: Optional[threading.Timer] = None
         # The stale-config WARNING is loud ONCE per requested id; repeats
         # drop to DEBUG (live 2026-09-05: it logged before every
         # main-route call — 6x per diag run — long after the point was
@@ -429,16 +441,185 @@ class LocalLLMClient:
             return None
         return sorted(candidates, key=lambda pc: (-pc[0], pc[1]))[0][1]
 
+    # ------------------------------------------------------------------
+    # Code-lane autoswap (owner request 2026-09-09): the coder is loaded
+    # on demand and ejected afterwards — the VRAM belongs to the chat
+    # models she keeps loaded. All of it fails open: no native API, no
+    # swap; the code lane degrades to the main model exactly as before.
+    # ------------------------------------------------------------------
+    def _native_base(self) -> str:
+        base = str(self.base_url or "").rstrip("/")
+        if base.endswith("/v1"):
+            base = base[: -len("/v1")]
+        return base
+
+    def _native_models(self) -> Optional[List[Dict[str, Any]]]:
+        """The provider's native model listing WITH load state (LM
+        Studio >=0.3 /api/v0/models). None when the endpoint does not
+        exist or carries no state — every autoswap decision then
+        honestly stands down."""
+        try:
+            r = self.client.get(f"{self._native_base()}/api/v0/models",
+                                timeout=5.0)
+            if r.ok:
+                data = (r.json() or {}).get("data") or []
+                if data and any("state" in m for m in data):
+                    return [m for m in data if m.get("id")]
+        except Exception:
+            pass
+        return None
+
+    def load_provider_model(self, identifier: str,
+                            ttl_s: Optional[int] = None) -> bool:
+        """Ask the provider to load a model; True only when the
+        provider CONFIRMS it loaded (polled native state). Fail-open:
+        False on any API gap — callers degrade, never raise."""
+        body: Dict[str, Any] = {"identifier": identifier}
+        try:
+            if ttl_s is not None and int(ttl_s) > 0:
+                body["ttl"] = int(ttl_s)
+        except Exception:
+            pass
+        try:
+            r = self.client.post(
+                f"{self._native_base()}/api/v0/models/load",
+                json=body, timeout=float(getattr(
+                    settings, "CODE_MODEL_LOAD_TIMEOUT_S", 90)))
+            if not r.ok:
+                app_logger.info(
+                    f"Code-lane load of '{identifier}' was refused by the "
+                    f"provider ({r.status_code}); the lane degrades to "
+                    f"the main model.")
+                return False
+        except Exception as exc:
+            app_logger.info(
+                f"Code-lane load of '{identifier}' failed ({exc}); the "
+                f"lane degrades to the main model.")
+            return False
+        deadline = time.monotonic() + float(
+            getattr(settings, "CODE_MODEL_LOAD_TIMEOUT_S", 90))
+        while time.monotonic() < deadline:
+            for m in (self._native_models() or []):
+                if (str(m.get("id")) == identifier
+                        and str(m.get("state", "")).lower() == "loaded"):
+                    self.list_loaded_models(force=True)
+                    return True
+            time.sleep(1.0)
+        app_logger.info(
+            f"Code-lane load of '{identifier}' did not confirm within "
+            f"the timeout; the lane degrades to the main model.")
+        return False
+
+    def unload_provider_model(self, identifier: str) -> bool:
+        """Ask the provider to eject a model (VRAM back to the chat
+        models). Fail-open."""
+        try:
+            r = self.client.post(
+                f"{self._native_base()}/api/v0/models/unload",
+                json={"identifier": identifier}, timeout=15.0)
+            if r.ok:
+                self.list_loaded_models(force=True)
+                return True
+        except Exception as exc:
+            app_logger.info(
+                f"Code-lane eject of '{identifier}' failed ({exc}); the "
+                f"provider's own TTL remains the backstop.")
+        return False
+
+    def _best_downloaded_code_model(self) -> Optional[str]:
+        """The biggest DOWNLOADED code specialist (loaded or not) from
+        the native listing — the autoswap target for CODE_MODEL=auto.
+        None when the listing is unavailable or holds no coder."""
+        data = self._native_models() or []
+        candidates = []
+        for m in data:
+            mid = str(m.get("id") or "")
+            lower = mid.lower()
+            if "coder" in lower or "-code" in lower or "code-" in lower:
+                params = 0.0
+                for token in re.split(r"[^a-z0-9.]+", lower):
+                    mm = re.fullmatch(r"(\d+(?:\.\d+)?)b", token)
+                    if mm:
+                        params = float(mm.group(1))
+                        break
+                candidates.append((params, mid))
+        if not candidates:
+            return None
+        return sorted(candidates, key=lambda pc: (-pc[0], pc[1]))[0][1]
+
+    def _schedule_code_eject(self, identifier: str) -> None:
+        """Eject the swapped-in coder after a quiet window; every
+        code-lane use re-arms the timer so bursts coalesce. The
+        provider-side TTL (set at load) is the backstop if this process
+        dies first."""
+        timer = getattr(self, "_code_eject_timer", None)
+        if timer is not None:
+            try:
+                timer.cancel()
+            except Exception:
+                pass
+
+        def _eject() -> None:
+            try:
+                if self.unload_provider_model(identifier):
+                    app_logger.info(
+                        f"Code lane: ejected '{identifier}' after use — "
+                        f"the VRAM is back to the loaded chat models.")
+            except Exception:
+                pass
+            finally:
+                self._code_eject_timer = None
+                if getattr(self, "_code_swapped_id", None) == identifier:
+                    self._code_swapped_id = None
+
+        delay = max(0.5, float(getattr(settings,
+                                       "CODE_MODEL_EJECT_AFTER_S", 60)))
+        t = threading.Timer(delay, _eject)
+        t.daemon = True
+        self._code_eject_timer = t
+        t.start()
+
+    def _fuzzy_satisfy(self, requested: str,
+                       loaded: List[str]) -> List[str]:
+        """Loaded ids that are UNAMBIGUOUSLY the same model as the
+        pinned id, even with extra words in the provider-side title.
+        Owner live finding 2026-09-09: the pinned 'qwen2.5-9b-instruct'
+        did not match her loaded 9B because its title carried extra
+        words, and role scoring then pulled a 14B into VRAM over the
+        model she had chosen. Token rule: every token of the shorter
+        id appears in the longer id in the same order (subsequence) —
+        'qwen2.5-9b-instruct' satisfies 'qwen2.5-9b-instruct-1m' but
+        never 'qwen2.5-14b-instruct' (9b != 14b) or 'qwen3-14b'.
+        Ambiguity (several matches) is NOT resolved here — it goes to
+        the loud scored fallback instead."""
+        req_tokens = [t for t in re.split(
+            r"[^a-z0-9.]+", self._normalize_model_id(requested)) if t]
+        if not req_tokens:
+            return []
+        matches: List[str] = []
+        for m in loaded:
+            if m == requested:
+                continue
+            cand_tokens = [t for t in re.split(
+                r"[^a-z0-9.]+", self._normalize_model_id(m)) if t]
+            shorter, longer = ((req_tokens, cand_tokens)
+                               if len(req_tokens) <= len(cand_tokens)
+                               else (cand_tokens, req_tokens))
+            it = iter(longer)
+            if all(any(lt == st for lt in it) for st in shorter):
+                matches.append(m)
+        return matches
+
     def _resolve_model(
         self, requested: str, role: str = "main",
     ) -> "Tuple[str, Optional[Dict[str, Any]]]":
         """The routing decision: is the requested model actually loaded?
-        YES -> use it. Loaded under an equivalent id (vendor prefix or
-        .gguf drift) -> use the PROVIDER's id, silently (same model, not
-        a fallback). NO -> the best loaded model for the route (or the
-        requested model itself when the probe is unavailable/empty, so
-        the request path can fail honestly rather than invent a
-        selection)."""
+        YES -> use it. Loaded under an equivalent id (vendor prefix,
+        .gguf drift, or extra title words) -> use the PROVIDER's id,
+        silently (same model, not a fallback). NO -> the best loaded
+        model for the route (or the requested model itself when the
+        probe is unavailable/empty, so the request path can fail
+        honestly rather than invent a selection)."""
         loaded = self.list_loaded_models()
         if loaded is None or requested in loaded:
             return requested, None
@@ -448,6 +629,12 @@ class LocalLLMClient:
                        if self._normalize_model_id(m) == norm and m != requested]
             if len(matches) == 1:
                 return matches[0], None
+        fuzzy = self._fuzzy_satisfy(requested, loaded)
+        if len(fuzzy) == 1:
+            # Same model under a drifted title — the owner's loaded
+            # model is used, silently, exactly as for vendor-prefix
+            # drift. Not a fallback: nothing was chosen over anything.
+            return fuzzy[0], None
         fallback = self.select_loaded_fallback(requested, loaded, role=role)
         if fallback is None:
             return requested, None
@@ -526,12 +713,17 @@ class LocalLLMClient:
             # Owner model plan (2026-09-08): coding tasks go to the loaded
             # code specialist. CODE_MODEL pins one; "auto" picks the biggest
             # loaded coder; no coder loaded -> honest main-lane fallback.
+            # Owner request 2026-09-09: with CODE_MODEL_AUTOSWAP the coder
+            # is LOADED on demand and EJECTED afterwards — VRAM belongs to
+            # the chat models she keeps loaded.
             role = "main"
             pinned = str(getattr(settings, "CODE_MODEL", "auto") or "auto").strip()
+            autoswap = str(getattr(settings, "CODE_MODEL_AUTOSWAP", "1")) != "0"
+            loaded_now = self.list_loaded_models()
             if pinned.lower() not in ("", "auto"):
                 requested_model = pinned
             else:
-                code_pick = self.select_loaded_code_model(self.list_loaded_models())
+                code_pick = self.select_loaded_code_model(loaded_now)
                 if code_pick:
                     requested_model = code_pick
                     app_logger.info(
@@ -553,6 +745,45 @@ class LocalLLMClient:
                     app_logger.info(
                         "Code lane: no code specialist loaded; using the main lane."
                     )
+            if autoswap and not llm_forced_offline():
+                target: Optional[str] = None
+                if pinned.lower() not in ("", "auto"):
+                    target = pinned
+                elif requested_model == settings.MAIN_MODEL:
+                    target = self._best_downloaded_code_model()
+                if target:
+                    already = bool(loaded_now) and (
+                        target in (loaded_now or [])
+                        or bool(self._fuzzy_satisfy(target, loaded_now or [])))
+                    if already:
+                        if target == getattr(self, "_code_swapped_id", None):
+                            # burst use: re-arm the eject timer
+                            self._schedule_code_eject(target)
+                    elif self.load_provider_model(
+                            target,
+                            ttl_s=int(getattr(settings,
+                                              "CODE_MODEL_TTL_S", 300))):
+                        self._code_swapped_id = target
+                        requested_model = target
+                        self._schedule_code_eject(target)
+                        app_logger.info(
+                            f"Code lane: loaded '{target}' on demand — it "
+                            f"ejects after "
+                            f"{getattr(settings, 'CODE_MODEL_EJECT_AFTER_S', 60)}s "
+                            f"of quiet (provider TTL backstop "
+                            f"{getattr(settings, 'CODE_MODEL_TTL_S', 300)}s)."
+                        )
+                        try:
+                            from app.utils import decision_trace
+
+                            decision_trace.record(
+                                "model_lane", "code_lane",
+                                "code specialist loaded on demand; scheduled "
+                                "eject after use",
+                                model=target,
+                            )
+                        except Exception:
+                            pass
         if str(requested_model or "").strip().lower() in ("", "auto"):
             # MAIN_MODEL/FAST_MODEL=auto: scan the loaded models and use
             # the best one for the route (role-scored). Observable as a

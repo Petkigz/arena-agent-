@@ -254,6 +254,15 @@ class WebSocketService {
     });
   }
 
+  deleteConversation(conversationId: string) {
+    // Owner report 2026-09-09: deletions must synchronize — the server
+    // deletes the rows and tells every connected UI (web, desktop,
+    // Android) so the conversation never resurrects at the next hydrate.
+    return this.send('delete_conversation', {
+      conversation_id: conversationId,
+    });
+  }
+
   requestConversationList() {
     return this.send('list_conversations', {});
   }

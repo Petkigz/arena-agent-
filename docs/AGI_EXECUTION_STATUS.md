@@ -10,8 +10,44 @@
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — post-roadmap growth from the architecture
 audit COMPLETE, including #26 mortality at the owner's request.
-Pre-go-live: the CONTINUITY NET is LIVE.**
-Pre-go-live (owner-approved): the continuity net — sleep and waking
+Pre-go-live: the CONTINUITY NET is LIVE; go-live hardening round 1
+from the owner's first live Windows run is COMPLETE.**
+Go-live hardening round 1 (owner's first live run on Windows,
+2026-09-09 — real logs, real failures, every fix traced to evidence):
+(1) THE MODEL LANE SERVES HER LOADED MODELS — a pinned id is now
+SATISFIED by a loaded id with extra title words (token-subsequence,
+unique match only; `qwen2.5-9b-instruct` matches her loaded
+`…-9b-instruct-…` and never crosses sizes), LM Studio's
+"Please load the model … first" 400 now triggers the existing
+retry-with-a-loaded-model ladder instead of falling to simulation, and
+the coding model LOADS ON DEMAND and EJECTS afterwards
+(`CODE_MODEL_AUTOSWAP`, provider TTL backstop; a coder the owner
+loaded herself is never ejected). (2) CONVERSATION DELETIONS
+SYNCHRONIZE — the web store only filtered local state and the backend
+had no delete at all; now `db.delete_conversation` + WS
+`delete_conversation` → ack + `conversation_deleted` broadcast →
+web/desktop drop it everywhere (no resurrection at the next hydrate).
+(3) DESKTOP — real Qt runs exposed four pinned-but-broken contracts:
+ContextPanel exposes `body` and hides it collapsed (set_collapsed is
+silent by default; the user's toggle notifies), the sidebar gained the
+Chats item, and the review bar's toggle reads the explicit hidden
+state (`isHidden()`, not ancestor-dependent `isVisible()`). (4)
+WINDOWS PORTABILITY of the suite — fixtures set USERPROFILE beside
+HOME (Windows' Path.home() ignores HOME), sources are read as UTF-8
+(cp1252 default broke two sweeps), unwritable-place tests use a path
+under a file (writable on Windows via `/proc/...`), home-scope
+fixtures are sandboxed (her 200k-file profile made walker indexes
+partial and non-deterministic), and .py launches spawn through the
+interpreter so the pid is honest. (5) AN EXPLICIT PATH IS NEVER
+FUZZY-SUBSTITUTED — her live run 'resolved' a non-existent
+`C:/pics/w.jpg` to an unrelated photo and set it as the wallpaper;
+operand completion now resolves bare names only. Guarded by
+`tests/test_llm_code_autoswap.py` (11 tests),
+`tests/test_conversation_delete_sync.py` (7), the desktop suites (31
+under real PySide6) and the fixed platform suites.
+
+Earlier in this gate: the continuity net (pre-go-live,
+owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown
 `mortality.on_shutdown()` writes the legacy letter AND a
 whole-database continuity copy — SQLite's own backup API, consistent

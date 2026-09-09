@@ -2,6 +2,7 @@ import os
 import shutil
 import platform
 import subprocess
+import sys
 import psutil
 from typing import Dict, Any, List, Optional
 from app.database import db
@@ -522,7 +523,14 @@ class SystemAppInventory:
             # BEFORE success is claimed. os.startfile has no feedback channel,
             # but is only used for paths that verifiably exist on disk.
             if host_os == "windows":
-                if exec_path.lower().endswith(".lnk") or os.path.exists(exec_path):
+                if exec_path.lower().endswith(".py"):
+                    # Python scripts spawn through the interpreter:
+                    # os.startfile would lean on the file association and
+                    # returns NO process handle, so the pid could not be
+                    # reported honestly (owner Windows run 2026-09-09).
+                    launched_process = subprocess.Popen(
+                        [sys.executable, exec_path])
+                elif exec_path.lower().endswith(".lnk") or os.path.exists(exec_path):
                     os.startfile(exec_path)
                 else:
                     # `start` is a cmd.exe builtin; invoke it with /c and argv so

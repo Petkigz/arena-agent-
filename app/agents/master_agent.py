@@ -94,11 +94,19 @@ def _complete_path_operand(
         return key.endswith("_path") or key.endswith("_path_str")
 
     # Case 1: a path param present but carrying a bare name (not a real
-    # path) — resolve it.
+    # path) — resolve it. An EXPLICIT path the owner typed (absolute,
+    # drive-lettered, or rooted) is NEVER fuzzy-substituted with a
+    # different file — owner live run 2026-09-09: a requested
+    # 'C:/pics/w.jpg' that did not exist was 'resolved' to an unrelated
+    # photo and set as the wallpaper. If an explicit path is missing,
+    # the tool reports that honestly.
     for key, value in list(payload.items()):
         if not _pathish(key) or not isinstance(value, str) or not value.strip():
             continue
         if _P(value).expanduser().exists():
+            continue
+        probe = _P(value).expanduser()
+        if probe.is_absolute() or probe.drive or value.strip().startswith(("/", "\\")):
             continue
         ref = _resolve_file_reference(value)
         if ref.get("resolved"):

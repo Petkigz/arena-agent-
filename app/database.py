@@ -377,6 +377,22 @@ class DatabaseManager:
             })
         return previews
 
+    def delete_conversation(self, conversation_id: str) -> int:
+        """Delete a whole conversation — every message row. Owner report
+        2026-09-09: deletions never synchronized; the frontend filtered
+        local state only, so the conversation resurrected at the next
+        hydrate. The database is the source of truth: delete here, then
+        the WS layer tells every UI. Returns the number of message rows
+        deleted."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            conn.commit()
+            return cursor.rowcount or 0
+
     # Project tasks (Kanban board — synced across all UIs)
     def add_project_task(self, task: Dict[str, Any]) -> bool:
         """Insert a project task. `id` is client-supplied (task-<ts>) so the

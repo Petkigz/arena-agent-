@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     ARENA_MORTALITY: str = "1"  # "0" disables the mortality organ (audit #26, opened at the owner's request)
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
+    CODE_MODEL_AUTOSWAP: str = "1"  # "0" disables on-demand load+eject of the coder (owner 2026-09-09)
+    CODE_MODEL_TTL_S: int = 300  # server-side idle backstop: provider ejects the coder after N idle seconds
+    CODE_MODEL_EJECT_AFTER_S: int = 60  # client-side eject N seconds after the last code-lane use
+    CODE_MODEL_LOAD_TIMEOUT_S: int = 90  # how long to wait for an on-demand coder load to finish
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard
     ARENA_ELEVATED_ACKNOWLEDGED: str = "0"  # "1" = owner accepts elevated operation; warning becomes INFO
     ARENA_EMBEDDING_URL: str = ""  # LM Studio base URL for real embeddings (optional)

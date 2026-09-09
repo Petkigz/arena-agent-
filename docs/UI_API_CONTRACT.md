@@ -19,6 +19,7 @@ Client → server messages:
 | `join_conversation` | `conversation_id` | join a conversation room |
 | `user_message` | `conversation_id`, `content` | send a message (streams the reply) |
 | `create_conversation` | `title` | create + join a conversation |
+| `delete_conversation` | `conversation_id` | delete a whole conversation (rows + every UI synchronizes) |
 | `list_conversations` | — | request the conversation list |
 | `get_history` | `conversation_id` | request the message history |
 
@@ -29,6 +30,7 @@ Server → client messages:
 | `conversation_list` | `conversations: [{id\|conversation_id, title}]` | sidebar list |
 | `conversation_history` | `conversation_id`, `messages: [{message_id, role, content, created_at, trace_id?}]` | durable history on join; legacy rows may lack trace links |
 | `conversation_created` | `conversation_id`, `title` | after create |
+| `conversation_deleted` | `conversation_id`, `deleted_messages?` | broadcast to EVERY client after a deletion — drop it from lists; the ack to the requester also carries `deleted_messages` |
 | `message_token` | `conversation_id`, `message_id`, `token`, `done` | streaming reply (token-by-token; `done: true` ends the turn) |
 | `cognitive_metadata` | `conversation_id`, `message_id`, `trace_id`, `epistemic_presentation`, `grounding` | evidence metadata for one exact assistant reply, never the latest message by position |
 | `correction_recorded` | `conversation_id`, `correction_type`, `signal`, `target_trace_id`, `candidate_id`, `generalized`, `duplicate` | an explicit in-chat owner correction was understood and recorded through the existing owner-correction path; the candidate stays pending owner review. `duplicate=true` retries stay silent. Clients may ignore it; web shows a transient notice, desktop shows a note above the composer |

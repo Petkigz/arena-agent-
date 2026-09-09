@@ -89,8 +89,8 @@ class LeftSidebar(QFrame):
         self._nav_sections: List[QLabel] = []
         nav_groups = [
             # Conversation history is the primary navigation surface below;
-            # retain the semantic group label for parity with the other shells.
-            ("Conversations", []),
+            # the Chats item returns to it from any other page.
+            ("Conversations", [("Chats", "chat")]),
             ("Workspace", [("Pansophy", "pansophy"), ("Projects", "projects"), ("Files", "files")]),
             ("Tools", [("Images", "images"), ("Code", "code")]),
             ("Owner", [("Owner Control", "owner_control"), ("Tools", "tools"), ("Beanie", "beanie")]),

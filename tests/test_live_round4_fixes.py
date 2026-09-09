@@ -205,7 +205,7 @@ def test_already_verified_stays_untouched():
 def test_chat_page_uses_real_header_orb_attribute():
     import pathlib
 
-    src = pathlib.Path("desktop/pages/chat.py").read_text()
+    src = pathlib.Path("desktop/pages/chat.py").read_text(encoding="utf-8")
     assert "self._header_orb" not in src, (
         "the typo that closed the app mid-voice must be gone"
     )
@@ -215,11 +215,11 @@ def test_chat_page_uses_real_header_orb_attribute():
 def test_desktop_app_has_crash_guard():
     import pathlib
 
-    src = pathlib.Path("desktop/main.py").read_text()
+    src = pathlib.Path("desktop/main.py").read_text(encoding="utf-8")
     assert "sys.excepthook = _hook" in src, (
         "a page bug must log, never close the window"
     )
-    app_src = pathlib.Path("desktop/app.py").read_text()
+    app_src = pathlib.Path("desktop/app.py").read_text(encoding="utf-8")
     assert "traceback.print_exc()" in app_src
     assert app_src.count("def _on_online") == 1
 
@@ -231,7 +231,7 @@ def test_no_underscore_attribute_typos_in_chat_page():
     import pathlib
 
     path = pathlib.Path("desktop/pages/chat.py")
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     assigned, read, methods = set(), set(), set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

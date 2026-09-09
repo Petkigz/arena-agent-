@@ -327,11 +327,14 @@ class TestPlaybackThroughOpenFile:
         (media / "Kaba - Song.mp3").write_bytes(b"\x00" * 8)
         old_home = Path.home()
         import os
+        # BOTH: Windows' Path.home() reads USERPROFILE, not HOME.
         os.environ["HOME"] = str(fake_home)
+        os.environ["USERPROFILE"] = str(fake_home)
         try:
             d = self._exec({"name": "kaba"}, "play kaba")
         finally:
             os.environ["HOME"] = str(old_home)
+            os.environ["USERPROFILE"] = str(old_home)
             shutil.rmtree(fake_home, ignore_errors=True)
         assert d["execution_status"] == "succeeded", d
         assert len(opened) == 1 and "Kaba - Song.mp3" in opened[0]
@@ -350,10 +353,12 @@ class TestPlaybackThroughOpenFile:
         (media / "kaba video.mp4").write_bytes(b"\x00")
         old_home = Path.home()
         os.environ["HOME"] = str(fake_home)
+        os.environ["USERPROFILE"] = str(fake_home)  # Windows reads this one
         try:
             d = self._exec({"name": "kaba"}, "play kaba")
         finally:
             os.environ["HOME"] = str(old_home)
+            os.environ["USERPROFILE"] = str(old_home)
             shutil.rmtree(fake_home, ignore_errors=True)
         assert d["execution_status"] == "failed"
         assert "tell me which one" in " ".join(d["executed_actions"])
@@ -477,12 +482,14 @@ class TestFindAndPlayFullCycle:
         (media / "Kaba - Song.mp3").write_bytes(b"\x00" * 16)
         old_home = Path.home()
         os.environ["HOME"] = str(fake_home)
+        os.environ["USERPROFILE"] = str(fake_home)  # Windows reads this one
         try:
             rt = CognitiveRuntime.get_instance()
             result = rt.process_cognitive_cycle(
                 user_text="find the file kaba and play it", complexity="fast")
         finally:
             os.environ["HOME"] = str(old_home)
+            os.environ["USERPROFILE"] = str(old_home)
             shutil.rmtree(fake_home, ignore_errors=True)
 
         assert result.get("action_type") == "open_file"

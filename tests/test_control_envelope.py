@@ -101,9 +101,12 @@ def home_with_pictures(monkeypatch, tmp_path):
     pics.mkdir()
     (pics / "kaba.jpg").write_bytes(b"\x00" * 8)
     (pics / "beach.jpg").write_bytes(b"\x00" * 8)
+    # BOTH variables: Path.home() reads HOME on POSIX but USERPROFILE on
+    # Windows (owner run 2026-09-09: HOME-only left the search scoped to
+    # her real 200k-file profile and the fixtures' files were never seen).
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     yield tmp_path
-    monkeypatch.setenv("HOME", str(Path("/home/user")))
 
 
 class TestOperandCompletion:
@@ -195,7 +198,10 @@ class TestGeneralityBeyondMedia:
         pics.mkdir()
         (pics / "kaba.jpg").write_bytes(b"\x00" * 8)
         old = os.environ.get("HOME")
+        old_profile = os.environ.get("USERPROFILE")
+        # BOTH variables: Windows' Path.home() reads USERPROFILE, not HOME.
         os.environ["HOME"] = str(fake_home)
+        os.environ["USERPROFILE"] = str(fake_home)
         try:
             from app.cognition.tool_matcher import match_control_tool
             m = match_control_tool("find the photo kaba and set it as my wallpaper")
@@ -210,5 +216,9 @@ class TestGeneralityBeyondMedia:
             assert resolved and Path(resolved).exists(), out
         finally:
             os.environ["HOME"] = old or str(Path("/home/user"))
+            if old_profile is None:
+                os.environ.pop("USERPROFILE", None)
+            else:
+                os.environ["USERPROFILE"] = old_profile
             import shutil
             shutil.rmtree(fake_home, ignore_errors=True)

@@ -65,6 +65,9 @@ class ContextPanel(QFrame):
         self._online = None
 
         scroll = QScrollArea()
+        #: The collapsible body — the whole live-context stack below the
+        #: header. Public so the collapse state is observable (review §5).
+        self.body = scroll
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         inner = QWidget()
@@ -117,7 +120,10 @@ class ContextPanel(QFrame):
             f"QPushButton:hover {{ background: {BG_SURFACE}; color: {TEXT_PRIMARY}; }}"
         )
 
-    def set_collapsed(self, collapsed: bool, notify: bool = True) -> None:
+    def set_collapsed(self, collapsed: bool, notify: bool = False) -> None:
+        """Programmatic collapse — SILENT by default (settings restore
+        and state sync must not fire the owner callback); the user's
+        toggle_collapsed() is the notifying path."""
         collapsed = bool(collapsed)
         if collapsed == self._collapsed:
             return
@@ -125,6 +131,7 @@ class ContextPanel(QFrame):
         self.setFixedWidth(self.COLLAPSED_WIDTH if collapsed else self.EXPANDED_WIDTH)
         self._toggle_btn.setText("▸" if collapsed else "▾")
         self._title.setVisible(not collapsed)
+        self.body.setVisible(not collapsed)
         for section in self._sections:
             section.setVisible(not collapsed)
         # Keep the status line readable in the collapsed rail.
@@ -138,7 +145,7 @@ class ContextPanel(QFrame):
             self._on_collapsed(collapsed)
 
     def toggle_collapsed(self) -> None:
-        self.set_collapsed(not self._collapsed)
+        self.set_collapsed(not self._collapsed, notify=True)
 
     # ── Live Context API ────────────────────────────────────────────────────
     def _label(self, text: str, size: int, bold: bool, color: str) -> QLabel:

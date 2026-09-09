@@ -38,6 +38,9 @@ class DesktopChatClient:
         self.on_history: Optional[Callable[[str, List[Tuple[str, str]]], None]] = None
         #: Called with (conversation_id, title) when a conversation is created.
         self.on_created: Optional[Callable[[str, str], None]] = None
+        #: Called with a conversation_id when a conversation is deleted
+        #: ANYWHERE (owner report 2026-09-09: deletions must synchronize).
+        self.on_deleted: Optional[Callable[[str], None]] = None
         #: Called with an error message string.
         self.on_error: Optional[Callable[[str], None]] = None
         #: Called with (message_id, content) for messages from other clients.
@@ -112,6 +115,10 @@ class DesktopChatClient:
 
     def create_conversation(self, title: str = "New Conversation") -> None:
         self._send({"type": "create_conversation", "title": title})
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        self._send({"type": "delete_conversation",
+                    "conversation_id": conversation_id})
 
     def list_conversations(self) -> None:
         self._send({"type": "list_conversations"})
@@ -196,6 +203,9 @@ class DesktopChatClient:
         elif t == "conversation_created":
             if self.on_created:
                 self.on_created(data.get("conversation_id", ""), data.get("title", "New Conversation"))
+        elif t == "conversation_deleted":
+            if self.on_deleted:
+                self.on_deleted(data.get("conversation_id", ""))
         elif t == "message_token":
             token = data.get("token", "")
             done = bool(data.get("done", False))

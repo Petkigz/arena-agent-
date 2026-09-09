@@ -236,7 +236,11 @@ class ResponseReviewBar(QWidget):
 
     # ── expansion / loading ─────────────────────────────────────────────────
     def _toggle_expanded(self) -> None:
-        showing = not self._body.isVisible()
+        # isHidden() is the EXPLICIT-hide state — isVisible() additionally
+        # requires every ancestor to be shown, which made this toggle
+        # read "collapsed" while the bar sat in a not-yet-shown chat
+        # page and misfire the first click (owner report 2026-09-09).
+        showing = self._body.isHidden()
         self._body.setVisible(showing)
         if not showing:
             self._eval_panel.setVisible(False)

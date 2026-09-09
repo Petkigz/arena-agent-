@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
     _chat_correction_signal = Signal(str, dict)
     _chat_history_detail_signal = Signal(str, list)
     _chat_created_signal = Signal(str, str)
+    _chat_deleted_signal = Signal(str)
     _chat_action_signal = Signal(str, str)
     _chat_meta_signal = Signal(str, str, str)
     _chat_error_signal = Signal(str)
@@ -187,6 +188,7 @@ class MainWindow(QMainWindow):
         self.chat_client.on_cognitive_metadata = lambda cid, mid, tid: self._chat_meta_signal.emit(cid, mid, tid)
         self.chat_client.on_correction_recorded = lambda cid, payload: self._chat_correction_signal.emit(cid, payload)
         self.chat_client.on_created = lambda cid, t: self._chat_created_signal.emit(cid, t)
+        self.chat_client.on_deleted = lambda cid: self._chat_deleted_signal.emit(cid)
         self.chat_client.on_error = lambda e: self._chat_error_signal.emit(e)
         self.chat_client.on_activity = self._on_conversation_activity
         self.current_conv_id = conversation_id
@@ -208,6 +210,7 @@ class MainWindow(QMainWindow):
         self._chat_meta_signal.connect(self._handle_cognitive_metadata)
         self._chat_correction_signal.connect(self._handle_correction_recorded)
         self._chat_created_signal.connect(self._handle_conversation_created)
+        self._chat_deleted_signal.connect(self._handle_conversation_deleted)
         self._chat_error_signal.connect(self._handle_chat_error)
         self._chat_action_signal.connect(self._handle_action_step)
 
@@ -603,6 +606,24 @@ class MainWindow(QMainWindow):
         self.current_conv_id = cid
         self.chat.set_conversation_title(title)
         self.chat.clear_messages()
+        self.chat_client.list_conversations()
+
+    @Slot(str)
+    def _handle_conversation_deleted(self, cid: str) -> None:
+        """A conversation was deleted ANYWHERE (this window, a web tab,
+        the phone) — the sidebar drops it, and if it was the one on
+        screen, the chat clears and follow-newest picks up again
+        (owner report 2026-09-09: deletions must synchronize)."""
+        if not cid:
+            return
+        if cid == self.current_conv_id:
+            self.chat.clear_messages()
+            self.chat.set_conversation_title("")
+            self.current_conv_id = ""
+            # The room the owner picked is gone; let the list handler
+            # follow the newest remaining conversation instead of
+            # pinning the dead id.
+            self._user_picked_conversation = False
         self.chat_client.list_conversations()
 
     @Slot(str)

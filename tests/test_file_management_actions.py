@@ -101,14 +101,20 @@ def test_delete_files_requires_owner_approval():
 # ── Execution: bare names resolve to real paths ────────────────────────────
 
 @pytest.fixture()
-def sandbox_files(tmp_path):
-    """Create real files under the home Music/Desktop folders (created if the
-    host lacks them) and clean everything up afterwards."""
-    home = Path.home()
+def sandbox_files(tmp_path, monkeypatch):
+    """Create real files under a SANDBOXED home's Music/Desktop folders.
+    Owner run 2026-09-09: against her real 200k-file profile the walker's
+    time budget produced a partial index that missed the fixture's own
+    file — a sandboxed home is deterministic on any machine, and the
+    owner's real folders are never touched. BOTH env vars: Windows'
+    Path.home() reads USERPROFILE, not HOME."""
+    home = tmp_path / "sandbox_home"
     music = home / "Music"
     desktop = home / "Desktop"
-    music.mkdir(exist_ok=True)
-    desktop.mkdir(exist_ok=True)
+    music.mkdir(parents=True)
+    desktop.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     src = music / "zz_test_move_kaba.mp3"
     src.write_bytes(b"kaba-audio")
     yield {"src": src, "music": music, "desktop": desktop, "home": home}

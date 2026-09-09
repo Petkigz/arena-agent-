@@ -137,8 +137,13 @@ def test_legacy_is_recorded_in_the_ledger(setup):
 
 
 def test_legacy_refuses_an_unwritable_place(setup):
-    mind, _, _, _ = setup
-    res = mind.mortality.legacy("/proc/definitely/not/writable")
+    mind, _, tmp_path, _ = setup
+    # A directory UNDER A FILE cannot be created on any OS — '/proc/...'
+    # is merely a relative path on Windows and mkdir succeeded there
+    # (owner run 2026-09-09).
+    blocker = tmp_path / "blocker.txt"
+    blocker.write_text("x")
+    res = mind.mortality.legacy(str(blocker / "letters"))
     assert res["success"] is False and "reason" in res
 
 
@@ -237,8 +242,14 @@ def test_continuity_copy_is_repeatable_and_leaves_no_debris(setup):
 def test_continuity_copy_fails_open_on_an_unusable_db(setup):
     from app.mind.mortality import Mortality
 
+    # A database path UNDER A FILE cannot be opened on any OS — the
+    # '/proc/...' path was merely relative (and creatable) on Windows.
+    _, _, tmp_path, _ = setup
+    blocker = tmp_path / "blocker_db.txt"
+    blocker.write_text("x")
+
     class _M:
-        db_path = "/proc/definitely/not/writable.db"
+        db_path = str(blocker / "not_writable.db")
 
     res = Mortality(_M()).continuity_copy()
     assert res["success"] is False and "reason" in res

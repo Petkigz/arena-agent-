@@ -56,7 +56,13 @@ def test_zip_conflict_asks_then_proceeds_with_approval(tmp_path):
     assert granted["success"] is True
 
 
-def test_trash_outside_home_asks_before_anything_moves(tmp_path):
+def test_trash_outside_home_asks_before_anything_moves(tmp_path, monkeypatch):
+    # Sandbox "home" to tmp_path itself so tmp_path.parent is genuinely
+    # OUTSIDE on every platform — on Windows pytest's tmp lives under the
+    # owner's real profile, where the parent is still "inside" and the
+    # charter ask never fired (owner run 2026-09-09).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     inside = _write(tmp_path, "inside.txt")
     outside = Path(tmp_path.parent) / "outside-charter-test.txt"
     outside.write_text("outside")

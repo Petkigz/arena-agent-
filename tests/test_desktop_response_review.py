@@ -282,9 +282,11 @@ def test_response_review_bar_widget_offscreen():
     client = _client_with(handler)
     bar = ResponseReviewBar(client=client, trace_id="trace_1", message_id="msg_1")
     assert bar._toggle.text() == "Review response"
-    assert not bar._body.isVisible()  # collapsed until the owner opens it
+    # isHidden() is the explicit-hide contract: isVisible() also demands
+    # shown ancestors, which the offscreen test harness never provides.
+    assert bar._body.isHidden()  # collapsed until the owner opens it
     bar._toggle_expanded()
-    assert bar._body.isVisible()
+    assert not bar._body.isHidden()
     # Local validation failure: nothing is sent, an honest message is shown.
     bar._submit_evaluation()
     assert "task key" in bar._eval_status.text().lower()
