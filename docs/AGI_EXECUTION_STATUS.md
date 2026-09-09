@@ -7,8 +7,24 @@
 
 ## Current owner-directed gate
 
-**2026-09-08 — Beanie AGI roadmap active; Phases 0–17 ✅ complete.**
-Phase 17 (personality development) is LIVE: `app/mind/personality.py` —
+**2026-09-08 — Beanie AGI roadmap active; Phases 0–18 ✅ complete.**
+Phase 18 (owner authority) is LIVE: `app/mind/authority.py` — the owner's
+authority, not system morals. Five lanes (always_allowed / ask_first /
+never_do / trusted_context / temporary) from the owner's statements only;
+repeats compound; Phase-16 boundaries seed the never lane. Charter §2 in
+every verdict: risk patterns decide WHEN TO ASK, never a silent drop or
+bare refusal; unruled actions ask (asking is never refusing); ask-first
+opens a typed `requires_owner_approval` ask with the real reason;
+`answer()` obeys — a declined ask is the owner's decision, the only
+reason it doesn't happen. Never-lane verdicts quote the owner's rule back
+and note authority ≠ intelligence. Live-verified: never beats always;
+trusted contexts apply only in context. Owner-visible: `GET
+/mind/authority`, `POST /mind/authority/check`, `POST
+/mind/authority/answer`. Kill switch `ARENA_AUTHORITY=0`. Guarded by
+`tests/test_mind_authority.py` (17 tests).
+
+Earlier in this gate: Phase 17 (personality development) LIVE —
+`app/mind/personality.py` —
 the developing personality, never a hard-coded mask. Basic identity
 (Phase-1 record) plus traits DERIVED from her real ledgers with evidence
 and observation counts: experience profile, epistemic calibration

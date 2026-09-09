@@ -13,8 +13,8 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 375 after the `app/mind/`
-package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 — the target architecture itself, all KEEP).
+modules with **0 unclassified** (354 at freeze; 376 after the `app/mind/`
+package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
 
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-08: steps 1–17 are LIVE (Phases 1–17 complete).**
+**Status 2026-09-08: steps 1–18 are LIVE (Phases 1–18 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -300,12 +300,21 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     snapshots and diffs: `changes()` is the verifiable record of "Beanie
     has changed." Kill switch `ARENA_PERSONALITY=0`. 16 tests in
     `tests/test_mind_personality.py`; 45 `/mind/*` paths (48 routes) total.
-18. **Open (roadmap order):** Phase 18 owner authority (always allowed /
-    ask first / never do — typed `requires_owner_approval` answered
-    conversationally; risk patterns decide WHEN to ask), then
-    self-reflection / self-improvement / model evolution / voice-first UI
-    / one-mind desktop+Android, and M9 generalization eval (P24), per the
-    owner's sequencing.
+18. ✅ **Phase 18 LIVE (2026-09-08)** — `authority.py`: the OWNER's
+    authority — five lanes of owner-stated rules (always / ask-first /
+    never / trusted contexts / temporary); Phase-16 boundaries seed the
+    never lane; risk patterns decide only WHEN TO ASK (ask-first opens a
+    typed requires_owner_approval ask, never a silent drop); answers
+    obeyed; no system morals; authority ≠ intelligence; judges
+    authorization, never executes. Kill switch `ARENA_AUTHORITY=0`.
+    17 tests in `tests/test_mind_authority.py`; 48 `/mind/*` paths
+    (51 routes) total.
+19. **Open (roadmap order):** Phase 19 self-reflection (what happened?
+    why? what did I believe? was I correct? what surprised me? what did I
+    learn? should I change my model? — the bridge between experience and
+    development), then self-improvement / model evolution / voice-first
+    UI / one-mind desktop+Android, and M9 generalization eval (P24), per
+    the owner's sequencing.
 
 ---
 

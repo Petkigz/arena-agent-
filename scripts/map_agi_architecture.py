@@ -270,7 +270,10 @@ OVERRIDES = {
     "app/cognition/owner_decisions.py": (
         "owner-authority/decisions", "KEEP", "", ""),
     "app/cognition/approval_store.py": (
-        "owner-authority/approvals", "KEEP", "", ""),
+        "owner-authority/approvals", "KEEP", "AUTHORITY",
+        "runtime approval-request store; Phase 18's authoritative policy is "
+        "app/mind/authority.py — five owner-stated lanes, asks opened and "
+        "obeyed"),
     "app/cognition/adaptive_autonomy.py": (
         "owner-authority/autonomy", "KEEP", "", ""),
     "app/cognition/autonomy_allocator.py": (
@@ -669,6 +672,15 @@ OVERRIDES = {
         "curiosity, her own reply patterns, the owner's values only, "
         "adaptation); derive() snapshots + diffs = the verifiable record "
         "of 'Beanie has changed'; describes, performs nothing"),
+    "app/mind/authority.py": (
+        "owner-authority/policy", "KEEP", "AUTHORITY",
+        "Phase 18 LIVE: the OWNER's authority — five lanes of owner-stated "
+        "rules (always / ask-first / never / trusted contexts / "
+        "temporary), Phase-16 boundaries seed the never lane, risk "
+        "patterns decide only WHEN TO ASK (ask-first opens a typed "
+        "requires_owner_approval ask, never a silent drop), answers "
+        "obeyed; no system morals; authority ≠ intelligence; judges "
+        "authorization, never executes"),
     "app/cognition/social_cognition.py": (
         "learning/social", "INTEGRATE", "SOCIAL",
         "Phase 16 seed (mental-state/emotion/relationship engine); the "

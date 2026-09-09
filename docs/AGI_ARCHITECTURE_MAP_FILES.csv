@@ -8,7 +8,7 @@ app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cog
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,,,Phase 20 material: one mechanism of self-improvement
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
-app/api/mind.py,545,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
+app/api/mind.py,583,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
 app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
@@ -21,7 +21,7 @@ app/cognition/action_selection.py,363,mind/decision,INTEGRATE,,"Turn information
 app/cognition/adaptive_autonomy.py,156,owner-authority/autonomy,KEEP,,Outcome-calibrated autonomy thresholds with owner-bounded exploration.,
 app/cognition/advanced_cognitive_capabilities.py,1833,mind/cognition-core,INTEGRATE,,Phase 14: Advanced Cognitive Capabilities,Phase-14 monolith — candidate for split when the Mind forms
 app/cognition/analogical_memory.py,287,memory/semantic,MERGE,MEMORY,Phase 3B: Analogical Reasoning.,analogical reasoning layer
-app/cognition/approval_store.py,208,owner-authority/approvals,KEEP,,Persistent recommendation/decision ledger for owner-reviewed actions.,
+app/cognition/approval_store.py,208,owner-authority/approvals,KEEP,AUTHORITY,Persistent recommendation/decision ledger for owner-reviewed actions.,"runtime approval-request store; Phase 18's authoritative policy is app/mind/authority.py — five owner-stated lanes, asks opened and obeyed"
 app/cognition/associative_memory.py,298,memory/semantic,MERGE,MEMORY,Associative memory: embedding-backed recall layered over the lexical store.,
 app/cognition/attention_manager.py,43,mind/attention,INTEGRATE,ATTENTION,Phase D: Executive Attention & Priority Allocation Engine.,"43-line seed, LIVE in the cognitive cycle (runtime.py:159) as the in-cycle focus tracker; Phase 14 built the authoritative perception-stream arbitrator as the mind organ app/mind/attention.py — one cognitive authority"
 app/cognition/autonomous_goal_executor.py,999,mind/motivation,INTEGRATE,MOTIVATION,Phase 8: Autonomous Goal Execution,"execution-plan seed under the authority layer; Phase-15 accepted goals execute through the normal door, not around it"
@@ -165,7 +165,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,70,infrastructure/config,KEEP,,,
+app/config.py,71,infrastructure/config,KEEP,,,
 app/database.py,465,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,771,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
@@ -176,9 +176,10 @@ app/memory/decision_constitution.py,35,owner-authority/values,KEEP,,,
 app/memory/human_nature_engine.py,104,models/owner,INTEGRATE,OWNER,,
 app/memory/reflection_engine.py,113,mind/reflection,MERGE,REFLECTION,,
 app/memory/semantic_rag.py,81,memory/semantic,MERGE,MEMORY,,legacy global RAG path — fold into the facade
-app/mind/__init__.py,44,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
+app/mind/__init__.py,45,infrastructure/package,KEEP,,Beanie Mind — Phase 1 of the AGI roadmap (docs/AGI_ROADMAP.md).,
 app/mind/attention.py,350,mind/attention,KEEP,ATTENTION,Attention — Phase 14 (Beanie AGI roadmap): M8 attention significance.,"Phase 14 LIVE (M8): the arbitrator between perception and thought — roadmap ladder from evidence on the record, repeats demoted, watermark review, one open unknown surfaced when quiet, popup-over-task advisory; decides only, never acts"
-app/mind/beanie_mind.py,657,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
+app/mind/authority.py,406,owner-authority/policy,KEEP,AUTHORITY,"Authority — Phase 18 (Beanie AGI roadmap): the owner's authority, not","Phase 18 LIVE: the OWNER's authority — five lanes of owner-stated rules (always / ask-first / never / trusted contexts / temporary), Phase-16 boundaries seed the never lane, risk patterns decide only WHEN TO ASK (ask-first opens a typed requires_owner_approval ask, never a silent drop), answers obeyed; no system morals; authority ≠ intelligence; judges authorization, never executes"
+app/mind/beanie_mind.py,682,mind/cognition-core,KEEP,AUTHORITY,BeanieMind — the one canonical entry point (AGI roadmap Phase 1).,Phase 1 LIVE: the one canonical door — BeanieMind.process(...)
 app/mind/curiosity.py,304,mind/curiosity,KEEP,CURIOSITY,CuriosityEngine — Phase 9 (Beanie AGI roadmap): the internal UNKNOWN,"Phase 9 LIVE: the internal UNKNOWN system — brief gaps become records, encounters compound, investigation searches memory first, resolution paths counted (knowledge/investigation/owner)"
 app/mind/embodiment.py,247,mind/motor,KEEP,EMBODIMENT,Embodiment — Phase 11 (Beanie AGI roadmap): the existing capabilities,"Phase 11 LIVE: the 184 capabilities as her motor system — concepts in, ranked pathways out (plans only, never execution); authority surfaced, motor gaps become unknowns"
 app/mind/identity.py,201,mind/identity,KEEP,AUTHORITY,"BeanieIdentity — the ""I am Beanie"" record (MISSING item M1, Phase 1).",Phase 1 LIVE: 'I am Beanie' as persisted state (M1)
@@ -366,7 +367,7 @@ scripts/benchmark_lm_studio.py,199,evaluation/ops,KEEP,,Owner-machine LM Studio 
 scripts/demo_agi.py,345,evaluation/ops,KEEP,,Demo AGI capabilities — P1-1 → P3 push toward human intelligence.,
 scripts/export_chats.py,169,evaluation/ops,KEEP,,Export Arena chats + cognitive traces into one shareable file.,
 scripts/live_check.py,137,evaluation/ops,KEEP,,Live verification of tools that need real network / credentials.,
-scripts/map_agi_architecture.py,803,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
+scripts/map_agi_architecture.py,815,evaluation/ops,KEEP,,Phase 0 (Beanie AGI Roadmap): whole-repository architecture map.,
 scripts/owner_diagnostics.py,538,evaluation/ops,KEEP,,Owner-machine diagnostics (run where LM Studio / hardware live).,
 scripts/owner_machine_check.py,117,evaluation/ops,KEEP,,"One-shot owner-machine readiness check: hardware, OS grounding, providers.",
 scripts/reset_learning.py,285,evaluation/ops,KEEP,,reset_learning.py — clear Arena's learned experience (the polluted learning).,

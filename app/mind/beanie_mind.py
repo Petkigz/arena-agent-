@@ -38,6 +38,7 @@ from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
 from app.mind.attention import Attention
+from app.mind.authority import Authority
 from app.mind.memory_facade import SocialMemoryStore, UnifiedMemory
 from app.mind.motivation import Motivation
 from app.mind.os_concepts import OSConceptLayer
@@ -98,6 +99,7 @@ class BeanieMind:
         self._motivation: Optional[Motivation] = None
         self._social: Optional[Social] = None
         self._personality: Optional[Personality] = None
+        self._authority: Optional[Authority] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -351,6 +353,17 @@ class BeanieMind:
                 self._personality = Personality(self)
             return self._personality
 
+    @property
+    def authority(self) -> Authority:
+        """Phase 18: the owner's authority — five lanes of rules the owner
+        stated (always / ask-first / never / trusted contexts /
+        temporary), asks opened and answered conversationally. Judges
+        authorization only; never executes; asking is never refusing."""
+        with self._lock:
+            if self._authority is None:
+                self._authority = Authority(self)
+            return self._authority
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -387,6 +400,7 @@ class BeanieMind:
         )
         self._learn_from_cycle(user_text, modality, result)
         self._run_personality(user_text, result)
+        self._run_authority(user_text)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -530,6 +544,17 @@ class BeanieMind:
                 self.personality.record_reply(result.get("assistant_reply"))
         except Exception as exc:
             app_logger.warning(f"Reply sample skipped (non-fatal): {exc}")
+
+    def _run_authority(self, user_text: str) -> None:
+        """Phase 18: the owner's words may state authority rules ('never
+        delete…', 'you can always…', 'ask before…'). Rules come ONLY from
+        the owner. Best-effort; never fails the task."""
+        if str(getattr(settings, "ARENA_AUTHORITY", "1")) == "0":
+            return
+        try:
+            self.authority.note(user_text)
+        except Exception as exc:
+            app_logger.warning(f"Authority pass skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

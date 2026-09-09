@@ -543,3 +543,41 @@ def mind_personality_derive() -> dict:
     what changed since the last snapshot — the verifiable record of
     'Beanie has changed'."""
     return BeanieMind.get_instance().personality.derive()
+
+
+# ── Phase 18: owner authority ──────────────────────────────────────────────
+class AuthorityCheckIn(BaseModel):
+    action: str = Field(min_length=1, max_length=2000)
+    safety_level: Optional[int] = None
+    context: str = ""
+
+
+class AuthorityAnswerIn(BaseModel):
+    ask_id: int
+    allow: bool
+
+
+@router.get("/mind/authority")
+def mind_authority_policy() -> dict:
+    """The owner's authority policy: five lanes (always allowed / ask
+    first / never do / trusted contexts / temporary) exactly as the owner
+    stated them, plus open asks. No system morals, no invented
+    restrictions."""
+    return {"success": True, **BeanieMind.get_instance().authority.policy()}
+
+
+@router.post("/mind/authority/check")
+def mind_authority_check(body: AuthorityCheckIn) -> dict:
+    """Where does this action sit in the owner's policy? Ask-first opens a
+    typed requires_owner_approval ask — never a silent drop. Judges
+    authorization only; never executes."""
+    return BeanieMind.get_instance().authority.check(
+        body.action, safety_level=body.safety_level, context=body.context)
+
+
+@router.post("/mind/authority/answer")
+def mind_authority_answer(body: AuthorityAnswerIn) -> dict:
+    """The owner answers an open ask conversationally; the answer is
+    obeyed. A declined ask is the owner's decision — the only reason it
+    doesn't happen."""
+    return BeanieMind.get_instance().authority.answer(body.ask_id, body.allow)

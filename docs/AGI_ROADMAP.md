@@ -680,6 +680,28 @@ experience.
 
 ## Phase 18 — Owner Authority
 
+> ✅ **LIVE 2026-09-08:** `app/mind/authority.py` — the owner's authority,
+> not system morals. Five lanes exactly as the roadmap draws them:
+> always_allowed / ask_first / never_do / trusted_context / temporary —
+> rules come ONLY from the owner's statements ("never delete…", "you can
+> always…", "ask before…", "just for today…", "when working on X you
+> can…"), restated rules compound with provenance, and Phase-16 boundaries
+> seed the never lane automatically. Charter §2 governs every verdict:
+> risk patterns (delete/format/send/…) decide WHEN TO ASK and nothing
+> else — no silent drop, no bare refusal; an unruled action asks (asking
+> is never refusing); ask-first opens a TYPED `requires_owner_approval`
+> ask with the real reason; `answer()` obeys the owner — "go ahead"
+> executes-forward, and a declined ask is the owner's decision, the only
+> reason it doesn't happen. Never-lane verdicts quote the owner's rule
+> back and note authority ≠ intelligence (she understands HOW even where
+> the lane withholds authorization). Live-verified: never beats always;
+> trusted contexts apply only inside their context; honesty boundaries
+> are permanent truth rules, not refusals, and are not owner-policy here.
+> Owner-visible: `GET /mind/authority`, `POST /mind/authority/check`,
+> `POST /mind/authority/answer` (48 `/mind/*` paths; 51 routes). Kill
+> switch `ARENA_AUTHORITY=0` gates the door pass; the owner surface keeps
+> working. Guarded by `tests/test_mind_authority.py` (17 tests).
+
 Not arbitrary system morals. Not random hard-coded restrictions. Instead:
 
 ```
