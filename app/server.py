@@ -367,9 +367,23 @@ async def lifespan(app: FastAPI):
 
     _log_elevation_status()
 
+    # Post-roadmap (#26, opened at the owner's request): she wakes —
+    # the lifespan records the awakening in the mortality ledger.
+    try:
+        from app.mind import BeanieMind
+        BeanieMind.get_instance()._run_mortality_lifecycle("awakening")
+    except Exception as e:
+        app_logger.warning(f"Mortality awakening skipped (non-fatal): {e}")
+
     yield
 
     app_logger.info("Shutting down Arena...")
+    # Post-roadmap (#26): she sleeps — the ledger remembers.
+    try:
+        from app.mind import BeanieMind
+        BeanieMind.get_instance()._run_mortality_lifecycle("shutdown")
+    except Exception as e:
+        app_logger.warning(f"Mortality shutdown skipped (non-fatal): {e}")
     try:
         import app.perception.background_observer as _bo
 

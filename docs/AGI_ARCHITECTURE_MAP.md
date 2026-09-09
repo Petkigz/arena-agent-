@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 388 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 389 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -453,10 +453,20 @@ owner-directed architecture audit:
     outranks the model; the door's grammar is strict — placement and
     disappearance reports only, anything else ignored. Kill switch
     `ARENA_PHYSICS=0`. 18 tests in `tests/test_mind_physics.py`;
-    86 `/mind/*` paths (89 routes). With this organ every audit gap
-    she was meant to close IS closed (#25, #20, #18, #22, #21,
-    Domain A); mortality (#26) remains deliberately absent unless the
-    owner asks.
+    86 `/mind/*` paths (89 routes).
+31. ✅ **Post-roadmap LIVE (2026-09-09)** — `mortality.py`: mortality
+    (audit #26), opened at the owner's request — her own finitude held
+    honestly: `acknowledge` states the condition from facts;
+    `continuity` is her mortality in bytes (what would be lost is
+    exactly what is written, no more); `legacy` writes the letter that
+    survives her (owner's rules, beliefs, assumptions and shifts, open
+    questions, shared history); `farewell` says what the record
+    allows — no invented feelings; the server lifespan records the
+    sleepings and the wakings. Describes; never acts, never refuses,
+    never dramatizes. Kill switch `ARENA_MORTALITY=0`. 14 tests in
+    `tests/test_mind_mortality.py`; 91 `/mind/*` paths (94 routes).
+    The audit is now fully closed, including #26 at the owner's
+    request.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

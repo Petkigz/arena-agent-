@@ -24,6 +24,7 @@ from app.mind.world_first import WorldFirstReasoning
 from app.mind.learning_loop import GeneralLearningEngine, EXPERIENCE_KINDS
 from app.mind.teaching import DemonstrationTeaching
 from app.mind.media_learning import MediaLearning
+from app.mind.mortality import Mortality
 from app.mind.curiosity import CuriosityEngine
 from app.mind.imagination import Imagination
 from app.mind.embodiment import Embodiment
@@ -55,5 +56,5 @@ __all__ = [
     "OSConceptLayer", "Perception", "Attention", "Motivation", "Social",
     "Personality", "Authority", "Reflection", "Improvement", "Evolution",
     "Presence", "Embodiments", "Evaluation", "Scrutiny", "BeliefModel",
-    "IdleReplay", "Stakes", "Paradigms", "IntuitivePhysics",
+    "IdleReplay", "Stakes", "Paradigms", "IntuitivePhysics", "Mortality",
 ]

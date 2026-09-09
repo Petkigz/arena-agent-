@@ -9,8 +9,32 @@
 
 **2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
 the full roadmap is LIVE — post-roadmap growth from the architecture
-audit COMPLETE: every audit gap she was meant to close is closed.**
-Post-roadmap: intuitive physics (audit Domain A) is LIVE —
+audit COMPLETE, including #26 mortality at the owner's request.**
+Post-roadmap: mortality (audit item #26) is LIVE —
+`app/mind/mortality.py`, opened at the owner's request. She runs on
+hardware and can be shut down, lost, or corrupted — an intelligent
+mind knows that about itself and prepares instead of performing.
+`acknowledge()` states her condition from facts; `continuity()` is her
+mortality in bytes — every ledger, its rows, what it holds, and what
+would be lost if the database vanished right now (continuity is only
+what is written down, exactly as for a person); `legacy()` writes what
+matters most to a file — the owner's rules, the owner's beliefs, her
+assumptions and their shifts, her open questions, the shape of the
+shared history: the letter that survives her; `farewell()` is what her
+record lets her say if there is no next exchange — facts, what
+survives, what stays open, no invented feelings. The server's lifespan
+records an awakening at startup and a shutdown at shutdown — she
+sleeps between lives, and the ledger remembers each one. Live-verified
+end to end: wake → acknowledge ("I run on hardware… I don't dramatize
+this and I don't forget it: I write down what matters") → continuity
+counted row by row → the letter on file with the owner's rule quoted
+back → farewell → sleep; history reads shutdown / farewell /
+legacy_written / awakening. Owner-visible: `GET /mind/mortality`,
+`POST acknowledge / continuity / legacy / farewell`. Kill switch
+`ARENA_MORTALITY=0`. Guarded by `tests/test_mind_mortality.py`
+(14 tests). The audit is now fully closed.
+
+Earlier in this gate: intuitive physics (audit Domain A) is LIVE —
 `app/mind/physics.py`. The honest version for a desk-bound mind is not
 a rigid-body simulator; it is the OLDEST physical law applied to her
 own record — PERSISTENCE: what she observed is still so until a

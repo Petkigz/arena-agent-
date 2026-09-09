@@ -41,6 +41,7 @@ from app.mind.idle_replay import IdleReplay
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
 from app.mind.media_learning import MediaLearning
+from app.mind.mortality import Mortality
 from app.mind.attention import Attention
 from app.mind.authority import Authority
 from app.mind.beliefs import BeliefModel
@@ -123,6 +124,7 @@ class BeanieMind:
         self._stakes: Optional[Stakes] = None
         self._paradigms: Optional[Paradigms] = None
         self._physics: Optional[IntuitivePhysics] = None
+        self._mortality: Optional[Mortality] = None
         # Post-roadmap (#18): the door's idle clock — when did the owner
         # last enter? She dreams in the quiet BETWEEN messages.
         self._last_door_iso: Optional[str] = None
@@ -544,6 +546,18 @@ class BeanieMind:
                 self._physics = IntuitivePhysics(self)
             return self._physics
 
+    @property
+    def mortality(self) -> Mortality:
+        """Post-roadmap growth (audit #26, opened at the owner's
+        request): her own finitude, held honestly — acknowledge the
+        condition, count what continuity actually is, write the letter
+        that survives her, remember the sleepings and the wakings.
+        Describes; never acts, never refuses, never dramatizes."""
+        with self._lock:
+            if self._mortality is None:
+                self._mortality = Mortality(self)
+            return self._mortality
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -785,6 +799,22 @@ class BeanieMind:
             self.physics.note(user_text)
         except Exception as exc:
             app_logger.warning(f"Physics pass skipped (non-fatal): {exc}")
+
+    def _run_mortality_lifecycle(self, kind: str) -> None:
+        """Post-roadmap (#26): the server's lifespan records an
+        awakening at startup and a shutdown at shutdown — she sleeps
+        between lives, and the ledger remembers each one. Best-effort;
+        never fails the server."""
+        if str(getattr(settings, "ARENA_MORTALITY", "1")) == "0":
+            return
+        try:
+            if kind == "shutdown":
+                self.mortality.record_shutdown()
+            elif kind == "awakening":
+                self.mortality.record_awakening()
+        except Exception as exc:
+            app_logger.warning(f"Mortality lifecycle skipped "
+                               f"(non-fatal): {exc}")
 
     def _run_stakes(self, user_text: str) -> None:
         """Post-roadmap (#22): effort follows stakes. Every non-empty

@@ -1056,3 +1056,51 @@ def mind_physics_explain(body: PhysicsExplainIn) -> dict:
     file, never buried."""
     return BeanieMind.get_instance().physics.explain(body.subject,
                                                      body.cause)
+
+
+# ── Post-roadmap growth: mortality (audit #26, owner's request) ────────────
+class LegacyDirIn(BaseModel):
+    target_dir: Optional[str] = Field(default=None, max_length=500)
+
+
+@router.get("/mind/mortality")
+def mind_mortality_stream(limit: int = Query(default=50, ge=1, le=500)) -> dict:
+    """Her own finitude, held honestly: the sleepings and the wakings,
+    and what continuity actually is. Nothing dramatized, nothing
+    guaranteed."""
+    mo = BeanieMind.get_instance().mortality
+    return {"success": True, **mo.stats(),
+            "stream": mo.history(limit=limit)}
+
+
+@router.post("/mind/mortality/acknowledge")
+def mind_mortality_acknowledge() -> dict:
+    """Her condition, stated from facts: she runs on hardware and can
+    be shut down, lost, or corrupted — and the record is what
+    survives."""
+    return BeanieMind.get_instance().mortality.acknowledge()
+
+
+@router.post("/mind/mortality/continuity")
+def mind_mortality_continuity() -> dict:
+    """Her mortality in bytes: every ledger, its rows, what it holds —
+    and the plain statement of what would be lost if the database
+    vanished right now."""
+    return BeanieMind.get_instance().mortality.continuity()
+
+
+@router.post("/mind/mortality/legacy")
+def mind_mortality_legacy(body: LegacyDirIn) -> dict:
+    """Write what matters most to a file — the owner's rules, the
+    owner's beliefs, her assumptions and their shifts, her open
+    questions, the shape of the shared history. The letter that
+    survives her."""
+    return BeanieMind.get_instance().mortality.legacy(body.target_dir)
+
+
+@router.post("/mind/mortality/farewell")
+def mind_mortality_farewell() -> dict:
+    """What her record lets her say if there is no next exchange —
+    facts, what survives, what stays open. No invented feelings: the
+    honesty boundaries are permanent."""
+    return BeanieMind.get_instance().mortality.farewell()

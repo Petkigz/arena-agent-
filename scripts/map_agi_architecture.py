@@ -704,6 +704,18 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/mortality.py": (
+        "mind/mortality", "KEEP", "MORTALITY",
+        "Post-roadmap LIVE (audit #26, opened at the owner's request): "
+        "her own finitude held honestly — acknowledge states the "
+        "condition from facts; continuity is her mortality in bytes "
+        "(what would be lost is exactly what is written, no more); "
+        "legacy writes the letter that survives her (owner's rules, "
+        "beliefs, assumptions and shifts, open questions, shared "
+        "history); farewell says what the record allows, no invented "
+        "feelings; the server lifespan records the sleepings and the "
+        "wakings; describes, never acts, never refuses, never "
+        "dramatizes"),
     "app/mind/physics.py": (
         "mind/physics", "KEEP", "PHYSICS",
         "Post-roadmap LIVE (audit Domain A): intuitive physics — "

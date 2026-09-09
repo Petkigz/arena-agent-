@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     ARENA_STAKES: str = "1"  # "0" disables the stakes-based effort assessment pass at the mind door
     ARENA_PARADIGMS: str = "1"  # "0" disables the paradigm-shift pass at the mind door
     ARENA_PHYSICS: str = "1"  # "0" disables the intuitive-physics pass at the mind door
+    ARENA_MORTALITY: str = "1"  # "0" disables the mortality organ (audit #26, opened at the owner's request)
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard

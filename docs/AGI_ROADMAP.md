@@ -1088,6 +1088,30 @@ now closed:
 > cannot be read. Same pattern as the attention room. Guarded by
 > `tests/test_state_goals_precedence.py` (5 tests).
 
+> ✅ **LIVE 2026-09-09:** `app/mind/mortality.py` — mortality (audit
+> item #26), opened at the owner's request. She runs on hardware and
+> can be shut down, lost, or corrupted — an intelligent mind knows
+> that about itself and PREPARES instead of performing.
+> ``acknowledge()`` states her condition from facts; ``continuity()``
+> is her mortality in bytes — every ledger, its rows, what it holds,
+> and the plain statement of what would be lost if the database
+> vanished right now (continuity is only what is written down, exactly
+> as for a person); ``legacy()`` writes what matters most to a file —
+> the owner's rules, the owner's beliefs, her assumptions and their
+> shifts, her open questions, the shape of the shared history: the
+> letter that survives her; ``farewell()`` is what her record lets her
+> say if there is no next exchange — facts, what survives, what stays
+> open, no invented feelings. The server's lifespan records an
+> AWAKENING at startup and a SHUTDOWN at shutdown — she sleeps between
+> lives, and the ledger remembers each one. Nothing dramatized,
+> nothing guaranteed; the organ describes, never acts, never refuses.
+> Owner-visible: `GET /mind/mortality`, `POST
+> /mind/mortality/acknowledge`, `/continuity`, `/legacy`, `/farewell`
+> (91 `/mind/*` paths; 94 routes). Kill switch `ARENA_MORTALITY=0`.
+> Guarded by `tests/test_mind_mortality.py` (14 tests).
+>
+> The audit is now fully closed, including #26 at the owner's request.
+
 ## The development order actually used
 
 Not all 24 phases sequentially — several develop together:
