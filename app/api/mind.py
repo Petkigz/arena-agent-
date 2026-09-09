@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.mind import BeanieMind
 
 router = APIRouter()
@@ -821,3 +822,27 @@ def mind_embodiments_execution(body: EmbodimentExecutionIn) -> dict:
     bodies are hands, never brains."""
     return BeanieMind.get_instance().embodiments.note_execution(
         body.body_id, body.action)
+
+
+# ── Phase 24: AGI evaluation — measure generalization ──────────────────────
+@router.get("/mind/evaluation")
+def mind_evaluation_stream(limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    """AGI evaluation: measure GENERALIZATION, not test counts. The
+    ledger of runs of the seven task families (A–G), each a
+    deterministic proxy against the real organs — proxies, never
+    proof."""
+    ev = BeanieMind.get_instance().evaluation
+    return {"success": True, **ev.stats(), "stream": ev.runs(limit=limit)}
+
+
+@router.post("/mind/evaluation/run")
+def mind_evaluation_run() -> dict:
+    """Run all seven generalization families now: teach once → variation;
+    tutorial without hard-coded workflow; unfamiliar error → investigate;
+    environment change → adapt; incomplete instruction → infer (never
+    fabricate); fail → learn; teach on one body → transfer."""
+    if str(getattr(settings, "ARENA_EVALUATION", "1")) == "0":
+        return {"success": False,
+                "reason": "the evaluation surface is disabled "
+                          "(ARENA_EVALUATION=0)"}
+    return BeanieMind.get_instance().evaluation.run_all()

@@ -904,6 +904,30 @@ Both are clients of the same Mind. Not two separate assistants.
 
 ## Phase 24 — AGI Evaluation
 
+> ✅ **LIVE 2026-09-09:** `app/mind/evaluation.py` — measure
+> GENERALIZATION, not test counts. All seven task families run as
+> DETERMINISTIC proxies against her real organs — never an LLM jury,
+> never a staged pass: **A** teach once → variation (adaptation scored
+> on real term evidence); **B** tutorial → the steps she performs are
+> recovered from what was actually LEARNED (ledger recovery, never
+> hidden knowledge); **C** unfamiliar error → becomes a registered
+> UNKNOWN (investigation starts with honest ignorance); **D**
+> environment change → the registry revision advances and stale
+> availability is dropped (re-probe, never dead facts); **E**
+> incomplete instruction → correctness stays UNKNOWN (never fabricated
+> completion); **F** verified failure → called WRONG with counsel
+> (failure becomes material); **G** teach on one body → the OS concept
+> layer transfers it, resolved on the target body or flagged as a
+> VISIBLE gap, never a fabricated capability. Each task yields a score
+> in [0,1] with evidence; the overall number is a proxy measurement of
+> generalization — meaningful, and honestly labeled a proxy, never
+> proof. First live report card: A 0.83 / B–F 1.00 / G 0.00 (the
+> sandbox's empty capability manifest leaves transfer gaps VISIBLE).
+> Owner-visible: `GET /mind/evaluation`, `POST /mind/evaluation/run`
+> (69 `/mind/*` paths; 72 routes). Kill switch `ARENA_EVALUATION=0`
+> gates the run surface. Guarded by `tests/test_mind_evaluation.py`
+> (12 tests).
+
 Stop measuring primarily "How many tests pass?" Measure **generalization**.
 Create tasks Beanie has never explicitly been programmed for:
 

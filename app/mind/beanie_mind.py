@@ -35,6 +35,7 @@ from app.mind.curiosity import CuriosityEngine
 from app.mind.embodiment import Embodiment
 from app.mind.evolution import Evolution
 from app.mind.embodiments import Embodiments
+from app.mind.evaluation import Evaluation
 from app.mind.identity import BeanieIdentity
 from app.mind.imagination import Imagination
 from app.mind.learning_loop import GeneralLearningEngine
@@ -109,6 +110,7 @@ class BeanieMind:
         self._improvement: Optional[Improvement] = None
         self._evolution: Optional[Evolution] = None
         self._embodiments: Optional[Embodiments] = None
+        self._evaluation: Optional[Evaluation] = None
         self._presence: Optional[Presence] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
@@ -434,6 +436,21 @@ class BeanieMind:
             if self._embodiments is None:
                 self._embodiments = Embodiments(self)
             return self._embodiments
+
+    @property
+    def evaluation(self) -> Evaluation:
+        """Phase 24: AGI evaluation — measure GENERALIZATION, not test
+        counts. Seven task families (A–G: teach once → variation;
+        tutorial without hard-coded workflow; unfamiliar error →
+        investigate; environment change → adapt; incomplete instruction
+        → infer, never fabricate; fail → learn; teach on one body →
+        transfer) run as deterministic proxies against the real organs.
+        Proxies, never proof. An explicit surface act — never runs per
+        cycle."""
+        with self._lock:
+            if self._evaluation is None:
+                self._evaluation = Evaluation(self)
+            return self._evaluation
 
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(

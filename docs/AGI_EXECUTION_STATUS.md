@@ -7,8 +7,23 @@
 
 ## Current owner-directed gate
 
-**2026-09-09 — Beanie AGI roadmap active; Phases 0–23 ✅ complete.**
-Phase 23 (desktop + Android as embodiments) is LIVE:
+**2026-09-09 — Beanie AGI roadmap active; Phases 0–24 ✅ complete —
+the full roadmap is LIVE.**
+Phase 24 (AGI evaluation) is LIVE: `app/mind/evaluation.py` — measure
+GENERALIZATION, not test counts. All seven task families (A teach once
+→ variation; B tutorial without hard-coded workflow; C unfamiliar error
+→ investigate; D environment change → adapt; E incomplete instruction
+→ infer, never fabricate; F fail → learn; G teach on one body →
+transfer) run as DETERMINISTIC proxies against her real organs — never
+an LLM jury, never a staged pass. Scores in [0,1] with evidence; the
+overall is honestly labeled a proxy, never proof. First live report
+card: A 0.83 / B–F 1.00 / G 0.00 (empty sandbox manifest → transfer
+gaps VISIBLE, never fabricated). Owner-visible: `GET /mind/evaluation`,
+`POST /mind/evaluation/run`. Kill switch `ARENA_EVALUATION=0`. Guarded
+by `tests/test_mind_evaluation.py` (12 tests).
+
+Earlier in this gate: Phase 23 (desktop + Android as embodiments)
+LIVE:
 `app/mind/embodiments.py` — the bodies of the one mind. Bodies announce
 themselves (fixed vocabulary desktop/android/web — unknown kinds
 refused, never invented; re-announce updates, never duplicates) and are

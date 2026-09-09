@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/evaluation.py": (
+        "mind/evaluation", "KEEP", "EVALUATION",
+        "Phase 24 LIVE: AGI evaluation — measure generalization, not "
+        "test counts; the seven task families (A teach-once→variation; "
+        "B tutorial without hard-coded workflow; C unfamiliar error → "
+        "registered unknown; D environment change → revision advance; "
+        "E incomplete instruction → UNKNOWN preserved; F failure → "
+        "counsel; G teach on one body → transfer via the OS concept "
+        "layer, gaps VISIBLE) run as deterministic proxies against the "
+        "real organs — proxies honestly labeled, never proof"),
     "app/mind/embodiments.py": (
         "mind/embodiments", "KEEP", "EMBODIMENT",
         "Phase 23 LIVE: the bodies of the ONE mind — desktop and Android "

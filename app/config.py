@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     ARENA_EVOLUTION: str = "1"  # "0" disables Phase-21 consolidation pass at the mind door
     ARENA_PRESENCE: str = "1"  # "0" disables Phase-22 presence-state settling at the mind door
     ARENA_EMBODIMENTS: str = "1"  # "0" disables Phase-23 presence broadcast to alive bodies at the mind door
+    ARENA_EVALUATION: str = "1"  # "0" disables the Phase-24 generalization evaluation surface
     ARENA_AUTO_OPEN_DASHBOARD: str = "1"  # "0" stops the dashboard from opening when the server starts
     CODE_MODEL: str = "auto"  # pinned coder model id, or "auto" = best loaded code specialist
     ARENA_ANNOUNCEMENT_GUARD: str = "1"  # "0" disables the no-announcements reply guard

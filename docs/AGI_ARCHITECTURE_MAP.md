@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 381 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 382 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -185,7 +185,8 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-09: steps 1–23 are LIVE (Phases 1–23 complete).**
+**Status 2026-09-09: steps 1–24 are LIVE — Phases 1–24 complete; the
+full owner-directed roadmap is LIVE.**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -379,10 +380,26 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     background presence, one continuous conversation. Kill switch
     `ARENA_EMBODIMENTS=0`. 14 tests in `tests/test_mind_embodiments.py`;
     67 `/mind/*` paths (70 routes) total.
-24. **Open (roadmap order):** Phase 24 AGI evaluation — stop measuring
-    primarily "how many tests pass"; measure GENERALIZATION (M9): teach
-    once → variation; tutorial without hard-coded workflow; unfamiliar
-    error investigation, per the owner's sequencing.
+24. ✅ **Phase 24 LIVE (2026-09-09)** — `evaluation.py`: measure
+    GENERALIZATION, not test counts (M9 resolved). All seven task
+    families (A teach once → variation; B tutorial without hard-coded
+    workflow; C unfamiliar error → registered unknown; D environment
+    change → adapt; E incomplete instruction → infer, never fabricate;
+    F fail → learn; G teach on one body → transfer) run as
+    deterministic proxies against the real organs — never an LLM jury,
+    never a staged pass. Scores in [0,1] with evidence; the overall is
+    honestly labeled a proxy, never proof. First live report card:
+    A 0.83 / B–F 1.00 / G 0.00 (empty sandbox manifest → gaps VISIBLE).
+    Kill switch `ARENA_EVALUATION=0`. 12 tests in
+    `tests/test_mind_evaluation.py`; 69 `/mind/*` paths (72 routes)
+    total.
+
+**All 24 roadmap phases are LIVE.** What remains is not a phase but
+practice: run the generalization evaluation on the owner's machine with
+the real capability manifest and a live model, feed the results back
+through reflection → improvement → evolution, and let the map's
+dispositions (the MERGE/INTEGRATE/DEMOTE backlog) be worked down as she
+grows.
 
 ---
 
