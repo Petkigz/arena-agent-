@@ -708,3 +708,44 @@ def mind_evolution_evaluate() -> dict:
     """Deterministic dataset sufficiency: volume floor + both outcome
     classes present. Arithmetic, never optimism."""
     return BeanieMind.get_instance().evolution.evaluate_dataset()
+
+
+# ── Phase 22: voice-first presence ─────────────────────────────────────────
+class PresenceNoteIn(BaseModel):
+    state: str = Field(min_length=1, max_length=40)
+    detail: str = ""
+    source: str = "owner_surface"
+
+
+class PresenceVoiceIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    conversation_id: Optional[str] = None
+
+
+@router.get("/mind/presence")
+def mind_presence_stream() -> dict:
+    """Voice-first presence: how she is present right now (the design
+    vocabulary's state machine, derived from real signals, never staged)
+    plus the contextual window into the mind — complicated information
+    when needed, not permanently."""
+    p = BeanieMind.get_instance().presence
+    return {"success": True, **p.stats(), "current": p.current(),
+            "context_window": p.context_window()}
+
+
+@router.post("/mind/presence/note")
+def mind_presence_note(body: PresenceNoteIn) -> dict:
+    """Record a real presence transition. States outside the design
+    vocabulary are refused — a presence state is never invented."""
+    return BeanieMind.get_instance().presence.note(
+        body.state, detail=body.detail, source=body.source)
+
+
+@router.post("/mind/presence/voice")
+def mind_presence_voice(body: PresenceVoiceIn) -> dict:
+    """The voice-primary door: a transcript enters the ONE mind exactly
+    like any other modality; the reply comes back with the presence
+    state the evidence supports (verified success / verified failure /
+    nothing claimed)."""
+    return BeanieMind.get_instance().presence.voice_turn(
+        body.text, conversation_id=body.conversation_id)

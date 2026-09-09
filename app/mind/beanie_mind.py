@@ -46,6 +46,7 @@ from app.mind.os_concepts import OSConceptLayer
 from app.mind.improvement import Improvement
 from app.mind.perception import Perception
 from app.mind.personality import Personality
+from app.mind.presence import Presence
 from app.mind.reflection import Reflection
 from app.mind.social import Social
 from app.mind.self_facade import SelfModelFacade
@@ -106,6 +107,7 @@ class BeanieMind:
         self._reflection: Optional[Reflection] = None
         self._improvement: Optional[Improvement] = None
         self._evolution: Optional[Evolution] = None
+        self._presence: Optional[Presence] = None
         self._entry_count = 0
         # Phase 2: the most recent world-first briefs (owner-inspectable).
         self._briefs: List[Dict[str, Any]] = []
@@ -407,6 +409,18 @@ class BeanieMind:
                 self._evolution = Evolution(self)
             return self._evolution
 
+    @property
+    def presence(self) -> Presence:
+        """Phase 22: voice-first presence — how she is present in the
+        conversation right now (states from the design vocabulary,
+        derived from real signals, never staged), the contextual window
+        into the mind (complicated information when needed, not
+        permanent), and the voice-primary door into the ONE mind."""
+        with self._lock:
+            if self._presence is None:
+                self._presence = Presence(self)
+            return self._presence
+
     # ── THE DOOR ─────────────────────────────────────────────────────────
     def process(
         self,
@@ -447,6 +461,7 @@ class BeanieMind:
         self._run_reflection(user_text, result)
         self._run_improvement(user_text, result)
         self._run_evolution(result)
+        self._run_presence(result)
         return result
 
     def _learn_from_cycle(self, user_text: str, modality: str, result: Any) -> None:
@@ -660,6 +675,25 @@ class BeanieMind:
             self.evolution.maybe_consolidate()
         except Exception as exc:
             app_logger.warning(f"Evolution pass skipped (non-fatal): {exc}")
+
+    def _run_presence(self, result: Any) -> None:
+        """Phase 22: a cycle with a DEFINITE verifier verdict settles the
+        presence state the evidence supports (success / error). No
+        verdict → no staged state. Best-effort; never fails the task."""
+        if str(getattr(settings, "ARENA_PRESENCE", "1")) == "0":
+            return
+        if not isinstance(result, dict):
+            return
+        verified = result.get("goal_verified")
+        if not isinstance(verified, bool) or result.get("verification_unknown"):
+            return
+        try:
+            self.presence.note(
+                "success" if verified else "error",
+                detail="the verifier's word from the door",
+                source="door")
+        except Exception as exc:
+            app_logger.warning(f"Presence pass skipped (non-fatal): {exc}")
 
     def _feed_gaps_to_curiosity(self, gaps: List[str], user_text: str) -> None:
         """Phase 9: 'not yet in world model' → open unknowns. Best-effort;

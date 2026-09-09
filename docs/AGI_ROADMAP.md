@@ -820,6 +820,30 @@ That prevents catastrophic forgetting and unnecessary retraining.
 
 ## Phase 22 — Voice-first Beanie
 
+> ✅ **LIVE 2026-09-09:** `app/mind/presence.py` — voice-first presence.
+> The presence vocabulary IS the design system's own state machine
+> (`design/tokens.json` → `beanie.states`: idle / listening / thinking /
+> speaking / working / acting / observing / success / error / offline) —
+> one shared vocabulary, rendered per platform; states outside it are
+> refused, never invented, and with no activity on record she reports
+> idle HONESTLY (never pretends to be busy). The CONTEXTUAL WINDOW is
+> the complicated information existing WHEN NEEDED, not permanently:
+> the recent conversation (the door's entry ledger), open asks awaiting
+> the owner's answer, active goals, top open unknowns, model-changing
+> lessons — each bounded, each from a real ledger, each honest when
+> unavailable. The VOICE-PRIMARY DOOR sends a transcript through the ONE
+> mind exactly like any modality; the settled state is the verifier's
+> word (verified success → success; verified failure → error; no verdict
+> → nothing claimed). The voice pipeline (`backend/voice` orchestrator:
+> wake word, VAD, STT, TTS) stays wired as a callable — it calls this
+> organ; one typed door, one continuous conversation. Live-verified:
+> voice turn → verified success → green Success presence; open asks
+> surface in the window with their reasons. Owner-visible:
+> `GET /mind/presence`, `POST /mind/presence/note`,
+> `POST /mind/presence/voice` (61 `/mind/*` paths; 64 routes). Kill
+> switch `ARENA_PRESENCE=0` gates the door pass; the owner surface keeps
+> working. Guarded by `tests/test_mind_presence.py` (15 tests).
+
 The desktop shouldn't look like a traditional dashboard. It should feel like:
 
 ```

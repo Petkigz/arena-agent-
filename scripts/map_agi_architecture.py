@@ -704,6 +704,16 @@ OVERRIDES = {
         "verified failure → open unknown with curiosity) / remember? "
         "(the loop's own decision) — every answer from evidence on "
         "record, never narrated; reflecting performs nothing"),
+    "app/mind/presence.py": (
+        "mind/presence", "KEEP", "PRESENCE",
+        "Phase 22 LIVE: voice-first presence — the state vocabulary is "
+        "the design system's own machine (design/tokens.json → "
+        "beanie.states); states derived from real signals, never staged, "
+        "never invented; idle is honest, not a mask; the contextual "
+        "window shows the complicated information when needed, not "
+        "permanently (conversation, open asks, goals, unknowns, "
+        "lessons); the voice-primary door sends transcripts through the "
+        "ONE mind, settling state by the verifier's word only"),
     "app/mind/evolution.py": (
         "mind/evolution", "KEEP", "EVOLUTION",
         "Phase 21 LIVE: model evolution in three lanes — fast lane "

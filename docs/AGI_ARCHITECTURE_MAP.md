@@ -13,7 +13,7 @@ Integrity evidence captured at baseline (this sandbox): full Python suite
 **3,353 passed, 19 skipped, 0 failed**; `app.server:app` builds **367 HTTP +
 3 WebSocket routes**; all Python parses clean; the manifest carries **184
 capabilities** across 85 tool modules. The map covers all production Python
-modules with **0 unclassified** (354 at freeze; 379 after the `app/mind/`
+modules with **0 unclassified** (354 at freeze; 380 after the `app/mind/`
 package grew through Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 — the target architecture itself, all KEEP).
 
 ---
@@ -185,7 +185,7 @@ post-Phase-0 plan.
 
 ## 8. What happens next (proposed, owner decides)
 
-**Status 2026-09-09: steps 1–21 are LIVE (Phases 1–21 complete).**
+**Status 2026-09-09: steps 1–22 are LIVE (Phases 1–22 complete).**
 
 Per the roadmap's restructuring order, the first build step after this freeze:
 
@@ -351,11 +351,25 @@ Per the roadmap's restructuring order, the first build step after this freeze:
     stays on the owner's GPU machine — the organ reports readiness,
     never a trained model. Kill switch `ARENA_EVOLUTION=0`. 13 tests in
     `tests/test_mind_evolution.py`; 58 `/mind/*` paths (61 routes) total.
-22. **Open (roadmap order):** Phase 22 voice-first Beanie (the desktop
-    feels like a companion, not a dashboard: "Yeah?" + listening state +
-    small visual presence; voice primary, text backup), then one-mind
-    desktop+Android, and M9 generalization eval (P24), per the owner's
-    sequencing.
+22. ✅ **Phase 22 LIVE (2026-09-09)** — `presence.py`: voice-first
+    Beanie. The presence vocabulary IS the design system's own state
+    machine (`design/tokens.json` → `beanie.states`) — one shared
+    vocabulary, rendered per platform; states outside it are refused,
+    never invented; idle with no activity is honest, not a mask. The
+    contextual window shows the complicated information WHEN NEEDED —
+    recent conversation, open asks (with reasons), goals, top unknowns,
+    lessons — bounded, from real ledgers, never permanent. The
+    voice-primary door sends a transcript through the ONE mind like any
+    modality; the settled state is the verifier's word only (success /
+    error / nothing claimed). The voice pipeline (`backend/voice`
+    orchestrator) stays wired as a callable — one typed door, one
+    continuous conversation. Kill switch `ARENA_PRESENCE=0`. 15 tests in
+    `tests/test_mind_presence.py`; 61 `/mind/*` paths (64 routes) total.
+23. **Open (roadmap order):** Phase 23 desktop + Android as embodiments
+    — both clients of the SAME Mind (background presence, one continuous
+    conversation), then M9 generalization eval (P24: teach once →
+    variation; tutorial without hard-coded workflow; unfamiliar error
+    investigation), per the owner's sequencing.
 
 ---
 

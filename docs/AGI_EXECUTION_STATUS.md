@@ -7,8 +7,26 @@
 
 ## Current owner-directed gate
 
-**2026-09-09 — Beanie AGI roadmap active; Phases 0–21 ✅ complete.**
-Phase 21 (model evolution) is LIVE: `app/mind/evolution.py` — the three
+**2026-09-09 — Beanie AGI roadmap active; Phases 0–22 ✅ complete.**
+Phase 22 (voice-first Beanie) is LIVE: `app/mind/presence.py` — the
+presence vocabulary is the design system's own state machine
+(design/tokens.json → beanie.states); states outside it are refused,
+never invented; idle with no activity is honest, not a mask. The
+contextual window shows the complicated information WHEN NEEDED —
+recent conversation, open asks (with reasons), goals, top unknowns,
+lessons — bounded, from real ledgers, never permanent. The voice-primary
+door sends a transcript through the ONE mind like any modality; the
+settled state is the verifier's word only (success / error / nothing
+claimed). The voice pipeline (backend/voice orchestrator: wake word,
+VAD, STT, TTS) stays wired as a callable — one typed door, one
+continuous conversation. Live-verified: voice turn → verified success →
+Success presence; open asks surface in the window. Owner-visible:
+`GET /mind/presence`, `POST /mind/presence/note`,
+`POST /mind/presence/voice`. Kill switch `ARENA_PRESENCE=0`. Guarded by
+`tests/test_mind_presence.py` (15 tests).
+
+Earlier in this gate: Phase 21 (model evolution) LIVE —
+`app/mind/evolution.py` — the three
 lanes. Fast: already live at the door — reported from the real organs,
 never duplicated. Medium: the door consolidates when enough new verified
 learning accumulates, delegating to the WIRED ConsolidationCoordinator
