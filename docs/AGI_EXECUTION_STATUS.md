@@ -209,6 +209,39 @@ order-flakes (reproduced on pristine 57a0f8e, NOT from Phase 0): two
 code-lane tests in `test_task_execution_honesty.py` under a specific
 72-file subset ordering; they pass standalone and in full-suite order.
 
+**Phase 2 of the owner's mind-platform plan (2026-09-10) — authoritative
+world-model identity resolution, COMPLETE.** "Beanie acts on stable
+entities, not repeated string guesses." Built by EXTENDING the existing
+organ (app/cognition/world_model.py + app/mind/world_facade.py — one
+cognitive authority), not duplicating it: `WorldModel.resolve_candidates`
+returns ranked COMPETING HYPOTHESES, each with confidence + evidence
+(exact 1.0 → normalized 0.97 → alias ×0.97 → token containment 0.8 →
+difflib ≥0.6 ×0.85; certainty capped at 0.999 — never absolute);
+`add_alias` binds a spoken form to its canonical entity permanently with
+provenance observations; `why(entity_id)` answers "why do you believe
+this?" with the timestamped, source-tagged evidence trail. New
+`app/mind/app_identity.py` applies the policy: single strong candidate
+(≥0.9 or ≥0.12 margin) resolves; competing candidates produce a focused
+selection question (the word 'ambiguous' types the park reason as
+TARGET_AMBIGUOUS via the round-5 taxonomy); nothing matching falls
+through to the legacy inventory matcher. The launch seam in
+`master_agent.execute_proposal` now resolves BEFORE the inventory/fuzzy
+fallback can derail the request (the six-RichST-instances class of
+incident): ambiguous → ask, never launch; resolved → launch the
+CANONICAL name; successful legacy launches TEACH the binding
+(remember_app + alias + process-state observation). Freshness was
+already right in the organ (get_entity_state max_age →
+current/stale/unknown) and is pinned by test: a 3-day-old 'running' is
+stale, never current fact. Kill switch `ARENA_APP_IDENTITY=0` restores
+the pre-Phase-2 path exactly; every seam fail-opens (a broken world
+model degrades to the legacy matcher — verified by test). 20 new tests
+(tests/test_world_identity_resolution.py) + 530-test affected sweep
+clean. Scope honesty: the store's identity layer is kind-agnostic (all
+ontology types resolve through it), but only the APPLICATION path is
+wired into execution this round; files/devices/projects wiring is the
+next increment, and the Phase 1 typed Event ledger remains queued on
+the owner's go.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

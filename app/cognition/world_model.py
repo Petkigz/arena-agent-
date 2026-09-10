@@ -270,6 +270,142 @@ class WorldModel:
                 return entity
         return None
 
+    # ── Phase 2 (owner plan 2026-09-10): authoritative identity ──────────
+
+    @staticmethod
+    def _norm(text: str) -> str:
+        """Case/punctuation-insensitive comparison form (deterministic)."""
+        import re as _re
+        return _re.sub(r"[^a-z0-9]+", " ", str(text).casefold()).strip()
+
+    def resolve_candidates(self, query: str, entity_type: Optional[str] = None,
+                           limit: int = 8) -> List[Dict[str, Any]]:
+        """Ranked identity candidates, each carrying confidence + evidence.
+
+        Unlike ``resolve_entity`` (single exact/alias hit) this returns the
+        COMPETING HYPOTHESES with per-candidate evidence, so the caller can
+        distinguish 'sure' from 'ambiguous' from 'unknown' — the Phase 2
+        contract: matching creates candidates with confidence and evidence;
+        ambiguity produces a focused selection question, never a guess.
+        Deterministic: normalization + token + difflib only, no LLM.
+        """
+        import difflib
+
+        q = str(query or "").strip()
+        if not q:
+            return []
+        qn = self._norm(q)
+        if not qn:
+            return []
+        q_tokens = qn.split()
+        out: List[Dict[str, Any]] = []
+        for e in self.find_entities(entity_type=entity_type):
+            names = [(e.name, "name")]
+            aliases = (e.attributes or {}).get("aliases")
+            if isinstance(aliases, list):
+                names += [(str(a), "alias") for a in aliases if str(a).strip()]
+            best: Optional[tuple] = None  # (score, via, evidence)
+            for cand, kind in names:
+                c = str(cand).strip()
+                cn = self._norm(c)
+                if not cn:
+                    continue
+                if c.casefold() == q.casefold():
+                    score, ev = 1.0, f"exact {kind} match '{c}'"
+                elif cn == qn:
+                    score, ev = 0.97, f"{kind} '{c}' matches after normalization"
+                elif q_tokens and all(t in cn.split() for t in q_tokens):
+                    score, ev = 0.8, f"every token of '{q}' appears in {kind} '{c}'"
+                else:
+                    ratio = difflib.SequenceMatcher(None, qn, cn).ratio()
+                    if ratio < 0.6:
+                        continue
+                    score, ev = round(0.85 * ratio, 3), f"fuzzy similarity {ratio:.2f} with {kind} '{c}'"
+                if kind == "alias":
+                    score = round(score * 0.97, 3)  # aliases bind, canonical names bind harder
+                    ev += " (alias)"
+                if best is None or score > best[0]:
+                    best = (score, kind, ev)
+            if best is not None:
+                out.append({
+                    "entity": e,
+                    "confidence": min(0.999, round(best[0], 3)),
+                    "matched_via": best[1],
+                    "evidence": best[2],
+                })
+        out.sort(key=lambda c: (-c["confidence"], c["entity"].name.casefold()))
+        return out[: max(1, min(int(limit), 50))]
+
+    def add_alias(self, entity_id: str, alias: str, source: str = "owner") -> bool:
+        """Bind a spoken form to its canonical entity, permanently.
+
+        The alias list lives in attributes (the convention resolve_entity
+        and the facade's understand() already read); provenance for the
+        binding is recorded as an observation, so 'why do you believe
+        this?' can answer for the alias itself.
+        """
+        alias = str(alias or "").strip()
+        e = self.get_entity(entity_id)
+        if e is None or not alias:
+            return False
+        if alias.casefold() == e.name.casefold():
+            return True  # the canonical name needs no alias
+        aliases = [str(a) for a in (e.attributes or {}).get("aliases", []) if str(a).strip()]
+        if any(a.casefold() == alias.casefold() for a in aliases):
+            return True
+        aliases.append(alias)
+        attrs = dict(e.attributes or {})
+        attrs["aliases"] = aliases
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE world_entities SET attributes = ?, last_seen = ? WHERE id = ?",
+                (json.dumps(attrs), _now(), entity_id),
+            )
+        self.observe(Observation(
+            id=uuid4().hex, subject=e.name, predicate="alias", value=alias,
+            source=str(source), observation_type="inferred",
+        ))
+        return True
+
+    def why(self, entity_id: str, limit: int = 12) -> Dict[str, Any]:
+        """The owner's 'why do you believe this?' — one entity's evidence
+        trail: identity, aliases, timestamped observations WITH sources,
+        relationships. Freshness is enforced at read time by
+        get_entity_state/entity_state_status — stale state claims are never
+        served as current fact by this layer either (they carry their age).
+        """
+        e = self.get_entity(entity_id)
+        if e is None:
+            return {"known": False, "entity_id": entity_id}
+        evidence: List[Dict[str, Any]] = []
+        for o in self.recent_observations(subject=e.name, limit=int(limit)):
+            evidence.append({
+                "predicate": o.predicate, "value": o.value, "source": o.source,
+                "observation_type": o.observation_type, "confidence": o.confidence,
+                "observed_at": o.observed_at,
+            })
+        relationships: List[Dict[str, Any]] = []
+        for r in self.related(e.id)[:12]:
+            obj = self.get_entity(r.object_id)
+            relationships.append({"predicate": r.predicate,
+                                  "object": obj.name if obj else r.object_id,
+                                  "confidence": r.confidence})
+        for r in self.related_to(e.id)[:12]:
+            subj = self.get_entity(r.subject_id)
+            relationships.append({"predicate": f"^{r.predicate}",
+                                  "subject": subj.name if subj else r.subject_id,
+                                  "confidence": r.confidence})
+        return {
+            "known": True,
+            "entity": {"id": e.id, "name": e.name, "entity_type": e.entity_type,
+                       "confidence": e.confidence, "first_seen": e.first_seen,
+                       "last_seen": e.last_seen},
+            "aliases": (e.attributes or {}).get("aliases", []),
+            "evidence": evidence,
+            "relationships": relationships,
+            "note": "every claim carries source + timestamp; freshness is checked at read time, never assumed",
+        }
+
     def observe(self, observation: Observation) -> Observation:
         self._check_confidence(observation.confidence)
         obs_type = getattr(observation, "observation_type", "direct")

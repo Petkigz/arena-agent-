@@ -3,7 +3,7 @@ app/__init__.py,1,infrastructure/package,KEEP,,,
 app/agents/__init__.py,0,infrastructure/package,KEEP,,,
 app/agents/coding_agent.py,283,capabilities/code,DEMOTE,,Coding Agent — a specialized multi-step agent for code tasks.,"task loop, thin-agent contract"
 app/agents/data_analysis_agent.py,327,capabilities/data,DEMOTE,,"Data Analysis Agent — a thin, read-only analysis loop.","task loop, thin-agent contract"
-app/agents/master_agent.py,1112,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
+app/agents/master_agent.py,1169,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
 app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cognition stays in the Mind
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
@@ -164,8 +164,8 @@ app/cognition/verified_reflection.py,372,mind/reflection,MERGE,REFLECTION,Phase 
 app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserver — deterministic ""understand the screen"" step for the vision loop.",
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
-app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,132,infrastructure/config,KEEP,,,
+app/cognition/world_model.py,919,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
+app/config.py,133,infrastructure/config,KEEP,,,
 app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)

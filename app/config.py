@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     ARENA_BACKGROUND_OBSERVER: str = "1"  # "0" disables the read-only environment watcher
     ARENA_SCREEN_WATCHER: str = "1"  # "0" disables the desktop-awareness probe (screenshots stay local)
     ARENA_PARKED_RECHECK: str = "0"  # "1" enables automatic re-checks of parked goals. Phase 0 (owner plan 2026-09-10): OFF by default until the typed event ledger (Phase 1) replaces chat replay; rechecks are owner-invoked until then.
+    ARENA_APP_IDENTITY: str = "1"  # Phase 2 (owner plan 2026-09-10): persistent app-target resolution via the world model before the inventory/fuzzy fallback. "0" restores the pre-Phase-2 launch path exactly (fail-open either way).
     ARENA_WORLD_FIRST: str = "1"  # "0" disables Phase-2 world-first briefs at the mind door
     ARENA_LEARNING_LOOP: str = "1"  # "0" disables Phase-6 experience learning at the mind door
     ARENA_TEACHING: str = "1"  # "0" disables Phase-7 conversational teaching ("watch this")

@@ -289,25 +289,82 @@ class MasterAgentOrchestrator:
                     "source": "master_agent",
                 })
             else:
-                res = SystemAppInventory.launch_any_app(app_name)
-                raw_output_data["launch_res"] = res
-                if res.get("success"):
-                    executed_actions.append(f"Launched application '{res.get('app_name', app_name).title()}' on your PC.")
-                    execution_facts.append({
-                        "subject": res.get("app_name", app_name).lower(),
-                        "predicate": "launch_command",
-                        "value": "succeeded",
-                        "source": "system_app_inventory"
-                    })
-                else:
+                # Phase 2 (owner plan 2026-09-10): persistent identity
+                # resolution BEFORE the inventory/fuzzy fallback can derail
+                # the request. Fail-open: any problem degrades to the legacy
+                # matcher; ARENA_APP_IDENTITY=0 disables this seam entirely.
+                canonical_name = app_name
+                identity = {"status": "unknown"}
+                if world_model is not None:
+                    try:
+                        from app.mind.app_identity import resolve_app_target
+                        identity = resolve_app_target(app_name, world_model)
+                    except Exception:
+                        identity = {"status": "unknown"}
+                if identity.get("status") == "ambiguous":
+                    # Ambiguity is a focused selection question, never a
+                    # guess. The word 'ambiguous' types the park reason as
+                    # TARGET_AMBIGUOUS downstream (round-5 taxonomy).
                     execution_success = False
-                    executed_actions.append(f"Failed to launch application '{app_name}': {res.get('error', 'Launch error')}")
+                    clarification = identity.get("question") or (
+                        "Target ambiguous — which application did you mean?"
+                    )
+                    executed_actions.append(clarification)
+                    raw_output_data["launch_res"] = {
+                        "success": False,
+                        "error": "target ambiguous: multiple application candidates",
+                        "clarification_required": True,
+                        "close_matches": [c.get("name") for c in identity.get("candidates", [])],
+                    }
                     execution_facts.append({
-                        "subject": app_name.lower(),
-                        "predicate": "launch_command",
-                        "value": "failed",
-                        "source": "system_app_inventory"
+                        "subject": "application_launch",
+                        "predicate": "launch_target",
+                        "value": "ambiguous",
+                        "source": "world_model",
                     })
+                    res = None
+                else:
+                    if identity.get("status") == "resolved":
+                        canonical_name = identity.get("name") or app_name
+                    res = SystemAppInventory.launch_any_app(canonical_name)
+                if res is not None:
+                    raw_output_data["launch_res"] = res
+                    if res.get("success"):
+                        launched = res.get("app_name", canonical_name)
+                        # Persistent identity: bind the owner's spoken form
+                        # to the canonical app and record launch evidence.
+                        try:
+                            if world_model is not None:
+                                from app.mind.app_identity import (
+                                    record_process_state,
+                                    remember_app,
+                                )
+                                remember_app(
+                                    launched, world_model,
+                                    executable=str(res.get("executable_path") or ""),
+                                    alias=(str(app_name)
+                                           if str(app_name).casefold() != str(launched).casefold()
+                                           else None),
+                                )
+                                record_process_state(launched, True, world_model)
+                        except Exception:
+                            pass  # fail-open: learning must never fail a task
+                        executed_actions.append(f"Launched application '{launched.title()}' on your PC.")
+                        execution_facts.append({
+                            "subject": launched.lower(),
+                            "predicate": "launch_command",
+                            "value": "succeeded",
+                            "source": "system_app_inventory"
+                        })
+                    else:
+                        execution_success = False
+                        executed_actions.append(f"Failed to launch application '{canonical_name}': {res.get('error', 'Launch error')}")
+                        execution_facts.append({
+                            "subject": canonical_name.lower(),
+                            "predicate": "launch_command",
+                            "value": "failed",
+                            "source": "system_app_inventory"
+                        })
 
         elif action_type == "web_search":
             from app.tools.desktop_control import DesktopControl
