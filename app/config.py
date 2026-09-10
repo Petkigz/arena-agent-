@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     ARENA_ASSOCIATIVE_MEMORY: str = "1"  # "0" disables vector-associative recall
     ARENA_BACKGROUND_OBSERVER: str = "1"  # "0" disables the read-only environment watcher
     ARENA_SCREEN_WATCHER: str = "1"  # "0" disables the desktop-awareness probe (screenshots stay local)
-    ARENA_PARKED_RECHECK: str = "1"  # "0" disables automatic re-checks of parked goals
+    ARENA_PARKED_RECHECK: str = "0"  # "1" enables automatic re-checks of parked goals. Phase 0 (owner plan 2026-09-10): OFF by default until the typed event ledger (Phase 1) replaces chat replay; rechecks are owner-invoked until then.
     ARENA_WORLD_FIRST: str = "1"  # "0" disables Phase-2 world-first briefs at the mind door
     ARENA_LEARNING_LOOP: str = "1"  # "0" disables Phase-6 experience learning at the mind door
     ARENA_TEACHING: str = "1"  # "0" disables Phase-7 conversational teaching ("watch this")
@@ -99,11 +99,13 @@ class Settings(BaseSettings):
     ARENA_MEMORY_STALE_AFTER_HOURS: float = 720.0
 
     # Autonomy policy (P1 fix): the autonomous cycle is opt-in, not always-on.
-    #   "off"        — no autonomous cycle is scheduled.
-    #   "supervised" — cycle runs, but Level-3 actions always require owner approval (default).
+    #   "off"        — no autonomous cycle is scheduled (Phase 0 default,
+    #                  owner plan 2026-09-10: background autonomy stays off
+    #                  until the typed event ledger lands in Phase 1).
+    #   "supervised" — cycle runs, but Level-3 actions always require owner approval.
     #   "bounded"    — reserved for a future mode with explicit per-goal limits.
     #   "full"       — reserved; NOT currently implemented (no path grants full autonomy).
-    AUTONOMY_MODE: str = "supervised"
+    AUTONOMY_MODE: str = "off"
     AUTONOMY_INTERVAL_SECONDS: int = 3600
 
     model_config = SettingsConfigDict(

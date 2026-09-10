@@ -175,6 +175,40 @@ program. Audit state-mapping note: VERIFIED_SUCCESS = existing
 'superseded_by_followup', ABANDONED = the bounded 3-attempt honest
 close.
 
+**Phase 0 of the owner's mind-platform plan (2026-09-10) — safe
+deterministic operating baseline, COMPLETE.** The owner adopted a
+systematic plan ("build a persistent, evidence-driven mind substrate;
+make every decision flow through it; prove each learning capability
+generalizes") whose Phase 0 freezes unsafe/noisy behavior before any
+new cognition is built. Shipped: (1) SAFE DEFAULTS — parked-goal
+auto-recheck is now OFF by default (`ARENA_PARKED_RECHECK=0`; it stays
+owner-invoked until the Phase 1 typed event ledger replaces chat
+replay) and the autonomous cycle is OFF (`AUTONOMY_MODE=off`); both
+remain one env var away, and the shutdown-cooperation test now enables
+supervised mode explicitly instead of inheriting it. (2) STARTUP
+READINESS — one honest block at boot and `GET /readiness`: provider
+reachability with ACTUALLY-loaded model ids (native `/api/v0/models`
+state — the distinction behind the 14B-over-9B JIT-load incident),
+configured-vs-resolved ids per lane (a pinned-but-unloaded model is
+called out at startup, not at the first 400), enabled background jobs,
+authority posture (mode/auth/elevation), manifest tool count, and
+precise OpenCV/browser readiness (the cv2-stub failure mode gets its
+exact repair instruction). Fail-open probes, 2s timeout,
+`ARENA_READINESS=0` skips the log (`app/utils/readiness.py`,
+`tests/test_startup_readiness.py`, 10 tests). (3) HEADLESS GUARD — UI
+auto-open skips automatically on display-less environments (no
+DISPLAY/WAYLAND_DISPLAY on Linux); Windows/macOS keep the owner's
+merged desktop lifecycle (decision 2026-09-08) untouched. Phase 0 exit
+criteria audit: no autonomous replays by default ✓; owner sees what
+runs and why ✓; no duplicated recheck prefixes (pinned since 09-08 +
+round 3) ✓; tests independent of a live server on :8000 (round 3
+hermetic reset tests) ✓; one tracked event per request — PARTIAL: the
+typed park reasons (round 5) are the first brick, the full event
+ledger is Phase 1, gated on the owner's go. Known pre-existing
+order-flakes (reproduced on pristine 57a0f8e, NOT from Phase 0): two
+code-lane tests in `test_task_execution_honesty.py` under a specific
+72-file subset ordering; they pass standalone and in full-suite order.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

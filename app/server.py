@@ -305,15 +305,48 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app_logger.warning(f"Server heartbeat not started: {e}")
 
+    # Startup readiness snapshot (Phase 0, owner plan 2026-09-10): one
+    # honest block — provider reachability, actually-loaded models,
+    # configured-vs-resolved ids, enabled background jobs, authority
+    # posture, capability count, OpenCV/browser readiness. Fail-open;
+    # ARENA_READINESS=0 skips the log (GET /readiness stays available).
+    try:
+        import os as _rdy_os
+        if _rdy_os.environ.get("ARENA_READINESS", "1") != "0":
+            from app.utils.readiness import collect_readiness, format_readiness
+            for _line in format_readiness(collect_readiness()).splitlines():
+                app_logger.info(_line)
+    except Exception as e:
+        app_logger.warning(f"Readiness snapshot failed (non-fatal): {e}")
+
     # Desktop life (charter §5 ⑥): the UI opens when the server comes live.
     # Owner decision 2026-09-08: MERGE the native desktop app with the
     # server — when the server starts, the desktop window starts too. The
     # desktop client (PySide6) is launched as a detached subprocess pointing
     # at this server; if it exits within a few seconds (PySide6 missing,
     # crash), the browser dashboard opens as the fallback instead.
-    # ARENA_AUTO_OPEN_DASHBOARD=0 keeps a headless server headless.
+    # ARENA_AUTO_OPEN_DASHBOARD=0 keeps a headless server headless — and on
+    # a display-less environment (Linux without DISPLAY/WAYLAND_DISPLAY) the
+    # auto-open is skipped automatically (Phase 0, owner plan 2026-09-10:
+    # no surprise browser/desktop launches in dev/headless runs). Windows
+    # and macOS always have a desktop session, so her merged desktop-app
+    # lifecycle (owner decision 2026-09-08) is untouched.
+    def _headless_environment() -> bool:
+        import sys as _s
+        if _s.platform.startswith(("win", "darwin")):
+            return False
+        import os as _o
+        return not (_o.environ.get("DISPLAY") or _o.environ.get("WAYLAND_DISPLAY"))
+
     try:
-        if str(getattr(settings, "ARENA_AUTO_OPEN_DASHBOARD", "1")) != "0":
+        if (str(getattr(settings, "ARENA_AUTO_OPEN_DASHBOARD", "1")) != "0"
+                and _headless_environment()):
+            app_logger.info(
+                "UI auto-open skipped: headless environment (no DISPLAY). "
+                "Set ARENA_AUTO_OPEN_DASHBOARD=1 on a desktop session to "
+                "open the UI with the server.")
+        if str(getattr(settings, "ARENA_AUTO_OPEN_DASHBOARD", "1")) != "0" \
+                and not _headless_environment():
             import subprocess as _subprocess
             import sys as _sys
             import threading as _threading
@@ -573,6 +606,15 @@ def create_app() -> FastAPI:
             "voice_service_enabled": voice_service is not None,
             "auth_enabled": API_KEY_ENABLED,
         }
+
+    @app.get("/readiness")
+    async def readiness_check():
+        """Phase 0 (owner plan 2026-09-10): the live readiness snapshot —
+        provider + loaded models, configured-vs-resolved ids, background
+        jobs, authority posture, capability count, OpenCV/browser state.
+        Same data as the startup log block, on demand."""
+        from app.utils.readiness import collect_readiness
+        return collect_readiness()
 
     # /conversations is owned by owner_control_autonomy_router above. Do not
     # register a second fallback here: the first matching route always wins.

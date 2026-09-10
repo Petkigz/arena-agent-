@@ -165,7 +165,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,783,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,130,infrastructure/config,KEEP,,,
+app/config.py,132,infrastructure/config,KEEP,,,
 app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
@@ -223,7 +223,7 @@ app/runtime/resource_manager.py,53,infrastructure/resources,KEEP,,Lightweight re
 app/scheduler/__init__.py,4,infrastructure/scheduling,KEEP,,,
 app/scheduler/scheduler.py,87,infrastructure/scheduling,KEEP,,,
 app/scheduler/self_healer.py,59,infrastructure/scheduling,KEEP,,,
-app/server.py,662,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
+app/server.py,704,infrastructure/entry,KEEP,,Unified Arena server — the single authoritative entry point.,single authoritative server; Phase 1 redirects all inputs to BeanieMind.process
 app/settings_store.py,66,infrastructure/config,KEEP,,Shared backend settings store (cross-platform).,
 app/skill_acquisition.py,97,learning/demonstration,INTEGRATE,,,closest thing to demonstration learning today
 app/tasks.py,145,infrastructure/persistence,KEEP,,,
@@ -318,6 +318,7 @@ app/utils/hardware_monitor.py,32,infrastructure/utils,KEEP,,,
 app/utils/heartbeat.py,59,infrastructure/utils,KEEP,,Live-server heartbeat file — filesystem-visible proof that Arena runs.,
 app/utils/logger.py,105,infrastructure/utils,KEEP,,,
 app/utils/notifier.py,22,infrastructure/utils,KEEP,,,
+app/utils/readiness.py,199,infrastructure/utils,KEEP,,Startup readiness snapshot — Phase 0 of the owner's mind-platform plan,
 app/utils/spa.py,49,infrastructure/utils,KEEP,,Shared SPA-serving helpers.,
 app/utils/submissions.py,23,infrastructure/utils,KEEP,,Small idempotency helpers for append-only owner measurement submissions.,
 backend/__init__.py,16,infrastructure/package,KEEP,,Arena backend package.,

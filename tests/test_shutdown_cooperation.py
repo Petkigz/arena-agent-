@@ -59,22 +59,31 @@ def test_scheduler_shutdown_stops_recurring_jobs_and_resets():
         ProactiveScheduler.shutdown(wait=False)
 
 
-def test_unified_lifespan_shutdown_stops_the_autonomous_cycle_scheduler():
+def test_unified_lifespan_shutdown_stops_the_autonomous_cycle_scheduler(monkeypatch):
     """The real unified server lifespan must stop the job scheduler on exit.
 
     This is the exact cooperation contract of queue item 5: entering the
     lifespan schedules the autonomous cycle; exiting it must leave NO
     scheduler thread behind.
+
+    Phase 0 (owner plan 2026-09-10): the AUTONOMY_MODE default is now
+    'off', so the test ENABLES supervised mode explicitly — the contract
+    under test is the shutdown cooperation when jobs are actually
+    scheduled, not the default posture (pinned separately in
+    tests/test_startup_readiness.py::TestPhase0Defaults).
     """
     import app.server as server
+    from app.config import settings as _settings
     from app.scheduler.scheduler import ProactiveScheduler
+
+    monkeypatch.setattr(_settings, "AUTONOMY_MODE", "supervised")
 
     async def _run() -> None:
         lifecycle = server.lifespan(server.app)
         await lifecycle.__aenter__()
         try:
             # The lifespan scheduled its recurring work through the shared
-            # scheduler (autonomy mode is 'supervised' by default in tests).
+            # scheduler (supervised mode enabled above).
             assert ProactiveScheduler._scheduler is not None
         finally:
             await lifecycle.__aexit__(None, None, None)
