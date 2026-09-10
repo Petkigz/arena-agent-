@@ -3,7 +3,7 @@ app/__init__.py,1,infrastructure/package,KEEP,,,
 app/agents/__init__.py,0,infrastructure/package,KEEP,,,
 app/agents/coding_agent.py,283,capabilities/code,DEMOTE,,Coding Agent — a specialized multi-step agent for code tasks.,"task loop, thin-agent contract"
 app/agents/data_analysis_agent.py,327,capabilities/data,DEMOTE,,"Data Analysis Agent — a thin, read-only analysis loop.","task loop, thin-agent contract"
-app/agents/master_agent.py,1169,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
+app/agents/master_agent.py,1231,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
 app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cognition stays in the Mind
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
@@ -14,6 +14,7 @@ app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control au
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
 app/api/vault.py,92,communication/api,KEEP,,Owner-controlled encrypted vault API.,HTTP surface for the mind's state/actions
 app/cognition/__init__.py,100,mind/cognition-core,INTEGRATE,,Phase 1 cognitive foundation for Arena.,cognition module; becomes an organ of BeanieMind
+app/cognition/action_contract.py,434,mind/cognition-core,INTEGRATE,,"Phase 4 (owner plan 2026-09-10): action, authority, and verification contracts.",cognition module; becomes an organ of BeanieMind
 app/cognition/action_outcomes.py,242,learning/experience,INTEGRATE,,Learned action→outcome statistics from Arena's verified execution history.,
 app/cognition/action_planner.py,338,mind/decision,MERGE,PLANNERS,Cognitive Action Planner & Candidate Branch Evaluator.,
 app/cognition/action_proposal.py,397,mind/decision,KEEP,,ActionProposal & Multi-Gate Verification Engine.,multi-gate proposal engine
@@ -87,7 +88,7 @@ app/cognition/experiment_engine.py,80,mind/imagination,INTEGRATE,,Phase C: Exper
 app/cognition/functional_affect.py,271,models/self,INTEGRATE,,"Bounded functional affect telemetry, not subjective emotion.",bounded functional affect telemetry (social/emotional context)
 app/cognition/goal_decomposer.py,543,mind/decision,INTEGRATE,PLANNERS,Phase 6A: Long-Horizon Goal Decomposition.,
 app/cognition/goal_interpreter.py,1397,mind/reasoning,KEEP,,Semantic Goal & Intent Representation Layer (Goal Representation v2).,goal representation v2
-app/cognition/goal_lifecycle.py,235,mind/cognition-core,KEEP,,Goal Lifecycle & State Progression Engine.,
+app/cognition/goal_lifecycle.py,238,mind/cognition-core,KEEP,,Goal Lifecycle & State Progression Engine.,
 app/cognition/goal_replanner.py,263,mind/decision,INTEGRATE,PLANNERS,Goal Reassessment & Replanning Engine.,
 app/cognition/goal_verifier.py,873,mind/cognition-core,KEEP,,Goal Verification Engine.,
 app/cognition/guard_visibility.py,155,mind/cognition-core,KEEP,,"Guard-refusal visibility (owner vision charter §6, raw-input item).",charter §6
@@ -135,7 +136,7 @@ app/cognition/reasoning_cycle.py,123,mind/reasoning,MERGE,LOOP,"Phase 3 cognitiv
 app/cognition/reasoning_loop.py,264,mind/reasoning,MERGE,LOOP,Closed observe -> reason -> investigate -> observe cognitive loop.,
 app/cognition/resource_allocator.py,543,mind/decision,KEEP,,Phase 5C: Strategic Resource Allocation.,
 app/cognition/response_grounding.py,181,mind/cognition-core,KEEP,,Reconcile generated responses with authoritative evidence.,truth boundary
-app/cognition/runtime.py,5337,mind/cognition-core,INTEGRATE,AUTHORITY,Unit P1-A: Canonical CognitiveRuntime Composition Root Integration.,"de-facto brain today (singleton composition root, 5.3k lines); becomes the interior of BeanieMind — not a separate authority"
+app/cognition/runtime.py,5361,mind/cognition-core,INTEGRATE,AUTHORITY,Unit P1-A: Canonical CognitiveRuntime Composition Root Integration.,"de-facto brain today (singleton composition root, 5.3k lines); becomes the interior of BeanieMind — not a separate authority"
 app/cognition/runtime_wiring.py,285,mind/cognition-core,INTEGRATE,,Phase-module wiring for the cognitive cycle (Phases 11-21).,phase-module wiring glue
 app/cognition/scene_causal.py,132,mind/imagination,INTEGRATE,,Causal and counterfactual replay for the deterministic scene model.,causal replay of scenes
 app/cognition/scene_graph.py,635,models/world,INTEGRATE,WORLD,Deterministic scene state and bounded 2D physics predictions.,deterministic scene state
@@ -165,7 +166,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,919,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,133,infrastructure/config,KEEP,,,
+app/config.py,134,infrastructure/config,KEEP,,,
 app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)

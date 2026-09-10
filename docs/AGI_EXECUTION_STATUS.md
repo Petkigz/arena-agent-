@@ -242,6 +242,39 @@ wired into execution this round; files/devices/projects wiring is the
 next increment, and the Phase 1 typed Event ledger remains queued on
 the owner's go.
 
+**Phase 4 of the owner's mind-platform plan (2026-09-10) — action,
+authority, and verification contracts, COMPLETE.** "Capability,
+permission, action, and outcome are separate facts." New
+`app/cognition/action_contract.py` assembles the SEVEN FACTS per
+proposal: capability (manifest authority — an unresolvable capability
+is a concrete blocker naming it), target (Phase 2 identity), authority
+(PolicyEvaluator stays the authority of record), expectation (declared
+observable effect), verification (declared probe: process / file-exists
+/ none), reversibility (undo path), outcome (ExecutionReceipt with
+machine-observed evidence). The single decision: clear + allowed →
+`act` with NO question (the owner never repeats "do it"); ambiguous →
+one focused selection question; approval needed → one specific,
+actionable question naming action, target, level, and the word
+'approve' (and it parks as AUTHORIZATION_REQUIRED — the round-5
+classifier gained a narrow branch for the contract's exact phrase).
+The 2026-09-08 launch process-verification override is now a GENERAL
+pattern: `_apply_launch_truth_override` delegates to
+`apply_receipt_to_verification` for ANY action whose receipt carries
+observed evidence — never fires without evidence; the three behaviors
+pinned since round 4 survive verbatim (re-tested). Honesty gate
+`can_claim_observed`: "I see you opened it" requires observed process/
+window evidence; an unobserved launch reply says so ("process was NOT
+observed running — treating this as unconfirmed"). Receipts also teach
+the world model (process_state observations, source
+'execution_receipt'). Kill switch `ARENA_ACTION_CONTRACT=0` restores
+pre-Phase-4 behavior exactly; every seam fail-opens (a broken contract
+never blocks an allowed action — verified by test). 25 new tests
+(tests/test_action_contract.py) + 2115-test affected sweep clean.
+Scope honesty: probes exist for launch (process) and file ops
+(existence); other action families honestly report "no observation
+probe declared" until their probes land, and receipt PERSISTENCE as a
+first-class ledger row belongs to the Phase 1 Event ledger (queued).
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

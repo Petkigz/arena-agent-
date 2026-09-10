@@ -73,7 +73,8 @@ def probe_evidence_str(output: Any, budget: int = 300) -> str:
 
 
 def _apply_launch_truth_override(verification: Any, action_type: str, execution: Dict[str, Any]) -> bool:
-    """Launch truth override (owner live test 2026-09-08 rounds 3-4).
+    """Launch truth override (owner live test 2026-09-08 rounds 3-4),
+    generalized in Phase 4 (owner plan 2026-09-10).
 
     The GoalVerifier matches goal conditions against world-model entities;
     launch goals whose payload carried no app name never matched — the
@@ -82,11 +83,34 @@ def _apply_launch_truth_override(verification: Any, action_type: str, execution:
     itself carries a machine-observed process verification, THAT is the
     authoritative evidence for the goal "open <app>". Mutates and returns
     True when the override applied.
+
+    Phase 4: the same evidence-outranks-inference rule now applies to ANY
+    action whose execution produced a receipt with machine-observed
+    evidence (action_contract.apply_receipt_to_verification) — the
+    isolated launch patch as a general pattern. Never fires without
+    evidence; ARENA_ACTION_CONTRACT=0 restores launch-only behavior.
     """
     if verification is None or verification.verified_success:
         return False
     if action_type not in ("launch_app", "open_application"):
-        return False
+        # Generalized path: consult the execution receipt, if any.
+        try:
+            from app.config import settings as _settings
+            if str(getattr(_settings, "ARENA_ACTION_CONTRACT", "1")).strip().lower() in ("0", "false", "off"):
+                return False
+            from app.cognition.action_contract import (
+                ExecutionReceipt,
+                apply_receipt_to_verification,
+            )
+            raw = ((execution.get("outputs") or {}).get("receipt")
+                   or execution.get("receipt"))
+            if not raw:
+                return False
+            receipt = ExecutionReceipt(**{
+                k: raw[k] for k in ExecutionReceipt.__dataclass_fields__ if k in raw})
+            return apply_receipt_to_verification(verification, receipt)
+        except Exception:
+            return False  # fail-open: a receipt problem never fakes success
     launch = (execution.get("outputs") or {}).get("launch_res") or execution.get("launch_res") or {}
     if not launch.get("process_verified"):
         return False

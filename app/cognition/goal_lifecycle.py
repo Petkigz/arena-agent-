@@ -209,7 +209,10 @@ def classify_park_reason(result: Dict[str, object]) -> str:
     if result.get("simulated") is True or "[simulated response" in blob:
         return PARK_PROVIDER_UNAVAILABLE
     if result.get("approval_request") or (
-            "approval" in reason.lower() and "requir" in reason.lower()):
+            "approval" in reason.lower() and "requir" in reason.lower()) or (
+            # Phase 4 (owner plan 2026-09-10): the action contract's explicit
+            # approval ask — narrow phrase, emitted only by action_contract.
+            "needs your approval" in blob or "say 'approve'" in blob):
         return PARK_AUTHORIZATION_REQUIRED
     caps = result.get("capability_status") or result.get("capability_status_map") or {}
     if isinstance(caps, dict) and any(

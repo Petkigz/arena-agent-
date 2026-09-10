@@ -326,9 +326,58 @@ class MasterAgentOrchestrator:
                 else:
                     if identity.get("status") == "resolved":
                         canonical_name = identity.get("name") or app_name
-                    res = SystemAppInventory.launch_any_app(canonical_name)
+                    # Phase 4 pre-flight: capability/authority are checked as
+                    # separate facts BEFORE the action is attempted. A clear,
+                    # allowed request goes straight to execution (the owner
+                    # never has to repeat "do it"); anything else produces ONE
+                    # specific, actionable question or a concrete blocker.
+                    contract = None
+                    try:
+                        from app.cognition import action_contract as _ac
+                        if _ac._enabled():
+                            contract = _ac.build_contract(proposal, user_text, world=world_model)
+                    except Exception:
+                        contract = None  # fail-open: the policy inside the launcher still guards
+                    if contract is not None and contract.decision in ("ask_approval", "blocked"):
+                        execution_success = False
+                        question_text = (contract.question or contract.blocker
+                                         or "This action is not allowed right now.")
+                        executed_actions.append(question_text)
+                        raw_output_data["launch_res"] = {
+                            "success": False,
+                            "error": question_text,
+                            "clarification_required": contract.decision == "ask_approval",
+                            "authority": contract.authority,
+                        }
+                        raw_output_data["contract"] = contract.to_dict()
+                        execution_facts.append({
+                            "subject": "application_launch",
+                            "predicate": "authority_check",
+                            "value": contract.decision,
+                            "source": "action_contract",
+                        })
+                        res = None
+                    else:
+                        res = SystemAppInventory.launch_any_app(canonical_name)
+                        if contract is not None:
+                            raw_output_data["contract"] = contract.to_dict()
                 if res is not None:
                     raw_output_data["launch_res"] = res
+                    # Phase 4: the execution RECEIPT — what happened in
+                    # reality, separate from what was attempted. Success
+                    # claims bind to machine-observed evidence only.
+                    receipt = None
+                    try:
+                        from app.cognition import action_contract as _ac
+                        if _ac._enabled():
+                            receipt = _ac.receipt_from_execution(
+                                proposal,
+                                {"outputs": raw_output_data, "attempted": True,
+                                 "success": bool(res.get("success"))},
+                                world=world_model)
+                            raw_output_data["receipt"] = receipt.to_dict()
+                    except Exception:
+                        receipt = None  # fail-open
                     if res.get("success"):
                         launched = res.get("app_name", canonical_name)
                         # Persistent identity: bind the owner's spoken form
@@ -349,7 +398,20 @@ class MasterAgentOrchestrator:
                                 record_process_state(launched, True, world_model)
                         except Exception:
                             pass  # fail-open: learning must never fail a task
-                        executed_actions.append(f"Launched application '{launched.title()}' on your PC.")
+                        launch_note = f"Launched application '{launched.title()}' on your PC."
+                        if receipt is not None and receipt.verification_method == "process_probe":
+                            if receipt.verified is True and receipt.evidence:
+                                ev = receipt.evidence[0]
+                                launch_note += (
+                                    f" (process verified: {ev.get('process_name') or launched},"
+                                    f" pid {ev.get('pid')})"
+                                )
+                            elif receipt.verified is False:
+                                launch_note += (
+                                    " However, the process was NOT observed running —"
+                                    " treating this as unconfirmed."
+                                )
+                        executed_actions.append(launch_note)
                         execution_facts.append({
                             "subject": launched.lower(),
                             "predicate": "launch_command",
