@@ -117,6 +117,7 @@ class ActionPlanner:
         # but the proposal carries the honest state — the missing dependency
         # must be visible at PLANNING time, not discovered mid-execution.
         winner = cls._probe_and_select(sim_res, winner)
+        winner = cls._guard_literal_command_search(sim_res, winner, goal_text)
 
         app_logger.info(f"ActionPlanner selected winning branch '{winner.branch_name}' for action_type '{winner.hypothetical_action}' (utility {winner.utility_score:.4f})")
 
@@ -211,6 +212,46 @@ class ActionPlanner:
                 )
             guided.append(candidate)
         return guided
+
+    @classmethod
+    def _guard_literal_command_search(cls, sim_res, winner, goal_text: str):
+        """A web_search whose query IS the raw command sentence is a
+        derailment, not an outcome.
+
+        Owner live run 2026-09-11: "open it itunes on my pc" was googled
+        VERBATIM (browser opened search?q=open+it+itunes+on+my+pc, then
+        HTTP 429) while 'os.launch_app' sat ready in the capability
+        ladder. Searching a literal command never achieves the commanded
+        outcome — when any other branch exists, it wins instead.
+        Deterministic, fail-open.
+        """
+        try:
+            if str(getattr(winner, "hypothetical_action", "")).lower() != "web_search":
+                return winner
+            payload = getattr(winner, "candidate_payload", {}) or {}
+            query = str(payload.get("query_term") or payload.get("query") or "").strip().lower()
+            goal = str(goal_text or "").strip().lower()
+            if not query or not goal or query != goal:
+                # also catch near-echoes (punctuation/case drift)
+                import difflib
+                if not query or difflib.SequenceMatcher(None, query, goal).ratio() < 0.9:
+                    return winner
+            branches = [
+                b for b in getattr(sim_res, "competing_branches", [])
+                if str(getattr(b, "hypothetical_action", "")).lower() != "web_search"
+                and getattr(b, "branch_name", "") != "Default Fallback"
+            ]
+            if not branches:
+                return winner  # honest: a derail is still better than nothing
+            alt = max(branches, key=lambda b: getattr(b, "utility_score", 0.0))
+            app_logger.info(
+                f"Literal-command search guard: web_search on the raw request "
+                f"is a derailment — selecting '{alt.branch_name}' "
+                f"({alt.hypothetical_action}) instead."
+            )
+            return alt
+        except Exception:
+            return winner  # fail-open
 
     @classmethod
     def _probe_and_select(cls, sim_res, winner):

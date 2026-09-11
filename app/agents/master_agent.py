@@ -207,6 +207,13 @@ def extract_app_query(user_text: str) -> str:
 
     def _acceptable(candidate: str) -> str:
         candidate = _VERB_TAIL_RE.sub("", candidate or "").strip(" \"'.,!?")
+        # Leading filler words (owner live run 2026-09-11: the typo "open it
+        # itunes on my pc" extracted 'it itunes'). Strip them only while a
+        # real name remains after them.
+        words = candidate.split()
+        while len(words) > 1 and words[0] in ("it", "up", "me", "my", "that"):
+            words = words[1:]
+        candidate = " ".join(words)
         if not candidate or candidate.strip() in GENERIC_APP_WORDS:
             return ""
         return candidate

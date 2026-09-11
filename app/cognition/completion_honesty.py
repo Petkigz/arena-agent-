@@ -33,9 +33,16 @@ ANNOUNCE_RE = re.compile(
 
 CLAIMS_DONE_RE = re.compile(
     r"\b(deleted|removed|uninstalled|killed|shut(?:ting)? down|"
-    r"has been (?:deleted|removed|completed)|completed successfully|done!)\b",
+    r"has been (?:deleted|removed|completed|opened|launched|started|"
+    r"created|sent|installed|moved|closed)|"
+    r"is now (?:open|running|ready)|"
+    r"(?:i'?ve|i have) (?:confirmed|verified)|"
+    r"completed successfully|done!)\b",
     re.I,
 )
+# Owner live run 2026-09-11: "I've confirmed iTunes has been opened
+# manually" sailed through — CLAIMS_DONE only knew deletion words. Launch/
+# creation/confirmation claims are completion claims too.
 
 # An honest ASK (capability missing, question to the owner) is not a hollow
 # promise — the defer path ends its reply with what it needs from the owner.

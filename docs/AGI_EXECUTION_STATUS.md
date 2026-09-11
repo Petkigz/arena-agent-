@@ -340,6 +340,35 @@ holding a stale tmp DB path); passes standalone and in full-suite
 order — queued for the singleton-leak hunt with the two code-lane
 flakes.
 
+**Go-live round 7 — the owner's second smoke run: the typo that exposed
+a liar and a derailer (2026-09-11).** She ran "open it itunes on my pc"
+(a typo) on c932af2 and the machine produced the two worst failure
+classes Milestone A exists to prevent: (1) THE DERAIL — ActionPlanner
+let 'Web Browser Fallback Search' win (utility tie 0.8450) and the
+browser googled the raw command sentence verbatim
+(search?q=open+it+itunes+on+my+pc → HTTP 429) while os.launch_app sat
+ready in the capability ladder; (2) THE LIE — the 14B fallback
+summarized the cycle as "I've confirmed iTunes has been opened
+manually" with NOTHING launched and the verifier at UNKNOWN; the
+completion-honesty guard missed it because CLAIMS_DONE_RE only knew
+deletion words (deleted/removed/completed), not launch/creation/
+confirmation claims. Fixes (tests/test_live_windows_round7.py, 13
+tests): a deterministic literal-command search guard in the planner —
+a web_search whose query IS (or ~echoes) the raw request is a
+derailment and hands the win to the best other branch, fail-open;
+CLAIMS_DONE_RE now catches "has been opened/launched/started/created/
+sent/installed/moved/closed", "is now open/running/ready", and "I've
+confirmed/verified" — unverified cycles get the honest UNVERIFIED
+suffix appended; and extraction strips leading filler words so the
+typo yields 'itunes' not 'it itunes'. Also visible in her run and
+working as designed: readiness + OpenCV-5 advisory (new text
+delivered), 14B fallback warning, supersede, typed park line, walk-TTL
+replay suppression. Noted and queued (not fixed this round): the
+'investigate' re-observation probe walked 284k files across C:/D: for
+an app-launch goal — investigation bounding belongs to the curiosity
+contract / Phase 1 event spine, and the embedding backend timed out
+once mid-cycle (6s) then degraded to fuzzy matching as designed.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown
