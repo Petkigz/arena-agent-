@@ -275,6 +275,34 @@ Scope honesty: probes exist for launch (process) and file ops
 probe declared" until their probes land, and receipt PERSISTENCE as a
 first-class ledger row belongs to the Phase 1 Event ledger (queued).
 
+**Phase 7 of the owner's mind-platform plan (2026-09-10) —
+information-gain-based continuous cognition, COMPLETE.** "Beanie
+notices, reasons, and learns continuously without becoming a noisy
+replay engine." New `app/cognition/curiosity.py`: a persisted
+CuriosityScheduler whose every question carries the owner's SEVEN
+ANSWERS (what uncertainty / why it matters / what evidence resolves it
+/ cost-risk / read-only / what decision it changes / when it expires) —
+a question missing ANY answer is not admitted; "unknown" alone never
+generates one (staleness only counts when an active goal depends on the
+fact; contradictions always count). Admission is bounded: expected
+information gain ≥0.3 with an owner-auditable explanation, 25-question
+open cap, 48h default TTL, duplicate/superseded/answered facts never
+re-run. Probes are read-only BY CONSTRUCTION (whitelist: process scan,
+file existence, world-model state — anything else is refused); answers
+become provenance-tracked observations (source 'curiosity_probe') and
+failed probes never fake an answer. Owner controls: pause/resume,
+inspect (all seven answers visible), approve/reject/delete per
+question, owner-triggered probes — five endpoints under
+/owner-control/curiosity-*. The autonomous cycle gained a bounded
+curiosity sweep (recorded as a cycle event), which stays dormant under
+the Phase 0 default AUTONOMY_MODE=off; probe approval is never
+execution approval (Phase 4 contracts still gate all action). Kill
+switch `ARENA_CURIOSITY=0`. 24 new tests
+(tests/test_curiosity_scheduler.py) — test-driven fixes during the
+build: the generator initially emitted questions without expiry
+(question 7 unanswered — contract violation caught by its own test) —
+plus 972-test affected sweep clean.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

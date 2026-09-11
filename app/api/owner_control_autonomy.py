@@ -393,6 +393,66 @@ def defer_autonomous_goal_endpoint(goal_id:str):
     if not goal:raise HTTPException(status_code=404,detail="Autonomous goal not found")
     return {"success":True,"goal":goal.to_dict(),"executed":False}
 
+
+# ── Phase 7 (owner plan 2026-09-10): curiosity question controls ─────────
+# The owner can pause, inspect, approve, reject, or delete every autonomous
+# question; probes are read-only by construction (whitelist-enforced).
+
+class CuriosityDecisionRequest(BaseModel):
+    decision: str  # approve | reject | delete
+    note: str = ""
+
+class CuriosityPauseRequest(BaseModel):
+    paused: bool = True
+
+def _curiosity_scheduler():
+    from app.cognition.curiosity import CuriosityScheduler
+    return CuriosityScheduler()
+
+@router.get("/owner-control/curiosity-questions")
+def list_curiosity_questions_endpoint(status_filter: Optional[str]=Query(None,alias="status"),limit:int=Query(100,ge=1,le=500)):
+    scheduler=_curiosity_scheduler()
+    return {"success":True,"paused":scheduler.is_paused(),
+            "questions":scheduler.inspect(status=status_filter,limit=limit),
+            "note":"Every question carries the seven contract answers; probes are read-only."}
+
+@router.get("/owner-control/curiosity-summary")
+def curiosity_summary_endpoint():
+    from app.cognition.curiosity import MAX_OPEN_QUESTIONS, _enabled
+    scheduler=_curiosity_scheduler()
+    counts: dict={}
+    for q in scheduler.inspect(limit=500):
+        counts[q["status"]]=counts.get(q["status"],0)+1
+    return {"success":True,"enabled":_enabled(),"paused":scheduler.is_paused(),
+            "counts":counts,"open_cap":MAX_OPEN_QUESTIONS}
+
+@router.post("/owner-control/curiosity-questions/{question_id}/decision")
+def decide_curiosity_question_endpoint(question_id:str,req:CuriosityDecisionRequest):
+    result=_curiosity_scheduler().decide(question_id,req.decision,owner_note=req.note)
+    if not result.get("success"):
+        code=404 if result.get("reason")=="no such question" else 400
+        raise HTTPException(status_code=code,detail=result.get("reason",""))
+    return {"success":True,**result}
+
+@router.post("/owner-control/curiosity-pause")
+def pause_curiosity_endpoint(req:CuriosityPauseRequest):
+    scheduler=_curiosity_scheduler()
+    scheduler.pause(req.paused)
+    return {"success":True,"paused":scheduler.is_paused()}
+
+@router.post("/owner-control/curiosity-questions/{question_id}/probe")
+def run_curiosity_probe_endpoint(question_id:str):
+    """Owner-triggered read-only probe. Approval to PROBE is never approval
+    to ACT — execution stays behind the Phase 4 authority contracts."""
+    from app.cognition.runtime import CognitiveRuntime
+    scheduler=_curiosity_scheduler()
+    world=getattr(CognitiveRuntime.get_instance(),"world",None)
+    result=scheduler.run_probe(question_id,world=world)
+    if not result.get("success"):
+        code=404 if result.get("reason")=="no such question" else 409
+        raise HTTPException(status_code=code,detail=result.get("reason",""))
+    return {"success":True,**result}
+
 @router.put("/owner-control/autonomous-goals/{goal_id}/priority")
 def prioritize_autonomous_goal_endpoint(goal_id:str,req:AutonomousGoalPriorityRequest):
     from app.cognition.runtime import CognitiveRuntime

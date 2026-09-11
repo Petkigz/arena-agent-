@@ -294,6 +294,24 @@ class PeriodicAutonomousCycle:
             except Exception as e:
                 app_logger.warning(f"Signal-driven goal generation failed (falling back): {e}")
 
+            # Phase 7 (owner plan 2026-09-10): the curiosity sweep — bounded,
+            # expiring, read-only questions with the full seven-answer
+            # contract, owner-pausable. This cycle only runs when
+            # AUTONOMY_MODE is enabled (Phase 0 default: off), and the
+            # sweep itself only curates questions — it never executes
+            # anything that changes the machine.
+            try:
+                from app.config import settings as _settings
+                if str(getattr(_settings, "ARENA_CURIOSITY", "1")).strip().lower() not in ("0", "false", "off"):
+                    from app.cognition.curiosity import CuriosityScheduler
+                    curiosity = CuriosityScheduler(db_path=self.db_path)
+                    active_goals = [getattr(g, "goal_text", "") or str(g) for g in all_goals]
+                    sweep = curiosity.sweep(getattr(cognitive_runtime, "world", None),
+                                            active_goals=active_goals)
+                    self._record_event(cycle.cycle_id, "curiosity_sweep", details=sweep)
+            except Exception as e:
+                app_logger.warning(f"Curiosity sweep failed (fail-open): {e}")
+
             # P1-4 AGI: Information-gain curiosity — goals that maximize learning
             try:
                 if cognitive_runtime:

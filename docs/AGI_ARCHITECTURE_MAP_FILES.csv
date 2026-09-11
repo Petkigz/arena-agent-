@@ -10,7 +10,7 @@ app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROV
 app/api/__init__.py,1,communication/api,KEEP,,API router modules extracted from app.main (composition refactor).,HTTP surface for the mind's state/actions
 app/api/mind.py,1122,communication/api,KEEP,,Mind API — owner-visible window onto BeanieMind.,Phase 1 LIVE: owner window onto identity/state/entries
 app/api/os_browser_automation.py,282,communication/api,KEEP,,"OS grounding, browser/desktop automation, and raw-input API routes.",HTTP surface for the mind's state/actions
-app/api/owner_control_autonomy.py,1003,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
+app/api/owner_control_autonomy.py,1063,communication/api,KEEP,,"Owner-control autonomy API: goal queue, schedules, run timelines,",HTTP surface for the mind's state/actions
 app/api/self_awareness.py,179,models/self,KEEP,SELF,Evidence-linked functional self-awareness API.,API window onto the self model
 app/api/vault.py,92,communication/api,KEEP,,Owner-controlled encrypted vault API.,HTTP surface for the mind's state/actions
 app/cognition/__init__.py,100,mind/cognition-core,INTEGRATE,,Phase 1 cognitive foundation for Arena.,cognition module; becomes an organ of BeanieMind
@@ -71,6 +71,7 @@ app/cognition/criterion_evaluator.py,374,mind/decision,KEEP,,CriterionEvaluator 
 app/cognition/criticality_review.py,134,mind/decision,KEEP,,Bounded pre-gate criticality review for action recommendations.,
 app/cognition/cross_domain_transfer.py,851,learning/transfer,KEEP,,Phase 15: Cross-Domain Transfer Learning,owner-deferred embedding completion
 app/cognition/cultural_learning.py,989,learning/social,KEEP,,Phase 21: Cultural Learning,
+app/cognition/curiosity.py,463,mind/cognition-core,INTEGRATE,,Phase 7 (owner plan 2026-09-10): information-gain-based continuous cognition.,cognition module; becomes an organ of BeanieMind
 app/cognition/diagnostic_ranking.py,162,mind/reasoning,KEEP,,Diagnostic hypothesis ranking (P2 review).,
 app/cognition/disk_reservation.py,220,infrastructure/resources,KEEP,,Persistent free-disk reservations for bounded browser transfers.,
 app/cognition/embodied_boundary.py,83,models/world,MERGE,WORLD,"Evidence-linked boundary between Arena, owner, devices, and environment.",
@@ -115,7 +116,7 @@ app/cognition/owner_decisions.py,205,owner-authority/decisions,KEEP,,Signed owne
 app/cognition/owner_model.py,193,models/owner,INTEGRATE,,The owner model: counted patterns from the owner's own decisions.,exists: counted patterns from owner decisions; becomes the relationship model
 app/cognition/parked_goal_recheck.py,413,mind/motivation,KEEP,MOTIVATION,Parked goals get re-checked automatically (owner live test 2026-09-08).,wired in server lifespan; Phase 15 LIVE: its parked (waiting_for_evidence) goals feed app/mind/motivation.py as the unfinished_goal evidence source
 app/cognition/perception.py,728,perception/environment,INTEGRATE,,Perception & Observation Collector Layer.,observation collector — post-action probes today
-app/cognition/periodic_autonomous_cycle.py,772,mind/motivation,INTEGRATE,MOTIVATION,Phase 10: Periodic Autonomous Cycle,
+app/cognition/periodic_autonomous_cycle.py,790,mind/motivation,INTEGRATE,MOTIVATION,Phase 10: Periodic Autonomous Cycle,
 app/cognition/phase0_evaluation.py,435,evaluation/learning,KEEP,,Isolated Phase 0 evaluation runner for evidence-centered behavior.,
 app/cognition/phase1_evidence.py,202,evaluation/learning,KEEP,,Owner-visible aggregation for bounded Phase 1 evidence.,
 app/cognition/phase1_task_evaluations.py,356,evaluation/learning,KEEP,,Append-only owner-recorded evaluations for Phase 1 held-out tasks.,
@@ -166,7 +167,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,919,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,134,infrastructure/config,KEEP,,,
+app/config.py,135,infrastructure/config,KEEP,,,
 app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
