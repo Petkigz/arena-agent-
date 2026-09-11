@@ -216,6 +216,20 @@ class MessageRouter:
         app_logger.info(f"Processing user message in {conversation_id}: {content[:80]}...")
         message_source = str(message.get("source") or "text")
 
+        # Follow-up resolution BEFORE supersession (owner live run
+        # 2026-09-11): the owner's short answers ("itunes") and pronoun
+        # requests ("open it now") bind to the parked goal they answer —
+        # while that goal is still visible as waiting_for_evidence. The
+        # resolved text then flows through supersession and interpretation.
+        if message_source != "auto_recheck":
+            try:
+                from app.cognition.parked_goal_recheck import (
+                    resolve_followup_request,
+                )
+                content = resolve_followup_request(conversation_id, content)
+            except Exception as exc:
+                app_logger.debug(f"Follow-up resolution hook skipped: {exc}")
+
         # A substantive follow-up supersedes an AMBIGUOUS parked goal in
         # this conversation ('i wanted to search something' + 'the weather
         # in kampala now' — owner transcript 2026-09-09), so rechecks stop

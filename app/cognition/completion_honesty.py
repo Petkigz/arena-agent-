@@ -36,7 +36,8 @@ CLAIMS_DONE_RE = re.compile(
     r"has been (?:deleted|removed|completed|opened|launched|started|"
     r"created|sent|installed|moved|closed)|"
     r"is now (?:open|running|ready)|"
-    r"(?:i'?ve|i have) (?:confirmed|verified)|"
+    r"(?:i'?ve|i have) (?:confirmed|verified|opened|launched|started|"
+    r"created|sent|installed|moved|closed|deleted|removed)|"
     r"completed successfully|done!)\b",
     re.I,
 )
@@ -109,6 +110,7 @@ def enforce_completion_honesty(
     if (
         ANNOUNCE_RE.search(reply)
         and not executed
+        and not CLAIMS_DONE_RE.search(reply)
         and not HONEST_ASK_RE.search(reply)
     ):
         # Case 1: promised future work with nothing executed at all, and the
@@ -121,12 +123,53 @@ def enforce_completion_honesty(
         )
         result["announcement_guard"] = "promise_without_action_replaced"
         guard_applied = "promise_without_action_replaced"
+    elif CLAIMS_DONE_RE.search(reply) and not executed and not verified:
+        # Case 3 (owner live run 2026-09-11, 1:20 PM): the WORST combination —
+        # a completion claim with NOTHING executed in the cycle. Case 2 needs
+        # executed actions to correct, case 1 only knows announcements, so
+        # "I've confirmed iTunes has been opened manually" (nothing launched,
+        # verifier UNKNOWN) sailed through both. A fabricated outcome claim is
+        # replaced outright; if the reply also ASKS the owner something, the
+        # question is kept and corrected instead of deleted. The ask check is
+        # deliberately narrow (question mark / explicit request phrasing) —
+        # the broad HONEST_ASK_RE matches "which is outside our scope" in her
+        # very transcript, and a statement must not excuse a fabricated claim.
+        asks_owner = (
+            reply.rstrip().endswith("?")
+            or re.search(
+                r"could you|can you (?:confirm|tell|share)|please "
+                r"(?:provide|tell|specify|confirm|share)",
+                reply, re.I) is not None
+        )
+        if asks_owner:
+            suffix = (
+                "\n\nHonest status: nothing was actually executed in this cycle, "
+                "so any completion claim above is NOT supported by evidence."
+            )
+            result["assistant_reply"] = reply.rstrip() + suffix
+            guard_applied = "fabricated_claim_corrected"
+        else:
+            result["assistant_reply"] = (
+                "Straight answer: I claimed a completed outcome, but NOTHING was "
+                "executed this cycle and nothing was verified — that claim was "
+                "fabricated and I'm retracting it. Tell me what to run; I'll run "
+                "it and report the verified result."
+            )
+            guard_applied = "fabricated_claim_replaced"
     elif executed and not verified and (
         CLAIMS_DONE_RE.search(reply) or ANNOUNCE_RE.search(reply)
     ):
         # Case 2: work ran but did NOT verify, while the reply claims
         # success or keeps announcing. The claim never stands alone.
-        action_names = ", ".join(sorted({str(a.get("action_type", "action")) for a in executed}))
+        # Name what actually ran: string actions arrive wrapped with the
+        # placeholder type "executed" — show their real detail instead
+        # (owner live run 2026-09-11: "I ran executed" told her nothing).
+        action_names = ", ".join(sorted({
+            (str(a.get("detail"))[:60]
+             if str(a.get("action_type", "")) == "executed" and a.get("detail")
+             else str(a.get("action_type", "action")))
+            for a in executed
+        }))
         verification = result.get("verification") or {}
         reason = str(verification.get("reason") or "").strip()
         if lifecycle == "failed":

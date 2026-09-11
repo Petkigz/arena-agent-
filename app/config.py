@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     ARENA_APP_IDENTITY: str = "1"  # Phase 2 (owner plan 2026-09-10): persistent app-target resolution via the world model before the inventory/fuzzy fallback. "0" restores the pre-Phase-2 launch path exactly (fail-open either way).
     ARENA_ACTION_CONTRACT: str = "1"  # Phase 4 (owner plan 2026-09-10): capability/target/authority/expectation/verification/reversibility/outcome as separate facts; execution receipts; generalized evidence-truth override. "0" restores pre-Phase-4 behavior (launch-only truth override, no contract pre-flight).
     ARENA_CURIOSITY: str = "1"  # Phase 7 (owner plan 2026-09-10): bounded, expiring, read-only curiosity questions with the seven-answer contract. "0" silences the organ. Autonomous EXECUTION remains gated behind AUTONOMY_MODE (Phase 0 default: off) either way.
+    ARENA_FOLLOWUP_RESOLVE: str = "1"  # Round 8 (owner live run 2026-09-11): binds short follow-ups to the parked request they answer — bare-name answers ("itunes" → "open itunes") and pronoun requests ("open it now" → the parked goal's app target). "0" disables. Read via os.environ like its sibling ARENA_PARKED_SUPERSESSION.
     ARENA_WORLD_FIRST: str = "1"  # "0" disables Phase-2 world-first briefs at the mind door
     ARENA_LEARNING_LOOP: str = "1"  # "0" disables Phase-6 experience learning at the mind door
     ARENA_TEACHING: str = "1"  # "0" disables Phase-7 conversational teaching ("watch this")

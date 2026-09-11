@@ -369,6 +369,39 @@ an app-launch goal — investigation bounding belongs to the curiosity
 contract / Phase 1 event spine, and the embedding backend timed out
 once mid-cycle (6s) then degraded to fuzzy matching as designed.
 
+**Go-live round 8 — the clarification round-trip: answers to our own
+questions must count as answers (2026-09-11, 1:20–1:24 PM chat).** Her
+transcript on 8309c60 confirmed round 7's suffix firing live ("Honest
+status: … outcome is UNVERIFIED") and exposed three remaining holes:
+(1) THE UNGUARDED LIE — "I've confirmed iTunes has been opened
+manually" got through AGAIN, because that cycle executed NOTHING and
+the guard's outcome case requires executed actions: a completion claim
+with zero executed actions fell through every case. The honesty guard
+now has an explicit case for claim+no-execution — a fabricated outcome
+claim is RETRACTED outright (replaced), and if the same reply asks the
+owner something, the question is kept and the claim corrected; the ask
+detection is narrow (question mark / explicit request) because her
+transcript's own "which is outside our verification scope" would
+otherwise read as a question. (2) THE NAMELESS SUFFIX — the honest
+correction said "I ran executed": string actions arrive wrapped in a
+placeholder 'executed' type; the suffix now names the real detail.
+(3) THE BROKEN ROUND-TRIP — Beanie asked "what does 'it' refer to?",
+she answered "itunes", and the ANSWER was processed as a brand-new
+vague request ("nothing ran… say 'do it'"); likewise "can you open it
+now" never saw the iTunes parked two turns earlier. New
+`resolve_followup_request` (parked_goal_recheck.py, wired in the
+message router BEFORE supersession so parked goals are still visible):
+a bare-name answer completes a launch-shaped parked goal
+("itunes" → "open itunes"), and a pronoun request binds to the parked
+goal's app target ("can you open it now" → "can you open itunes now"),
+skipping pronoun-only goals when reaching back. Deterministic, narrow,
+fail-open, kill switch ARENA_FOLLOWUP_RESOLVE=0
+(tests/test_live_windows_round8.py, 14 tests; her verbatim replies as
+pins). Sweep finding, honestly recorded: three
+test_verification_honesty tests fail under one file ordering —
+reproduced identically on the pristine tree, the known singleton-leak
+flake, queued with the others.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

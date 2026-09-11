@@ -234,6 +234,106 @@ def supersede_ambiguous_parked_goals(conversation_id: str, new_text: str) -> int
     return superseded
 
 
+# ── Phase: follow-up resolution (owner live run 2026-09-11, 1:20-1:22 PM) ──
+# The clarification round-trip was broken twice in one conversation:
+#   "can you open it now" → 'it' never resolved to the iTunes named in the
+#       parked goal two turns earlier — Beanie asked "what does 'it' refer
+#       to?" instead;
+#   "itunes" (the owner ANSWERING that question) was processed as a brand
+#       new vague request — "nothing ran... say 'do it'".
+# The owner's answers to Beanie's own questions must complete the parked
+# request; the owner must never have to repeat themselves. Deterministic,
+# narrow, fail-open; kill switch ARENA_FOLLOWUP_RESOLVE=0.
+
+_FOLLOWUP_LAUNCH_VERB_RE = None
+_PRONOUN_REQUEST_RE = None
+_BARE_ANSWER_MAX_WORDS = 4
+
+
+def _followup_regexes():
+    global _FOLLOWUP_LAUNCH_VERB_RE, _PRONOUN_REQUEST_RE
+    if _FOLLOWUP_LAUNCH_VERB_RE is None:
+        import re
+        _FOLLOWUP_LAUNCH_VERB_RE = re.compile(r"\b(?:open|launch|start|run)\b", re.I)
+        _PRONOUN_REQUEST_RE = re.compile(
+            r"\b(open|launch|start|run)\s+(it|that|this|them)\b", re.I)
+    return _FOLLOWUP_LAUNCH_VERB_RE, _PRONOUN_REQUEST_RE
+
+
+def _recent_waiting_goals(conversation_id: str, limit: int = 5) -> List[str]:
+    from app.database import db
+    with db._get_connection() as conn:
+        rows = conn.execute(
+            "SELECT user_input FROM cognitive_traces "
+            "WHERE session_id = ? "
+            "  AND goal_lifecycle_state = 'waiting_for_evidence' "
+            "  AND user_input NOT LIKE '%(automatic re-check #%' "
+            "ORDER BY created_at DESC LIMIT ?",
+            (conversation_id, int(limit)),
+        ).fetchall()
+    return [r[0] or "" for r in rows]
+
+
+def resolve_followup_request(conversation_id: str, text: str) -> str:
+    """Bind the owner's short follow-up to the parked request it answers.
+
+    Two deterministic cases (both from the owner's live transcript):
+      * BARE-NAME ANSWER: "itunes" after Beanie asked which app — when the
+        most recent parked goal in this conversation is launch-shaped, the
+        answer becomes "open itunes".
+      * PRONOUN REQUEST: "can you open it now" — the pronoun takes the app
+        target of the most recent parked goal that HAS one ("open it
+        itunes on my pc" → 'itunes'), so interpretation sees the real name.
+
+    Anything ambiguous stays verbatim: guessing wrong here would violate
+    the very contract this fixes. Fail-open.
+    """
+    try:
+        import os
+        if os.environ.get("ARENA_FOLLOWUP_RESOLVE", "1") == "0":
+            return text
+        t = str(text or "").strip()
+        if not t or t.endswith("?") or len(t.split()) > 12:
+            return text
+        verb_re, pronoun_re = _followup_regexes()
+        goals = _recent_waiting_goals(conversation_id)
+        if not goals:
+            return text
+
+        from app.agents.master_agent import extract_app_query
+        from app.utils.logger import audit_logger
+
+        # Case B first: an explicit pronoun request ("open it now").
+        m = pronoun_re.search(t)
+        if m:
+            for goal in goals:
+                target = extract_app_query(goal)
+                if target:  # pronoun-only goals extract to '' — keep looking
+                    new_text = t[:m.start()] + f"{m.group(1)} {target}" + t[m.end():]
+                    audit_logger.info(
+                        f"Follow-up resolve: pronoun in '{t[:40]}' bound to "
+                        f"'{target}' from parked goal '{goal[:40]}'")
+                    return new_text.strip()
+            return text
+
+        # Case A: a bare-name answer to our own clarification question.
+        if (len(t.split()) <= _BARE_ANSWER_MAX_WORDS
+                and not verb_re.search(t)
+                and not t.lower().rstrip("?!. ") in _SUPERSESSION_GREETINGS):
+            for goal in goals:
+                if verb_re.search(goal):
+                    new_text = f"open {t}"
+                    audit_logger.info(
+                        f"Follow-up resolve: bare answer '{t[:40]}' completes "
+                        f"parked launch goal '{goal[:40]}' -> '{new_text}'")
+                    return new_text
+            return text
+        return text
+    except Exception as exc:
+        app_logger.debug(f"Follow-up resolution skipped: {exc}")
+        return str(text or "")
+
+
 _MARKER_RE = None
 
 
