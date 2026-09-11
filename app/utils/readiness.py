@@ -72,12 +72,24 @@ def _probe_opencv() -> Dict[str, Any]:
     cascade = hasattr(cv2, "CascadeClassifier")
     detail = ""
     if not cascade:
-        # The owner's live machine had the PyPI stub 'cv2' shadowing the
-        # real OpenCV: the import succeeds but the API is missing.
-        detail = ("cv2 imports but lacks CascadeClassifier — wrong or "
-                  "broken distribution. Uninstall every opencv-* "
-                  "distribution from this interpreter and install "
-                  "opencv-python.")
+        version = str(getattr(cv2, "__version__", "") or "")
+        if version.startswith("5"):
+            # Owner Windows run 2026-09-11: opencv-python 5.0 imports fine
+            # but Haar CascadeClassifier moved to opencv_contrib
+            # (xobjdetect) in OpenCV 5 — this is NOT a broken install.
+            detail = (f"OpenCV {version}: Haar CascadeClassifier moved to "
+                      "opencv_contrib (xobjdetect) in OpenCV 5 — the "
+                      "install is fine, face cascade is simply not in core. "
+                      "Options: 'pip install \"opencv-python<5\"' for the "
+                      "classic API, or run without face detection "
+                      "(everything else works; all vision paths fail open).")
+        else:
+            # The owner's live machine had the PyPI stub 'cv2' shadowing the
+            # real OpenCV: the import succeeds but the API is missing.
+            detail = ("cv2 imports but lacks CascadeClassifier — wrong or "
+                      "broken distribution. Uninstall every opencv-* "
+                      "distribution from this interpreter and install "
+                      "opencv-python.")
     return {"importable": True, "cascade": cascade,
             "version": getattr(cv2, "__version__", None), "detail": detail}
 

@@ -868,6 +868,14 @@ class ToolRegistry:
             result = tool_entry["handler"](payload)
             execution_control_registry.checkpoint(f"after_tool:{key}")
 
+            # Tool-result contract: results are dicts. A handler returning a
+            # bare list/value used to crash the scoring pass below (owner
+            # Windows run 2026-09-11: "list indices must be integers or
+            # slices, not str"). Normalize honestly instead of crashing —
+            # the raw payload stays visible under "output".
+            if not isinstance(result, dict):
+                result = {"success": True, "output": result}
+
             # Dependency availability is an execution precondition, not an
             # observed action outcome. Preserve the typed result and do not run
             # prediction scoring over a capability that never executed.

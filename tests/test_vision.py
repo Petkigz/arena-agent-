@@ -34,6 +34,16 @@ def test_vision_analyzer_simulation():
 
     # Run vision analysis
     analysis = VisionAnalyzerTool.analyze_screen_image(cap["file_path"], prompt_focus="check window")
+    if not analysis.get("success"):
+        # Hermetic: analysis needs SOME backend (VLM, OCR, cascade, or a
+        # reachable provider). The suite disables the provider
+        # (ARENA_LLM_DISABLED), and the owner's Windows box had no
+        # transformers/tesseract/working cascade (run 2026-09-11) — an
+        # environment with no backend is a skip, not a regression. A
+        # failure WITH backends present still fails the test.
+        err = str(analysis.get("error", "")).lower()
+        if "unavailable" in err or "not installed" in err or "no detection engine" in err:
+            pytest.skip(f"no vision analysis backend in this environment: {err[:90]}")
     assert analysis["success"] is True
     assert "image_name" in analysis
 

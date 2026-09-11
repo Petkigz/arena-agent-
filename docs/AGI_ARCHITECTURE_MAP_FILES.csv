@@ -3,7 +3,7 @@ app/__init__.py,1,infrastructure/package,KEEP,,,
 app/agents/__init__.py,0,infrastructure/package,KEEP,,,
 app/agents/coding_agent.py,283,capabilities/code,DEMOTE,,Coding Agent — a specialized multi-step agent for code tasks.,"task loop, thin-agent contract"
 app/agents/data_analysis_agent.py,327,capabilities/data,DEMOTE,,"Data Analysis Agent — a thin, read-only analysis loop.","task loop, thin-agent contract"
-app/agents/master_agent.py,1231,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
+app/agents/master_agent.py,1247,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
 app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cognition stays in the Mind
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
@@ -157,7 +157,7 @@ app/cognition/strategy_outcomes.py,380,learning/experience,INTEGRATE,,Phase 1B: 
 app/cognition/structured_lessons.py,363,learning/experience,INTEGRATE,,Phase 1C: Structured Lesson Extraction & Behavior Change.,
 app/cognition/temporal_vision.py,382,perception/vision,KEEP,,Deterministic temporal object tracking across visual frames.,stream-isolated tracking
 app/cognition/tool_matcher.py,945,capabilities/registry,DEMOTE,EMBODIMENT,"Deterministic manifest-first routing: the manifest decides, the LLM advises.",manifest-first routing IS the tool-first thinking Phase 2 replaces; Phase 11 gives it the demoted job for real: primary capability resolver inside app/mind/embodiment.py (concepts → motor pathways)
-app/cognition/tool_registry.py,935,capabilities/registry,KEEP,,Unified Tool Capability Registry with Gate Verification & Event Emissions.,"single capability authority — called BY the mind, never as it"
+app/cognition/tool_registry.py,943,capabilities/registry,KEEP,,Unified Tool Capability Registry with Gate Verification & Event Emissions.,"single capability authority — called BY the mind, never as it"
 app/cognition/trace.py,351,evaluation/trace,KEEP,,Cognitive Pipeline Trace & Session Tracker with Hardware Telemetry.,
 app/cognition/training_examples.py,540,learning/consolidation,KEEP,,Owner-reviewed continual-learning examples from verified outcomes.,owner-reviewed LoRA candidates
 app/cognition/uncertainty_questions.py,294,mind/cognition-core,KEEP,,Uncertainty-driven owner questions: ask instead of acting on weak evidence.,ask instead of acting on weak evidence
@@ -271,13 +271,13 @@ app/tools/knowledge_indexer.py,98,learning/media,INTEGRATE,,,
 app/tools/local_executor.py,122,embodiment/generic,KEEP,OS,"Generic local command / script / API executor — the ""escape hatch"" tool.",the escape-hatch effector
 app/tools/location_service.py,131,capabilities/general,KEEP,,Native location resolution (browser-free).,manifest capability; motor-system unit for the future Mind
 app/tools/lora_manager.py,540,learning/consolidation,KEEP,,LoRA manager — continual learning via LoRA adapters for Qwen.,
-app/tools/manifest.py,1076,capabilities/general,KEEP,,Unified tool capability manifest.,manifest capability; motor-system unit for the future Mind
+app/tools/manifest.py,1085,capabilities/general,KEEP,,Unified tool capability manifest.,manifest capability; motor-system unit for the future Mind
 app/tools/media_studio.py,107,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
 app/tools/messaging.py,94,capabilities/general,KEEP,,Messaging — send Telegram and WhatsApp messages.,manifest capability; motor-system unit for the future Mind
 app/tools/music_studio.py,78,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
 app/tools/network_diagnostics.py,174,capabilities/general,KEEP,,"Network diagnostics — DNS lookup, port check, ping, traceroute, WHOIS.",manifest capability; motor-system unit for the future Mind
 app/tools/notes_manager.py,95,capabilities/general,KEEP,,Markdown notes manager — a native coworker tool (browser-free).,manifest capability; motor-system unit for the future Mind
-app/tools/object_detector.py,385,perception/vision,INTEGRATE,SENSES,"Object detection + face detection — deterministic, local, degradable.",
+app/tools/object_detector.py,399,perception/vision,INTEGRATE,SENSES,"Object detection + face detection — deterministic, local, degradable.",
 app/tools/ocr_reader.py,46,perception/vision,INTEGRATE,SENSES,,
 app/tools/opsec_manager.py,139,capabilities/general,KEEP,,,manifest capability; motor-system unit for the future Mind
 app/tools/package_installer.py,213,embodiment/generic,KEEP,OS,Package installer — list/check/install/uninstall pip and npm packages.,
@@ -320,7 +320,7 @@ app/utils/hardware_monitor.py,32,infrastructure/utils,KEEP,,,
 app/utils/heartbeat.py,59,infrastructure/utils,KEEP,,Live-server heartbeat file — filesystem-visible proof that Arena runs.,
 app/utils/logger.py,105,infrastructure/utils,KEEP,,,
 app/utils/notifier.py,22,infrastructure/utils,KEEP,,,
-app/utils/readiness.py,199,infrastructure/utils,KEEP,,Startup readiness snapshot — Phase 0 of the owner's mind-platform plan,
+app/utils/readiness.py,211,infrastructure/utils,KEEP,,Startup readiness snapshot — Phase 0 of the owner's mind-platform plan,
 app/utils/spa.py,49,infrastructure/utils,KEEP,,Shared SPA-serving helpers.,
 app/utils/submissions.py,23,infrastructure/utils,KEEP,,Small idempotency helpers for append-only owner measurement submissions.,
 backend/__init__.py,16,infrastructure/package,KEEP,,Arena backend package.,

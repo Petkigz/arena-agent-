@@ -303,6 +303,43 @@ build: the generator initially emitted questions without expiry
 (question 7 unanswered — contract violation caught by its own test) —
 plus 972-test affected sweep clean.
 
+**Go-live round 6 — the owner's FIRST Windows verification pass
+(2026-09-11), all findings pinned.** She pulled to 6614aef and ran the
+full suite on her machine (3965 passed / 2 failed / 1 skipped) plus a
+live smoke run; every finding became a fix + test
+(tests/test_live_windows_round6.py, 12 tests). (1) SENTENCE-AS-APP-NAME:
+"open itunes on my pc" reached the inventory scan verbatim — the
+payload echoed the whole request and 5 words slipped under the
+launcher's 6-word guard; the executor seam now re-extracts when a
+payload equals the request / starts with the launch verb / is
+sentence-long, and extraction strips locative tails ("on my pc", "on
+the computer") so the query is 'itunes'. (2) LIST_WINDOWS CRASH: the
+handler returned a bare list; the registry's scoring pass indexed it
+as a dict ("list indices must be integers or slices, not str") — the
+handler now returns the dict contract observation_router already
+expected (success/windows/open_windows/count) and the registry
+normalizes any non-dict result honestly instead of crashing. (3)
+HERMETICITY: her LIVE nomic-embed-text flipped
+test_unreachable_lmstudio_degrades_to_hashed (default_embedder picked
+the real provider) — the test now configures NO provider explicitly;
+test_vision_analyzer_simulation failed on a machine with capture but
+no analysis backend — it now skips on backend-unavailability errors
+only (real regressions still fail). (4) OPENCV 5: her opencv-python
+5.0.0.93 imports fine but OpenCV 5 moved Haar CascadeClassifier to
+opencv_contrib/xobjdetect (official migration wiki) — readiness and
+the cascade loader now distinguish "OpenCV 5, install fine, cascade
+not in core (pin opencv-python<5 to restore; everything else fails
+open)" from the broken-stub case. Also logged from her run, working AS
+DESIGNED: readiness named main/fast as NOT loaded (only the embedder
+was), the 14B fallback warned explicitly, supersede fired on her
+follow-up, and the park carried its typed reason. Known pre-existing
+order-flake (reproduced on pristine 6614aef, NOT round 6):
+test_observation_routing::test_answer_branch_uses_observation_evidence
+under a specific 132-file subset ordering (ontology_schema singleton
+holding a stale tmp DB path); passes standalone and in full-suite
+order — queued for the singleton-leak hunt with the two code-lane
+flakes.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

@@ -84,6 +84,20 @@ class ObjectDetectorTool:
             # every attempt when the installed cv2 build lacks the
             # objdetect module entirely).
             cls._face_cascade_missing = True
+            if "CascadeClassifier" in str(e):
+                import cv2 as _cv2
+                _ver = str(getattr(_cv2, "__version__", "") or "")
+                if _ver.startswith("5"):
+                    # OpenCV 5 moved Haar cascades to opencv_contrib
+                    # (xobjdetect) — install is fine, cascade just isn't
+                    # in core anymore. Face detection degrades, everything
+                    # else works (owner Windows run 2026-09-11).
+                    app_logger.warning(
+                        f"OpenCV {_ver}: Haar CascadeClassifier moved to "
+                        "opencv_contrib in OpenCV 5 — face detection "
+                        "unavailable (fail-open). Use 'pip install "
+                        "\"opencv-python<5\"' to restore it.")
+                    return None
             app_logger.warning(f"Could not load face cascade: {e}")
             return None
 

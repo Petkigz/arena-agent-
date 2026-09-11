@@ -797,8 +797,17 @@ def build_tool_manifest() -> Dict[str, Dict[str, Any]]:
         _wrap(SkillTeachingEngine.execute_taught_skill, "skill_name", "target_parameter", "run_in_sandbox"))
 
     # ── Ghost operator / notifications ──────────────────────────────────────
+    def _list_windows_result():
+        # Tool-result contract: handlers return DICTS. The bare-list return
+        # crashed the registry's scoring pass (owner Windows run 2026-09-11:
+        # "list indices must be integers or slices, not str") and starved
+        # observation_router, which reads data["success"]/["windows"].
+        wins = Win32GhostOperator.list_open_windows()
+        return {"success": True, "windows": wins, "open_windows": wins,
+                "count": len(wins)}
+
     add("list_windows", "os_control", 0, "List open windows",
-        _ignore_payload(Win32GhostOperator.list_open_windows))
+        _ignore_payload(_list_windows_result))
     add("trigger_webhook", "integration", 3, "Trigger a webhook",
         _wrap(ConnectorsTool.trigger_webhook, "webhook_url", "payload"))
 

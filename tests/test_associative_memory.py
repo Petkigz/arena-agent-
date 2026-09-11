@@ -91,9 +91,14 @@ def test_provider_change_rebuilds_instead_of_mixing_spaces(tmp_path):
     assert swapped.count() == 0  # refused to load foreign vectors
 
 
-def test_unreachable_lmstudio_degrades_to_hashed(tmp_path):
+def test_unreachable_lmstudio_degrades_to_hashed(tmp_path, monkeypatch):
     provider = LMStudioEmbedder("http://127.0.0.1:1", "fake-model", timeout=0.2)
     assert provider.embed("probe") is None  # honest failure, no fake vectors
+    # Hermetic: the owner's machine has a LIVE embedding model loaded
+    # (Windows run 2026-09-11 flipped this test). The fallback contract is
+    # about NO CONFIGURED provider — so configure none, on any machine.
+    monkeypatch.setattr("app.config.settings.ARENA_EMBEDDING_URL", "", raising=False)
+    monkeypatch.setattr("app.config.settings.ARENA_EMBEDDING_MODEL", "", raising=False)
     chosen = default_embedder()  # no URL configured → hashed
     assert chosen.name == "hashed-ngram-512"
 

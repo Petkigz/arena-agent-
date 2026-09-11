@@ -186,7 +186,10 @@ GENERIC_APP_WORDS = frozenset({
 })
 
 _VERB_TAIL_RE = re.compile(
-    r"\s+(?:open|launch|start|run|please|and|now|for me)\b.*$", re.I
+    r"\s+(?:open|launch|start|run|please|and|now|for me"
+    r"|on\s+(?:my|the|this)\s+(?:pc|computer|laptop|desktop|machine|system)"
+    r"|on\s+(?:pc|desktop|windows))\b.*$",
+    re.I,
 )
 _VERB_FIRST_RE = re.compile(
     r"(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?([a-zA-Z0-9_\-.\s]+)",
@@ -260,6 +263,19 @@ class MasterAgentOrchestrator:
             from app.tools.app_inventory import SystemAppInventory
 
             app_name = payload.get("app_name") or payload.get("app") or payload.get("app_query") or payload.get("query")
+            # Owner Windows run 2026-09-11: the payload echoed the WHOLE
+            # request ('open itunes on my pc') and reached the inventory
+            # scan verbatim — a 5-word sentence slips under the launcher's
+            # 6-word guard. A payload that IS the request (or starts with
+            # the launch verb, or is sentence-long) is not an app name:
+            # re-extract from the request text instead.
+            if app_name and (
+                    str(app_name).casefold().strip() == str(user_text or "").casefold().strip()
+                    or len(str(app_name).split()) > 6
+                    or _VERB_FIRST_RE.match(str(app_name).strip())):
+                extracted = extract_app_query(user_text)
+                if extracted:
+                    app_name = extracted
             if not app_name:
                 # Shared extraction (module level, tested directly): handles
                 # verb-first AND 'called/named X' orders, filters generic
