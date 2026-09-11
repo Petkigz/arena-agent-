@@ -231,6 +231,16 @@ def supersede_ambiguous_parked_goals(conversation_id: str, new_text: str) -> int
     except Exception as exc:
         app_logger.debug(f"Parked-goal supersession check skipped: {exc}")
         return 0
+    # Phase 1 Event ledger mirror: the same supersession closes the
+    # ambiguous request's EVENT with a typed receipt, so the ledger and
+    # the goal lifecycle can never disagree. Fail-open.
+    try:
+        from app.cognition.event_ledger import (
+            supersede_active_ambiguous_events,
+        )
+        supersede_active_ambiguous_events(conversation_id, text)
+    except Exception as exc:
+        app_logger.debug(f"Event-ledger supersession mirror skipped: {exc}")
     return superseded
 
 

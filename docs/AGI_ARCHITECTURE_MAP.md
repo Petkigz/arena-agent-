@@ -467,6 +467,21 @@ owner-directed architecture audit:
     `tests/test_mind_mortality.py`; 91 `/mind/*` paths (94 routes).
     The audit is now fully closed, including #26 at the owner's
     request.
+32. ✅ **Owner-plan Phase 1 LIVE (2026-09-11)** — `event_ledger.py`: the
+    typed Event ledger, the request spine. One event id per owner request
+    (retries re-bind inside the dedupe window); typed one-way states
+    (new → dispatched → observation_pending → verified_success /
+    verified_failure / superseded / abandoned / expired); append-only
+    receipts that record only observed facts (dispatch, cycle_result
+    with trace link, supersession, expiry). The router opens events; the
+    cognitive runtime maps every finished cycle's honest verdict onto
+    them (re-check prefixes stripped, so a re-check flips the ORIGINAL
+    request's event); guard-fired cycles are verified_failure, never
+    success; crash dicts abandon with a receipt; goal supersession
+    mirrors onto the ledger. Legacy traces backfill idempotently with
+    empty park reasons labeled 'legacy_unspecified' — history labeled,
+    never rewritten. Fail-open; kill switch `ARENA_EVENT_LEDGER=0`.
+    16 tests in `tests/test_event_ledger_phase1.py`.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

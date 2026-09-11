@@ -3260,6 +3260,16 @@ class CognitiveRuntime:
                     )
             except Exception as exc:
                 app_logger.warning(f"Guard-visibility pass skipped: {exc}")
+            # Phase 1 typed Event ledger: map this cycle's honest verdict
+            # onto the request's single event (re-check prefixes stripped
+            # inside, so a re-check flips the ORIGINAL request's event).
+            # Fail-open: the ledger observes cognition, never blocks it.
+            try:
+                from app.cognition.event_ledger import mark_from_cycle_result
+
+                mark_from_cycle_result(session_id or "default", user_text, result)
+            except Exception as exc:
+                app_logger.debug(f"Event ledger cycle-result mark skipped: {exc}")
             result["due_reminders"] = due_reminders
             result["conversation_turn"] = conversation_turn
             if due_reminders:

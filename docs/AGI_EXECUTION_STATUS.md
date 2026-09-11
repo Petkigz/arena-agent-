@@ -402,6 +402,38 @@ test_verification_honesty tests fail under one file ordering —
 reproduced identically on the pristine tree, the known singleton-leak
 flake, queued with the others.
 
+**Phase 1 of the owner's mind-platform plan (owner go-ahead
+2026-09-11) — the typed Event ledger: the request spine.** Every owner
+request now gets exactly ONE event id, and "what happened to that
+request" is answerable from typed states and receipts instead of
+chat vibes. This is the structural fix for the bug class the live
+rounds exposed — the derail, the fabricated completion claim, the lost
+clarification were all "the machine lost track of what it had done or
+been told". New `app/cognition/event_ledger.py`:
+`cognitive_events` table, typed one-way states (new → dispatched →
+observation_pending → verified_success / verified_failure /
+superseded / abandoned / expired; terminal states refuse every
+transition), append-only bounded receipts (dispatch, cycle_result with
+trace link + verdict, supersession, expiry) that record only observed
+facts, never claims. One event id per request: a retried/duplicated
+message inside the 10-minute dedupe window re-binds to the same active
+event. Wiring: the message router opens the event (after follow-up
+resolution and supersession, never for auto-rechecks); the cognitive
+runtime seam maps every finished cycle's honest verdict onto it —
+re-check prefixes are stripped inside, so a re-check flips the
+ORIGINAL request's event; the pipeline bridge's honest crash dict
+(`state='failed'`) abandons with a receipt; a cycle whose
+completion-honesty guard fired is verified_FAILURE, never success;
+parked-goal supersession mirrors onto the ledger so lifecycle and
+ledger cannot disagree. Legacy migration: recent cognitive_traces are
+backfilled as `source='legacy_backfill'` events, idempotently by
+trace_id, with empty park reasons labeled 'legacy_unspecified' —
+history is labeled, never rewritten. Active events expire at the
+48-hour parked TTL. Fail-open everywhere; kill switch
+ARENA_EVENT_LEDGER=0 (tests/test_event_ledger_phase1.py, 16 tests,
+including her verbatim live requests and the ambiguous-supersession
+pattern; 136-test adjacent suite clean).
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

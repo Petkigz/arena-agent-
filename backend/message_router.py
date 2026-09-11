@@ -242,6 +242,16 @@ class MessageRouter:
                 supersede_ambiguous_parked_goals(conversation_id, content)
             except Exception as exc:
                 app_logger.debug(f"Parked-goal supersession hook skipped: {exc}")
+        # Phase 1 typed Event ledger: this owner request gets exactly ONE
+        # event id (retries/duplicates re-bind to the same active event);
+        # the cognitive runtime seam later maps the cycle's honest verdict
+        # onto it. Fail-open: the ledger never blocks a message.
+        if message_source != "auto_recheck":
+            try:
+                from app.cognition.event_ledger import open_event
+                open_event(conversation_id, content)
+            except Exception as exc:
+                app_logger.debug(f"Event ledger open skipped: {exc}")
         try:
             from app.utils import decision_trace
             decision_trace.record(

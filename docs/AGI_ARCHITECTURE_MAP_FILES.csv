@@ -3,7 +3,7 @@ app/__init__.py,1,infrastructure/package,KEEP,,,
 app/agents/__init__.py,0,infrastructure/package,KEEP,,,
 app/agents/coding_agent.py,283,capabilities/code,DEMOTE,,Coding Agent — a specialized multi-step agent for code tasks.,"task loop, thin-agent contract"
 app/agents/data_analysis_agent.py,327,capabilities/data,DEMOTE,,"Data Analysis Agent — a thin, read-only analysis loop.","task loop, thin-agent contract"
-app/agents/master_agent.py,1247,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
+app/agents/master_agent.py,1254,embodiment/action-execution,DEMOTE,AUTHORITY,,action executor (hands); must not be perceived as a brain
 app/agents/multi_agent.py,86,capabilities/agent,DEMOTE,,,collaboration loop; cognition stays in the Mind
 app/agents/proactive_coworker_daemon.py,114,mind/motivation,INTEGRATE,,,proactive behavior feed for the motivation system
 app/agents/self_evolving_agent.py,360,learning/self-improvement,INTEGRATE,IMPROVEMENT,,"Phase 20 LIVE: the verify-before-install synthesis engine — the one MECHANISM that app/mind/improvement.py calls; the organ decides, this engine executes-and-verifies"
@@ -16,7 +16,7 @@ app/api/vault.py,92,communication/api,KEEP,,Owner-controlled encrypted vault API
 app/cognition/__init__.py,100,mind/cognition-core,INTEGRATE,,Phase 1 cognitive foundation for Arena.,cognition module; becomes an organ of BeanieMind
 app/cognition/action_contract.py,434,mind/cognition-core,INTEGRATE,,"Phase 4 (owner plan 2026-09-10): action, authority, and verification contracts.",cognition module; becomes an organ of BeanieMind
 app/cognition/action_outcomes.py,242,learning/experience,INTEGRATE,,Learned action→outcome statistics from Arena's verified execution history.,
-app/cognition/action_planner.py,338,mind/decision,MERGE,PLANNERS,Cognitive Action Planner & Candidate Branch Evaluator.,
+app/cognition/action_planner.py,379,mind/decision,MERGE,PLANNERS,Cognitive Action Planner & Candidate Branch Evaluator.,
 app/cognition/action_proposal.py,397,mind/decision,KEEP,,ActionProposal & Multi-Gate Verification Engine.,multi-gate proposal engine
 app/cognition/action_selection.py,363,mind/decision,INTEGRATE,,"Turn information needs into bounded, inspectable tool requests.",
 app/cognition/adaptive_autonomy.py,156,owner-authority/autonomy,KEEP,,Outcome-calibrated autonomy thresholds with owner-bounded exploration.,
@@ -56,7 +56,7 @@ app/cognition/common_sense/physical_world.py,214,memory/semantic,KEEP,,Physical 
 app/cognition/common_sense/spatial_knowledge.py,117,memory/semantic,KEEP,,Spatial Knowledge,
 app/cognition/common_sense/technology_knowledge.py,139,memory/semantic,KEEP,,Technology and Computing Knowledge,
 app/cognition/common_sense/temporal_knowledge.py,85,memory/semantic,KEEP,,Temporal Knowledge,
-app/cognition/completion_honesty.py,157,mind/cognition-core,KEEP,,Completion honesty guard (owner live test 2026-09-08).,truth boundary
+app/cognition/completion_honesty.py,207,mind/cognition-core,KEEP,,Completion honesty guard (owner live test 2026-09-08).,truth boundary
 app/cognition/concept_bridge.py,273,mind/reasoning,KEEP,,Goal-side concept expansion: colloquial SYMPTOMS -> diagnostic CONCEPTS.,symptoms → concepts expansion
 app/cognition/condition_language.py,677,mind/decision,KEEP,,The typed condition language (P0 review #9).,
 app/cognition/confidence.py,30,mind/reasoning,LEGACY,,Lightweight empirical calibration of evidence-source reliability.,owner-deferred prototype (charter §5⑦); test-only
@@ -81,6 +81,7 @@ app/cognition/environment_state.py,96,models/world,MERGE,WORLD,Environment obser
 app/cognition/epistemic_presentation.py,225,mind/cognition-core,KEEP,,User-facing epistemic status for evidence-grounded responses.,
 app/cognition/ethical_reasoning.py,623,owner-authority/values,KEEP,,Phase 11: Ethical Reasoning System,annotates + routes to owner decision; never suppresses (charter §2)
 app/cognition/event_bus.py,68,infrastructure/events,KEEP,,Lightweight in-process event bus for Arena's cognitive systems.,
+app/cognition/event_ledger.py,585,mind/cognition-core,INTEGRATE,,Phase 1 — the typed Event ledger: the request spine.,cognition module; becomes an organ of BeanieMind
 app/cognition/events.py,32,infrastructure/events,KEEP,,Typed-enough cognitive events used to decouple Arena subsystems.,
 app/cognition/execution_control.py,569,mind/cognition-core,KEEP,,Cooperative cancellation registry and truthful rollback receipts.,
 app/cognition/execution_result.py,85,mind/cognition-core,KEEP,,First-Class ExecutionResult and ExecutionStatus Abstractions.,
@@ -114,7 +115,7 @@ app/cognition/owner_charter.py,196,owner-authority/values,KEEP,,The Owner Charte
 app/cognition/owner_control.py,396,owner-authority/control-plane,KEEP,,Persistent owner control plane for action authorization.,
 app/cognition/owner_decisions.py,205,owner-authority/decisions,KEEP,,Signed owner decisions binding expected system-state changes to authority.,
 app/cognition/owner_model.py,193,models/owner,INTEGRATE,,The owner model: counted patterns from the owner's own decisions.,exists: counted patterns from owner decisions; becomes the relationship model
-app/cognition/parked_goal_recheck.py,413,mind/motivation,KEEP,MOTIVATION,Parked goals get re-checked automatically (owner live test 2026-09-08).,wired in server lifespan; Phase 15 LIVE: its parked (waiting_for_evidence) goals feed app/mind/motivation.py as the unfinished_goal evidence source
+app/cognition/parked_goal_recheck.py,523,mind/motivation,KEEP,MOTIVATION,Parked goals get re-checked automatically (owner live test 2026-09-08).,wired in server lifespan; Phase 15 LIVE: its parked (waiting_for_evidence) goals feed app/mind/motivation.py as the unfinished_goal evidence source
 app/cognition/perception.py,728,perception/environment,INTEGRATE,,Perception & Observation Collector Layer.,observation collector — post-action probes today
 app/cognition/periodic_autonomous_cycle.py,790,mind/motivation,INTEGRATE,MOTIVATION,Phase 10: Periodic Autonomous Cycle,
 app/cognition/phase0_evaluation.py,435,evaluation/learning,KEEP,,Isolated Phase 0 evaluation runner for evidence-centered behavior.,
@@ -137,7 +138,7 @@ app/cognition/reasoning_cycle.py,123,mind/reasoning,MERGE,LOOP,"Phase 3 cognitiv
 app/cognition/reasoning_loop.py,264,mind/reasoning,MERGE,LOOP,Closed observe -> reason -> investigate -> observe cognitive loop.,
 app/cognition/resource_allocator.py,543,mind/decision,KEEP,,Phase 5C: Strategic Resource Allocation.,
 app/cognition/response_grounding.py,181,mind/cognition-core,KEEP,,Reconcile generated responses with authoritative evidence.,truth boundary
-app/cognition/runtime.py,5361,mind/cognition-core,INTEGRATE,AUTHORITY,Unit P1-A: Canonical CognitiveRuntime Composition Root Integration.,"de-facto brain today (singleton composition root, 5.3k lines); becomes the interior of BeanieMind — not a separate authority"
+app/cognition/runtime.py,5371,mind/cognition-core,INTEGRATE,AUTHORITY,Unit P1-A: Canonical CognitiveRuntime Composition Root Integration.,"de-facto brain today (singleton composition root, 5.3k lines); becomes the interior of BeanieMind — not a separate authority"
 app/cognition/runtime_wiring.py,285,mind/cognition-core,INTEGRATE,,Phase-module wiring for the cognitive cycle (Phases 11-21).,phase-module wiring glue
 app/cognition/scene_causal.py,132,mind/imagination,INTEGRATE,,Causal and counterfactual replay for the deterministic scene model.,causal replay of scenes
 app/cognition/scene_graph.py,635,models/world,INTEGRATE,WORLD,Deterministic scene state and bounded 2D physics predictions.,deterministic scene state
@@ -167,7 +168,7 @@ app/cognition/visual_observer.py,105,perception/vision,INTEGRATE,,"VisualObserve
 app/cognition/working_memory.py,197,memory/working,INTEGRATE,MEMORY,"Working memory: a capacity-limited, decaying attention scratchpad.",
 app/cognition/world_ingest.py,91,models/world,INTEGRATE,WORLD,Bridge raw observations into Arena's persistent world model.,
 app/cognition/world_model.py,919,models/world,INTEGRATE,WORLD,Phase 2: lightweight persistent world model.,exists but verification-oriented (post-action probes); must also serve pre-action world understanding
-app/config.py,135,infrastructure/config,KEEP,,,
+app/config.py,137,infrastructure/config,KEEP,,,
 app/database.py,481,infrastructure/persistence,KEEP,,,
 app/desktop_tray.py,142,communication/presence,KEEP,,,tray/autostart glue (charter §5⑥)
 app/llm.py,1002,infrastructure/inference,KEEP,,,LM Studio client; model router untouched (invariant #3)
@@ -334,7 +335,7 @@ backend/api/theme_routes.py,150,communication/api,KEEP,,Theme customization.,
 backend/api/wakeword_routes.py,318,communication/api,KEEP,,Custom wake word training and management.,
 backend/chat_corrections.py,364,learning/conversation,INTEGRATE,,In-chat owner corrections.,in-chat owner corrections — Phase-7 teaching surface
 backend/main.py,20,infrastructure/entry,LEGACY,,Backward-compatible shim for the unified Arena server.,compat shim alias
-backend/message_router.py,1040,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
+backend/message_router.py,1064,communication/text,INTEGRATE,ENTRIES,Message router for processing incoming WebSocket messages with LLM integration and streami,WS entry — becomes a thin adapter calling BeanieMind.process
 backend/voice/__init__.py,28,communication/voice,KEEP,,Voice pipeline for Arena.,
 backend/voice/audio_capture.py,176,communication/voice,KEEP,,Audio capture service using PyAudio.,
 backend/voice/orchestrator.py,490,communication/voice,KEEP,,"Voice pipeline orchestrator - coordinates audio capture, wake word, VAD, STT, and TTS.",
