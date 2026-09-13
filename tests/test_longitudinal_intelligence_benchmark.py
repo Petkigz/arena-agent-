@@ -13,7 +13,8 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
 
     run = suite.run()
 
-    assert run.total_count == 38
+    # 38 checks + the 7-probe Phase 8 honesty family (2026-09-11)
+    assert run.total_count == 45
     assert run.passed_count == run.total_count
     assert run.regressions == []
     assert {check.category for check in run.checks} >= {
@@ -72,7 +73,7 @@ def test_benchmark_runs_isolated_behavioral_checks_and_persists(tmp_path):
     restored = BenchmarkHistoryStore(tmp_path / "benchmarks.db").latest()
     assert restored is not None
     assert restored.run_id == run.run_id
-    assert restored.passed_count == 38
+    assert restored.passed_count == 45  # Phase 8 honesty family included
 
 
 def test_history_detects_pass_to_fail_regression(tmp_path, monkeypatch):

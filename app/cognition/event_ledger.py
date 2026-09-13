@@ -470,7 +470,7 @@ def supersede_active_ambiguous_events(
         from app.database import db
         with db._get_connection() as conn:
             rows = conn.execute(
-                f"SELECT event_id, request_text FROM cognitive_events "
+                "SELECT event_id, request_text FROM cognitive_events "
                 "WHERE conversation_id = ? AND state IN (?, ?, ?)",
                 (str(conversation_id), *ACTIVE_STATES),
             ).fetchall()

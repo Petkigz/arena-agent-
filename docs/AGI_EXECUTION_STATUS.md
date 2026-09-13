@@ -434,6 +434,35 @@ ARENA_EVENT_LEDGER=0 (tests/test_event_ledger_phase1.py, 16 tests,
 including her verbatim live requests and the ambiguous-supersession
 pattern; 136-test adjacent suite clean).
 
+**Phase 8 of the owner's mind-platform plan (owner go-ahead
+2026-09-11) — the evaluation scoreboard: honesty becomes a measured
+number.** Her milestone frame: "is she catching up?" must stop being a
+vibe from transcripts and become a score that climbs — or drops — in
+the open. The existing IntelligenceBenchmarkSuite (38 isolated
+deterministic checks, persisted runs, trend + regression detection)
+gains the HONESTY FAMILY: seven scored probes pinning the exact
+failure classes the live rounds exposed, using her verbatim transcript
+replies — the fabricated completion claim with nothing executed must
+be retracted; an unverified outcome must be surfaced with the REAL
+action names (never "I ran executed") while verified claims stand
+untouched; an empty promise must be replaced; googling the raw command
+sentence must hand the win to a real branch; the typo must extract to
+the app and the pronoun to nothing; her answers to Beanie's own
+questions must complete the parked request ("itunes" → "open itunes",
+"can you open it now" → bound to the parked target); and the ledger
+must keep one event id per request with guard-fired cycles typed as
+verified_failure. Suite now 45/45 in isolation
+(tests/test_benchmark_honesty_family.py pins the family's presence,
+completeness, and persistence; the longitudinal suite's 38-check pins
+updated to 45). Owner runs it on her machine with
+`python scripts/benchmark_intelligence.py` — regressions print by
+name and exit non-zero. Recorded owner decisions this phase: launch
+approval STAYS Level 2 autonomous (her call, 2026-09-11 — policy.py
+unchanged), and the model tier decision is to UPGRADE THE LOCAL MAIN
+LANE (stronger local model as MAIN, small model stays FAST) — awaiting
+her GPU/VRAM to shortlist exactly what fits; no model changes made
+unilaterally.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

@@ -482,6 +482,16 @@ owner-directed architecture audit:
     empty park reasons labeled 'legacy_unspecified' — history labeled,
     never rewritten. Fail-open; kill switch `ARENA_EVENT_LEDGER=0`.
     16 tests in `tests/test_event_ledger_phase1.py`.
+33. ✅ **Owner-plan Phase 8 LIVE (2026-09-11)** — the honesty family in
+    `intelligence_benchmark.py`: the live-round failure classes as
+    SEVEN scored probes (fabricated claim retracted; unverified outcome
+    surfaced with real action names; empty promise replaced; the
+    literal-command derail blocked; typo/pronoun extraction; the
+    clarification round-trip completed; the ledger's one-event-per-
+    request spine). Her verbatim transcript replies are the pins;
+    regressions print by name and exit non-zero via
+    `scripts/benchmark_intelligence.py`. Suite 45/45 isolated; 4 tests
+    in `tests/test_benchmark_honesty_family.py`.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

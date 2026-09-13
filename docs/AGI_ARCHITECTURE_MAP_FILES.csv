@@ -100,7 +100,7 @@ app/cognition/identity_continuity.py,79,models/self,MERGE,SELF,Restart-aware con
 app/cognition/incubation_queue.py,556,mind/imagination,KEEP,,"Owner-visible, bounded incubation queue for safe background reasoning.",bounded background reasoning
 app/cognition/inference_profile.py,370,infrastructure/inference,KEEP,,Owner-managed local inference profile with measured recommendations.,
 app/cognition/information_gain.py,16,mind/motivation,KEEP,,Lightweight information-seeking primitives for uncertain beliefs.,information-seeking primitives
-app/cognition/intelligence_benchmark.py,1862,evaluation/regression,KEEP,,"Isolated longitudinal benchmarks for learning, transfer, and control integrity.","isolated longitudinal benchmark — regression-style, NOT the Phase-24 generalization tasks"
+app/cognition/intelligence_benchmark.py,2084,evaluation/regression,KEEP,,"Isolated longitudinal benchmarks for learning, transfer, and control integrity.","isolated longitudinal benchmark — regression-style, NOT the Phase-24 generalization tasks"
 app/cognition/language_grounding.py,855,mind/reasoning,KEEP,,Phase 22: Language Grounding,
 app/cognition/learning_progress.py,162,mind/motivation,KEEP,,Learning-progress motivation: explore where competence is actually growing.,curiosity: explore growing competence
 app/cognition/lora_evaluation.py,282,learning/consolidation,KEEP,,Held-out LoRA evaluation and evidence-gated provider deployment.,
