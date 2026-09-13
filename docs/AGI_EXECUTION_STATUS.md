@@ -481,6 +481,18 @@ runs on. Flows to every client through the existing GET/POST
 e.g. Qwen3-8B Q4_K_M at 5.03 GB); the 16 GB card reopens the 14B
 class (tests/test_settings_hardware.py, 7 tests).
 
+Owner model-tier decision, final for now (2026-09-13): the main lane
+STARTS ON qwen2.5-9b-instruct — the owner judged the 8B class too weak
+and chose 9B "at first" (the config default already matches; no code
+change). Revisit points, recorded so the decision survives: the
+planned 16 GB card reopens the 14B class fully resident, and the 48 GB
+system RAM keeps Qwen3-30B-A3B MoE available as a CPU+GPU-offload
+stretch. Honest note kept on file: newer-generation 8B models have
+benchmarked above last-generation 9–14B on reasoning, so if the 9B
+lane ever feels short, the empirical path is a Phase 1.4 task
+evaluation of both models on the SAME real tasks — a number, not a
+vibe. The owner's judgment governs; the measurement settles it.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown
