@@ -37,7 +37,34 @@ _DEFAULTS: Dict[str, Any] = {
     "fast_model": "",
     "main_model": "",
     "lm_studio_url": "",
+    # Hardware profile (owner statement 2026-09-13 — this was always
+    # meant to live in system settings and had been dropped/forgotten;
+    # model-lane sizing, readiness, and planning read it). Editable via
+    # POST /settings {"hardware": {...}}; partial patches merge.
+    "hardware": {
+        "cpu": "Intel Core i9-14900K",
+        "gpu_model": "AMD Radeon RX 580",
+        "vram_gb": 8,
+        "ram_gb": 48,
+        "ram_type": "DDR5",
+        "planned_gpu": "16 GB VRAM card (owner-planned upgrade, 2026-09)",
+        "notes": (
+            "Polaris: ROCm unsupported; Vulkan is the GPU path on "
+            "Windows. Main-lane model files should fit fully in VRAM "
+            "(<= ~6 GB at 8 GB VRAM); revisit on the 16 GB card."
+        ),
+        "updated_at": "2026-09-13T00:00:00+00:00",
+    },
 }
+
+
+def get_hardware() -> Dict[str, Any]:
+    """The recorded owner hardware profile (never None, fail-open)."""
+    try:
+        hw = get_settings().get("hardware")
+        return dict(hw) if isinstance(hw, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def get_settings() -> Dict[str, Any]:
@@ -56,7 +83,18 @@ def update_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
     """Merge a partial patch into the settings and persist it."""
     current = get_settings()
     for key, value in patch.items():
-        if value is not None:
+        if value is None:
+            continue
+        # The hardware profile merges field-by-field: patching one value
+        # (e.g. vram_gb after the owner's planned GPU swap) must not wipe
+        # the recorded siblings.
+        if key == "hardware" and isinstance(value, dict):
+            merged = dict(current.get("hardware") or {})
+            merged.update({k: v for k, v in value.items() if v is not None})
+            from datetime import datetime, timezone
+            merged["updated_at"] = datetime.now(timezone.utc).isoformat()
+            current[key] = merged
+        else:
             current[key] = value
     try:
         _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)

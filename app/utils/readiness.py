@@ -163,6 +163,14 @@ def collect_readiness(probe_provider_fn: Optional[Callable[[str], Dict[str, Any]
         "opencv": _probe_opencv(),
         "browser": _probe_browser(),
     }
+    # The recorded owner hardware profile (owner statement 2026-09-13 —
+    # it belongs in system settings and must be visible at every boot).
+    # Fail-open: a settings-store problem never hides readiness.
+    try:
+        from app.settings_store import get_hardware
+        snapshot["hardware"] = get_hardware()
+    except Exception:
+        snapshot["hardware"] = {}
     return snapshot
 
 
@@ -207,5 +215,13 @@ def format_readiness(snapshot: Dict[str, Any]) -> str:
     lines.append(cv_line)
     br = snapshot.get("browser") or {}
     lines.append(f"browser       : {'available' if br.get('available') else 'UNAVAILABLE'}")
+    hw = snapshot.get("hardware") or {}
+    if hw:
+        hw_line = (f"hardware      : {hw.get('gpu_model', '?')} "
+                   f"{hw.get('vram_gb', '?')}GB VRAM, "
+                   f"{hw.get('ram_gb', '?')}GB RAM, {hw.get('cpu', '?')}")
+        if hw.get("planned_gpu"):
+            hw_line += f" | planned: {hw['planned_gpu']}"
+        lines.append(hw_line)
     lines.append("=" * 60)
     return "\n".join(lines)

@@ -463,6 +463,24 @@ LANE (stronger local model as MAIN, small model stays FAST) — awaiting
 her GPU/VRAM to shortlist exactly what fits; no model changes made
 unilaterally.
 
+**System-settings hardware profile — the dropped setting, restored
+(2026-09-13).** The owner reported her machine's specs (i9-14900K,
+48 GB DDR5, RX 580 8 GB now, a 16 GB VRAM card planned) "were supposed
+to be in the system settings but somehow got dropped and forgotten."
+Verified: `app/settings_store.py` never carried a hardware section in
+any committed revision — intended, never landed. Now the shared
+settings store persists an owner-editable `hardware` profile (seeded
+with her real machine, including the planned upgrade and the
+Polaris/Vulkan constraint), partial patches merge field-by-field
+without wiping siblings, `get_hardware()` is fail-open, and every
+boot's readiness block states the recorded body — GPU, VRAM, RAM, CPU,
+and the planned card — so the machine can never again forget what it
+runs on. Flows to every client through the existing GET/POST
+/settings endpoints. Model-lane sizing advice derives from it: at
+8 GB VRAM the main lane wants a fully-resident model (<= ~6 GB file,
+e.g. Qwen3-8B Q4_K_M at 5.03 GB); the 16 GB card reopens the 14B
+class (tests/test_settings_hardware.py, 7 tests).
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown
