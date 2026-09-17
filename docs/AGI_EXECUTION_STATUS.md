@@ -493,6 +493,38 @@ lane ever feels short, the empirical path is a Phase 1.4 task
 evaluation of both models on the SAME real tasks — a number, not a
 vibe. The owner's judgment governs; the measurement settles it.
 
+**Round 9 — tighten the loop (owner go-ahead 2026-09-13).** The owner
+asked for a self-comparison against the agent that builds her: the
+gap decomposes into weights (hers, unfixable by scaffolding), organs
+(mostly built), and the WORKING LOOP — where her headaches live.
+Verification before building corrected the pitch itself: two of the
+three proposed ideas already existed — `search_filesystem` has kept a
+persistent filename index (`data/file_index.db`) with a 15-second
+bounded walk and honest partial results since before this round, and
+`ActionProposal.predicted_outcome` is already declared, persisted on
+the trace, and compared against reality by the imagination organ;
+neither was rebuilt (one cognitive authority). Round 9 therefore
+shipped only the true gaps: (1) THE CRITIC PASS —
+`app/cognition/reply_critic.py`: the honesty guard catches LIE
+PATTERNS (regex-recognizable phrasings); the critic catches SEMANTIC
+overshoot — the fast lane reads the draft reply against the ONLY
+evidence (executed actions + verifier verdict) and appends a VISIBLE
+correction ("Critic note: the claim ... is not supported by what
+actually executed"), the original text always preserved. It never
+touches verified outcomes, never double-corrects a guarded reply,
+treats a simulated provider as no critic at all, and fails open; kill
+switch ARENA_REPLY_CRITIC=0; wired in the runtime between the
+completion-honesty and guard-visibility passes so the ledger's
+cycle_result receipt sees the corrected reply. (2) THE BOUNDED SWEEP —
+the autonomous cycle's workspace rglob (unbounded — the 284k-walk
+headache's sibling) is now a capped helper (5000 entries) that reports
+truncation honestly via `unexplored_files_truncated`. Tests:
+tests/test_reply_critic_round9.py (14); 125-test adjacent sweep clean.
+Queued from this round's analysis, not built: context distillation
+beyond the 16-message runtime window, embedding-cache completion,
+live-round verification that goal_replanner fires varied retries on
+verified_failure, and owner-authored held-out task packs.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

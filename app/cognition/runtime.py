@@ -3247,6 +3247,21 @@ class CognitiveRuntime:
                     )
             except Exception as exc:
                 app_logger.warning(f"Completion-honesty guard skipped: {exc}")
+            # Round 9 critic pass: the honesty guard catches LIE PATTERNS;
+            # the critic catches SEMANTIC overshoot the regexes cannot know
+            # — the fast lane reads the draft against the executed evidence
+            # and appends a visible correction when a claim outruns it.
+            # Never double-corrects a guarded reply; fail-open.
+            try:
+                from app.cognition.reply_critic import critique_reply
+
+                result = critique_reply(result)
+                if result.get("critic_correction") and result.get("trace_id"):
+                    CognitiveTrace.update_persisted_reply(
+                        str(result["trace_id"]), str(result.get("assistant_reply") or "")
+                    )
+            except Exception as exc:
+                app_logger.warning(f"Reply-critic pass skipped: {exc}")
             # Guard-refusal visibility (charter §6): a refused raw-input
             # action must be owner-visible in chat with the retry path,
             # never silently swallowed by the execution payload.

@@ -28,6 +28,37 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_SWEEP_ENTRY_CAP = 5000
+
+
+def _recent_workspace_files(workspace, limit: int = _SWEEP_ENTRY_CAP,
+                            since_s: float = 86400.0):
+    """Bounded walk of the workspace for files modified in the last day.
+
+    Round 9 (owner headache: unbounded exploration burned a live cycle —
+    the 284k-file walk): the sweep visits at most ``limit`` entries and
+    reports truncation honestly instead of hiding it. Returns
+    (recent_names, truncated).
+    """
+    recent: List[str] = []
+    visited = 0
+    truncated = False
+    try:
+        for p in workspace.rglob("*"):
+            visited += 1
+            if visited > limit:
+                truncated = True
+                break
+            try:
+                if p.is_file() and (time.time() - p.stat().st_mtime) < since_s:
+                    recent.append(str(p.name))
+            except Exception:
+                continue
+    except Exception as exc:
+        app_logger.debug(f"Workspace sweep failed: {exc}")
+    return recent, truncated
+
+
 class CycleStatus(str, Enum):
     """Status of an autonomous cycle."""
     PENDING = "pending"
@@ -631,17 +662,14 @@ class PeriodicAutonomousCycle:
                 from app.config import settings
                 workspace = settings.DATA_DIR / "workspace"
                 if workspace.exists():
-                    # Find files modified in last 24h not yet in memory
-                    recent = []
-                    for p in workspace.rglob("*"):
-                        if p.is_file():
-                            try:
-                                if (time.time() - p.stat().st_mtime) < 86400:
-                                    recent.append(str(p.name))
-                            except Exception:
-                                continue
-                    if recent:
-                        signals["unexplored_files"] = recent[:5]
+                    # Bounded sweep (round 9, owner headache: unbounded
+                    # walks burned a live cycle): capped at 5000 entries,
+                    # truncation reported honestly instead of hidden.
+                    names, truncated = _recent_workspace_files(workspace)
+                    if names:
+                        signals["unexplored_files"] = names[:5]
+                    if truncated:
+                        signals["unexplored_files_truncated"] = True
             except Exception as e:
                 app_logger.warning(f"Signal observation (unexplored files) failed: {e}")
 
