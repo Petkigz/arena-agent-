@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from app.utils.logger import app_logger
 

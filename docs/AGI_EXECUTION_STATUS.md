@@ -525,6 +525,25 @@ beyond the 16-message runtime window, embedding-cache completion,
 live-round verification that goal_replanner fires varied retries on
 verified_failure, and owner-authored held-out task packs.
 
+**Round 10 — context distillation (owner 'continue', 2026-09-13).**
+The structural half of the "I had to repeat myself" headache: the
+runtime only ever saw the last ~16 messages — older turns evaporated.
+New `app/cognition/context_distiller.py`: turns leaving the window are
+compressed into a standing per-conversation digest of FACTS (what was
+asked, what was done and its verified outcome, decisions, open loops),
+and the router injects it ahead of the recent window, explicitly
+labeled "for continuity only; not a new statement". Cost discipline:
+incremental re-distillation at most every 8 departing turns, so the
+fast lane is never paid per message. Honesty rule: a simulated or
+unavailable model produces NO digest — the machine never fabricates
+its own memory; the previous real digest stands and distillation
+retries later. Fail-open (any problem leaves the plain window intact);
+kill switch ARENA_CONTEXT_DISTILL=0
+(tests/test_context_distillation_round10.py, 11 tests). Caught during
+the build: the round-9 critic organ shipped an unused import that only
+surfaced once the file was git-tracked — the structure test scans
+tracked files, so new organs are now ruff-checked explicitly at birth.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

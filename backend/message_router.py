@@ -417,6 +417,24 @@ class MessageRouter:
                 if history and history[-1].get("role") == "user" and history[-1].get("content") == content:
                     history = history[:-1]
 
+                # Round 10 context distillation: turns that leave the
+                # 16-message window are compressed into a standing,
+                # labeled digest and injected ahead of the recent turns,
+                # so what leaves the window does not leave the mind.
+                # Fail-open: any problem leaves the plain window intact.
+                runtime_history = history[-16:]
+                try:
+                    from app.cognition.context_distiller import (
+                        digest_message,
+                        update_digest,
+                    )
+                    _digest = update_digest(conversation_id, history)
+                    _digest_msg = digest_message(_digest)
+                    if _digest_msg:
+                        runtime_history = [_digest_msg] + runtime_history
+                except Exception as exc:
+                    app_logger.debug(f"Context distillation skipped: {exc}")
+
                 # Route through the authoritative cognitive runtime (world model, beliefs,
                 # reasoning loop, goal verification, memory) rather than a raw LLM call.
                 # P2: Pass multimodal context (image_path, attachments) so vision is grounded
@@ -426,7 +444,7 @@ class MessageRouter:
                     audio_path=audio_path,
                     attachments=attachments,
                     conversation_id=conversation_id,
-                    conversation_history=history[-16:],
+                    conversation_history=runtime_history,
                     message_source=message_source,
                 )
 
