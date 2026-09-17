@@ -40,6 +40,7 @@ the calibrated score with their lexical score; they own the weighting.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import re
 import time
@@ -154,6 +155,92 @@ def _pick_embedding_model(client) -> Optional[str]:
     return model
 
 
+# --- persistent embedding cache (round 11, owner headache: a 6s embedder
+# timeout degraded the cycle to fuzzy matching) --------------------------------
+# Vectors the provider ACTUALLY computed, persisted so a restart or a
+# provider timeout falls back to REAL vectors instead of fuzzy strings.
+# Honesty rule: rescue returns cached vectors only — it never fabricates;
+# a text never embedded stays a fuzzy-matcher problem.
+
+
+def _embed_cache_enabled() -> bool:
+    return os.environ.get("ARENA_EMBED_CACHE", "1") != "0"
+
+
+def _cache_key(text: str) -> str:
+    return hashlib.sha256(str(text or "").strip().lower().encode("utf-8")).hexdigest()
+
+
+def _cache_ensure_table() -> None:
+    from app.database import db
+    with db._get_connection() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS embedding_cache (
+                text_hash TEXT NOT NULL,
+                model TEXT NOT NULL,
+                vector_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (text_hash, model)
+            )
+            """
+        )
+        conn.commit()
+
+
+def _cache_put(texts: Sequence[str], model: str,
+               vectors: Sequence[Sequence[float]]) -> None:
+    if not _embed_cache_enabled():
+        return
+    try:
+        _cache_ensure_table()
+        from datetime import datetime, timezone
+        from app.database import db
+        now = datetime.now(timezone.utc).isoformat()
+        with db._get_connection() as conn:
+            for text, vector in zip(texts, vectors):
+                if not vector:
+                    continue
+                conn.execute(
+                    "INSERT OR REPLACE INTO embedding_cache "
+                    "(text_hash, model, vector_json, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (_cache_key(text), str(model),
+                     json.dumps(list(vector)), now))
+            conn.commit()
+    except Exception as exc:
+        app_logger.debug(f"Embedding cache write skipped: {exc}")
+
+
+def _cache_rescue(texts: Sequence[str]) -> Optional[List[List[float]]]:
+    """Cached vectors for EVERY requested text, or None (all-or-nothing —
+    a partial rescue would silently mix real vectors with nothing)."""
+    if not _embed_cache_enabled():
+        return None
+    try:
+        _cache_ensure_table()
+        from app.database import db
+        out: List[List[float]] = []
+        with db._get_connection() as conn:
+            for text in texts:
+                row = conn.execute(
+                    "SELECT vector_json FROM embedding_cache "
+                    "WHERE text_hash = ? ORDER BY created_at DESC LIMIT 1",
+                    (_cache_key(text),)).fetchone()
+                if not row:
+                    return None
+                out.append(json.loads(row[0]))
+        if out:
+            _log_backend_transition(
+                "cache",
+                "Semantic matching: embedding backend unavailable; serving "
+                f"{len(out)} persisted vector(s) from the cache")
+        return out or None
+    except Exception as exc:
+        app_logger.debug(f"Embedding cache rescue skipped: {exc}")
+        return None
+
+
 def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
     """Embed a batch of texts with the local embedding server, or None.
 
@@ -174,7 +261,10 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
         import time as _time
 
         if _time.monotonic() < float(_backend_state["timeout_until"]):
-            return None  # cooling down after a timeout — fall back instantly
+            # Cooling down after a timeout — the persistent cache answers
+            # with REAL vectors for texts it knows; unknown texts still
+            # fall back to the fuzzy matcher instantly.
+            return _cache_rescue(texts)
         _backend_state["timeout_until"] = None
     try:
         with httpx.Client() as client:
@@ -196,6 +286,9 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
                 return None
             _log_backend_transition("embeddings",
                       f"Semantic matching: embedding backend active (model={model})")
+            # Round 11: persist what the provider actually computed, so a
+            # later timeout/restart degrades to real vectors, not fuzzy.
+            _cache_put(texts, model, vectors)
             return vectors
     except Exception as exc:
         if isinstance(exc, httpx.TimeoutException) or "timed out" in str(exc).lower():
@@ -208,7 +301,9 @@ def embed_texts(texts: Sequence[str]) -> Optional[List[List[float]]]:
             )
         _log_backend_transition("fallback",
                   f"Semantic matching: embedding backend unavailable ({exc}); using local fuzzy matching")
-        return None
+        # Round 11: a dead provider still has a memory — serve persisted
+        # vectors for texts the cache knows before falling back to fuzzy.
+        return _cache_rescue(texts)
 
 
 def _log_backend_transition(state: str, message: str) -> None:

@@ -544,6 +544,21 @@ the build: the round-9 critic organ shipped an unused import that only
 surfaced once the file was git-tracked — the structure test scans
 tracked files, so new organs are now ruff-checked explicitly at birth.
 
+**Round 11 — the persistent embedding cache (owner 'continue',
+2026-09-13).** Her live log: the embedding backend timed out (~6s)
+mid-cycle and the machine degraded to fuzzy string matching. The
+in-memory vector caches die with the process; `semantic_matcher` now
+persists what the provider ACTUALLY computed (`embedding_cache` table,
+keyed by normalized-text hash + model), so a timeout, cooldown, or
+restart degrades to REAL cached vectors instead of fuzzy guesses —
+logged honestly as a cache transition. Rescue is all-or-nothing (a
+partial rescue would silently mix real vectors with nothing) and never
+fabricates: a text never embedded stays a fuzzy-matcher problem.
+Hermetic mode (ARENA_LLM_DISABLED) is deliberately unchanged — the
+test-suite contract stands. Fail-open; kill switch
+ARENA_EMBED_CACHE=0 (tests/test_embedding_cache_round11.py, 10 tests,
+HTTP boundary stubbed — no network, no live provider).
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown
