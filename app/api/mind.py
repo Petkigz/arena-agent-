@@ -666,6 +666,61 @@ def mind_improvement_measure(body: ImprovementIdIn) -> dict:
     return BeanieMind.get_instance().improvement.measure(body.improvement_id)
 
 
+# ── The gated self-improvement loop (owner go-ahead 2026-09-13) ────────────
+class ExperimentDecisionIn(BaseModel):
+    event_id: str = Field(min_length=1, max_length=64)
+    reason: str = Field(default="", max_length=200)
+
+
+@router.get("/mind/self-improvement/targets")
+def mind_self_improvement_targets(limit: int = Query(default=10, ge=1, le=50)) -> dict:
+    """THE CHOOSER: what to improve, ranked from evidence only —
+    scoreboard regressions/failures, verified_failure clusters in the
+    ledger, (optionally) detected capability gaps. Targets, never fixes."""
+    from app.mind.self_improvement_gate import rank_improvement_targets
+    return {"success": True,
+            "targets": rank_improvement_targets(limit=limit)}
+
+
+@router.get("/mind/self-improvement/experiments")
+def mind_self_improvement_experiments(
+        limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    """The experiment spine: every trial is one append-only ledger event —
+    hypothesis, variant, measured scores, verdict. Variants that fail to
+    beat baseline never reach the owner; measured improvements wait here."""
+    from app.mind.self_improvement_gate import (
+        pending_experiments, recent_experiments)
+    return {"success": True,
+            "pending_owner_decision": pending_experiments(limit=limit),
+            "recent": recent_experiments(limit=limit)}
+
+
+@router.post("/mind/self-improvement/experiments/approve")
+def mind_self_improvement_approve(body: ExperimentDecisionIn) -> dict:
+    """THE OWNER GATE — the only path from measured improvement to
+    accepted. The machine proposes with evidence; the owner disposes."""
+    from app.mind.self_improvement_gate import approve_experiment
+    ok = approve_experiment(body.event_id)
+    return {"success": ok, "approved": ok, "event_id": body.event_id}
+
+
+@router.post("/mind/self-improvement/experiments/reject")
+def mind_self_improvement_reject(body: ExperimentDecisionIn) -> dict:
+    from app.mind.self_improvement_gate import reject_experiment
+    ok = reject_experiment(body.event_id, body.reason)
+    return {"success": ok, "rejected": ok, "event_id": body.event_id}
+
+
+@router.get("/mind/self-improvement/training-readiness")
+def mind_self_improvement_training_readiness() -> dict:
+    """Honest evidence accounting before any model training: how much
+    verified experience exists, the minimum before training means
+    anything, and the recorded hardware constraint — stated, not hidden.
+    This endpoint never trains anything."""
+    from app.mind.self_improvement_gate import training_readiness
+    return {"success": True, **training_readiness()}
+
+
 # ── Phase 21: model evolution ──────────────────────────────────────────────
 class EvolutionConsolidateIn(BaseModel):
     max_tasks: int = Field(default=50, ge=1, le=100)

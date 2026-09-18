@@ -829,6 +829,18 @@ OVERRIDES = {
         "new failures = reverted for real; else awaiting, never guessed); "
         "the door proposes, never implements — execution stays an explicit "
         "owner-surface act"),
+    "app/mind/self_improvement_gate.py": (
+        "mind/improvement", "KEEP", "IMPROVEMENT",
+        "Gated self-improvement LIVE (owner go-ahead 2026-09-13): the "
+        "Chooser ranks weaknesses from evidence only (scoreboard "
+        "regressions/failures, ledger failure clusters); experiments are "
+        "append-only Phase 1 ledger events; measurement rejects "
+        "no-improvement variants before they waste owner attention; the "
+        "OWNER GATE is the only path from measured improvement to "
+        "accepted — nothing auto-applies, the evaluator is read-only to "
+        "the improver; training readiness states evidence counts and the "
+        "recorded hardware constraint plainly. Kill switch "
+        "ARENA_SELF_IMPROVEMENT=0"),
     "app/cognition/social_cognition.py": (
         "learning/social", "INTEGRATE", "SOCIAL",
         "Phase 16 seed (mental-state/emotion/relationship engine); the "

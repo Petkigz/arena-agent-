@@ -492,6 +492,17 @@ owner-directed architecture audit:
     regressions print by name and exit non-zero via
     `scripts/benchmark_intelligence.py`. Suite 45/45 isolated; 4 tests
     in `tests/test_benchmark_honesty_family.py`.
+34. ✅ **Gated self-improvement LIVE (2026-09-13)** —
+    `self_improvement_gate.py`: RSI the honest way. The Chooser ranks
+    weaknesses from evidence only (scoreboard regressions/failures,
+    ledger failure clusters); experiments are append-only Phase 1
+    ledger events; measurement rejects no-improvement variants before
+    they waste owner attention; and the OWNER GATE is the only path
+    from measured improvement to accepted — nothing auto-applies, the
+    evaluator is read-only to the improver, and training readiness
+    states the evidence count and the hardware constraint plainly.
+    Kill switch `ARENA_SELF_IMPROVEMENT=0`. 16 tests in
+    `tests/test_self_improvement_gate.py`.
 
 Beyond that, what remains is practice: run the generalization
 evaluation on the owner's machine with the real capability manifest and

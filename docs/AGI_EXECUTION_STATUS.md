@@ -559,6 +559,45 @@ test-suite contract stands. Fail-open; kill switch
 ARENA_EMBED_CACHE=0 (tests/test_embedding_cache_round11.py, 10 tests,
 HTTP boundary stubbed — no network, no live provider).
 
+**The gated self-improvement loop — RSI the honest way (owner go-ahead
+2026-09-13: "go with your recommendation and implement it all").** The
+owner asked for recursive self-improvement that DIFFERENTIATES choosing
+what to improve from improving the code, that researches, writes code,
+and experiments. What was built is the only form this project will
+ship: a GATED loop — the machine proposes with evidence, measurement is
+the first gate, and the OWNER is the final gate on every accepted
+change (her explicit decision; nothing auto-applies). New
+`app/mind/self_improvement_gate.py`, extending the organs that already
+existed (Phase 20 `improvement.py` detect→design→implement→measure→
+retain/revert; Phase 21 `evolution.py`; scrutiny; the Phase 8
+scoreboard): (1) THE CHOOSER — `rank_improvement_targets` ranks
+weaknesses from EVIDENCE ONLY (scoreboard regressions weight 100,
+failing checks, weakest benchmark family, verified_failure clusters
+from the Phase 1 ledger, optional capability gaps); it proposes
+targets, never fixes. (2) THE EXPERIMENT SPINE — every trial is one
+append-only ledger event (source 'self_improvement'): hypothesis,
+variant, baseline-vs-variant scores, verdict as receipts; a variant
+that fails to beat baseline or regresses ANY check is rejected by
+measurement immediately and never spends owner attention; only
+measured improvements reach observation_pending. One event id per
+hypothesis (the ledger's dedupe). (3) THE OWNER GATE —
+approve/reject endpoints are the ONLY path from measured improvement
+to verified_success; terminal states refuse second decisions; every
+decision lands in the audit log. (4) THE EVALUATOR IS SACRED — the
+gate organ only READS the scoreboard; the improver can never edit its
+own exam (Goodhart). (5) TRAINING READINESS — honest evidence
+accounting before any model training: verified-outcome counts vs the
+25-outcome minimum, and the recorded hardware constraint (8GB VRAM —
+serious adapter training waits for the planned 16GB card) stated, not
+hidden. Endpoints: GET /mind/self-improvement/targets, GET
+/mind/self-improvement/experiments, POST .../experiments/approve|
+reject, GET /mind/self-improvement/training-readiness. Fail-open;
+kill switch ARENA_SELF_IMPROVEMENT=0
+(tests/test_self_improvement_gate.py, 16 tests). Honest boundary
+recorded with the owner: the improver writing arbitrary live code was
+NOT authorized or built — Phase 20's wired synthesis mechanism remains
+the only code-generation path, sandbox-tested before install.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown
