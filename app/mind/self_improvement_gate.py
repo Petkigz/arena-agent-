@@ -271,12 +271,28 @@ def recent_experiments(limit: int = 20) -> List[Dict[str, Any]]:
         return []
 
 
+def _is_experiment(event_id: str) -> bool:
+    """Authority boundary (red-team A2): the owner gate acts ONLY on
+    self-improvement experiments — an ordinary owner request parked at
+    observation_pending must never be flippable through this door."""
+    try:
+        from app.cognition import event_ledger as ledger
+        ev = ledger.get_event(str(event_id))
+        return bool(ev) and ev.get("source") == "self_improvement"
+    except Exception:
+        return False
+
+
 def approve_experiment(event_id: str) -> bool:
     """THE OWNER GATE: the only path from measured-improvement to
     verified_success. Recorded in the audit log — this is authority."""
     if not _enabled():
         return False
     try:
+        if not _is_experiment(event_id):
+            app_logger.debug(
+                f"Approval refused: {event_id} is not an experiment")
+            return False
         from app.cognition import event_ledger as ledger
         ok = ledger.transition_event(
             str(event_id), ledger.STATE_VERIFIED_SUCCESS,
@@ -296,6 +312,10 @@ def reject_experiment(event_id: str, reason: str = "") -> bool:
     if not _enabled():
         return False
     try:
+        if not _is_experiment(event_id):
+            app_logger.debug(
+                f"Rejection refused: {event_id} is not an experiment")
+            return False
         from app.cognition import event_ledger as ledger
         ok = ledger.transition_event(
             str(event_id), ledger.STATE_VERIFIED_FAILURE,

@@ -257,6 +257,12 @@ def test_no_underscore_attribute_typos_in_chat_page():
 @pytest.fixture
 def embed_env(monkeypatch):
     monkeypatch.delenv("ARENA_LLM_DISABLED", raising=False)
+    # These tests pin the COOLDOWN/short-circuit mechanism, not the
+    # round-11 embedding cache (own suite: test_embedding_cache_round11).
+    # Without the kill switch, cache rescue on the timeout path can serve
+    # a vector left in the real DATA_DIR db by earlier processes and the
+    # `is None` pins flip order-dependently (round-12 red-team found this).
+    monkeypatch.setenv("ARENA_EMBED_CACHE", "0")
     from app.cognition import semantic_matcher as sm
 
     # Full module-state reset, INCLUDING the TTL'd model-discovery cache:
@@ -270,11 +276,13 @@ def embed_env(monkeypatch):
     sm._embed_model_cache.clear()
     sm._backend_state["timeout_until"] = None
     sm._backend_state["current"] = None
+    sm._last_embed_model = None
     yield sm
     sm._embed_model_cache.clear()
     sm._embed_model_cache.update(saved_cache)
     sm._backend_state["timeout_until"] = None
     sm._backend_state["current"] = None
+    sm._last_embed_model = None
 
 
 def test_timeout_opens_cooldown_and_short_circuits(embed_env, monkeypatch):

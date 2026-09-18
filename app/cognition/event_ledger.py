@@ -178,7 +178,10 @@ def get_event(event_id: str) -> Optional[Dict[str, Any]]:
 
 
 def expire_stale_events(ttl_hours: int = _EVENT_TTL_HOURS) -> int:
-    """Active events older than the TTL are expired, with a receipt."""
+    """Active events older than the TTL are expired, with a receipt.
+    Settled (terminal) events older than 90 days are pruned outright —
+    the ledger is a spine, not an archive that grows forever
+    (red-team A3: unbounded growth)."""
     if not _enabled():
         return 0
     expired = 0
@@ -189,12 +192,19 @@ def expire_stale_events(ttl_hours: int = _EVENT_TTL_HOURS) -> int:
         ).isoformat()
         from app.database import db
         with db._get_connection() as conn:
+            conn.execute(
+                "DELETE FROM cognitive_events "
+                "WHERE state IN (?, ?, ?, ?, ?) AND created_at < ?",
+                (*TERMINAL_STATES, (
+                    datetime.now(timezone.utc) - timedelta(days=90)
+                ).isoformat()))
             rows = conn.execute(
                 "SELECT event_id FROM cognitive_events "
                 "WHERE state IN (?, ?, ?) AND created_at < ?",
                 (*ACTIVE_STATES, cutoff),
             ).fetchall()
             ids = [r[0] for r in rows]
+            conn.commit()
         for event_id in ids:
             if transition_event(
                 event_id, STATE_EXPIRED,

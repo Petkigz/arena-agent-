@@ -171,6 +171,12 @@ def _cache_key(text: str) -> str:
     return hashlib.sha256(str(text or "").strip().lower().encode("utf-8")).hexdigest()
 
 
+# The model the provider last ACTUALLY computed vectors with. Rescue is
+# bound to it (red-team A4): after an embedder swap, serving the old
+# model's vectors as the new model's would corrupt similarity silently.
+_last_embed_model: Optional[str] = None
+
+
 def _cache_ensure_table() -> None:
     from app.database import db
     with db._get_connection() as conn:
@@ -192,8 +198,10 @@ def _cache_put(texts: Sequence[str], model: str,
                vectors: Sequence[Sequence[float]]) -> None:
     if not _embed_cache_enabled():
         return
+    global _last_embed_model
     try:
         _cache_ensure_table()
+        _last_embed_model = str(model)
         from datetime import datetime, timezone
         from app.database import db
         now = datetime.now(timezone.utc).isoformat()
@@ -223,10 +231,21 @@ def _cache_rescue(texts: Sequence[str]) -> Optional[List[List[float]]]:
         out: List[List[float]] = []
         with db._get_connection() as conn:
             for text in texts:
-                row = conn.execute(
-                    "SELECT vector_json FROM embedding_cache "
-                    "WHERE text_hash = ? ORDER BY created_at DESC LIMIT 1",
-                    (_cache_key(text),)).fetchone()
+                if _last_embed_model:
+                    # red-team A4: only the KNOWN model's vectors may be
+                    # served as that model's — a swapped embedder's stale
+                    # vectors would corrupt similarity silently.
+                    row = conn.execute(
+                        "SELECT vector_json FROM embedding_cache "
+                        "WHERE text_hash = ? AND model = ? "
+                        "ORDER BY created_at DESC LIMIT 1",
+                        (_cache_key(text), _last_embed_model)).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT vector_json FROM embedding_cache "
+                        "WHERE text_hash = ? "
+                        "ORDER BY created_at DESC LIMIT 1",
+                        (_cache_key(text),)).fetchone()
                 if not row:
                     return None
                 out.append(json.loads(row[0]))

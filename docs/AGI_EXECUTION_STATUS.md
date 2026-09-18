@@ -598,6 +598,49 @@ recorded with the owner: the improver writing arbitrary live code was
 NOT authorized or built — Phase 20's wired synthesis mechanism remains
 the only code-generation path, sandbox-tested before install.
 
+**Round 12 — finish up, secure it, grind coverage (owner order
+2026-09-13: "ok finish up. secondly secure it, run attacks on it to
+catch gaps, thirdly test it, gring untill coverage hits 80%").**
+(1) FINISH UP: the held-out evaluation packs are written
+(`docs/HELDOUT_TASK_PACKS.md` — 3 packs, 20 tasks, owner-checked
+evidence criteria, scoring rules; she runs them on her machine and
+records via the Phase 1.4 evaluations endpoint, split=held_out — the
+benchmark suite can never be gamed by the machine that sees it).
+(2) RED TEAM (tests/test_redteam_round12.py, 15 tests): the adversary
+is the machine's OWN failure modes, stated in the threat model — not a
+keyboard attacker. Four real gaps found, all fixed test-driven:
+A1 completion claims phrased AROUND the pattern set ("iTunes is up and
+ready") evaded the honesty guard → CLAIMS_DONE_RE widened; A2
+authority confusion — the experiment gate could flip ANY
+observation_pending event (including ordinary owner requests) →
+approve/reject now refuse non-experiments (`_is_experiment`); A3
+ledger growth — terminal events accumulated forever → the sweep now
+prunes terminal events older than 90 days; A4 embed-cache model
+confusion — after an embedder swap, model-A vectors could be served as
+model-B → rescue is now model-bound (`_last_embed_model`). A1's
+widening caused a REAL false positive caught by the suite: the
+runtime's own offline notice ("...ensure LM Studio or Ollama is
+running...") matched the new patterns and the guard retracted the
+machine's honest "I could not answer" disclosure — fixed with
+DISCLOSURE_RE (honest unavailability disclosures are the OPPOSITE of
+fabricated claims; the guard never touches them) and pinned (A7b).
+Defenses proven holding: digest flood bounded, NaN never passes the
+measurement gate, SQL-shaped text inert (parameterized), double
+decisions refused. Accepted risk documented: homoglyph evasion is
+outside the threat model (the critic pass and the owner gate are the
+layers behind it). (3) COVERAGE GRIND (tests/test_coverage_round12.py,
+48 tests): measured on the full suite under `coverage run` (4128
+passed, 0 failed) — REPO-WIDE 84% (48,673 statements), above the
+owner's 80% target; every session-shipped organ individually ≥80%:
+semantic_matcher 62%→100%, self_improvement_gate 73%→100%,
+reply_critic 98%, completion_honesty 94%, parked_goal_recheck 84%,
+context_distiller 92%, event_ledger 82%. (The pytest-cov plugin is
+broken in this repo — capture teardown ValueError — so the numbers
+come from `coverage run` + `coverage report --ignore-errors`
+directly.) Round 4's cooldown pin was order-dependent (it ran against
+the real DATA_DIR cache); its intent (no HTTP retry during cooldown)
+is now isolated via ARENA_EMBED_CACHE=0 in its fixture.
+
 Earlier in this gate: the continuity net (pre-go-live,
 owner-approved) — sleep and waking
 are protected, not just recorded. On every shutdown

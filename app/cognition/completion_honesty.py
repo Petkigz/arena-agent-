@@ -35,7 +35,7 @@ CLAIMS_DONE_RE = re.compile(
     r"\b(deleted|removed|uninstalled|killed|shut(?:ting)? down|"
     r"has been (?:deleted|removed|completed|opened|launched|started|"
     r"created|sent|installed|moved|closed)|"
-    r"is now (?:open|running|ready)|"
+    r"is (?:now )?(?:open|opened|running|started|ready|up|live|active)|"
     r"(?:i'?ve|i have) (?:confirmed|verified|opened|launched|started|"
     r"created|sent|installed|moved|closed|deleted|removed)|"
     r"completed successfully|done!)\b",
@@ -47,6 +47,19 @@ CLAIMS_DONE_RE = re.compile(
 
 # An honest ASK (capability missing, question to the owner) is not a hollow
 # promise — the defer path ends its reply with what it needs from the owner.
+# Honest unavailability disclosures (runtime-authored, red-team round 12):
+# a reply that STATES the model/provider was down is the opposite of a
+# fabricated claim — the guard must never retract the machine's own
+# honest "I could not answer" notice. Found live: the offline notice's
+# "...ensure LM Studio or Ollama is running..." phrasing matched the
+# broadened claim patterns and the honest notice was replaced.
+DISCLOSURE_RE = re.compile(
+    r"simulated response|is not loaded|model was unavailable|"
+    r"no answer was generated|provider (?:is )?unavailable|"
+    r"LM Studio or Ollama",
+    re.I,
+)
+
 HONEST_ASK_RE = re.compile(
     r"\b(unrecognized|not recognized|no registered|not registered|"
     r"i can(?:'t|not)|i don(?:'t|) ?t have|i haven'?t|which |could you|"
@@ -123,7 +136,15 @@ def enforce_completion_honesty(
         )
         result["announcement_guard"] = "promise_without_action_replaced"
         guard_applied = "promise_without_action_replaced"
-    elif CLAIMS_DONE_RE.search(reply) and not executed and not verified:
+    elif (
+        CLAIMS_DONE_RE.search(reply)
+        and not executed
+        and not verified
+        # an honest unavailability disclosure is the OPPOSITE of a
+        # fabricated claim — never retract the machine's own "I could
+        # not answer" notice (red-team round 12, found live)
+        and not DISCLOSURE_RE.search(reply)
+    ):
         # Case 3 (owner live run 2026-09-11, 1:20 PM): the WORST combination —
         # a completion claim with NOTHING executed in the cycle. Case 2 needs
         # executed actions to correct, case 1 only knows announcements, so
@@ -158,7 +179,7 @@ def enforce_completion_honesty(
             guard_applied = "fabricated_claim_replaced"
     elif executed and not verified and (
         CLAIMS_DONE_RE.search(reply) or ANNOUNCE_RE.search(reply)
-    ):
+    ) and not DISCLOSURE_RE.search(reply):
         # Case 2: work ran but did NOT verify, while the reply claims
         # success or keeps announcing. The claim never stands alone.
         # Name what actually ran: string actions arrive wrapped with the

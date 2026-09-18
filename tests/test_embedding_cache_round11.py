@@ -63,6 +63,7 @@ def cache_env(monkeypatch, tmp_path):
     monkeypatch.setattr(sm, "_embed_model_cache", {})
     monkeypatch.setattr(sm, "_backend_state", {"current": None})
     monkeypatch.setattr(sm, "_embeddings_cache_model", None)
+    monkeypatch.setattr(sm, "_last_embed_model", None)
     StubClient.fail_post = False
     monkeypatch.setattr(sm.httpx, "Client", StubClient)
     return database_module.db
